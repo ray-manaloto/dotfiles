@@ -1,0 +1,6 @@
+tasks.dev = "aube run docs:dev"
+tasks.build = "aube run docs:build"
+
+[tasks."commit-and-push"]
+depends = ["build"]
+run = ["git ci -pm docs", "git push"]

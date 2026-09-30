@@ -1,0 +1,365 @@
+[Skip to content](https://packslip.dev/docs/publishing/#main)
+
+# Publish with GitHub Actions
+
+The `jdx/packslip` action signs a manifest with your workflow’s identity
+and uploads the bundle to an existing GitHub release. No long-lived
+signing key is needed.
+
+## Prepare the files and release
+
+The action consumes final local files. Complete any archive rewriting,
+platform signing, or notarization that changes the bytes first.
+
+Create the GitHub release and upload the artifacts through your existing
+workflow. Upload separate resource assets, such as SBOMs, too. The action
+uploads only the packslip bundle; a signed URL does not upload its target.
+
+Once those files are on the release, either bring them into the signing
+job yourself (a build matrix typically stages them with
+`actions/download-artifact` before this step) or let `download` fetch
+them straight from the release — see
+[Download from the release](https://packslip.dev/docs/publishing/#download-from-the-release) below.
+
+## Keep the action away from release write access
+
+Run packslip in its own job after your build and release jobs. Give that job
+`contents: read` so the action can download release assets but cannot change
+the release or its other files. It signs and verifies the bundle with
+`id-token: write`; `attestations: write` lets the provenance step attest the
+matched files. The job has no checkout of the build workspace. A separate job
+you control receives only the bundle and uploads that exact JSON file.
+
+Copy
+
+```yaml
+jobs:
+  packslip:
+    needs: release # Your existing job that publishes the release files.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: jdx/packslip@v1
+        id: packslip
+        with:
+          download: mytool-*.tar.xz mytool-*.zip
+          bin: mytool
+          upload: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: packslip-bundle
+          path: ${{ steps.packslip.outputs.bundle }}
+          if-no-files-found: error
+
+  publish-packslip:
+    needs: packslip
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: packslip-bundle
+          path: packslip
+      - name: Upload the signed bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -f packslip/packslip.sigstore.json
+          gh release upload "$GITHUB_REF_NAME" packslip/packslip.sigstore.json \
+            --repo "$GITHUB_REPOSITORY" --clobber
+```
+
+This example runs on a tag. If another event triggers the workflow, use its
+release tag in both the action’s `tag` input and the upload command. For a
+monorepo project, upload the bundle name reported by the action, such as
+`packslip.mytool.sigstore.json`. If build jobs already attested every file,
+set `attest: link` and omit `attestations: write` from the packslip job.
+
+GitHub’s token permissions apply to a job, not to individual steps. Passing
+`upload: false` in a job that still has `contents: write` does not sandbox the
+action: an action can access that job’s token even when it is not passed as an
+input. The separate job is the security boundary. GitHub does not offer a
+token limited to one release asset; the small upload step in the write-enabled
+job is therefore part of your workflow, not part of the packslip action.
+
+## Add the release step to an existing job
+
+Use this fragment after those preparation steps in your release job.
+
+Copy
+
+```yaml
+permissions:
+  contents: write       # Upload the bundle.
+  id-token: write       # Sign with the workflow's identity.
+  attestations: write  # Publish provenance for the matched files.
+
+steps:
+  # Your existing build and release steps go here.
+  - uses: jdx/packslip@v1
+    id: packslip
+    with:
+      artifacts: dist/*.tar.xz dist/*.zip
+      bin: mytool
+```
+
+Run on a release tag, or pass `tag` explicitly. By default, `project` is
+`github.com/<owner>/<repo>`, and `version` is the tag with a leading `v`
+removed. For tags such as `mytool-v1.2.3`, pass `version: 1.2.3` explicitly.
+The action does not normalize arbitrary tag formats.
+
+In this compact form, the action installs its matching packslip version,
+attests the files matched by `artifacts`, creates and signs the manifest,
+verifies the bundle, and uploads it. The output
+`${{ steps.packslip.outputs.bundle }}` is the local bundle path. It needs
+`contents: write` because its default `upload: true` preserves existing
+workflows; use the separate jobs above when the action must not have
+release write access.
+
+The action and CLI share a version: `@v1` follows CLI 1.x releases, and
+`@v1.0.0` pins both to 1.0.0. By default, the action installs the CLI
+version from its own commit’s `Cargo.toml`. Set `packslip-version` to
+explicitly override that selection.
+`packslip-path` runs a CLI the job already has instead of downloading
+one; see [Build the CLI on the runner](https://packslip.dev/docs/publishing/#build-the-cli-on-the-runner).
+
+## Publish a different source commit
+
+`tag` selects the release, but does not change the default source commit:
+`commit` defaults to the workflow’s `github.sha`. If you dispatch from a branch
+and check out a different release tag, pass that tag’s full commit SHA explicitly:
+
+Copy
+
+```yaml
+# After checking out the intended release tag and preparing its artifacts:
+- name: Resolve the checked-out release commit
+  id: source
+  shell: bash
+  run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+- uses: jdx/packslip@v1
+  with:
+    tag: ${{ inputs.tag }}
+    commit: ${{ steps.source.outputs.commit }}
+    artifacts: dist/*.tar.xz dist/*.zip
+    bin: mytool
+    attest: link
+```
+
+Use `attest: link` only when the build jobs already attested these files.
+A repository skill resource is pinned to this source commit. The caller must
+ensure the commit matches the tag, artifacts, and repository resources; the
+input does not fetch or validate that relationship. It changes only the release
+manifest’s source metadata, not the workflow’s signing identity or separate
+build-provenance statements. Keep any workflow-ref/tag guards needed to ensure
+those statements describe the intended build. Workflows that already run from
+the release commit can omit the input.
+
+## Add resources and requirements
+
+Copy
+
+```yaml
+- uses: jdx/packslip@v1
+  with:
+    artifacts: dist/*.tar.xz
+    bin: mytool
+    resources: |
+      completion/zsh=archive:share/zsh/site-functions/_mytool
+      man=archive:share/man/man1/mytool.1
+      cli-spec/usage=exec:mytool usage
+      sbom/cyclonedx=asset:dist/mytool.cdx.json
+    require: |
+      bin:java@17
+```
+
+Use paths from the actual archive root, including any top-level directory.
+Only include resources and commands your release really provides or needs.
+Use a [TOML manifest](https://packslip.dev/docs/describing-releases/#use-a-toml-manifest) when
+paths or requirements differ between artifacts.
+
+## Download from the release
+
+A signing job that runs after the release already has its archives
+uploaded — a separate job in the same workflow run, or a re-run against
+an existing tag — can skip staging them itself:
+
+Copy
+
+```yaml
+- uses: jdx/packslip@v1
+  with:
+    download: mytool-*.tar.xz mytool-*.zip
+    bin: mytool
+```
+
+This replaces a `gh release download` step and a second copy of the same
+glob for `artifacts`: `download` fetches matching assets from the release
+named by `tag` (the triggering tag by default) into a working directory
+and folds them into the same file set `artifacts` collects. Set both
+inputs to combine files already on disk with files pulled from the
+release. `token` must be able to read that release — the default
+`github.token` already can, including for a release still in draft.
+
+## Release several tools from one repository
+
+Run the action once per tool, selecting only that tool’s artifacts:
+
+Copy
+
+```yaml
+- uses: jdx/packslip@v1
+  with:
+    project: github.com/owner/repo/mytool
+    version: 1.2.3
+    tag: mytool-v1.2.3
+    artifacts: dist/mytool-*.tar.xz
+    bin: mytool
+```
+
+This writes `packslip.mytool.sigstore.json`. Nested subpaths use hyphens
+in the filename: `tools/mytool` becomes `packslip.tools-mytool.sigstore.json`.
+The signer is still pinned to the repository. Consumers match the signed
+`project` field, not the bundle filename.
+
+## Publish outside GitHub releases
+
+The signed URLs are whatever `url-base` says, so a release whose files are
+served from a download host of your own sets it and uploads the files
+there itself; the action only uploads the bundle, to the GitHub release,
+and `upload: false` keeps even that local. A project named after that host
+rather than the repository also publishes a signed release list there.
+[Host releases on your own domain](https://packslip.dev/docs/self-hosting/) covers both.
+
+## Build the CLI on the runner
+
+The action downloads the release archive for the runner’s platform. Where
+that archive does not exist or cannot be used, `packslip-path` points the
+action at an executable the job already has: a path, or a name to look up
+on PATH. The action runs it as `packslip` for the rest of the steps and
+skips the download.
+
+macOS releases are arm64 only, so an x64 macOS job builds the CLI with
+cargo first:
+
+Copy
+
+```yaml
+jobs:
+  release:
+    runs-on: macos-15-intel
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      # Build the archives and create the release before these steps.
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install packslip --version 1.0.0 --locked --root "$RUNNER_TEMP/packslip"
+      - uses: jdx/packslip@v1.0.0
+        with:
+          packslip-path: ${{ runner.temp }}/packslip/bin/packslip
+          artifacts: dist/*.tar.xz
+          bin: mytool
+```
+
+Build on the runner that will run the binary; the action executes it
+rather than cross-compiling for anything. Install the version the action
+ref pins, since the action and CLI are released together, and prefer
+`--locked` so the build uses the dependency versions that release was
+tested with. The same approach covers a platform packslip does not ship,
+a self-hosted or network-restricted runner, and a job that would rather
+build from source than download.
+
+A matrix that needs this on only some runners can leave the input empty
+elsewhere; an empty `packslip-path` downloads as usual:
+
+Copy
+
+```yaml
+packslip-path: ${{ runner.os == 'macOS' && runner.arch == 'X64' && format('{0}/packslip/bin/packslip', runner.temp) || '' }}
+```
+
+`packslip-path` takes precedence over `packslip-version`, which the action
+warns about when both are set. A downloaded archive is checked against
+jdx/packslip’s build provenance before it runs; a binary supplied this way
+is not checked at all, so the job vouches for where it came from.
+
+## Action inputs
+
+| Input | Purpose and default |
+| --- | --- |
+| `artifacts` | Whitespace-separated local files or globs. Between this and `download`, at least one file must match. |
+| `download` | Whitespace-separated release asset name patterns to fetch before collecting artifacts; joins `artifacts`. See [Download from the release](https://packslip.dev/docs/publishing/#download-from-the-release). |
+| `bin` | Whitespace-separated executable names or `NAME=PATH` entries. |
+| `project` | Project name; defaults to `github.com/<owner>/<repo>`. A host such as `mytool.example.com` names a [project on its own domain](https://packslip.dev/docs/self-hosting/). |
+| `version` | Semver version; defaults to the tag without its leading `v`. |
+| `tag` | Existing release tag; defaults to the triggering tag. |
+| `commit` | Source commit SHA; defaults to `github.sha`. Override when the release source differs from the workflow commit. |
+| `manifest` | Path to a TOML manifest. Its artifact entries join the matched files. |
+| `variants` | Whitespace-separated `FILENAME=VARIANT` entries. |
+| `formats` | Whitespace-separated `FILENAME=FORMAT` entries, for an artifact whose name does not say what it is. |
+| `resources` | One resource declaration per line. Add `@os[/arch[/libc]]` after the kind to scope one to a platform. |
+| `require` | One `bin:NAME[@MIN]` requirement per line. |
+| `extensions` | One `NAME=JSON` extension per line. |
+| `url-base` | Artifact download prefix; defaults to the release’s download URL. Set it when the files are served from elsewhere. |
+| `notes-url` | Defaults to the release page. |
+| `attest` | Defaults to `true`. Use `link` when the build jobs already attested the files, or `false` for neither. |
+| `out` | Bundle output directory; defaults to `packslip`. |
+| `upload` | Defaults to `true`. Set to `false` to keep the bundle local. |
+| `packslip-version` | CLI version; defaults to the version in the action’s `Cargo.toml`. |
+| `packslip-path` | An existing packslip executable to run instead of downloading a release: a path, or a name on PATH. Takes precedence over `packslip-version`. |
+| `token` | Download/upload token; defaults to `github.token`. |
+
+The provenance step covers files matched by `artifacts`. Files supplied
+only through the manifest or a resource declaration are not automatically
+included in that step. Include them in `artifacts` if you want the action
+to attest them too. A file also declared as a resource asset is recorded
+as an asset rather than an installable artifact.
+
+A workflow whose build jobs attest each file as they produce it should set
+`attest: link`. GitHub serves an artifact’s provenance by subject digest
+whoever attested it, so the packslip links the same URL either way, and the
+action does not add a second statement about digests already covered. It
+needs no `attestations: write` permission in that case. An artifact nothing
+attested leaves a link that resolves to nothing, so `link` belongs only in a
+workflow that really does attest every file it publishes.
+
+The action passes project, version, source, and URL metadata as CLI flags,
+which take precedence over the corresponding manifest values. Change
+those values through action inputs where available.
+
+## Check the published result
+
+The action verifies the local bundle before uploading it. Check the published
+release separately: download the bundle and an artifact from the URLs users
+will use, then [verify both](https://packslip.dev/docs/verifying/#verify-against-the-expected-repository)
+against your repository identity. This also catches a wrong upload, stale file,
+or URL that points at a different build.
+
+Inspect the statement with `packslip show` to confirm the project, normalized
+version, source tag, platforms, and executable paths. Inspection does not
+replace verification. Linked build provenance also needs its own verification;
+the packslip verification command does not fetch it.
+
+For a draft workflow trial, set `upload: false` to retain the bundle locally.
+This still signs the statement and, with the default `attest: true`, publishes
+provenance. Use the [local walkthrough](https://packslip.dev/docs/getting-started/) for an offline
+trial that does not contact signing services.
+
+## Troubleshoot publication
+
+| Symptom | What to check |
+| --- | --- |
+| No artifacts matched | Files must be present in this job’s working directory, or matched by `download` from the release named by `tag`. Download matrix outputs before the action (or set `download`), and check the glob. |
+| Version rejected | Pass a semver `version` explicitly for tags such as `mytool-v1.2.3` or `v4.1`. |
+| Executable missing or ambiguous | Check the archive contents and use an explicit path or `NAME=PATH` mapping. |
+| Bundle upload fails | The release named by `tag` must exist and the token must have `contents: write`. |
+| Signing cannot obtain a CI identity | Give the signing job `id-token: write`. |
+| A resource URL returns a missing file | Upload that separate asset; resource declarations only describe it. |
+| A download fails its digest check | Compare the published file with the final local file that was signed; do not disable verification. |
