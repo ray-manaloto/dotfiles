@@ -85,6 +85,15 @@ KNOWN_LABEL_PREFIXES = {
     "adjudicate",
     "read-link",
     "codex-sol-advisor",
+    # native-cli-installers.js (plan + execute modes)
+    "discover",
+    "research",
+    "design",
+    "implement",
+    "sweep",
+    "qa",
+    "review",
+    "docs",
 }
 
 ARGS = {
@@ -936,3 +945,55 @@ def test_research_sweep_keeps_a_section_fragment(tmp_path: Path) -> None:
         e for e in events if e["kind"] == "read" and e["label"].startswith("read-link")
     )
     assert "https://p.test/post#on-omarchy" in link_read["prompt"]
+
+
+def test_native_cli_installers_execute_mode_reaches_every_phase(tmp_path: Path) -> None:
+    """Execute mode reaches implement, per-target sweep, QA, reviews, docs, verify."""
+    source = (WORKFLOWS / "native-cli-installers.js").read_text(encoding="utf-8")
+    wrapped = _wrapped_source(source).replace(
+        f"const args = {json.dumps(ARGS)}",
+        "const args = "
+        + json.dumps(
+            {
+                **ARGS,
+                "mode": "execute",
+                "specFile": str(REPO_ROOT / ".agent" / "spec.md"),
+                "sweepTargets": [
+                    {"path": "a/mise.toml", "kind": "repo", "scope": "HOST"},
+                    {"path": "b/mise.toml", "kind": "worktree", "scope": "HOST"},
+                ],
+            }
+        ),
+        1,
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "native-execute.js")
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.splitlines()[-1])
+    labels = [call["label"] for call in payload["calls"]]
+    assert labels.count("sweep:repo") + labels.count("sweep:worktree") == 2
+    for prefix in ("implement", "qa", "cold-reviewer", "review", "docs", "verify"):
+        assert any(label.split(":", 1)[0] == prefix for label in labels), prefix
+
+
+def test_native_cli_installers_rejects_execute_without_an_approved_spec(
+    tmp_path: Path,
+) -> None:
+    """Execute without args.specFile must stop before any agent runs."""
+    source = (WORKFLOWS / "native-cli-installers.js").read_text(encoding="utf-8")
+    wrapped = _wrapped_source(source).replace(
+        f"const args = {json.dumps(ARGS)}",
+        # ARGS carries gated-implementation's specFile; drop it so this arm really
+        # has no approved spec (the first run passed only because of that key).
+        "const args = "
+        + json.dumps(
+            {
+                key: value
+                for key, value in {**ARGS, "mode": "execute"}.items()
+                if key != "specFile"
+            }
+        ),
+        1,
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "native-no-spec.js")
+    assert result.returncode != 0
+    assert "args.specFile" in result.stderr

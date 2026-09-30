@@ -1,0 +1,525 @@
+{
+  "controlArm": "This lane was read-only and wrote no files; the coordinator persists this report. The candidate set was 543 files whose names are mise configs (mise.toml, .mise.toml, mise.*.toml, .tool-versions, .config/mise/conf.d/*.toml, .config/mise/config*.toml, .devcontainer/mise-*.toml). They came from ~/.config/mise, ~/.codex, ~ (maxdepth 3) and all of ~/dev with node_modules pruned; vendored sources/ trees were excluded. Pin lines were then extracted with a non-comment key regex. CONTROL ARMS: (1) the same file set and grep shape found the known-present term 'shellcheck' in 38 dotfiles-tree files, and found dotfiles/mise.toml:126 `antigravity-cli = \"1.2.14\"`, which was already known to be there. (2) The live-cwd probe (one `lsof -a -d cwd -p <all pids>` call, 818 cwds, lsof rc=1 from vanished pids) found 22 processes with cwd = the dotfiles checkout, including this session's own shell, so it can see a live tree. It reported 0 for every dotfiles.worktrees/*, knowledge-base.worktrees/*, ~/.codex/worktrees/* and ~/dev/tmp/kb2. (3) The KB CI 'no mise install' negative: the same grep over KB/.github found 'graphify' 9 times and 'mise' 6 times in graphify-live-receipt.yml, but every 'mise' use is a git show/diff of mise.toml and mise.lock (lines 45-52), never an install, so KB pins are HOST-only. Note that removing a KB pin changes the mise.toml diff that workflow reads. (4) The 'no claude pin on host' negative: the same regex did hit claude-code pins elsewhere (dotfiles/.devcontainer/mise-runtime.toml:63, cpp-playground:3, claude-code-marketplace:10), so it can see claude pins. It found none in ~/.config/mise/config.toml, dotfiles/mise.toml (line 27 says the absence is deliberate) or knowledge-base/mise.toml. BINARIES (which -a, each exec'd with --version): agy -> (1) ~/.local/share/mise/installs/antigravity-cli/1.2.13/agy = 1.2.13, a stale mise install dir placed on PATH AHEAD of shims; (2) ~/.local/share/mise/shims/agy = 1.2.14; (3) ~/.local/bin/agy = 1.1.12, a native 172MB binary dated Aug 12, stale. antigravity -> installs/1.2.13 = 1.2.13, then shim = 1.2.14. codex -> shim = codex-cli 0.159.2, then ~/.local/bin/codex -> ~/.codex/packages/standalone/releases/0.159.2-aarch64-apple-darwin/bin/codex = 0.159.2. Because dotfiles disable_tools removes npm codex, the shim falls through to native. claude -> ~/.local/bin/claude -> ~/.local/share/claude/versions/2.1.285 = 2.1.285, with 2.1.283 and 2.1.284 also present; there is no mise claude on PATH. `mise ls --current` in dotfiles shows antigravity-cli 1.2.14 (dotfiles/mise.toml) and no codex or claude entry. Out-of-scope lookalikes, NOT the target CLIs: npm:claude-code-lint (dotfiles, macos-dev-env), npm:oh-my-claude-sisyphus (dotfiles), npm:oh-my-codex (global), npm:@google/gemini-cli (image). CI FACT: dotfiles ci.yml:72 sets MISE_DISABLE_TOOLS=\"\" workflow-wide and contract-preflight runs a full `mise install`. So shared.toml's npm:@openai/codex AND root mise.toml's antigravity-cli are both installed in CI. CI's Claude comes from .github/actions/setup-claude-code, which curls the native installer with no mise pin. Not listed individually, as backups/other: 3 ~/.codex/archives snapshots of dotfiles (codex=0.147.0, antigravity-cli=1.1.11/1.1.12; mise-runtime claude-code=latest, npm:@openai/codex=latest) and of KB; about 12 ~/.codex/visualizations/.../mise.toml KB probe copies (npm:@openai/codex 0.154.0/0.157.1, antigravity-cli 1.2.2/1.2.11/1.2.12); 17 test fixtures under ~/.config/mise/docs and agentsview-native evidence (`\"npm:@openai/codex\" = \"0.0.0\"`, conflicting-overlay). The ~/.codex/config.toml hits are codex plugin config, not mise pins.",
+  "files": [
+    {
+      "path": "/Users/rmanaloto/.config/mise/config.toml",
+      "kind": "global",
+      "scope": "HOST",
+      "lines": [
+        "142: antigravity-cli = { version = \"1.2.14\", minimum_release_age = \"0s\" }"
+      ],
+      "branch": "-",
+      "dirty": false,
+      "liveWriter": true,
+      "repo": "(not a git repo)"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/mise.toml",
+      "kind": "repo",
+      "scope": "HOST+CI",
+      "lines": [
+        "126: antigravity-cli = \"1.2.14\"",
+        "169: disable_tools = [\"npm:@openai/codex\"]  ([settings], host-only codex disable; CI re-enables via MISE_DISABLE_TOOLS=\"\" in ci.yml:72)"
+      ],
+      "branch": "feat/doctor-devcontainer-arches",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.config/mise/conf.d/shared.toml",
+      "kind": "repo",
+      "scope": "HOST(disabled)+IMAGE+CI",
+      "lines": [
+        "44: \"npm:@openai/codex\" = { version = \"0.154.0\", allow_builds = [\"@openai/codex\"] }"
+      ],
+      "branch": "feat/doctor-devcontainer-arches",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.devcontainer/mise-runtime.toml",
+      "kind": "repo",
+      "scope": "IMAGE",
+      "lines": [
+        "63: claude-code = \"latest\""
+      ],
+      "branch": "feat/doctor-devcontainer-arches",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "239: \"npm:@openai/codex\" = \"0.154.0\"",
+        "240: antigravity-cli = \"1.2.12\""
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/agy-graphify-research/.mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "12: antigravity-cli = { version = \"1.1.19\", minimum_release_age = \"0s\" }"
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "agy-graphify-research"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/claude-code-marketplace/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "10: \"npm:@anthropic-ai/claude-code\" = { version = \"2.1.251\", allow_builds = [\"@anthropic-ai/claude-code\"] }"
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": true,
+      "repo": "ray-manaloto/claude-code-marketplace"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/cpp-playground/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "3: claude-code = \"2.1.81\"",
+        "4: codex = \"0.116.0\""
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/cpp-playground"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/gemini-ai-macos-development-environment/config/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "84: \"npm:@anthropic-ai/claude-code\" = \"latest\"",
+        "85: \"npm:@openai/codex\" = \"latest\""
+      ],
+      "branch": "feat/vercel-labs-non-skill-audit",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/gemini-ai-macos-development-environment"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/harness-evolution-ledger/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "40: codex = \"0.150.0\""
+      ],
+      "branch": "main",
+      "dirty": false,
+      "liveWriter": true,
+      "repo": "ray-manaloto/harness-evolution-ledger"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/harness-evolution-ledger-fnox-1.35.3/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "40: codex = \"0.150.0\""
+      ],
+      "branch": "codex/fnox-1.35.3",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/harness-evolution-ledger"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb/mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "22: codex = \"latest\""
+      ],
+      "branch": "kb/spec-and-handoff-refactor",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/modern_cpp_kb"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/symphony-cpp/.mise.toml",
+      "kind": "repo",
+      "scope": "HOST",
+      "lines": [
+        "7: codex = \"0.146.0\""
+      ],
+      "branch": "codex/implementation",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "symphony-cpp"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/rio/dotfiles/mise.toml",
+      "kind": "other",
+      "scope": "HOST",
+      "lines": [
+        "2: codex = \"latest\"  (file UNTRACKED in rio/dotfiles)"
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "rio/dotfiles (third-party clone)"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/rio/dotfiles/.tool-versions",
+      "kind": "other",
+      "scope": "HOST",
+      "lines": [
+        "1: npm:@openai/codex 0.120.0  (file UNTRACKED)"
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "rio/dotfiles (third-party clone)"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/rio/dotfiles/dot_config/mise/mise.toml",
+      "kind": "other",
+      "scope": "HOST(chezmoi source of a third party, not applied here)",
+      "lines": [
+        "65: \"npm:@openai/codex\" = { version = \"latest\", depends = [\"node\"] }"
+      ],
+      "branch": "main",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "rio/dotfiles (third-party clone)"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify/mise.toml",
+      "kind": "other",
+      "scope": "HOST",
+      "lines": [
+        "3: codex = \"0.121.0\"  (file UNTRACKED)"
+      ],
+      "branch": "claude/init-setup",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "safishamsi/graphify (third-party clone)"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/tmp/kb2/mise.toml",
+      "kind": "other",
+      "scope": "HOST",
+      "lines": [
+        "4: codex = \"latest\""
+      ],
+      "branch": "-",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "(not a git repo)"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/tools/dotfiles-research-gate/mise.toml",
+      "kind": "other",
+      "scope": "HOST+CI (dotfiles clone owned by codex tooling)",
+      "lines": [
+        "126: antigravity-cli = \"1.2.12\"",
+        "169: disable_tools = [\"npm:@openai/codex\"]"
+      ],
+      "branch": "main",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/tools/dotfiles-research-gate/.config/mise/conf.d/shared.toml",
+      "kind": "other",
+      "scope": "HOST(disabled)+IMAGE+CI",
+      "lines": [
+        "44: \"npm:@openai/codex\" = { version = \"0.154.0\", allow_builds = [\"@openai/codex\"] }"
+      ],
+      "branch": "main",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/tools/dotfiles-research-gate/.devcontainer/mise-runtime.toml",
+      "kind": "other",
+      "scope": "IMAGE",
+      "lines": [
+        "63: claude-code = \"latest\""
+      ],
+      "branch": "main",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/3f4c/dotfiles/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST+CI",
+      "lines": [
+        "127: antigravity-cli = \"1.2.8\""
+      ],
+      "branch": "codex/graphify-0-9-67",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/3f4c/dotfiles/.config/mise/conf.d/shared.toml",
+      "kind": "worktree",
+      "scope": "HOST+IMAGE+CI",
+      "lines": [
+        "44: \"npm:@openai/codex\" = { version = \"0.154.0\", allow_builds = [\"@openai/codex\"] }"
+      ],
+      "branch": "codex/graphify-0-9-67",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/3f4c/dotfiles/.devcontainer/mise-runtime.toml",
+      "kind": "worktree",
+      "scope": "IMAGE",
+      "lines": [
+        "63: claude-code = \"latest\""
+      ],
+      "branch": "codex/graphify-0-9-67",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/{1a55,5565,5af3,7fe5,8e90,b3f2,cd23,da13,deb6,ef9a}/symphony-cpp/.mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "7: codex = \"0.146.0\"  (10 identical worktrees)"
+      ],
+      "branch": "DETACHED@2b7167f",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "symphony-cpp"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/{3191,7cb9}/harness-evolution-ledger/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "40: codex = \"0.150.0\""
+      ],
+      "branch": "codex/phase-0-bootstrap-completion | DETACHED@41fbcca",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/harness-evolution-ledger"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/worktrees/hel-session-review/harness-evolution-ledger/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "25: \"npm:@openai/codex\" = \"0.149.1\""
+      ],
+      "branch": "codex/session-review-port-prep",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/harness-evolution-ledger"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/{agent-team-research-skill,agy-native-20260930,currency-20260930,research-five-source-gate,worktree-orchestration-20260929}/mise.toml + ../dotfiles.validation/research-five-source-land/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST+CI",
+      "lines": [
+        "126: antigravity-cli = \"1.2.12\" (agent-team-research-skill, research-five-source-gate, worktree-orchestration, research-five-source-land) | \"1.2.14\" (agy-native-20260930, currency-20260930)",
+        "169: disable_tools = [\"npm:@openai/codex\"]"
+      ],
+      "branch": "codex/agent-team-research-skill(clean) | feat/native-cli-installers-workflow(dirty 2) | chore/currency-20260930(dirty 1) | DETACHED@2d763acb(clean) | codex/worktree-orchestration-20260929(clean) | main(clean, validation clone)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/project-sync-readiness-20260928/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST+CI",
+      "lines": [
+        "128: antigravity-cli = \"1.2.12\"",
+        "171: disable_tools = [\"npm:@openai/codex\"]"
+      ],
+      "branch": "codex/dotfiles-project-sync-readiness",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/{agentsview-managed-service,agentsview-native-service}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST+CI",
+      "lines": [
+        "132: antigravity-cli = \"1.2.3\"  (no disable_tools line on these older branches)"
+      ],
+      "branch": "codex/agentsview-managed-service(dirty 8) | codex/agentsview-native-service(dirty 6)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/{agent-a6e5728e0204c312c,agent-a82a7019cd7d3bac4}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST+CI",
+      "lines": [
+        "127: antigravity-cli = \"1.2.8\""
+      ],
+      "branch": "research/codex-exec-review-settings | research/hk-2-0-impact",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/{dotfiles.worktrees/*,dotfiles.validation/research-five-source-land,dotfiles/.claude/worktrees/agent-*}/.config/mise/conf.d/shared.toml (all 12 dotfiles worktrees)",
+      "kind": "worktree",
+      "scope": "HOST(disabled where disable_tools present)+IMAGE+CI",
+      "lines": [
+        "44: \"npm:@openai/codex\" = { version = \"0.154.0\", allow_builds = [\"@openai/codex\"] }"
+      ],
+      "branch": "(per worktree, see mise.toml rows)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/{dotfiles.worktrees/*,dotfiles.validation/research-five-source-land,dotfiles/.claude/worktrees/agent-*}/.devcontainer/mise-runtime.toml (all 12 dotfiles worktrees)",
+      "kind": "worktree",
+      "scope": "IMAGE",
+      "lines": [
+        "63: claude-code = \"latest\""
+      ],
+      "branch": "(per worktree, see mise.toml rows)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/dotfiles"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/{agentsview-kb-source-refresh,codex-0155-alignment-20260918,issue-1-cli-delivery-d2,issue-1-cli-integration}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "239: \"npm:@openai/codex\" = \"0.155.1\"",
+        "240: antigravity-cli = \"1.2.2\""
+      ],
+      "branch": "codex/agentsview-kb-source-refresh(dirty 5) | codex/codex-0155-alignment-20260918(dirty 2) | codex/issue-1-cli-delivery-d2(dirty 26) | codex/issue-1-kb-cli-integration(dirty 25)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/{cli-maintenance-20260922,cli-maintenance-51237d45-20260924,cli-maintenance-93c019a5-20260924}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "238: \"npm:@openai/codex\" = \"0.154.0\"",
+        "239: antigravity-cli = \"1.2.2\""
+      ],
+      "branch": "codex/cli-maintenance-20260922 | codex/cli-maintenance-51237d45-20260924 | codex/cli-maintenance-93c019a5-20260924",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-parity-9fa-20260925/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "244: \"npm:@openai/codex\" = \"0.154.0\"",
+        "245: antigravity-cli = \"1.2.2\""
+      ],
+      "branch": "codex/cli-parity-9fa-20260925",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/{graphify-claude-handoff-20260928,graphify-claude-handoff-docs-20260929,graphify-live-bootstrap-20260927,graphify-live-evidence-d5-20260928}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "239: \"npm:@openai/codex\" = \"0.154.0\"",
+        "240: antigravity-cli = \"1.2.12\""
+      ],
+      "branch": "codex/graphify-claude-handoff-20260928 | codex/graphify-claude-handoff-docs-20260929 | DETACHED@a8b4ca4b | codex/graphify-live-evidence-d5-20260928",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/{cli-cold-review-d5-20260928,cli-final-main-20260927,cli-review-arms-bb95-20260927,cli-signer-074b024-20260927,cli-v0971-integration-20260928}/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "251: \"npm:@openai/codex\" = \"0.157.1\"",
+        "252: antigravity-cli = \"1.2.12\""
+      ],
+      "branch": "DETACHED@c7917fda(dirty 1) | codex/cli-final-main-20260927(dirty 4) | DETACHED@bb95ae78(dirty 2) | DETACHED@c7917fda(clean) | codex/cli-v0971-integration-20260928(clean)",
+      "dirty": true,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/kb-project-sync-v0971-20260928/mise.toml",
+      "kind": "worktree",
+      "scope": "HOST",
+      "lines": [
+        "251: \"npm:@openai/codex\" = \"0.159.0\"",
+        "252: antigravity-cli = \"1.2.12\""
+      ],
+      "branch": "codex/kb-project-sync-v0971",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "ray-manaloto/knowledge-base"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/archives/{graphify-stabilization-20260813T001937Z/repositories,repo-recovery/20260813T195951Z/frozen-originals,repo-recovery/20260813T195951Z/restoration-drills/*}/{dotfiles,knowledge-base}/(mise.toml|.devcontainer/mise-runtime.toml)",
+      "kind": "backup",
+      "scope": "n/a (frozen snapshots; dotfiles copies would be HOST+CI / IMAGE)",
+      "lines": [
+        "dotfiles mise.toml: codex = \"0.147.0\"; antigravity-cli = \"1.1.11\"",
+        "dotfiles mise-runtime.toml:65 claude-code = \"latest\"; :67 \"npm:@openai/codex\" = { version = \"latest\", depends = [\"node\"] }",
+        "knowledge-base mise.toml:90-91 codex = \"0.147.0\"; antigravity-cli = \"1.1.12\""
+      ],
+      "branch": "-",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "archive"
+    },
+    {
+      "path": "/Users/rmanaloto/.codex/visualizations/2026/09/22/01a0ca59-2291-76a0-a5e7-bc6163a8567f/goal-research/execution-start/attempts/*/mise.toml (about 12 KB probe copies)",
+      "kind": "backup",
+      "scope": "n/a (probe copies)",
+      "lines": [
+        "\"npm:@openai/codex\" = \"0.154.0\" | \"0.157.1\"",
+        "antigravity-cli = \"1.2.2\" | \"1.2.11\" | \"1.2.12\""
+      ],
+      "branch": "-",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "probe artifacts"
+    },
+    {
+      "path": "/Users/rmanaloto/.config/mise/{docs/goals/agentsview-codex-update-all-20260919/**,agentsview-native/evidence/**}/fixtures/conflicting-overlay/mise.toml (17 copies)",
+      "kind": "other",
+      "scope": "n/a (test fixtures)",
+      "lines": [
+        "2: \"npm:@openai/codex\" = \"0.0.0\""
+      ],
+      "branch": "-",
+      "dirty": false,
+      "liveWriter": false,
+      "repo": "fixtures"
+    }
+  ]
+}
