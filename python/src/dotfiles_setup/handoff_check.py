@@ -54,11 +54,13 @@ _FENCE_MARKER = re.compile(r"^\s*(?P<fence>`{3,}|~{3,})")
 _INLINE_CODE = re.compile(r"(`+).*?\1")
 _STRIKETHROUGH = re.compile(r"~~.*?~~")
 _CLAIM_REFERENCE = re.compile(r"(?<![\w#/])#(?P<n>\d+)\b")
-# A reference written after a space-separated foreign-repo qualifier ("KB #509",
-# "knowledge-base PR #611", "owner/repo #12") names another repo's number.
+# A number glued to a word ("KB#814", "owner/repo#12") names another repo: it is
+# never a reference, but it ends the previous reference's window.
+_GLUED_REFERENCE = re.compile(r"(?<=\w)#\d+")
+# A reference written after a space-separated KB qualifier ("KB #509",
+# "knowledge-base PR #611") names a knowledge-base number.
 _FOREIGN_QUALIFIER = re.compile(
-    r"(?:\b(?:KB|kb|knowledge-base)|\b[\w.-]+/[\w.-]+)[ \t]+"
-    r"(?:(?:PR|pr|issue|Issue)[ \t]+)?$"
+    r"\b(?:KB|kb|knowledge-base)[ \t]+(?:(?:PR|pr|issue|Issue)[ \t]+)?$"
 )
 # Negated or past forms ("was RED", "never MERGED", "auto-merge disarmed") are
 # masked before the claim patterns run: they are not present-state claims.
@@ -156,25 +158,44 @@ class Finding:
     detail: str
 
 
+def handoff_key(path: Path) -> tuple[str, int] | None:
+    """Return a handoff's (date, letter order) identity; None for any other name.
+
+    Only the basename counts, so ``session-2026-09-29c.md`` and
+    ``session-2026-09-29-c.md`` name the same handoff wherever they live.
+    """
+    match = _HANDOFF_RE.fullmatch(path.name)
+    if match is None:
+        return None
+    suffix = match.group("suffix")
+    suffix_order = 0 if suffix is None else ord(suffix.lower()) - ord("a") + 1
+    return match.group("date"), suffix_order
+
+
 def newest_handoff(repo_root: Path, *, exclude: Path | None = None) -> Path | None:
     """Return the newest local handoff by ISO date and optional letter suffix.
 
-    ``exclude`` (compared by resolved path) is skipped — the handoff being
-    written is not "the previous handoff".
+    ``exclude`` is skipped by :func:`handoff_key`, not by path — the handoff
+    being written is not "the previous handoff", however its name is spelled.
+    It may be a bare filename or any path; a basename that is not a handoff
+    name raises ValueError rather than silently excluding nothing.
     """
+    excluded = None
+    if exclude is not None:
+        excluded = handoff_key(exclude)
+        if excluded is None:
+            message = f"not a session-YYYY-MM-DD[-x].md handoff name: {exclude}"
+            raise ValueError(message)
     plans = repo_root / ".agent" / "plans"
     if not plans.is_dir():
         return None
 
-    excluded = None if exclude is None else exclude.resolve()
     candidates: list[tuple[tuple[str, int], Path]] = []
     for path in plans.glob("session-*.md"):
-        match = _HANDOFF_RE.fullmatch(path.name)
-        if match is None or path.resolve() == excluded:
+        key = handoff_key(path)
+        if key is None or key == excluded:
             continue
-        suffix = match.group("suffix")
-        suffix_order = 0 if suffix is None else ord(suffix.lower()) - ord("a") + 1
-        candidates.append(((match.group("date"), suffix_order), path))
+        candidates.append((key, path))
     if not candidates:
         return None
     return max(candidates, key=lambda item: item[0])[1]
@@ -385,6 +406,14 @@ class Claim:
     line: int
 
 
+@dataclass(frozen=True)
+class ClaimTally:
+    """How many claims were judged, and which were skipped as not applicable."""
+
+    checked: int
+    skipped: tuple[Claim, ...]  # claim_holds(...) is None: a PR-only word on an ISSUE
+
+
 def _blank(match: re.Match[str]) -> str:
     """Replace a span with spaces so later patterns cannot see it."""
     return " " * len(match.group(0))
@@ -405,13 +434,16 @@ def extract_claims(text: str, *, source: str, line_offset: int = 0) -> list[Clai
     """Extract state claims from visible text: no fences, code spans, or strikethrough.
 
     A reference is ``#<digits>`` not preceded by a word character, ``#`` or
-    ``/`` (so ``KB#814`` and ``owner/repo#12`` are not references).  Its window
-    is the rest of its line up to the next reference on that line.
+    ``/``.  Its window is the rest of its line up to the next reference, or up
+    to the next number glued to a word (``KB#814``, ``owner/repo#12``), which
+    names another repo and so yields no claim itself.  ``/#N`` (the second
+    number of ``#A/#B``) neither is a reference nor ends the window, so
+    ``#1454/#1453 MERGED`` claims MERGED for #1454 only.
 
-    A reference after a space-separated foreign qualifier (``KB #509``,
-    ``knowledge-base PR #611``, ``owner/repo #12``) still ends the previous
-    window but yields no claim.  Only the KB spellings and ``owner/repo`` are
-    recognised: any other repo name followed by a space is still read as a
+    A reference after a space-separated KB qualifier (``KB #509``,
+    ``knowledge-base PR #611``) still ends the previous window but yields no
+    claim.  Only the KB spellings are recognised: any other repo name followed
+    by a space (``owner/repo #12``, ``other-repo #5``) is still read as a
     dotfiles number.  Negated or past forms (``was RED``, ``never MERGED``,
     ``auto-merge disarmed``) are not claims.
     """
@@ -420,13 +452,18 @@ def extract_claims(text: str, *, source: str, line_offset: int = 0) -> list[Clai
     for index, raw in enumerate(visible):
         line = _STRIKETHROUGH.sub(_blank, _INLINE_CODE.sub(_blank, raw.rstrip("\n")))
         references = list(_CLAIM_REFERENCE.finditer(line))
-        for position, reference in enumerate(references):
+        boundaries = sorted(
+            [
+                *(reference.start() for reference in references),
+                *(glued.start() for glued in _GLUED_REFERENCE.finditer(line)),
+            ]
+        )
+        for reference in references:
             if _FOREIGN_QUALIFIER.search(line, 0, reference.start()):
                 continue
-            window_end = (
-                references[position + 1].start()
-                if position + 1 < len(references)
-                else len(line)
+            window_end = next(
+                (start for start in boundaries if start > reference.start()),
+                len(line),
             )
             claims.extend(
                 Claim(int(reference.group("n")), word, source, line_offset + index + 1)
@@ -541,7 +578,7 @@ def _claim_findings(
     claims: list[Claim],
     facts: Callable[[Path, int], pr_facts.PrFacts | str],
     deadline_s: float,
-) -> tuple[list[Finding], int]:
+) -> tuple[list[Finding], ClaimTally]:
     """Judge every claim, fetching each number once within one total deadline."""
     per_number: dict[int, int] = {}
     for claim in claims:
@@ -551,6 +588,7 @@ def _claim_findings(
     answers: dict[int, pr_facts.PrFacts | str] = {}
     findings: list[Finding] = []
     checked = 0
+    skipped: list[Claim] = []
     for claim in claims:
         if claim.number not in answers:
             if time.monotonic() - started >= deadline_s:
@@ -582,6 +620,7 @@ def _claim_findings(
             continue
         holds = claim_holds(claim.word, answer)
         if holds is None:
+            skipped.append(claim)
             continue
         checked += 1
         if not holds:
@@ -592,7 +631,7 @@ def _claim_findings(
                     _describe(answer),
                 )
             )
-    return findings, checked
+    return findings, ClaimTally(checked, tuple(skipped))
 
 
 def check_with_claims(
@@ -602,8 +641,11 @@ def check_with_claims(
     show: Callable[[Path], Attestation] = show_attestation,
     facts: Callable[[Path, int], pr_facts.PrFacts | str] | None = None,
     source: str = "handoff",
-) -> tuple[list[Finding], int]:
-    """Return every non-OK finding plus the number of PR claims judged.
+) -> tuple[list[Finding], ClaimTally]:
+    """Return every non-OK finding plus the tally of judged and skipped claims.
+
+    A skipped claim (a PR-only word on an issue) never fails the check; it is
+    counted and listed so it cannot pass invisibly.
 
     ``CLAIMS_DEADLINE_S`` is read at call time: no NEW lookup starts after it
     expires, but a lookup in flight can add up to 2 x ``pr_facts.GH_TIMEOUT``
@@ -619,13 +661,13 @@ def check_with_claims(
         *extract_claims(text, source=source),
         *_plan_claims(repo_root),
     ]
-    claim_findings, checked = _claim_findings(
+    claim_findings, tally = _claim_findings(
         repo_root,
         claims,
         pr_facts.fetch_facts if facts is None else facts,
         CLAIMS_DEADLINE_S,
     )
-    return [*findings, *claim_findings], checked
+    return [*findings, *claim_findings], tally
 
 
 def check(
@@ -640,17 +682,33 @@ def check(
     return check_with_claims(repo_root, text, show=show, facts=facts, source=source)[0]
 
 
-def render(findings: list[Finding], *, source: str, claims_checked: int = 0) -> str:
-    """Render the findings list, including an explicit clean result."""
-    if not findings:
-        return (
-            f"handoff-check: OK — {source} citations resolve; "
-            f"{claims_checked} PR claim(s) match GitHub"
+def render(
+    findings: list[Finding], *, source: str, tally: ClaimTally | None = None
+) -> str:
+    """Render the findings list, including an explicit clean result.
+
+    Every skipped claim gets an info line in both forms; skips never fail.
+    """
+    checked = 0 if tally is None else tally.checked
+    skipped = () if tally is None else tally.skipped
+    if findings:
+        lines = [f"handoff-check: {len(findings)} finding(s) in {source}"]
+        lines.extend(
+            f"- {finding.verdict.value}: `{finding.citation}` — {finding.detail}"
+            for finding in findings
         )
-    lines = [f"handoff-check: {len(findings)} finding(s) in {source}"]
+    else:
+        ok = (
+            f"handoff-check: OK — {source} citations resolve; "
+            f"{checked} PR claim(s) match GitHub"
+        )
+        if skipped:
+            ok += f"; {len(skipped)} skipped (PR-only word on an issue)"
+        lines = [ok]
     lines.extend(
-        f"- {finding.verdict.value}: `{finding.citation}` — {finding.detail}"
-        for finding in findings
+        f"handoff-check: info — skipped #{claim.number} {claim.word.value} "
+        f"({claim.source}:{claim.line}): #{claim.number} is an issue, not a PR"
+        for claim in skipped
     )
     return "\n".join(lines)
 
@@ -679,13 +737,13 @@ def main(args: list[str], repo_root: Path) -> int:
         sys.stderr.write(f"handoff-check: handoff not found: {source}\n")
         return 1
     try:
-        findings, claims_checked = check_with_claims(
+        findings, tally = check_with_claims(
             repo_root, handoff.read_text(errors="replace"), source=source
         )
     except (RuntimeError, OSError) as exc:
         sys.stderr.write(f"handoff-check: {exc}\n")
         return 1
-    rendered = render(findings, source=source, claims_checked=claims_checked)
+    rendered = render(findings, source=source, tally=tally)
     if not (repo_root / "task_plan.md").is_file():
         rendered += (
             "\nhandoff-check: info — task_plan.md absent (fresh clone); "

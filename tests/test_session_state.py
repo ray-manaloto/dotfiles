@@ -690,7 +690,7 @@ def test_main_since_wins_over_for(
 
     assert (
         session_state.main(
-            ["--for", "x.md", "--since", "2026-09-29T20:00:00Z"],
+            ["--for", "session-2026-09-30.md", "--since", "2026-09-29T20:00:00Z"],
             repo,
         )
         == 0
@@ -807,3 +807,139 @@ def test_cli_dispatch_forwards_for(
 
     assert code == 0
     assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+
+
+# --- S29-H round 2 (F1 generated stamp, F5 --for by handoff key) -------------
+
+_NOW = datetime(2026, 9, 30, 1, 2, 3, tzinfo=UTC)
+
+
+def test_render_stamps_the_generation_time_right_after_the_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+
+    snapshot = session_state.gather(repo, with_pr=False)
+    lines = session_state.render(snapshot).splitlines()
+
+    assert snapshot.generated_at == "2026-09-30T01:02:03Z"
+    assert lines[0] == "- **branch**: `work/123`"
+    assert lines[1] == "- **generated**: 2026-09-30T01:02:03Z"
+
+
+def test_gather_reads_one_clock_for_the_stamp_and_the_fallback_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+    calls = _fake_gh(monkeypatch)
+
+    snapshot = session_state.gather(repo)
+
+    assert snapshot.generated_at == "2026-09-30T01:02:03Z"
+    assert (snapshot.since, snapshot.since_source) == (
+        "2026-09-29T01:02:03Z",
+        "24h fallback",
+    )
+    assert "merged:>=2026-09-29T01:02:03Z" in calls[2]
+
+
+def test_default_since_prefers_the_generated_stamp_over_a_later_mtime(
+    tmp_path: Path,
+) -> None:
+    """F1: the handoff was saved at 22:15:03 but its State was generated at 22:00."""
+    repo = _repo(tmp_path)
+    plans = _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    handoff = plans / "session-2026-09-29b.md"
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:15:03Z",
+        ".agent/plans/session-2026-09-29b.md mtime",
+    )
+
+    handoff.write_text("## State\n- **generated**: 2026-09-29T22:00:00Z\n")
+    os.utime(handoff, (_T_B, _T_B))
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:00:00Z",
+        ".agent/plans/session-2026-09-29b.md generated stamp",
+    )
+    assert session_state.default_since(
+        repo, _NOW, exclude=Path("session-2026-09-29-c.md")
+    ) == (
+        "2026-09-29T22:00:00Z",
+        (
+            ".agent/plans/session-2026-09-29b.md generated stamp "
+            "(excluding session-2026-09-29-c.md)"
+        ),
+    )
+
+
+def test_default_since_takes_the_last_parsable_stamp(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plans = _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    (plans / "session-2026-09-29b.md").write_text(
+        "- **generated**: 2026-09-29T20:00:00Z\n"
+        "- **generated**: 2026-09-29T21:00:00Z  \n"
+        "- **generated**: not-a-time\n"
+        "  - **generated**: 2026-09-29T23:00:00Z\n"
+    )
+
+    assert session_state.default_since(repo, _NOW)[0] == "2026-09-29T21:00:00Z"
+
+
+def test_an_unreadable_handoff_falls_back_to_its_mtime(tmp_path: Path) -> None:
+    """A directory named like a handoff cannot be read, but it can be stat'd."""
+    repo = _repo(tmp_path)
+    plans = repo / ".agent" / "plans"
+    unreadable = plans / "session-2026-09-29b.md"
+    unreadable.mkdir(parents=True)
+    os.utime(unreadable, (_T_B, _T_B))
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:15:03Z",
+        ".agent/plans/session-2026-09-29b.md mtime",
+    )
+
+
+def test_a_pasted_state_block_starts_the_next_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round trip: this run's render IS the next run's generated stamp."""
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    rendered = session_state.render(session_state.gather(repo, with_pr=False))
+    (plans / "session-2026-09-30.md").write_text("## State\n" + rendered + "\n")
+
+    assert session_state.default_since(repo, datetime.now(UTC)) == (
+        "2026-09-30T01:02:03Z",
+        ".agent/plans/session-2026-09-30.md generated stamp",
+    )
+
+
+def test_main_for_excludes_the_handoff_by_date_and_letter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F5: ``--for session-2026-09-29-c.md`` names the on-disk ``…29c.md``."""
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C})
+    calls = _fake_gh(monkeypatch)
+
+    assert session_state.main(["--for", "session-2026-09-29-c.md"], repo) == 0
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+
+
+def test_main_rejects_a_for_that_is_not_a_handoff_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert session_state.main(["--for", "notes.md"], repo) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "session-state: --for must name a session-YYYY-MM-DD[-x].md handoff\n"
+    )

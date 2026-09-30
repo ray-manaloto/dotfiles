@@ -14,11 +14,16 @@ failure, timeout, malformed JSON, and detached HEAD are all
 The repo's open PRs and the PRs merged since the previous handoff are rendered
 in the claim words ``handoff-check`` verifies ("#1449 OPEN, auto-merge armed,
 RED"), so a State section pasted from this output checks itself.
+
+Every render carries a ``generated`` stamp.  The next run starts its merged-since
+window at the previous handoff's stamp, not at its mtime: a handoff edited after
+its State was pasted would otherwise hide the merges in between from both.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -34,6 +39,7 @@ _STATUS_PREFIX_LENGTH = 3
 _PR_LIST_LIMIT = "100"
 _SINCE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 _FALLBACK_WINDOW = timedelta(hours=24)
+_GENERATED_STAMP = re.compile(r"^- \*\*generated\*\*: (\S+)\s*$", re.MULTILINE)
 
 DEFAULT_COMMITS = 8
 
@@ -95,6 +101,7 @@ class Snapshot:
     merged_prs: tuple[PrSummary, ...] | None
     since: str | None
     since_source: str | None
+    generated_at: str
     open_truncated: bool = False
     merged_truncated: bool = False
 
@@ -326,22 +333,46 @@ def _display(path: Path, repo_root: Path) -> str:
         return str(path)
 
 
+def _generated_stamp(handoff: Path) -> str | None:
+    """The last parsable ``- **generated**:`` stamp in a handoff, else None.
+
+    An unreadable file has no stamp: the caller falls back to its mtime.
+    """
+    try:
+        text = handoff.read_text(errors="replace")
+    except OSError:
+        return None
+    for match in reversed(list(_GENERATED_STAMP.finditer(text))):
+        stamp = parse_since(match.group(1))
+        if stamp is not None:
+            return stamp
+    return None
+
+
 def default_since(
     repo_root: Path, now: datetime, *, exclude: Path | None = None
 ) -> tuple[str, str]:
-    """The newest handoff's mtime in UTC, or ``now`` minus 24 h without one.
+    """The newest handoff's generated stamp (else its mtime), or ``now`` - 24 h.
 
     ``exclude`` is the handoff being written: once it exists it is the newest,
-    and its mtime would collapse the merged-since window to "now".
+    and its own time would collapse the merged-since window to "now".
     """
     handoff = handoff_check.newest_handoff(repo_root, exclude=exclude)
     if handoff is None:
         return _format_since(now - _FALLBACK_WINDOW), "24h fallback"
+    excluding = (
+        "" if exclude is None else f" (excluding {_display(exclude, repo_root)})"
+    )
+    stamp = _generated_stamp(handoff)
+    if stamp is not None:
+        return stamp, f"{handoff.relative_to(repo_root)} generated stamp{excluding}"
     mtime = datetime.fromtimestamp(handoff.stat().st_mtime, tz=UTC)
-    source = f"{handoff.relative_to(repo_root)} mtime"
-    if exclude is not None:
-        source += f" (excluding {_display(exclude, repo_root)})"
-    return _format_since(mtime), source
+    return _format_since(mtime), f"{handoff.relative_to(repo_root)} mtime{excluding}"
+
+
+def utc_now() -> datetime:
+    """The clock :func:`gather` reads once; tests pin it by patching this name."""
+    return datetime.now(UTC)
 
 
 def gather(
@@ -355,8 +386,10 @@ def gather(
     """Gather a read-only session snapshot from git and, optionally, GitHub.
 
     ``since`` wins over ``for_handoff``, which only excludes that handoff when
-    the window defaults to the previous handoff's mtime.
+    the window defaults to the previous handoff's stamp or mtime.
     """
+    now = utc_now()
+    generated_at = _format_since(now)
     branch = _current_branch(repo_root)
     dirty_paths = _dirty_paths(repo_root)
     commits = _recent_commits(repo_root, limit)
@@ -371,11 +404,10 @@ def gather(
             merged_prs=None,
             since=None,
             since_source=None,
+            generated_at=generated_at,
         )
     if since is None:
-        since, since_source = default_since(
-            repo_root, datetime.now(UTC), exclude=for_handoff
-        )
+        since, since_source = default_since(repo_root, now, exclude=for_handoff)
     else:
         since_source = "--since"
     pr = _pull_request(repo_root, branch)
@@ -391,6 +423,7 @@ def gather(
         merged_prs=None if merged_prs is None else merged_prs[0],
         since=since,
         since_source=since_source,
+        generated_at=generated_at,
         open_truncated=open_prs is not None and open_prs[1],
         merged_truncated=merged_prs is not None and merged_prs[1],
     )
@@ -487,7 +520,7 @@ def render(snapshot: Snapshot) -> str:
         if snapshot.branch is None
         else f"- **branch**: `{snapshot.branch}`"
     )
-    lines = [branch]
+    lines = [branch, f"- **generated**: {snapshot.generated_at}"]
     if snapshot.clean:
         lines.append("- **tree**: clean")
     else:
@@ -537,6 +570,12 @@ def main(args: list[str], repo_root: Path) -> int:
                 sys.stderr.write("session-state: --for needs a handoff path\n")
                 return 2
             requested = Path(value)
+            if handoff_check.handoff_key(requested) is None:
+                sys.stderr.write(
+                    "session-state: --for must name a "
+                    "session-YYYY-MM-DD[-x].md handoff\n"
+                )
+                return 2
             for_handoff = requested if requested.is_absolute() else repo_root / value
         elif arg == "--since":
             value = next(remaining, None)
