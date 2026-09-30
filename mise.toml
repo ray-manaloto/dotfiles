@@ -178,6 +178,11 @@ show_env = true
 postinstall = "mise reshim"
 
 [env]
+# Graphify 0.9.72 auto-refreshes stale HOME-level skill copies on any
+# non-install command (#3895); do-not.md #8 forbids graphify writing under
+# $HOME, so every task in this repo opts out. graphify.py also sets it on its
+# own children for runs outside mise.
+GRAPHIFY_NO_AUTO_REFRESH = "1"
 # THE platform default (#673). Everything that targets an architecture — the
 # container tasks below, devcontainer.json's build/run `--platform`, every
 # Python entry point via `platform_target.resolve_platform()`, and

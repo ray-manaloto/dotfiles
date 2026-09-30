@@ -55,6 +55,12 @@ copies the bundles and their packaged references, then stamps them. The
 `agents` surface is stamp-only: its `DELIBERATE STUB` stays byte-identical
 and no `references/` directory is created.
 
+Graphify 0.9.72's own auto-refresh (#3895, `GRAPHIFY_NO_AUTO_REFRESH`) does NOT
+cover these project-local surfaces — measured 2026-09-30: a stale, edited
+`.claude/skills/graphify` in the repo was left untouched, while the same skill
+under a scratch `$HOME` was refreshed with a `SKILL.md.bak`. It is a HOME-level
+feature, so this task's refresh stays necessary.
+
 A differing destination `SKILL.md` is copied to
 `.agent/graphify/backups/<platform>-SKILL.md.<timestamp>` before replacement,
 and the task prints that path. No `SKILL.md.bak` is left beside a managed
@@ -103,8 +109,15 @@ exact file with the same PATH. This is deliberately different from the project
 venv's Graphify used by `uv run --project python`.
 
 The rebuild subprocess removes every known LLM-provider credential/backend
-selector and forces the project venv to the front of PATH. Installed Graphify
-0.9.65 ignores `--no-label` on `update`, so no such flag is passed. Residual:
+selector and forces the project venv to the front of PATH. The scrub list is
+fixed; two tests hold it against the installed package (Graphify's own
+`backend_detection_env_vars()` and a double-quoted-name scan), and neither can
+see a user-level custom provider (the native test runs under a scratch HOME so
+one cannot turn it red). Every graphify child the repo spawns — the shared
+runner (forced, so an ambient `0` cannot win), the rebuild, the `--version`
+path probe the SessionStart doctor runs, and both bake-off sites — sets
+`GRAPHIFY_NO_AUTO_REFRESH=1`, and so does root `mise.toml` `[env]`. Graphify 0.9.65 was measured ignoring `--no-label` on
+`update`, so no such flag is passed. Residual:
 PATH must remain available for Graphify/git, and a future vendor update could
 still discover the keyless `claude` CLI fallback. The environment scrub reduces
 provider reachability; the AST argv gate is the repository-owned hard boundary.

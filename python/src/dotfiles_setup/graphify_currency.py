@@ -189,7 +189,10 @@ def _path_binary_probe(
             text=True,
             check=False,
             timeout=_PATH_TIMEOUT_SECONDS,
-            env={"PATH": ambient_path},
+            # The opt-out rides even this minimal env: with no HOME the child
+            # resolves the real home from the user record and 0.9.72 would
+            # rewrite a stale HOME skill on every session-start doctor run.
+            env={"PATH": ambient_path, "GRAPHIFY_NO_AUTO_REFRESH": "1"},
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return _Probe(
@@ -333,7 +336,12 @@ def write_release_receipts(
             f"- Published at: `{note.published_at}`\n\n"
             "## Release notes (verbatim)\n\n"
         )
-        receipt.write_text(f"{header}{note.body}\n", encoding="utf-8")
+        # GitHub release bodies often end in blank lines; hk's end-of-file and
+        # trailing-whitespace fixers reject them, so every receipt of the
+        # 0.9.66-0.9.72 bump failed lint. Only line endings (CRLF -> LF) and
+        # TRAILING whitespace change; an empty body is named, never blank.
+        body = note.body.replace("\r\n", "\n").rstrip() or "(empty release body)"
+        receipt.write_text(f"{header}{body}\n", encoding="utf-8")
         written.append(receipt)
     return tuple(written)
 

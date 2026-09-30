@@ -13,8 +13,11 @@ it:
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -54,7 +57,9 @@ from dotfiles_setup.graphify import (
 )
 from dotfiles_setup.graphify_currency import locked_version
 
-GRAPHIFY_VERSION = "0.9.65"
+# Read from the lock, not hard-coded: a hard-coded copy needed an edit on every
+# bump (three today) while guarding nothing the receipt check below does not.
+GRAPHIFY_VERSION = locked_version(Path(__file__).parent.parent)
 
 
 @pytest.fixture(autouse=True)
@@ -80,6 +85,9 @@ def test_graphify_lock_is_the_single_project_pin() -> None:
     assert dependency == "graphifyy[all]"
     assert project["tool"]["uv"]["override-dependencies"] == [dependency]
     assert locked_version(repo) == GRAPHIFY_VERSION
+    # The reviewed-bump tripwire: the locked version must carry its release
+    # receipt (written by `mise run graphify-update` before the lock moves).
+    assert (repo / "docs/receipts/graphify" / f"{GRAPHIFY_VERSION}.md").is_file()
 
 
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1566,3 +1574,74 @@ def test_graphify_health_is_fresh_when_the_graph_matches_head(
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
     assert result.ok
+
+
+_CREDENTIAL_SHAPED = re.compile(
+    r'"([A-Z][A-Z0-9_]*(?:API_KEY|_TOKEN|_BACKEND|_ENDPOINT|_HOST|_PROFILE'
+    r"|_REGION|_BASE_URL|ACCESS_KEY_ID|SECRET_ACCESS_KEY|_PASSWORD|_CREDENTIALS"
+    r'|_PROVIDERS))"'
+)
+
+
+def test_scrub_covers_every_credential_name_the_installed_graphify_reads() -> None:
+    """Double-quoted credential-shaped names in the installed package are scrubbed.
+
+    A scan, not a proof: single-quoted, f-string-built and other-suffix names
+    escape it (cold review of 6ef572d4 F1), which is why the native test below
+    exists too. 0.9.72 added five names 0.9.65's list lacked.
+    """
+    spec = importlib.util.find_spec("graphify")
+    assert spec is not None
+    assert spec.origin is not None
+    package = Path(spec.origin).parent
+    names = {
+        match
+        for source in package.rglob("*.py")
+        for match in _CREDENTIAL_SHAPED.findall(source.read_text(errors="replace"))
+    }
+    assert "OPENAI_API_KEY" in names, "control: the scan must see a known name"
+    assert names <= set(GRAPHIFY_REBUILD_SCRUB_ENV), sorted(
+        names - set(GRAPHIFY_REBUILD_SCRUB_ENV)
+    )
+
+
+def test_scrub_covers_graphifys_own_backend_detection_env_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Graphify's native list of backend-selecting names is a subset of the scrub.
+
+    Catches a new provider whose key a string scan cannot see (`env_key` values,
+    f-strings). Tests may import graphify.llm; production modules may not. The
+    module reads custom providers from HOME and cwd AT IMPORT, so it is
+    (re)loaded under a scratch HOME/cwd: a developer's own
+    ~/.graphify/providers.json must not turn this red (cold review N4).
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("GRAPHIFY_ALLOW_LOCAL_PROVIDERS", raising=False)
+    monkeypatch.chdir(tmp_path)
+    llm = importlib.reload(importlib.import_module("graphify.llm"))
+    native = set(llm.backend_detection_env_vars())
+    assert native, "control: graphify must report at least one name"
+    assert native <= set(GRAPHIFY_REBUILD_SCRUB_ENV), sorted(
+        native - set(GRAPHIFY_REBUILD_SCRUB_ENV)
+    )
+
+
+def test_graphify_children_opt_out_of_home_skill_auto_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both graphify child envs and the repo's mise [env] set the 0.9.72 opt-out."""
+    monkeypatch.setattr("dotfiles_setup.graphify.without_env_diff", dict)
+    seen: dict[str, object] = {}
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    monkeypatch.setattr("dotfiles_setup.graphify.subprocess.run", fake_run)
+    prs(Path())  # public path through the shared graphify runner
+    env = seen["env"]
+    assert isinstance(env, dict)
+    assert env["GRAPHIFY_NO_AUTO_REFRESH"] == "1"
+    mise = tomllib.loads((Path(__file__).parent.parent / "mise.toml").read_text())
+    assert mise["env"]["GRAPHIFY_NO_AUTO_REFRESH"] == "1"

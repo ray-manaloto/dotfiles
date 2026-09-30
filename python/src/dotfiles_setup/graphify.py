@@ -35,10 +35,37 @@ _MANIFEST_FILE = "manifest.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
 
-# Every provider credential or backend selector read by Graphify 0.9.65's
-# backend detection, plus the additional provider keys named by this repo's
-# zero-token policy. Bound by workflow.graphify-zero-token-boundary.
+# Provider credentials, endpoints and backend selectors the installed Graphify
+# reads, plus the provider keys named by this repo's zero-token policy. A FIXED
+# list, checked two ways by tests: Graphify's own
+# ``graphify.llm.backend_detection_env_vars()`` and a scan for double-quoted
+# credential-shaped names must both be subsets. Names that escape both: built
+# at runtime, single-quoted, or with a suffix the scan does not list (e.g. a
+# future GRAPHIFY_LLM_PROVIDER). A user-level custom provider
+# (~/.graphify/providers.json) is outside any fixed list — the native test runs
+# under a scratch HOME so a developer's own provider cannot turn it red.
+# ``update`` itself makes no LLM call (0.9.72 source read, cold review of
+# 6ef572d4). Bound by workflow.graphify-zero-token-boundary.
+# Graphify 0.9.72 (#3895) rewrites a stale HOME-level skill copy on any
+# non-install command; do-not.md #8 forbids graphify writing under $HOME, so
+# every child this module spawns opts out (root mise.toml [env] sets it too).
+NO_AUTO_REFRESH_ENV = "GRAPHIFY_NO_AUTO_REFRESH"
+
 GRAPHIFY_REBUILD_SCRUB_ENV: tuple[str, ...] = (
+    "GRAPHIFY_ALLOW_LOCAL_PROVIDERS",
+    # graph-database export credentials (cli.py), not LLM providers; scrubbed
+    # so the name scan stays a strict subset check rather than an allowlist.
+    "DB_PASSWORD",
+    "FALKORDB_PASSWORD",
+    "NEO4J_PASSWORD",
+    "GRAPHIFY_API_KEY",
+    "GRAPHIFY_TRIAGE_BACKEND",
+    "AWS_ACCESS_KEY_ID",
+    "ANTHROPIC_BASE_URL",
+    "DEEPSEEK_BASE_URL",
+    "GEMINI_BASE_URL",
+    "KIMI_BASE_URL",
+    "OPENAI_BASE_URL",
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
     "OPENAI_API_KEY",
@@ -541,6 +568,8 @@ def _run(
     commit, and that variable carries every exported credential in one opaque
     zlib+base64 field. See `.claude/rules/secrets-out-of-the-shell-env.md`.
     """
+    child_env = without_env_diff() if env is None else dict(env)
+    child_env[NO_AUTO_REFRESH_ENV] = "1"  # forced: an ambient "0" must not win
     return subprocess.run(
         args,
         cwd=cwd,
@@ -548,7 +577,7 @@ def _run(
         capture_output=True,
         text=True,
         input=stdin,
-        env=without_env_diff() if env is None else env,
+        env=child_env,
     )
 
 
@@ -557,6 +586,7 @@ def _rebuild_env() -> dict[str, str]:
     env = without_env_diff()
     for name in GRAPHIFY_REBUILD_SCRUB_ENV:
         env.pop(name, None)
+    env[NO_AUTO_REFRESH_ENV] = "1"
     venv_bin = str(Path(sys.executable).parent)
     inherited = env.get("PATH", "").split(os.pathsep)
     env["PATH"] = os.pathsep.join(
