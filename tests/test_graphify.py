@@ -57,7 +57,9 @@ from dotfiles_setup.graphify import (
 )
 from dotfiles_setup.graphify_currency import locked_version
 
-GRAPHIFY_VERSION = "0.9.72"
+# Read from the lock, not hard-coded: a hard-coded copy needed an edit on every
+# bump (three today) while guarding nothing the receipt check below does not.
+GRAPHIFY_VERSION = locked_version(Path(__file__).parent.parent)
 
 
 @pytest.fixture(autouse=True)
@@ -83,6 +85,9 @@ def test_graphify_lock_is_the_single_project_pin() -> None:
     assert dependency == "graphifyy[all]"
     assert project["tool"]["uv"]["override-dependencies"] == [dependency]
     assert locked_version(repo) == GRAPHIFY_VERSION
+    # The reviewed-bump tripwire: the locked version must carry its release
+    # receipt (written by `mise run graphify-update` before the lock moves).
+    assert (repo / "docs/receipts/graphify" / f"{GRAPHIFY_VERSION}.md").is_file()
 
 
 def _force_fresh_health(monkeypatch: pytest.MonkeyPatch) -> None:
