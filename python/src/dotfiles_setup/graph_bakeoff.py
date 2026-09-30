@@ -50,6 +50,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
 import statistics
 import subprocess
@@ -150,7 +151,9 @@ def _run(
     """Execute graphify. The module's only external boundary."""
     # `without_env_diff` first: a bake-off arm writes artifacts we read back,
     # and __MISE_DIFF would carry every exported credential into them.
-    merged = {**without_env_diff(), **env}
+    # GRAPHIFY_NO_AUTO_REFRESH: 0.9.72 would rewrite a stale HOME skill copy
+    # (do-not.md #8); forced last so neither the caller nor the shell can undo it.
+    merged = {**without_env_diff(), **env, "GRAPHIFY_NO_AUTO_REFRESH": "1"}
     # Wall-clock is bounded by graphify's own --api-timeout in FIXED_FLAGS.
     return subprocess.run(
         list(args), cwd=cwd, env=merged, capture_output=True, text=True, check=False
@@ -560,7 +563,12 @@ def gather_versions() -> dict[str, str]:
     ):
         try:
             proc = subprocess.run(
-                argv, capture_output=True, text=True, check=False, timeout=30
+                argv,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+                env={**os.environ, "GRAPHIFY_NO_AUTO_REFRESH": "1"},
             )
             versions[label] = proc.stdout.strip() or proc.stderr.strip() or "unknown"
         except OSError, subprocess.SubprocessError:

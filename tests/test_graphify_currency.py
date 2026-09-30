@@ -234,6 +234,9 @@ def test_release_receipt_ends_in_exactly_one_newline(tmp_path: Path) -> None:
         ("", b"(empty release body)\n"),
         ("a\r\nb   \n", b"a\nb\n"),
         ("keep  inner  spacing\n\n", b"keep  inner  spacing\n"),
+        # every upstream body since v0.9.63 starts with "\n" (cold review of
+        # b8479e34 N5): the LEADING whitespace is part of the verbatim text
+        ("\nlead\n", b"\nlead\n"),
     ],
 )
 def test_release_receipt_normalizes_only_line_endings_and_the_tail(
@@ -303,7 +306,10 @@ def test_check_is_read_only_and_clean_when_every_surface_agrees(
         args: list[str], **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         if args == [binary, "--version"]:
-            assert kwargs["env"] == {"PATH": "/ambient/bin:/usr/bin"}
+            assert kwargs["env"] == {
+                "PATH": "/ambient/bin:/usr/bin",
+                "GRAPHIFY_NO_AUTO_REFRESH": "1",
+            }
             return _completed(args, stdout=f"graphify {LOCKED}\n")
         return original_run(args, **kwargs)
 
@@ -380,7 +386,10 @@ def test_offline_check_skips_network_and_keeps_local_axes(
 
     def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert args == [binary, "--version"]
-        assert kwargs["env"] == {"PATH": "/ambient/bin:/usr/bin"}
+        assert kwargs["env"] == {
+            "PATH": "/ambient/bin:/usr/bin",
+            "GRAPHIFY_NO_AUTO_REFRESH": "1",
+        }
         return _completed(args, stdout=f"graphify {LOCKED}\n")
 
     monkeypatch.setattr(graphify_currency.subprocess, "run", fake_run)
@@ -469,7 +478,10 @@ def test_path_probe_executes_the_binary_resolved_from_ambient_path(
 
     def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert args == [binary, "--version"]
-        assert kwargs["env"] == {"PATH": "/ambient/bin:/usr/bin"}
+        assert kwargs["env"] == {
+            "PATH": "/ambient/bin:/usr/bin",
+            "GRAPHIFY_NO_AUTO_REFRESH": "1",
+        }
         return _completed(args, stdout="graphify 0.0.1\n")
 
     monkeypatch.setattr(graphify_currency.subprocess, "run", fake_run)
@@ -498,7 +510,10 @@ def test_path_probe_never_accepts_the_uv_project_venv(
 
     def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         assert args == [str(ambient / "graphify"), "--version"]
-        assert kwargs["env"] == {"PATH": str(ambient)}
+        assert kwargs["env"] == {
+            "PATH": str(ambient),
+            "GRAPHIFY_NO_AUTO_REFRESH": "1",
+        }
         return _completed(args, stdout="graphify 0.0.1\n")
 
     monkeypatch.setattr(graphify_currency.shutil, "which", fake_which)

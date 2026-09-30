@@ -189,7 +189,10 @@ def _path_binary_probe(
             text=True,
             check=False,
             timeout=_PATH_TIMEOUT_SECONDS,
-            env={"PATH": ambient_path},
+            # The opt-out rides even this minimal env: with no HOME the child
+            # resolves the real home from the user record and 0.9.72 would
+            # rewrite a stale HOME skill on every session-start doctor run.
+            env={"PATH": ambient_path, "GRAPHIFY_NO_AUTO_REFRESH": "1"},
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return _Probe(

@@ -39,10 +39,13 @@ _MAX_AGENT_OUTPUT_BYTES = 65_536
 # reads, plus the provider keys named by this repo's zero-token policy. A FIXED
 # list, checked two ways by tests: Graphify's own
 # ``graphify.llm.backend_detection_env_vars()`` and a scan for double-quoted
-# credential-shaped names must both be subsets. Neither can see a user-level
-# custom provider (~/.graphify/providers.json) or names built at runtime — that
-# gap stays; ``update`` itself makes no LLM call (0.9.72 source read, cold
-# review of 6ef572d4). Bound by workflow.graphify-zero-token-boundary.
+# credential-shaped names must both be subsets. Names that escape both: built
+# at runtime, single-quoted, or with a suffix the scan does not list (e.g. a
+# future GRAPHIFY_LLM_PROVIDER). A user-level custom provider
+# (~/.graphify/providers.json) is outside any fixed list — the native test runs
+# under a scratch HOME so a developer's own provider cannot turn it red.
+# ``update`` itself makes no LLM call (0.9.72 source read, cold review of
+# 6ef572d4). Bound by workflow.graphify-zero-token-boundary.
 # Graphify 0.9.72 (#3895) rewrites a stale HOME-level skill copy on any
 # non-install command; do-not.md #8 forbids graphify writing under $HOME, so
 # every child this module spawns opts out (root mise.toml [env] sets it too).
@@ -566,7 +569,7 @@ def _run(
     zlib+base64 field. See `.claude/rules/secrets-out-of-the-shell-env.md`.
     """
     child_env = without_env_diff() if env is None else dict(env)
-    child_env.setdefault(NO_AUTO_REFRESH_ENV, "1")
+    child_env[NO_AUTO_REFRESH_ENV] = "1"  # forced: an ambient "0" must not win
     return subprocess.run(
         args,
         cwd=cwd,

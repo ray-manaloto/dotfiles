@@ -1600,13 +1600,21 @@ def test_scrub_covers_every_credential_name_the_installed_graphify_reads() -> No
     )
 
 
-def test_scrub_covers_graphifys_own_backend_detection_env_vars() -> None:
+def test_scrub_covers_graphifys_own_backend_detection_env_vars(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Graphify's native list of backend-selecting names is a subset of the scrub.
 
     Catches a new provider whose key a string scan cannot see (`env_key` values,
-    f-strings). Tests may import graphify.llm; production modules may not.
+    f-strings). Tests may import graphify.llm; production modules may not. The
+    module reads custom providers from HOME and cwd AT IMPORT, so it is
+    (re)loaded under a scratch HOME/cwd: a developer's own
+    ~/.graphify/providers.json must not turn this red (cold review N4).
     """
-    llm = importlib.import_module("graphify.llm")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("GRAPHIFY_ALLOW_LOCAL_PROVIDERS", raising=False)
+    monkeypatch.chdir(tmp_path)
+    llm = importlib.reload(importlib.import_module("graphify.llm"))
     native = set(llm.backend_detection_env_vars())
     assert native, "control: graphify must report at least one name"
     assert native <= set(GRAPHIFY_REBUILD_SCRUB_ENV), sorted(
