@@ -42,6 +42,11 @@ file — see :func:`find_violations`, which forbids the literal everywhere else,
 and :func:`find_default_drift`, which fails if the two ever disagree.
 Collapsing them into one generated value is #680's codegen job, not this
 ticket's.
+
+Arch profiles are a third, narrower class: a root ``mise.<arch>.toml`` (``<arch>``
+in :data:`PUBLISHED_ARCHES`, selected by ``MISE_ENV=<arch>``) may carry a literal
+for ITS OWN arch only — it exists to retarget that profile. It pins no default,
+so it does not join the agreement check.
 """
 
 from __future__ import annotations
@@ -70,6 +75,7 @@ __all__ = [
     "UBUNTU_26_04_ARM_RUNNER_BLOCKING",
     "PlatformLiteral",
     "PublishTarget",
+    "arch_profile",
     "ci_matrix_targets",
     "declared_lock_platforms",
     "expected_uname_machine",
@@ -186,6 +192,19 @@ _SCAN_EXCLUDED_PATHS = (
 # The architectures the published image ships as one manifest (#676), in the
 # order the CI matrix runs them.
 PUBLISHED_ARCHES = ("amd64", "arm64")
+
+# A root `mise.<env>.toml`; it is an ARCH PROFILE only when `<env>` is in
+# PUBLISHED_ARCHES (`mise.local.toml` and `mise.riscv.toml` are not).
+_ARCH_PROFILE_RE = re.compile(r"mise\.([a-z0-9_]+)\.toml")
+
+
+def arch_profile(rel_path: str) -> str | None:
+    """The arch a root ``mise.<arch>.toml`` profile selects, else ``None``."""
+    match = _ARCH_PROFILE_RE.fullmatch(rel_path)
+    if match is None or match.group(1) not in PUBLISHED_ARCHES:
+        return None
+    return match.group(1)
+
 
 # The GitHub-hosted runner label that executes each architecture NATIVELY.
 # Native is the whole ruling: a single bake emitting both platforms would build
@@ -513,9 +532,17 @@ class PlatformLiteral:
     path: str
     line: int
     literal: str
+    #: Set when the site is an arch profile: the only arch it may name.
+    expected_arch: str | None = None
 
     def render(self) -> str:
         """One reviewer-facing line naming the site and the fix."""
+        if self.expected_arch is not None:
+            return (
+                f"{self.path}:{self.line}: platform literal {self.literal!r} in "
+                f"the {self.expected_arch} arch profile — it may only name "
+                f"linux/{self.expected_arch}, the arch its MISE_ENV selects"
+            )
         return (
             f"{self.path}:{self.line}: hard-coded platform literal "
             f"{self.literal!r} — resolve it from {PLATFORM_ENV_VAR} "
@@ -547,6 +574,8 @@ def _in_scope(rel_path: str) -> bool:
 def find_violations(repo_root: Path) -> list[PlatformLiteral]:
     """Every platform literal outside the two permitted default sites.
 
+    An arch profile (:func:`arch_profile`) may name its own arch and no other.
+
     Machine-enforced completeness (#673 AC3): careful editing threads the
     parameter through the sites you remembered, and this finds the ones you did
     not. It scans the *tracked* tree so a literal cannot arrive via a file the
@@ -561,10 +590,17 @@ def find_violations(repo_root: Path) -> list[PlatformLiteral]:
             text = target.read_text(encoding="utf-8")
         except OSError, UnicodeDecodeError:
             continue
+        profile = arch_profile(rel_path)
         violations.extend(
-            PlatformLiteral(path=rel_path, line=lineno, literal=match.group(0))
+            PlatformLiteral(
+                path=rel_path,
+                line=lineno,
+                literal=match.group(0),
+                expected_arch=profile,
+            )
             for lineno, line in enumerate(text.splitlines(), start=1)
             for match in _LITERAL_RE.finditer(line)
+            if profile is None or platform_arch(match.group(0)) != profile
         )
     return violations
 

@@ -58,6 +58,7 @@ import importlib.util
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -97,7 +98,7 @@ from dotfiles_setup.path_drift import (
 # each to be in CHECKS, so an imported one would be an unregistrable false
 # positive — the guard caught this import on its first run.
 from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
-from dotfiles_setup.platform_target import platform_arch, resolve_platform
+from dotfiles_setup.platform_target import PLATFORM_ENV_VAR, platform_arch
 from dotfiles_setup.plugin_health import check_plugin_health as plugin_health_findings
 
 if TYPE_CHECKING:
@@ -1407,10 +1408,35 @@ _DOCKER_PS_TIMEOUT_S = 10.0
 _DOCKER_PS_FIELDS = ("{{.ID}}", "{{.State}}", "{{.Names}}")
 #: One output line each; they differ only in a linked worktree.
 _GIT_DIR_FLAGS = ("--git-dir", "--git-common-dir")
+_GIT_TIMEOUT_S = 10.0
+#: `mise env --json` measured at 0.07 s on this host (2026-09-30); the bound
+#: only stops a wedged mise (a hung credential child) from holding the session.
+_MISE_ENV_TIMEOUT_S = 20.0
+#: Dropped from the `mise env` child so it answers from CONFIG alone.
+#: ``mise.toml`` templates DOTFILES_PLATFORM from the ambient value, so a parent
+#: running under ``MISE_ENV=arm64`` would otherwise make arm64 the "default".
+_MISE_AMBIENT_VARS = (
+    "MISE_ENV",
+    PLATFORM_ENV_VAR,
+    devcontainer_names.SSH_PORT_ENV_VAR,
+)
+_PORT_ENV_VAR = devcontainer_names.SSH_PORT_ENV_VAR
+_PLATFORM_ENV_VAR = PLATFORM_ENV_VAR
+#: Devcontainers are brought up from the macOS host (AGENTS.md, "Two Build Types").
+_HOST_SYSTEM = "Darwin"
 
 
 class DockerUnavailableError(RuntimeError):
     """``docker ps`` did not answer, so no container state can be concluded."""
+
+
+class MiseEnvError(RuntimeError):
+    """``mise env`` did not answer, so the arch a profile selects is unknown."""
+
+
+def host_system() -> str:
+    """``platform.system()`` — a seam, so tests choose the host they model."""
+    return platform.system()
 
 
 def docker_container_rows(
@@ -1421,7 +1447,7 @@ def docker_container_rows(
     Not ``sync.container_state``, which runs the same query but ignores the
     return code, so a down daemon reads as ``absent`` — the conflation this
     helper exists to refuse. Every failure raises :class:`DockerUnavailableError`
-    carrying the first line of what docker said.
+    whose message names the cause.
     """
     try:
         proc = subprocess.run(
@@ -1442,13 +1468,21 @@ def docker_container_rows(
             timeout=_DOCKER_PS_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired as exc:
-        msg = f"timed out after {exc.timeout:g}s"
+        msg = f"docker ps did not answer within {_DOCKER_PS_TIMEOUT_S:g} s"
+        raise DockerUnavailableError(msg) from exc
+    except FileNotFoundError as exc:
+        msg = "docker CLI not found on PATH"
         raise DockerUnavailableError(msg) from exc
     except OSError as exc:
-        raise DockerUnavailableError(str(exc)) from exc
+        msg = f"docker could not run: {exc}"
+        raise DockerUnavailableError(msg) from exc
     if proc.returncode != 0:
         said = (proc.stderr.strip() or proc.stdout.strip()).splitlines()
-        msg = said[0] if said else f"exit {proc.returncode}"
+        first = said[0] if said else f"exit {proc.returncode}"
+        msg = (
+            f"docker ps failed: {first}; is Docker Desktop running and the "
+            "context right?"
+        )
         raise DockerUnavailableError(msg)
     rows: list[tuple[str, str, str]] = []
     for line in proc.stdout.splitlines():
@@ -1456,35 +1490,216 @@ def docker_container_rows(
             continue
         fields = line.split("\t")
         if len(fields) != len(_DOCKER_PS_FIELDS):
-            msg = f"unparsable docker ps line {line!r}"
+            msg = f"unparsable docker ps line: {line}"
             raise DockerUnavailableError(msg)
         rows.append((fields[0], fields[1], fields[2]))
     return rows
 
 
+@dataclass(frozen=True)
+class MiseResolution:
+    """What one mise profile resolves the two devcontainer selectors to."""
+
+    platform: str
+    arch: str
+    ssh_port: str
+
+
+def mise_env_resolution(
+    repo_root: Path,
+    environ: Mapping[str, str],
+    mise_env: str | None = None,
+) -> MiseResolution:
+    """``DOTFILES_PLATFORM`` / ``DEVCONTAINER_SSH_PORT`` as mise resolves them.
+
+    ``mise_env`` ``None`` is the default profile; otherwise ``mise -E <name>``,
+    exactly what ``MISE_ENV=<name> mise run up`` selects. Resolving through mise
+    itself (not this process's environment) is the point: outside mise the
+    process env falls back to the host's arm64, and mise's own precedence
+    between ``mise.local.toml`` and ``mise.<env>.toml`` contradicts its docs
+    (measured 2026-09-30), so only the resolved value is evidence. Every failure
+    raises :class:`MiseEnvError`.
+    """
+    argv = ["mise", *(("-E", mise_env) if mise_env else ()), "env", "--json"]
+    label = " ".join(argv[:-2])
+    child_env = {k: v for k, v in environ.items() if k not in _MISE_AMBIENT_VARS}
+    try:
+        proc = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=repo_root,
+            env=child_env,
+            stdin=subprocess.DEVNULL,
+            timeout=_MISE_ENV_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        msg = f"`{label} env` did not answer within {_MISE_ENV_TIMEOUT_S:g} s"
+        raise MiseEnvError(msg) from exc
+    except FileNotFoundError as exc:
+        msg = "mise not found on PATH"
+        raise MiseEnvError(msg) from exc
+    except OSError as exc:
+        msg = f"`{label} env` could not run: {exc}"
+        raise MiseEnvError(msg) from exc
+    if proc.returncode != 0:
+        said = proc.stderr.strip().splitlines()
+        first = said[0] if said else "no stderr"
+        msg = f"`{label} env` exited {proc.returncode}: {first}"
+        raise MiseEnvError(msg)
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        msg = f"`{label} env` printed unparsable JSON ({exc.msg})"
+        raise MiseEnvError(msg) from exc
+    if not isinstance(data, dict):
+        msg = f"`{label} env` printed JSON that is not an object"
+        raise MiseEnvError(msg)
+    platform_value = str(data.get(_PLATFORM_ENV_VAR, ""))
+    try:
+        arch = platform_arch(platform_value)
+    except ValueError as exc:
+        msg = f"`{label} env` resolves {_PLATFORM_ENV_VAR}={platform_value!r}: {exc}"
+        raise MiseEnvError(msg) from exc
+    return MiseResolution(
+        platform=platform_value,
+        arch=arch,
+        ssh_port=str(data.get(_PORT_ENV_VAR, "")).strip(),
+    )
+
+
 def is_linked_worktree(repo_root: Path) -> bool:
     """Whether ``repo_root`` is a linked git worktree rather than the main checkout.
 
-    Git that cannot answer is treated as "not a linked worktree", so the check
-    still runs — failing open to checking, not to silence.
+    Git that cannot answer (missing, hung past the bound, not a repository) is
+    treated as "not a linked worktree", so the check still runs — failing open
+    to checking, not to silence.
     """
-    proc = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(repo_root),
-            "rev-parse",
-            "--path-format=absolute",
-            *_GIT_DIR_FLAGS,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "rev-parse",
+                "--path-format=absolute",
+                *_GIT_DIR_FLAGS,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_GIT_TIMEOUT_S,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return False
     lines = proc.stdout.splitlines()
     if proc.returncode != 0 or len(lines) != len(_GIT_DIR_FLAGS):
         return False
     return Path(lines[0]).resolve() != Path(lines[1]).resolve()
+
+
+def _configured_arches(section: dict[str, object]) -> tuple[list[str], str | None]:
+    """The normalized ``[devcontainers].arches``, or a config finding."""
+    entries = section.get("arches")
+    if not isinstance(entries, list) or not entries:
+        return [], (
+            "devcontainers: doctor.toml has no [devcontainers].arches, so no "
+            "container is being checked"
+        )
+    arches: list[str] = []
+    bad: list[str] = []
+    for entry in entries:
+        try:
+            arch = platform_arch(entry) if isinstance(entry, str) else None
+        except ValueError:
+            arch = None
+        if arch is None or arch in arches:
+            bad.append(repr(entry))
+        else:
+            arches.append(arch)
+    if bad:
+        return [], (
+            f"devcontainers: doctor.toml [devcontainers].arches has unusable "
+            f"entries {', '.join(bad)} — each must be a distinct arch word "
+            "(amd64, arm64); no container is being checked"
+        )
+    return arches, None
+
+
+def _profile_findings(
+    arch: str, profile: MiseResolution, default: MiseResolution
+) -> list[str]:
+    """Does ``MISE_ENV=<arch>`` really select ``arch``, on its own port?"""
+    findings: list[str] = []
+    if profile.arch != arch:
+        findings.append(
+            f"devcontainers: `MISE_ENV={arch}` resolves "
+            f"{_PLATFORM_ENV_VAR}={profile.platform}, so `MISE_ENV={arch} mise "
+            f"run up` would bring up {profile.arch}; check mise.{arch}.toml"
+        )
+    if profile.ssh_port and profile.ssh_port == default.ssh_port:
+        findings.append(
+            f"devcontainers: `MISE_ENV={arch}` resolves {_PORT_ENV_VAR}="
+            f"{profile.ssh_port}, the same port the default {default.arch} "
+            f"container uses, so the two collide; blank it in mise.{arch}.toml"
+        )
+    return findings
+
+
+def _profile_phase(
+    setup: Setup, arches: list[str], default: MiseResolution
+) -> tuple[list[str], list[str], list[str]]:
+    """Assert each non-default arch's profile; return findings, arches, failures.
+
+    An arch whose ``mise -E`` run fails is left out of the container query: its
+    restore command is unknown, so a container finding would name a guess.
+    """
+    findings: list[str] = []
+    queryable: list[str] = []
+    failures: list[str] = []
+    for arch in arches:
+        if arch != default.arch:
+            try:
+                profile = mise_env_resolution(setup.repo_root, setup.environ, arch)
+            except MiseEnvError as exc:
+                failures.append(str(exc))
+                continue
+            findings.extend(_profile_findings(arch, profile, default))
+        queryable.append(arch)
+    return findings, queryable, failures
+
+
+def _container_phase(setup: Setup, arches: list[str], default_arch: str) -> list[str]:
+    """One finding per arch without a running container.
+
+    A docker failure appends ONE unverifiable finding and stops querying, but
+    the definite findings already made for earlier arches are kept.
+    """
+    findings: list[str] = []
+    env = dict(setup.environ)
+    for arch in arches:
+        names = devcontainer_names.resolve_names(
+            workspace=setup.repo_root, platform=arch, env=env
+        )
+        restore = (
+            "mise run up" if arch == default_arch else f"MISE_ENV={arch} mise run up"
+        )
+        try:
+            rows = docker_container_rows(names)
+        except DockerUnavailableError as exc:
+            findings.append(f"devcontainers: UNVERIFIABLE — {exc}")
+            break
+        if not rows:
+            findings.append(
+                f"devcontainers: no {arch} container for this clone — run `{restore}`"
+            )
+        elif not any(state == "running" for _, state, _ in rows):
+            _, state, name = rows[0]
+            findings.append(
+                f"devcontainers: {arch} container {name} is {state} — run `{restore}`"
+            )
+    return findings
 
 
 def check_devcontainers_running(setup: Setup) -> list[str]:
@@ -1493,56 +1708,36 @@ def check_devcontainers_running(setup: Setup) -> list[str]:
     Docker Desktop quitting stops every workspace container, and nothing
     restarts them by itself: `land`/`sync` bring back only the default
     architecture, so on 2026-09-29 the arm64 container sat exited for ~24 h
-    unreported. Each finding names the command that restores that architecture.
+    unreported. Each finding names the command that restores that architecture,
+    and that command is itself checked: each non-default arch's ``MISE_ENV``
+    profile must resolve (through mise) to that arch on a port of its own.
 
-    A linked git worktree returns no finding: the devcontainers belong to the
-    main checkout, whose path is what their workspace label hashes, so from a
-    worktree every architecture would read as missing.
+    Silent where it cannot apply. Devcontainers are brought up from the macOS
+    host (AGENTS.md "Two Build Types"): inside the container there is no docker
+    CLI or socket, and on a Linux CI host the concept does not exist. A linked
+    git worktree is silent too: the devcontainers belong to the main checkout,
+    whose path is what their workspace label hashes.
     """
-    section = _str_keys(setup.baseline.get("devcontainers"))
-    arches = section.get("arches")
-    if not isinstance(arches, list) or not arches:
-        return [
-            (
-                "devcontainers: doctor.toml has no [devcontainers].arches, so no "
-                "container is being checked"
-            )
-        ]
+    if host_system() != _HOST_SYSTEM:
+        return []
+    arches, config_finding = _configured_arches(
+        _str_keys(setup.baseline.get("devcontainers"))
+    )
+    if config_finding is not None:
+        return [config_finding]
     if is_linked_worktree(setup.repo_root):
         return []
-    env = dict(setup.environ)
-    default_arch = platform_arch(resolve_platform(None, env=env))
-    findings: list[str] = []
-    for entry in arches:
-        arch = str(entry)
-        names = devcontainer_names.resolve_names(
-            workspace=setup.repo_root, platform=arch, env=env
+    try:
+        default = mise_env_resolution(setup.repo_root, setup.environ)
+    except MiseEnvError as exc:
+        return [f"devcontainers: UNVERIFIABLE — mise env failed ({exc})"]
+    findings, queryable, mise_failures = _profile_phase(setup, arches, default)
+    findings.extend(_container_phase(setup, queryable, default.arch))
+    if mise_failures:
+        findings.append(
+            "devcontainers: UNVERIFIABLE — mise env failed "
+            f"({'; '.join(mise_failures)})"
         )
-        restore = (
-            "mise run up"
-            if names.arch == default_arch
-            else f"MISE_ENV={names.arch} mise run up"
-        )
-        try:
-            rows = docker_container_rows(names)
-        except DockerUnavailableError as exc:
-            return [
-                (
-                    f"devcontainers: UNVERIFIABLE — docker ps failed ({exc}); is "
-                    "Docker Desktop running?"
-                )
-            ]
-        if not rows:
-            findings.append(
-                f"devcontainers: no {names.arch} container for this clone — run "
-                f"`{restore}`"
-            )
-        elif not any(state == "running" for _, state, _ in rows):
-            _, state, name = rows[0]
-            findings.append(
-                f"devcontainers: {names.arch} container {name} is {state} — run "
-                f"`{restore}`"
-            )
     return findings
 
 

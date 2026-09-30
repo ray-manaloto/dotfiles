@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 from fnmatch import fnmatchcase
@@ -1343,74 +1344,99 @@ def test_collect_reads_the_real_repo_without_touching_the_real_home(
 # --------------------------------------------------------------------------- #
 
 _ARCHES_BASELINE: dict[str, object] = {"devcontainers": {"arches": ["amd64", "arm64"]}}
-#: The pinned repo default is a TRIPLE with a microarchitecture level; the
-#: default-arch comparison must survive it (premise report MISSING 2).
-_PINNED_AMD64 = {"DOTFILES_PLATFORM": "linux/amd64/v2"}
 _ARM64_NAME = "dotfiles-dotfiles-u-273897ea-arm64-22975"
 _AMD64_NAME = "dotfiles-dotfiles-u-273897ea-amd64-26233"
-#: Raised by the down-daemon fixture; a literal in a `raise` trips EM101.
-_DAEMON_DOWN = "Cannot connect to the Docker daemon"
+#: Raised by the down-daemon fixtures; a literal in a `raise` trips EM101.
+_DAEMON_DOWN = "docker ps failed: Cannot connect to the Docker daemon"
+_MISE_DOWN = "`mise -E arm64 env` exited 1: boom"
+_AMD64_PLATFORM = "linux/amd64/v2"
+_ARM64_PLATFORM = "linux/arm64/v8"
+#: What this host resolves today: default amd64 on the pinned port, the arm64
+#: profile on a blank one (P7 of the round-1 spec, re-probed 2026-09-30).
+Rows = list[tuple[str, str, str]]
+#: An arch's docker answer: its rows, or the DockerUnavailableError text.
+DockerAnswers = dict[str, "Rows | str"]
+Profiles = dict[str | None, "doctor.MiseResolution | Exception"]
+_HEALTHY_PROFILES: Profiles = {
+    None: doctor.MiseResolution(_AMD64_PLATFORM, "amd64", "26233"),
+    "arm64": doctor.MiseResolution(_ARM64_PLATFORM, "arm64", ""),
+}
+_BOTH_RUNNING: DockerAnswers = {
+    "amd64": [("e5ae", "running", _AMD64_NAME)],
+    "arm64": [("a914", "running", _ARM64_NAME)],
+}
 
 
-def _fake_docker(
+@dataclasses.dataclass
+class _Calls:
+    """What the check asked of each injected seam, in order."""
+
+    docker: list[str] = dataclasses.field(default_factory=list)
+    mise: list[str | None] = dataclasses.field(default_factory=list)
+
+
+def _inject(
     monkeypatch: pytest.MonkeyPatch,
-    rows_by_arch: dict[str, list[tuple[str, str, str]]],
+    rows_by_arch: DockerAnswers | None = None,
     *,
+    profiles: Profiles | None = None,
     worktree: bool = False,
-) -> list[str]:
-    """Replace both subprocess seams; return the arch of every docker query made."""
-    queried: list[str] = []
+    system: str = "Darwin",
+) -> _Calls:
+    """Replace every subprocess seam the check has; return the calls it made."""
+    calls = _Calls()
+    docker: DockerAnswers = _BOTH_RUNNING if rows_by_arch is None else rows_by_arch
+    answers: Profiles = _HEALTHY_PROFILES if profiles is None else profiles
 
-    def rows(
-        names: doctor.devcontainer_names.DevcontainerNames,
-    ) -> list[tuple[str, str, str]]:
-        queried.append(names.arch)
-        return rows_by_arch.get(names.arch, [])
+    def rows(names: doctor.devcontainer_names.DevcontainerNames) -> Rows:
+        calls.docker.append(names.arch)
+        answer = docker.get(names.arch, [])
+        if isinstance(answer, str):
+            raise doctor.DockerUnavailableError(answer)
+        return answer
+
+    def resolution(
+        _root: Path, _environ: object, mise_env: str | None = None
+    ) -> doctor.MiseResolution:
+        calls.mise.append(mise_env)
+        answer = answers[mise_env]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
     monkeypatch.setattr(doctor, "docker_container_rows", rows)
+    monkeypatch.setattr(doctor, "mise_env_resolution", resolution)
     monkeypatch.setattr(doctor, "is_linked_worktree", lambda _root: worktree)
-    return queried
+    monkeypatch.setattr(doctor, "host_system", lambda: system)
+    return calls
 
 
-def _arches_setup(environ: dict[str, str] | None = None) -> doctor.Setup:
-    return _setup(
-        baseline=_ARCHES_BASELINE,
-        environ=_PINNED_AMD64 if environ is None else environ,
-    )
+def _arches_setup(baseline: dict[str, object] | None = None) -> doctor.Setup:
+    return _setup(baseline=_ARCHES_BASELINE if baseline is None else baseline)
 
 
 def test_devcontainers_is_silent_when_every_arch_is_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The control arm: both containers up, nothing to say — and both were asked."""
-    queried = _fake_docker(
-        monkeypatch,
-        {
-            "amd64": [("e5ae", "running", _AMD64_NAME)],
-            "arm64": [("a914", "running", _ARM64_NAME)],
-        },
-    )
+    """The control arm: both up, profiles right — and every seam was asked."""
+    calls = _inject(monkeypatch)
     assert doctor.check_devcontainers_running(_arches_setup()) == []
-    assert queried == ["amd64", "arm64"]
+    assert calls.docker == ["amd64", "arm64"]
+    assert calls.mise == [None, "arm64"]
 
 
 def test_devcontainers_flags_the_incident_shape_with_dockers_own_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """2026-09-29: arm64 exited after a Docker Desktop quit, amd64 re-created.
-
-    The name is docker's ``{{.Names}}``, whose port suffix (22975) differs from
-    the one ``resolve_names`` computes under a ``DEVCONTAINER_SSH_PORT`` pin.
-    """
-    _fake_docker(
+    """2026-09-29: arm64 exited after a Docker Desktop quit, amd64 re-created."""
+    _inject(
         monkeypatch,
         {
             "amd64": [("e5ae", "running", _AMD64_NAME)],
             "arm64": [("a914", "exited", _ARM64_NAME)],
         },
     )
-    setup = _arches_setup({**_PINNED_AMD64, "DEVCONTAINER_SSH_PORT": "26233"})
-    assert doctor.check_devcontainers_running(setup) == [
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
         (
             f"devcontainers: arm64 container {_ARM64_NAME} is exited — run "
             "`MISE_ENV=arm64 mise run up`"
@@ -1418,11 +1444,25 @@ def test_devcontainers_flags_the_incident_shape_with_dockers_own_name(
     ]
 
 
+@pytest.mark.parametrize("state", ["created", "paused", "dead", "restarting"])
+def test_devcontainers_every_non_running_state_is_a_finding(
+    monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    """Only `running` counts; docker's other states all need the restore."""
+    _inject(
+        monkeypatch,
+        {"amd64": [("e5ae", state, _AMD64_NAME)], "arm64": _BOTH_RUNNING["arm64"]},
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        f"devcontainers: amd64 container {_AMD64_NAME} is {state} — run `mise run up`"
+    ]
+
+
 def test_devcontainers_flags_a_missing_default_arch_with_plain_up(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No container at all for the default arch restores with bare ``mise run up``."""
-    _fake_docker(monkeypatch, {"arm64": [("a914", "running", _ARM64_NAME)]})
+    _inject(monkeypatch, {"arm64": _BOTH_RUNNING["arm64"]})
     assert doctor.check_devcontainers_running(_arches_setup()) == [
         "devcontainers: no amd64 container for this clone — run `mise run up`"
     ]
@@ -1432,93 +1472,255 @@ def test_devcontainers_one_running_container_satisfies_the_arch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A stale exited sibling next to a running one is not a down architecture."""
-    _fake_docker(
+    _inject(
         monkeypatch,
         {
             "amd64": [("old1", "exited", "stale"), ("e5ae", "running", _AMD64_NAME)],
-            "arm64": [("a914", "running", _ARM64_NAME)],
+            "arm64": _BOTH_RUNNING["arm64"],
         },
     )
     assert doctor.check_devcontainers_running(_arches_setup()) == []
 
 
-@pytest.mark.parametrize(
-    ("platform", "restore"),
-    [
-        (
-            "linux/amd64/v2",
-            {"amd64": "mise run up", "arm64": "MISE_ENV=arm64 mise run up"},
-        ),
-        (
-            "linux/arm64/v8",
-            {"amd64": "MISE_ENV=amd64 mise run up", "arm64": "mise run up"},
-        ),
-        (
-            "linux/amd64",
-            {"amd64": "mise run up", "arm64": "MISE_ENV=arm64 mise run up"},
-        ),
-    ],
-)
-def test_devcontainers_default_arch_is_compared_as_an_arch_word(
-    monkeypatch: pytest.MonkeyPatch, platform: str, restore: dict[str, str]
-) -> None:
-    """The restore command follows the resolved platform's ARCH, never the triple."""
-    _fake_docker(monkeypatch, {})
-    findings = doctor.check_devcontainers_running(
-        _arches_setup({"DOTFILES_PLATFORM": platform})
-    )
-    assert findings == [
-        f"devcontainers: no {arch} container for this clone — run `{command}`"
-        for arch, command in restore.items()
-    ]
-
-
-def test_devcontainers_a_down_daemon_is_one_unverifiable_finding(
+def test_devcontainers_default_arch_comes_from_mise_not_the_process_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Never "absent": a failed ``docker ps`` stops the check after one finding."""
-    queried: list[str] = []
+    """Cold #2: outside mise the process env says arm64; mise says what `up` does.
 
-    def down(
-        names: doctor.devcontainer_names.DevcontainerNames,
-    ) -> list[tuple[str, str, str]]:
-        queried.append(names.arch)
-        raise doctor.DockerUnavailableError(_DAEMON_DOWN)
+    The process environ carries the host-fallback arm64 triple, and mise
+    resolves the default to amd64 — the restore commands must follow mise.
+    """
+    _inject(monkeypatch, {})
+    setup = _setup(
+        baseline=_ARCHES_BASELINE, environ={"DOTFILES_PLATFORM": _ARM64_PLATFORM}
+    )
+    assert doctor.check_devcontainers_running(setup) == [
+        "devcontainers: no amd64 container for this clone — run `mise run up`",
+        (
+            "devcontainers: no arm64 container for this clone — run "
+            "`MISE_ENV=arm64 mise run up`"
+        ),
+    ]
 
-    monkeypatch.setattr(doctor, "docker_container_rows", down)
-    monkeypatch.setattr(doctor, "is_linked_worktree", lambda _root: False)
+
+def test_devcontainers_an_arm64_default_asks_mise_about_amd64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whichever arch mise calls default, the OTHER is the profile checked."""
+    calls = _inject(
+        monkeypatch,
+        {},
+        profiles={
+            None: doctor.MiseResolution(_ARM64_PLATFORM, "arm64", ""),
+            "amd64": doctor.MiseResolution(_AMD64_PLATFORM, "amd64", ""),
+        },
+    )
     assert doctor.check_devcontainers_running(_arches_setup()) == [
         (
-            f"devcontainers: UNVERIFIABLE — docker ps failed ({_DAEMON_DOWN}); is "
-            "Docker Desktop running?"
-        )
+            "devcontainers: no amd64 container for this clone — run "
+            "`MISE_ENV=amd64 mise run up`"
+        ),
+        "devcontainers: no arm64 container for this clone — run `mise run up`",
     ]
-    assert queried == ["amd64"]
+    assert calls.mise == [None, "amd64"]
+
+
+def test_devcontainers_a_profile_resolving_the_wrong_arch_is_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cold #1: `MISE_ENV=arm64` silently selecting amd64 is the real hazard.
+
+    An unrecognised or missing env profile resolves the DEFAULT (measured on mise
+    2026.9.18), so `MISE_ENV=arm64 mise run up` would recreate amd64.
+    """
+    _inject(
+        monkeypatch,
+        profiles={
+            **_HEALTHY_PROFILES,
+            "arm64": doctor.MiseResolution(_AMD64_PLATFORM, "amd64", "26233"),
+        },
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        (
+            "devcontainers: `MISE_ENV=arm64` resolves DOTFILES_PLATFORM="
+            f"{_AMD64_PLATFORM}, so `MISE_ENV=arm64 mise run up` would bring up amd64; "
+            "check mise.arm64.toml"
+        ),
+        (
+            "devcontainers: `MISE_ENV=arm64` resolves DEVCONTAINER_SSH_PORT=26233, the "
+            "same port the default amd64 container uses, so the two collide; blank it "
+            "in mise.arm64.toml"
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("default_port", "profile_port", "collides"),
+    [
+        ("26233", "26233", True),
+        ("26233", "", False),
+        ("26233", "4445", False),
+        ("", "", False),
+    ],
+    ids=["same-pin", "blank-profile", "distinct-pin", "both-derived"],
+)
+def test_devcontainers_port_collision_needs_two_equal_non_empty_pins(
+    monkeypatch: pytest.MonkeyPatch,
+    default_port: str,
+    profile_port: str,
+    *,
+    collides: bool,
+) -> None:
+    """Blank means "derive per arch" (#677), so only two equal pins collide."""
+    _inject(
+        monkeypatch,
+        profiles={
+            None: doctor.MiseResolution(_AMD64_PLATFORM, "amd64", default_port),
+            "arm64": doctor.MiseResolution(_ARM64_PLATFORM, "arm64", profile_port),
+        },
+    )
+    findings = doctor.check_devcontainers_running(_arches_setup())
+    assert any("collide" in finding for finding in findings) is collides
+    assert len(findings) == int(collides)
+
+
+def test_devcontainers_a_failed_default_resolution_is_one_finding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No default means no restore command for ANY arch: docker is not asked."""
+    calls = _inject(
+        monkeypatch, profiles={None: doctor.MiseEnvError("mise not found on PATH")}
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        "devcontainers: UNVERIFIABLE — mise env failed (mise not found on PATH)"
+    ]
+    assert calls.docker == []
+
+
+def test_devcontainers_a_failed_profile_skips_only_that_arch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """amd64 is still checked (and its finding kept); arm64 is unverifiable."""
+    calls = _inject(
+        monkeypatch,
+        {},
+        profiles={**_HEALTHY_PROFILES, "arm64": doctor.MiseEnvError(_MISE_DOWN)},
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        "devcontainers: no amd64 container for this clone — run `mise run up`",
+        f"devcontainers: UNVERIFIABLE — mise env failed ({_MISE_DOWN})",
+    ]
+    assert calls.docker == ["amd64"]
+
+
+def test_devcontainers_a_down_daemon_keeps_earlier_findings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cold #5: a later arch's docker failure must not discard a definite finding."""
+    calls = _inject(monkeypatch, {"amd64": [], "arm64": _DAEMON_DOWN})
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        "devcontainers: no amd64 container for this clone — run `mise run up`",
+        f"devcontainers: UNVERIFIABLE — {_DAEMON_DOWN}",
+    ]
+    assert calls.docker == ["amd64", "arm64"]
+
+
+def test_devcontainers_a_down_daemon_stops_further_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One unverifiable finding, and no query after the one that failed."""
+    calls = _inject(monkeypatch, {"amd64": _DAEMON_DOWN})
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        f"devcontainers: UNVERIFIABLE — {_DAEMON_DOWN}"
+    ]
+    assert calls.docker == ["amd64"]
 
 
 @pytest.mark.parametrize("section", [{}, {"arches": []}, {"arches": "amd64"}])
 def test_devcontainers_reports_an_unconfigured_baseline(
     monkeypatch: pytest.MonkeyPatch, section: dict[str, object]
 ) -> None:
-    """A missing list must not read as a healthy host — and docker is not asked."""
-    queried = _fake_docker(monkeypatch, {})
-    setup = _setup(baseline={"devcontainers": section}, environ=_PINNED_AMD64)
-    assert doctor.check_devcontainers_running(setup) == [
+    """A missing list must not read as a healthy host — and nothing is asked."""
+    calls = _inject(monkeypatch)
+    assert doctor.check_devcontainers_running(
+        _arches_setup({"devcontainers": section})
+    ) == [
         (
             "devcontainers: doctor.toml has no [devcontainers].arches, so no "
             "container is being checked"
         )
     ]
-    assert queried == []
+    assert calls == _Calls()
+
+
+@pytest.mark.parametrize(
+    ("arches", "bad"),
+    [
+        (["amd64", "riscv"], "'riscv'"),
+        (["amd64", 3], "3"),
+        (["amd64", "amd64"], "'amd64'"),
+        (["x86_64", "amd64"], "'amd64'"),
+    ],
+    ids=["unknown-word", "not-a-string", "duplicate", "duplicate-alias"],
+)
+def test_devcontainers_rejects_unusable_arch_entries(
+    monkeypatch: pytest.MonkeyPatch, arches: list[object], bad: str
+) -> None:
+    """Cold #6: each entry must normalize to a distinct known arch."""
+    calls = _inject(monkeypatch)
+    findings = doctor.check_devcontainers_running(
+        _arches_setup({"devcontainers": {"arches": arches}})
+    )
+    assert len(findings) == 1
+    assert "unusable entries" in findings[0]
+    assert bad in findings[0]
+    assert calls == _Calls()
+
+
+def test_devcontainers_normalizes_an_alias_to_the_arch_word(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`aarch64` is arm64: the restore command names the MISE_ENV that exists."""
+    _inject(monkeypatch, {"amd64": _BOTH_RUNNING["amd64"]})
+    assert doctor.check_devcontainers_running(
+        _arches_setup({"devcontainers": {"arches": ["amd64", "aarch64"]}})
+    ) == [
+        (
+            "devcontainers: no arm64 container for this clone — run "
+            "`MISE_ENV=arm64 mise run up`"
+        )
+    ]
 
 
 def test_devcontainers_is_silent_in_a_linked_worktree(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Containers belong to the main checkout; a worktree would see none."""
-    queried = _fake_docker(monkeypatch, {}, worktree=True)
+    calls = _inject(monkeypatch, {}, worktree=True)
     assert doctor.check_devcontainers_running(_arches_setup()) == []
-    assert queried == []
+    assert calls == _Calls()
+
+
+@pytest.mark.parametrize("system", ["Linux", "Windows", ""])
+def test_devcontainers_is_silent_off_the_macos_host(
+    monkeypatch: pytest.MonkeyPatch, system: str
+) -> None:
+    """In the container there is no docker CLI; on CI the concept does not apply.
+
+    Every container missing, so the silence can only come from the host gate.
+    """
+    calls = _inject(monkeypatch, {}, system=system)
+    assert doctor.check_devcontainers_running(_arches_setup()) == []
+    assert calls == _Calls()
+
+
+def test_host_system_reads_the_platform_module(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The seam is the real ``platform.system`` — not a constant."""
+    monkeypatch.setattr(doctor.platform, "system", lambda: "Plan9")
+    assert doctor.host_system() == "Plan9"
+
+
+# --- the docker seam ------------------------------------------------------- #
 
 
 def _completed(
@@ -1536,7 +1738,7 @@ def _names() -> doctor.devcontainer_names.DevcontainerNames:
 def test_docker_container_rows_queries_both_labels_bounded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Workspace AND arch label, ``-a`` for exited ones, and a hard timeout."""
+    """Workspace AND arch label, each behind its own --filter; -a; a hard bound."""
     seen: dict[str, object] = {}
 
     def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -1550,9 +1752,11 @@ def test_docker_container_rows_queries_both_labels_bounded(
     argv = seen["argv"]
     assert isinstance(argv, list)
     assert argv[:3] == ["docker", "ps", "-a"]
-    assert f"label={names.workspace_label}" in argv
-    assert f"label={names.arch_label}" in argv
-    assert "{{.ID}}\t{{.State}}\t{{.Names}}" in argv
+    for label in (names.workspace_label, names.arch_label):
+        at = argv.index(f"label={label}")
+        assert argv[at - 1] == "--filter", f"{label} is not a --filter value"
+    assert argv.count("--filter") == 2
+    assert argv[argv.index("--format") + 1] == "{{.ID}}\t{{.State}}\t{{.Names}}"
     assert seen["timeout"] == 10.0
     assert seen["check"] is False
 
@@ -1570,21 +1774,50 @@ def test_docker_container_rows_empty_output_is_no_container(
     [
         (
             _completed(1, stderr="Cannot connect to the Docker daemon\nIs it running?"),
-            "Cannot connect to the Docker daemon",
+            (
+                "docker ps failed: Cannot connect to the Docker daemon; is Docker "
+                "Desktop running and the context right?"
+            ),
         ),
-        (_completed(125), "exit 125"),
-        (_completed(0, "only-two\tfields\n"), "unparsable docker ps line"),
-        (subprocess.TimeoutExpired(["docker"], 10.0), "timed out after 10s"),
-        (FileNotFoundError(2, "No such file or directory", "docker"), "docker"),
+        (
+            _completed(125),
+            (
+                "docker ps failed: exit 125; is Docker Desktop running and the "
+                "context right?"
+            ),
+        ),
+        (
+            _completed(0, "only-two\tfields\n"),
+            "unparsable docker ps line: only-two\tfields",
+        ),
+        (
+            subprocess.TimeoutExpired(["docker"], 10.0),
+            "docker ps did not answer within 10 s",
+        ),
+        (
+            FileNotFoundError(2, "No such file or directory", "docker"),
+            "docker CLI not found on PATH",
+        ),
+        (
+            PermissionError(13, "Permission denied", "docker"),
+            "docker could not run: [Errno 13] Permission denied: 'docker'",
+        ),
     ],
-    ids=["daemon-down", "silent-nonzero", "malformed", "timeout", "missing-binary"],
+    ids=[
+        "daemon-down",
+        "silent-nonzero",
+        "malformed",
+        "timeout",
+        "missing-binary",
+        "not-executable",
+    ],
 )
-def test_docker_container_rows_keeps_the_return_code(
+def test_docker_container_rows_names_each_cause(
     monkeypatch: pytest.MonkeyPatch,
     outcome: subprocess.CompletedProcess[str] | BaseException,
     message: str,
 ) -> None:
-    """The ``sync.container_state`` conflation, refused: every failure raises."""
+    """Cold #10: the hint follows the cause; every failure raises (rc kept)."""
 
     def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if isinstance(outcome, BaseException):
@@ -1592,9 +1825,110 @@ def test_docker_container_rows_keeps_the_return_code(
         return outcome
 
     monkeypatch.setattr(doctor.subprocess, "run", fake_run)
-    with pytest.raises(doctor.DockerUnavailableError, match=message) as info:
+    with pytest.raises(doctor.DockerUnavailableError) as info:
         doctor.docker_container_rows(_names())
-    assert "\n" not in str(info.value), "only the first line is reported"
+    assert str(info.value) == message
+
+
+# --- the mise seam --------------------------------------------------------- #
+
+
+_AMBIENT = {
+    "PATH": "/usr/bin",
+    "HOME": "/home/u",
+    "MISE_ENV": "arm64",
+    "DOTFILES_PLATFORM": _ARM64_PLATFORM,
+    "DEVCONTAINER_SSH_PORT": "26233",
+}
+
+
+@pytest.mark.parametrize(
+    ("mise_env", "argv"),
+    [
+        (None, ["mise", "env", "--json"]),
+        ("arm64", ["mise", "-E", "arm64", "env", "--json"]),
+    ],
+)
+def test_mise_env_resolution_asks_mise_from_config_alone(
+    monkeypatch: pytest.MonkeyPatch, mise_env: str | None, argv: list[str]
+) -> None:
+    """The profile flag, the repo cwd, a bound, no stdin — and no ambient leak.
+
+    ``mise.toml`` templates DOTFILES_PLATFORM from the ambient value, so a
+    parent under ``MISE_ENV=arm64`` would otherwise make arm64 the default.
+    """
+    seen: dict[str, object] = {}
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen["argv"] = cmd
+        seen.update(kwargs)
+        return _completed(
+            0, json.dumps({"DOTFILES_PLATFORM": _ARM64_PLATFORM, "OTHER": "x"})
+        )
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    got = doctor.mise_env_resolution(Path("/repo"), _AMBIENT, mise_env)
+    assert got == doctor.MiseResolution(_ARM64_PLATFORM, "arm64", "")
+    assert seen["argv"] == argv
+    assert seen["cwd"] == Path("/repo")
+    assert seen["timeout"] == 20.0
+    assert seen["stdin"] is subprocess.DEVNULL
+    assert seen["check"] is False
+    assert seen["env"] == {"PATH": "/usr/bin", "HOME": "/home/u"}
+
+
+def test_mise_env_resolution_reads_the_port_as_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pinned port comes back as the string mise resolved, trimmed."""
+    payload = {"DOTFILES_PLATFORM": _AMD64_PLATFORM, "DEVCONTAINER_SSH_PORT": " 26233 "}
+    monkeypatch.setattr(
+        doctor.subprocess, "run", lambda *_a, **_k: _completed(0, json.dumps(payload))
+    )
+    assert doctor.mise_env_resolution(Path("/repo"), {}) == doctor.MiseResolution(
+        _AMD64_PLATFORM, "amd64", "26233"
+    )
+
+
+@pytest.mark.parametrize(
+    ("outcome", "message"),
+    [
+        (_completed(1, stderr="mise ERROR not trusted\nmore"), "exited 1: mise ERROR"),
+        (_completed(0, "{not json"), "unparsable JSON"),
+        (_completed(0, "[1, 2]"), "not an object"),
+        (_completed(0, "{}"), "resolves DOTFILES_PLATFORM=''"),
+        (_completed(0, '{"DOTFILES_PLATFORM": "linux/s390x"}'), "linux/s390x"),
+        (subprocess.TimeoutExpired(["mise"], 20.0), "did not answer within 20 s"),
+        (FileNotFoundError(2, "No such file", "mise"), "mise not found on PATH"),
+    ],
+    ids=[
+        "nonzero",
+        "bad-json",
+        "not-object",
+        "no-platform",
+        "unknown-arch",
+        "timeout",
+        "missing",
+    ],
+)
+def test_mise_env_resolution_failures_raise(
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: subprocess.CompletedProcess[str] | BaseException,
+    message: str,
+) -> None:
+    """Every way mise can fail to answer is a MiseEnvError, never a guess."""
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    with pytest.raises(doctor.MiseEnvError, match=re.escape(message)):
+        doctor.mise_env_resolution(Path("/repo"), {}, "arm64")
+
+
+# --- the git seam ---------------------------------------------------------- #
 
 
 def _git(root: Path, *args: str) -> None:
@@ -1607,9 +1941,15 @@ def _git(root: Path, *args: str) -> None:
 
 
 def test_is_linked_worktree_discriminates_main_worktree_and_non_repo(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Real git, both arms: the main checkout is False, a linked worktree True."""
+    """Real git, both arms: the main checkout is False, a linked worktree True.
+
+    Global and system git config are cut off (cold #12), so an operator's
+    hooks, templates or `init.defaultBranch` cannot change the answer.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "no-global-config"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     main = tmp_path / "main"
     main.mkdir()
     _git(main, "init", "-b", "main")
@@ -1620,3 +1960,26 @@ def test_is_linked_worktree_discriminates_main_worktree_and_non_repo(
     assert doctor.is_linked_worktree(main) is False
     assert doctor.is_linked_worktree(linked) is True
     assert doctor.is_linked_worktree(tmp_path / "nowhere") is False
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError(2, "No such file or directory", "git"),
+        subprocess.TimeoutExpired(["git"], 10.0),
+    ],
+    ids=["git-missing", "git-hung"],
+)
+def test_is_linked_worktree_fails_open_to_checking(
+    monkeypatch: pytest.MonkeyPatch, error: BaseException
+) -> None:
+    """Code-review #2: a missing or hung git is "not a worktree", never a crash."""
+    seen: dict[str, object] = {}
+
+    def fake_run(*_args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        raise error
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    assert doctor.is_linked_worktree(Path("/repo")) is False
+    assert seen["timeout"] == 10.0
