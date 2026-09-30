@@ -415,6 +415,9 @@
         "in_app_updates": {
           "type": "boolean"
         },
+        "instant_interrupt": {
+          "type": "boolean"
+        },
         "item_ids": {
           "type": "boolean"
         },
@@ -1556,6 +1559,14 @@
     },
     "AutoReviewToml": {
       "properties": {
+        "circuit_break_action": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/CircuitBreakAction"
+            }
+          ],
+          "description": "Controls whether circuit-breaker interruptions include a structured error. Strict mode writes structured errors that older clients may not recognize when reading shared history. Defaults to `default`."
+        },
         "experimental_policy_template": {
           "description": "Experimental full Guardian prompt template containing the tenant policy placeholder.",
           "type": "string"
@@ -1674,6 +1685,24 @@
         }
       },
       "type": "object"
+    },
+    "CircuitBreakAction": {
+      "oneOf": [
+        {
+          "description": "Emit the warning and interrupt without structured error details.",
+          "enum": [
+            "default"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Emit the same warning and interruption, with structured error details.",
+          "enum": [
+            "strict"
+          ],
+          "type": "string"
+        }
+      ]
     },
     "CloudToml": {
       "additionalProperties": false,
@@ -2058,6 +2087,9 @@
               "type": "boolean"
             },
             "in_app_updates": {
+              "type": "boolean"
+            },
+            "instant_interrupt": {
               "type": "boolean"
             },
             "item_ids": {
