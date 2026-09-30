@@ -70,7 +70,14 @@ class CheckBucket(StrEnum):
 
 
 def classify_check(check: dict[str, object]) -> CheckBucket:
-    """Bucket one rollup entry by its conclusion, state, or status."""
+    """Bucket one rollup entry by its conclusion, state, or status.
+
+    Why not gh's own ``bucket``: ``gh pr view/list --json`` expose only
+    ``statusCheckRollup``, never ``bucket`` (that is ``gh pr checks``).  The
+    mapping also deliberately differs from gh's: CANCELLED and STARTUP_FAILURE
+    count as failing here (gh buckets them ``cancel``/``pending``), because a
+    handoff's RED means "will not merge as-is".
+    """
     value = check.get("conclusion") or check.get("state") or check.get("status")
     if not isinstance(value, str):
         return CheckBucket.PENDING
@@ -96,13 +103,53 @@ class CheckCounts:
         return self.passed + self.failing + self.pending
 
 
+def _started_at(check: dict[str, object]) -> str:
+    """ISO-8601 start time; a missing or non-string one sorts OLDEST."""
+    value = check.get("startedAt")
+    return value if isinstance(value, str) else ""
+
+
+def _dedupe_key(check: dict[str, object]) -> tuple[str | None, ...]:
+    """``context`` for a status, else ``(name, workflowName)`` for a check run."""
+    context = check.get("context")
+    if isinstance(context, str) and context:
+        return ("context", context)
+    name = check.get("name")
+    workflow = check.get("workflowName")
+    return (
+        "run",
+        name if isinstance(name, str) else None,
+        workflow if isinstance(workflow, str) else None,
+    )
+
+
+def _latest_checks(rollup: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Drop re-run duplicates the way gh does, keeping the newest per key.
+
+    Mirrors ``eliminateDuplicates`` in cli/cli ``pkg/cmd/pr/checks/aggregate.go``
+    (lines 96-120 at ``e9542451``): newest ``startedAt`` first, then the first
+    entry per key.  gh also keys a check run on its workflow run's EVENT, which
+    ``gh pr view/list --json statusCheckRollup`` does not expose, so two runs of
+    one workflow job from different events collapse to one here.
+    """
+    seen: set[tuple[str | None, ...]] = set()
+    latest: list[dict[str, object]] = []
+    for check in sorted(rollup, key=_started_at, reverse=True):
+        key = _dedupe_key(check)
+        if key in seen:
+            continue
+        seen.add(key)
+        latest.append(check)
+    return latest
+
+
 def count_checks(rollup: object) -> CheckCounts | None:
-    """Count a statusCheckRollup; None when it is not a list of dicts."""
+    """Count a statusCheckRollup's latest checks; None unless a list of dicts."""
     if not isinstance(rollup, list):
         return None
     if not all(isinstance(check, dict) for check in rollup):
         return None
-    buckets = [classify_check(check) for check in rollup]
+    buckets = [classify_check(check) for check in _latest_checks(rollup)]
     return CheckCounts(
         passed=buckets.count(CheckBucket.PASS),
         failing=buckets.count(CheckBucket.FAIL),

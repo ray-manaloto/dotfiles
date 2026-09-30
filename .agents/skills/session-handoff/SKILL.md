@@ -33,10 +33,12 @@ If that set has a gap, fix it before emitting the resume prompt.
 Gather, don't guess — one generated snapshot, never hand-copied PR state:
 
 ```bash
-mise run session-state
+mise run session-state -- --for .agent/plans/session-<YYYY-MM-DD>[-letter].md
 ```
 
-It prints branch, tree, recent commits, the branch PR, every open PR (state,
+`--for` names the handoff you are about to write, so the "merged since"
+window starts at the PREVIOUS handoff even after this one exists (a restart
+at step 1 would otherwise collapse it to now). It prints branch, tree, recent commits, the branch PR, every open PR (state,
 auto-merge, checks) and the PRs merged since the previous handoff, in the same
 claim words `handoff-check` verifies against GitHub (S29-H). Also note any
 in-flight process or owed evidence from the prior `.agent/plans/session-*.md`.
@@ -216,7 +218,7 @@ Write `.agent/plans/session-<YYYY-MM-DD>[-letter].md`
 (`.claude/rules/agent-artifact-conventions.md` — handoffs are plans). The
 handoff must be self-sufficient for recovery evidence while leaving task
 authority in `task_plan.md`. Include **State at handoff** — paste the
-`mise run session-state` output verbatim, generated after the last merge or
+`mise run session-state -- --for <this handoff>` output verbatim, generated after the last merge or
 ship, then add gate results; never hand-write a PR's state — plus **what shipped**, the plan path (`task_plan.md`),
 evidence/preload pointers, owed non-task
 obligations, open decisions, and **gotchas**. Do not copy a plan phase,
@@ -294,9 +296,14 @@ step starts; a later write — a ship repair loop included — restarts it.
 
    It validates cited paths/lines and mise tasks, forbids a second task
    carrier, requires an active plan, fails `unattested_plan` when
-   `task_plan.md` changed after its attestation, and compares every
-   `#NNNN` state claim (OPEN / MERGED / CLOSED / auto-merge / landed / RED /
-   green) in the handoff and the plan's active section with GitHub —
+   `task_plan.md` changed after its attestation, and compares each
+   `#NNNN` state claim in the handoff and the plan's active section with
+   GitHub. Claim words: uppercase `OPEN` / `MERGED` / `CLOSED` / `RED`, and
+   `auto-merge` / `auto-merge armed` / `landed` / `green` in any case; negated
+   or past forms (`was RED`, `auto-merge disarmed`), code spans, strikethrough,
+   fences and cross-repo refs (`KB#N`, `KB #N`, `owner/repo #N`) are not
+   claims, and neither are lowercase `merged`/`open` nor the second number of
+   `#A/#B` — write the uppercase word on each number you mean. Verdicts:
    `pr_claim_mismatch`, or `pr_claim_unverifiable` when the lookup fails
    (never a pass). Claims are judged at CHECK time, so the check needs
    network, and a handoff true when written fails later once GitHub moves —

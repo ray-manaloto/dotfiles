@@ -1003,7 +1003,7 @@ description = "Arm GitHub-native auto-merge on a BOT-opened PR (Renovate / refre
 run = 'uv run --project python dotfiles-setup pr automerge'
 
 [tasks.session-state]
-description = "Paste-ready session snapshot: branch/tree/commits/PR + open and merged-since PRs in handoff-check claim words: mise run session-state [-- --no-pr] [-- --since <ISO-8601>]"
+description = "Paste-ready session snapshot: branch/tree/commits/PR + open and merged-since PRs in handoff-check claim words: mise run session-state [-- --no-pr] [-- --since <ISO-8601>] [-- --for <handoff>]"
 # Thin caller; python/src/dotfiles_setup/session_state.py.
 run = 'uv run --project python dotfiles-setup session-state'
 

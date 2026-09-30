@@ -64,10 +64,10 @@ def test_check_bucket_values() -> None:
 def test_count_checks_counts_each_bucket() -> None:
     counts = pr_facts.count_checks(
         [
-            {"conclusion": "SUCCESS"},
-            {"conclusion": "FAILURE"},
-            {"conclusion": "FAILURE"},
-            {"status": "IN_PROGRESS"},
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"name": "build", "conclusion": "FAILURE"},
+            {"name": "smoke", "conclusion": "FAILURE"},
+            {"name": "e2e", "status": "IN_PROGRESS"},
         ]
     )
     assert counts == pr_facts.CheckCounts(passed=1, failing=2, pending=1)
@@ -179,7 +179,10 @@ def test_fetch_facts_reads_a_pr_through_pr_view(
     view = {
         "state": "OPEN",
         "autoMergeRequest": {"mergeMethod": "SQUASH"},
-        "statusCheckRollup": [{"conclusion": "FAILURE"}, {"conclusion": "SUCCESS"}],
+        "statusCheckRollup": [
+            {"name": "build", "conclusion": "FAILURE"},
+            {"name": "lint", "conclusion": "SUCCESS"},
+        ],
     }
     calls = _fake_gh(
         monkeypatch,
@@ -257,3 +260,58 @@ def test_fetch_facts_failures_are_unverifiable_strings(
 ) -> None:
     _fake_gh(monkeypatch, answers)
     assert pr_facts.fetch_facts(_ROOT, 5) == detail
+
+
+# --- R4: re-run duplicates are dropped the way gh does ------------------------
+
+
+def _run(conclusion: str, started: str | None, **ids: str) -> dict[str, object]:
+    check: dict[str, object] = {"conclusion": conclusion, **ids}
+    if started is not None:
+        check["startedAt"] = started
+    return check
+
+
+_BUILD = {"name": "build", "workflowName": "CI"}
+
+
+def test_a_newer_success_supersedes_a_stale_failure() -> None:
+    rollup = [
+        _run("FAILURE", "2026-09-29T20:00:00Z", **_BUILD),
+        _run("SUCCESS", "2026-09-29T21:00:00Z", **_BUILD),
+    ]
+    assert pr_facts.count_checks(rollup) == pr_facts.CheckCounts(1, 0, 0)
+
+
+def test_a_newer_failure_supersedes_a_stale_success() -> None:
+    rollup = [
+        _run("SUCCESS", "2026-09-29T20:00:00Z", **_BUILD),
+        _run("FAILURE", "2026-09-29T21:00:00Z", **_BUILD),
+    ]
+    assert pr_facts.count_checks(rollup) == pr_facts.CheckCounts(0, 1, 0)
+
+
+def test_a_missing_start_time_sorts_oldest() -> None:
+    rollup = [
+        _run("FAILURE", None, **_BUILD),
+        _run("SUCCESS", "2026-09-29T20:00:00Z", **_BUILD),
+    ]
+    assert pr_facts.count_checks(rollup) == pr_facts.CheckCounts(1, 0, 0)
+
+
+def test_status_contexts_dedupe_by_context() -> None:
+    rollup = [
+        {"context": "ci/x", "state": "FAILURE", "startedAt": "2026-09-29T20:00:00Z"},
+        {"context": "ci/x", "state": "SUCCESS", "startedAt": "2026-09-29T21:00:00Z"},
+        {"context": "ci/y", "state": "FAILURE", "startedAt": "2026-09-29T19:00:00Z"},
+    ]
+    assert pr_facts.count_checks(rollup) == pr_facts.CheckCounts(1, 1, 0)
+
+
+def test_distinct_workflows_or_names_are_not_duplicates() -> None:
+    rollup = [
+        _run("FAILURE", "2026-09-29T20:00:00Z", name="build", workflowName="CI"),
+        _run("SUCCESS", "2026-09-29T21:00:00Z", name="build", workflowName="Nightly"),
+        _run("SUCCESS", "2026-09-29T21:00:00Z", name="lint", workflowName="CI"),
+    ]
+    assert pr_facts.count_checks(rollup) == pr_facts.CheckCounts(2, 1, 0)

@@ -25,6 +25,17 @@ Two gates were first red on `classifier_axes`. Team-lead then extended the allow
 
 I re-ran arm 1 on the final tree: rc=1, with the same two `task_plan.md:1108`/`:1162` findings and nothing else.
 
+### Re-run requested by team-lead (third run, same tree plus report edits)
+
+- `git diff --stat` still shows both approved edits (classifier_tables.py +15, test_classifier_tables.py +1). `classifier-axes` rc=0.
+- lint **rc=0**, verify **rc=0** (166/0/4).
+- The first pytest re-run gave **rc=1**, `1 failed, 3630 passed`:
+  `test_session_review.py::test_default_cli_includes_automation_and_dual_provider_requirements` failed with `.agent/test-default-session-review.md` `is_file() False`. I **voided** that run for a two-writer collision. Another `mise run gate -- run pytest` (pid 9366, not mine) was live in the same checkout, writing the same fixed `.agent/` output path and `.agent/gate-results/pytest.log`. Three pieces of evidence:
+  - The test passed alone (rc=0).
+  - `session_review*.py`/`session_ledger*.py` import none of handoff_check/session_state/pr_facts/classifier_tables (grep rc=1; control: the same file shows 13 `import` lines).
+  - `docs/agents/goal-history.md` became modified by another writer during the run.
+- I waited for pid 9366 to exit (bounded) and confirmed no pytest process was running. The pytest gate then gave **rc=0**, `4232 passed, 11 deselected in 305.23s`, and still no concurrent pytest afterward.
+
 ## Changed paths (all inside the allowlist)
 
 - `python/src/dotfiles_setup/pr_facts.py` (new): `GH_TIMEOUT=120`, `run_gh` (moved verbatim from `session_state._gh`), `CheckBucket` (StrEnum, values pass/fail/pending), `classify_check`, `CheckCounts` (+`total` property), `count_checks`, `ItemKind`, `PrFacts`, `fetch_facts` (issues endpoint first, then `gh pr view` for a PR).
@@ -93,7 +104,7 @@ P16 CONFIRMED live: `gh pr list --json` returns `author.login` (bots render as `
      ),
      ```
    - `tests/test_classifier_tables.py:862-867`: `prior_classifiers` (or its own set) must gain `"pr_facts.py:classify_check"`.
-   I escalated this to team-lead via SendMessage with the recommendation to extend the allowlist to exactly these two edits. There was no reply before this report, and I have NOT edited either file. The truth table `_CLASSIFY_CHECK_TABLE` already exists in `tests/test_pr_facts.py` and reaches every bucket.
+   I escalated this to team-lead via SendMessage, recommending the allowlist be extended to exactly these two edits. Team-lead APPROVED it, and both edits are applied exactly as proposed (see "Allowlist extension" at the top); nothing else changed in either file. The truth table `_CLASSIFY_CHECK_TABLE` in `tests/test_pr_facts.py` reaches every bucket.
 2. `check_with_claims` has no `deadline_s` parameter (the spec signature has one). Six arguments trip ruff `PLR0913 (6 > 5)`, and suppressions are banned, so the budget is the module constant `CLAIMS_DEADLINE_S`, read at call time. Tests monkeypatch it. The behaviour is otherwise as specified.
 3. `CheckBucket` is a `StrEnum` with `auto()`, so the values are still `"pass"/"fail"/"pending"`. A literal `PASS = "pass"` trips ruff `S105` (hardcoded password).
 4. Unverifiable-by-deadline detail is exactly `claim-check deadline (300 s) expired before lookup`. The lookup-failure form adds the claim count.

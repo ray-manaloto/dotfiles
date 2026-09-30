@@ -1542,6 +1542,13 @@ def _add_session_subcommands(
         help="List PRs merged at or after this ISO-8601 time "
         "(default: newest handoff's mtime, else 24h ago)",
     )
+    session_state_parser.add_argument(
+        "--for",
+        dest="for_handoff",
+        default=None,
+        help="The handoff being written; excluded when --since defaults to the "
+        "previous handoff's mtime (--since wins)",
+    )
     plan_attest_parser = subparsers.add_parser(
         "plan-attest",
         help="Attest the planning-with-files plan; the bare form WRITES, --show reads",
@@ -2824,6 +2831,11 @@ def _build_command_handlers(
                 [
                     *(["--no-pr"] if args.no_pr else []),
                     *(["--since", args.since] if args.since is not None else []),
+                    *(
+                        ["--for", args.for_handoff]
+                        if args.for_handoff is not None
+                        else []
+                    ),
                 ],
                 project_root,
             )

@@ -840,3 +840,119 @@ def test_main_counts_matching_claims_and_fails_on_a_mismatch(
     out = capsys.readouterr().out
     assert "- pr_claim_mismatch: `#3 auto-merge armed (stale.md:1)` — " in out
     assert "state=MERGED auto-merge=yes checks fail:0 pending:0 pass:1" in out
+
+
+# --- S29-H round 1 (R1, R6, R7-M9/M10, newest_handoff exclude) ---------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- knowledge-base PR #611 MERGED and KB #509 OPEN",
+        "ray-manaloto/knowledge-base #12 MERGED",
+        "kb #5 OPEN",
+        "see KB issue #5 CLOSED",
+        "owner/repo pr #7 landed",
+    ],
+)
+def test_space_qualified_foreign_references_are_not_claims(text: str) -> None:
+    assert _words(text) == []
+
+
+def test_unqualified_numbers_on_the_same_line_are_claims() -> None:
+    """Control arm for the foreign-qualifier rule: drop the qualifiers."""
+    assert _words("- PR #611 MERGED and #509 OPEN") == [
+        (611, "MERGED"),
+        (509, "OPEN"),
+    ]
+
+
+def test_a_foreign_reference_still_ends_the_previous_window() -> None:
+    assert _words("#1449 OPEN; KB #509 MERGED") == [(1449, "OPEN")]
+
+
+def test_an_unrecognised_repo_name_is_still_read_as_dotfiles() -> None:
+    """The documented limitation: only KB spellings and owner/repo qualify."""
+    assert _words("other-repo #5 MERGED") == [(5, "MERGED")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "owner/repo#12 MERGED",
+        "see https://docs.example.com/guide/#12 MERGED",
+    ],
+)
+def test_a_slash_before_the_hash_is_not_a_reference(text: str) -> None:
+    assert _words(text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- #1454 was RED; auto-merge disarmed on #1452",
+        "#1 never MERGED, not green, no longer OPEN",
+        "#1 were CLOSED",
+        "#1 was auto-merge armed",
+        "#1 auto-merge disabled",
+        "#1 auto-merge off",
+        "#1 auto-merge cancelled",
+        "#1 auto-merge canceled",
+        "#1 not landed",
+    ],
+)
+def test_negated_and_past_forms_are_not_claims(text: str) -> None:
+    assert _words(text) == []
+
+
+def test_a_positive_claim_beside_a_negated_one_still_counts() -> None:
+    assert _words("#1 was open but is now RED") == [(1, "RED")]
+    assert _words("#1454 RED") == [(1454, "RED")]
+
+
+def test_check_forwards_injected_facts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M9: check() must hand facts= through, or the real lookup runs instead."""
+    repo = _repo(tmp_path)
+
+    def no_network(args: list[str], _root: Path) -> tuple[int, str]:
+        return 1, f"unit test forbids gh {args[0]}"
+
+    monkeypatch.setattr(pr_facts, "run_gh", no_network)
+    asked: list[int] = []
+
+    def stub(_root: Path, number: int) -> pr_facts.PrFacts | str:
+        asked.append(number)
+        return _pr(number, "OPEN")
+
+    findings = handoff_check.check(repo, "#5 MERGED\n", facts=stub)
+
+    assert asked == [5]
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_MISMATCH,
+            "#5 MERGED (handoff:1)",
+            "GitHub reports PR #5 state=OPEN auto-merge=no checks "
+            "fail:0 pending:0 pass:0",
+        )
+    ]
+
+
+def test_newest_handoff_can_exclude_the_one_being_written(tmp_path: Path) -> None:
+    plans = tmp_path / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name in ("session-2026-09-29b.md", "session-2026-09-29c.md"):
+        (plans / name).write_text("x\n")
+
+    assert handoff_check.newest_handoff(tmp_path) == plans / "session-2026-09-29c.md"
+    assert (
+        handoff_check.newest_handoff(
+            tmp_path, exclude=tmp_path / ".agent/plans/../plans/session-2026-09-29c.md"
+        )
+        == plans / "session-2026-09-29b.md"
+    )
+    assert (
+        handoff_check.newest_handoff(tmp_path, exclude=plans / "session-2026-09-29z.md")
+        == plans / "session-2026-09-29c.md"
+    )

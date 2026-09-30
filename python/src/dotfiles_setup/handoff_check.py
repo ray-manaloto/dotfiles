@@ -54,6 +54,21 @@ _FENCE_MARKER = re.compile(r"^\s*(?P<fence>`{3,}|~{3,})")
 _INLINE_CODE = re.compile(r"(`+).*?\1")
 _STRIKETHROUGH = re.compile(r"~~.*?~~")
 _CLAIM_REFERENCE = re.compile(r"(?<![\w#/])#(?P<n>\d+)\b")
+# A reference written after a space-separated foreign-repo qualifier ("KB #509",
+# "knowledge-base PR #611", "owner/repo #12") names another repo's number.
+_FOREIGN_QUALIFIER = re.compile(
+    r"(?:\b(?:KB|kb|knowledge-base)|\b[\w.-]+/[\w.-]+)[ \t]+"
+    r"(?:(?:PR|pr|issue|Issue)[ \t]+)?$"
+)
+# Negated or past forms ("was RED", "never MERGED", "auto-merge disarmed") are
+# masked before the claim patterns run: they are not present-state claims.
+_NEGATED_CLAIM = re.compile(
+    r"(?i)\b(?:was|were|not|never|no longer)\s+"
+    r"(?:auto-merge(?:\s+armed)?|OPEN|MERGED|CLOSED|RED|green|landed)\b"
+    r"|\bauto-merge\s+(?:disarmed|disabled|off|cancelled|canceled)\b"
+)
+# No NEW lookup starts after this many seconds; a lookup already in flight can
+# add up to 2 x pr_facts.GH_TIMEOUT (worst case ~540 s in total).
 CLAIMS_DEADLINE_S = 300.0
 # planning-with-files' own attestation replaced the retired tracked pointer
 # (Ray, 2026-09-28c). WHICH plan and attestation file are live is the plugin's
@@ -141,16 +156,21 @@ class Finding:
     detail: str
 
 
-def newest_handoff(repo_root: Path) -> Path | None:
-    """Return the newest local handoff by ISO date and optional letter suffix."""
+def newest_handoff(repo_root: Path, *, exclude: Path | None = None) -> Path | None:
+    """Return the newest local handoff by ISO date and optional letter suffix.
+
+    ``exclude`` (compared by resolved path) is skipped — the handoff being
+    written is not "the previous handoff".
+    """
     plans = repo_root / ".agent" / "plans"
     if not plans.is_dir():
         return None
 
+    excluded = None if exclude is None else exclude.resolve()
     candidates: list[tuple[tuple[str, int], Path]] = []
     for path in plans.glob("session-*.md"):
         match = _HANDOFF_RE.fullmatch(path.name)
-        if match is None:
+        if match is None or path.resolve() == excluded:
             continue
         suffix = match.group("suffix")
         suffix_order = 0 if suffix is None else ord(suffix.lower()) - ord("a") + 1
@@ -372,6 +392,7 @@ def _blank(match: re.Match[str]) -> str:
 
 def _window_words(window: str) -> list[ClaimWord]:
     """Return each distinct claim word in one reference window."""
+    window = _NEGATED_CLAIM.sub(_blank, window)
     words: list[ClaimWord] = []
     for pattern, word in _CLAIM_PATTERNS:
         window, hits = pattern.subn(_blank, window)
@@ -386,6 +407,13 @@ def extract_claims(text: str, *, source: str, line_offset: int = 0) -> list[Clai
     A reference is ``#<digits>`` not preceded by a word character, ``#`` or
     ``/`` (so ``KB#814`` and ``owner/repo#12`` are not references).  Its window
     is the rest of its line up to the next reference on that line.
+
+    A reference after a space-separated foreign qualifier (``KB #509``,
+    ``knowledge-base PR #611``, ``owner/repo #12``) still ends the previous
+    window but yields no claim.  Only the KB spellings and ``owner/repo`` are
+    recognised: any other repo name followed by a space is still read as a
+    dotfiles number.  Negated or past forms (``was RED``, ``never MERGED``,
+    ``auto-merge disarmed``) are not claims.
     """
     visible, _unclosed = _visible_lines(text)
     claims: list[Claim] = []
@@ -393,6 +421,8 @@ def extract_claims(text: str, *, source: str, line_offset: int = 0) -> list[Clai
         line = _STRIKETHROUGH.sub(_blank, _INLINE_CODE.sub(_blank, raw.rstrip("\n")))
         references = list(_CLAIM_REFERENCE.finditer(line))
         for position, reference in enumerate(references):
+            if _FOREIGN_QUALIFIER.search(line, 0, reference.start()):
+                continue
             window_end = (
                 references[position + 1].start()
                 if position + 1 < len(references)
@@ -575,8 +605,9 @@ def check_with_claims(
 ) -> tuple[list[Finding], int]:
     """Return every non-OK finding plus the number of PR claims judged.
 
-    ``CLAIMS_DEADLINE_S`` bounds all claim lookups together and is read at call
-    time; each single ``gh`` call is still bounded by ``pr_facts.GH_TIMEOUT``.
+    ``CLAIMS_DEADLINE_S`` is read at call time: no NEW lookup starts after it
+    expires, but a lookup in flight can add up to 2 x ``pr_facts.GH_TIMEOUT``
+    (worst case ~540 s), since each ``gh`` call is bounded only by that timeout.
     """
     findings = [
         *_task_carrier_findings(text),

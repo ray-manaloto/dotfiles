@@ -194,9 +194,9 @@ def test_open_pr_and_check_summary_are_structured(
             "number": 42,
             "title": "Resume safely",
             "statusCheckRollup": [
-                {"conclusion": "SUCCESS"},
-                {"state": "SUCCESS"},
-                {"status": "IN_PROGRESS"},
+                {"name": "lint", "conclusion": "SUCCESS"},
+                {"context": "ci/legacy", "state": "SUCCESS"},
+                {"name": "build", "status": "IN_PROGRESS"},
             ],
         }
     ]
@@ -370,9 +370,9 @@ _OPEN_ROWS = [
         "author": {"login": "app/renovate"},
         "autoMergeRequest": {"mergeMethod": "SQUASH"},
         "statusCheckRollup": [
-            {"conclusion": "FAILURE"},
-            {"conclusion": "SUCCESS"},
-            {"conclusion": "SKIPPED"},
+            {"name": "build", "conclusion": "FAILURE"},
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"name": "smoke", "conclusion": "SKIPPED"},
         ],
     },
     {
@@ -380,14 +380,20 @@ _OPEN_ROWS = [
         "title": "Add service",
         "author": {"login": "sortakool"},
         "autoMergeRequest": None,
-        "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"state": "NEUTRAL"}],
+        "statusCheckRollup": [
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"context": "coderabbit", "state": "NEUTRAL"},
+        ],
     },
     {
         "number": 1200,
         "title": "Still running",
         "author": {"login": "sortakool"},
         "autoMergeRequest": None,
-        "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"status": "IN_PROGRESS"}],
+        "statusCheckRollup": [
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"name": "build", "status": "IN_PROGRESS"},
+        ],
     },
     {
         "number": 1201,
@@ -615,3 +621,189 @@ def test_main_passes_a_normalized_since_to_the_merged_query(
 
     assert "merged:>=2026-09-29T22:00:00Z" in calls[2]
     assert "(--since)" in capsys.readouterr().out
+
+
+# --- S29-H round 1 (R2, R3, R5, R7-M1) ---------------------------------------
+
+
+def _handoffs(repo: Path, stamps: dict[str, int]) -> Path:
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name, stamp in stamps.items():
+        (plans / name).write_text("x\n")
+        os.utime(plans / name, (stamp, stamp))
+    return plans
+
+
+_T_B = int(datetime(2026, 9, 29, 22, 15, 3, tzinfo=UTC).timestamp())
+_T_C = _T_B + 3600
+
+
+def test_default_since_excludes_the_handoff_being_written(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plans = _handoffs(
+        repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C}
+    )
+    now = datetime.now(UTC)
+
+    assert session_state.default_since(repo, now) == (
+        "2026-09-29T23:15:03Z",
+        ".agent/plans/session-2026-09-29c.md mtime",
+    )
+    assert session_state.default_since(
+        repo, now, exclude=plans / "session-2026-09-29c.md"
+    ) == (
+        "2026-09-29T22:15:03Z",
+        (
+            ".agent/plans/session-2026-09-29b.md mtime "
+            "(excluding .agent/plans/session-2026-09-29c.md)"
+        ),
+    )
+
+
+def test_main_for_accepts_a_handoff_that_does_not_exist_yet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    calls = _fake_gh(monkeypatch)
+
+    assert (
+        session_state.main(["--for", ".agent/plans/session-2026-09-29c.md"], repo) == 0
+    )
+
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+    assert (
+        "(.agent/plans/session-2026-09-29b.md mtime "
+        "(excluding .agent/plans/session-2026-09-29c.md))"
+    ) in capsys.readouterr().out
+
+
+def test_main_since_wins_over_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    calls = _fake_gh(monkeypatch)
+
+    assert (
+        session_state.main(
+            ["--for", "x.md", "--since", "2026-09-29T20:00:00Z"],
+            repo,
+        )
+        == 0
+    )
+    assert "merged:>=2026-09-29T20:00:00Z" in calls[2]
+
+
+def test_main_rejects_for_without_a_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+    assert session_state.main(["--for"], repo) == 2
+    assert capsys.readouterr().err == "session-state: --for needs a handoff path\n"
+
+
+def test_branch_pr_and_commit_subjects_render_as_code_spans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pasted snapshot must not fail its own check on free text (R3)."""
+    repo = _repo(tmp_path)
+    (repo / "tracked.txt").write_text("two\n")
+    _git(repo, "commit", "-qam", "revert #12 so it is MERGED `now` and RED")
+    rows = [
+        {"number": 42, "title": "Keep #7 `OPEN` and green", "statusCheckRollup": []}
+    ]
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
+
+    rendered = session_state.render(session_state.gather(repo, since="2026-09-29"))
+
+    assert (
+        "- **open PR**: #42 — `Keep #7 'OPEN' and green` (checks: 0/0 passing)"
+    ) in rendered
+    assert "` `revert #12 so it is MERGED 'now' and RED`" in rendered
+    assert handoff_check.extract_claims(rendered, source="state") == []
+
+
+def _rows(count: int) -> str:
+    return json.dumps(
+        [
+            {"number": n, "title": "t", "author": {"login": "a"}, "mergedAt": "x"}
+            for n in range(1, count + 1)
+        ]
+    )
+
+
+def test_a_list_that_fills_the_limit_says_it_may_be_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _fake_gh(monkeypatch, open_prs=_rows(100), merged_prs=_rows(100))
+
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    rendered = session_state.render(snapshot)
+
+    assert snapshot.open_truncated
+    assert snapshot.merged_truncated
+    assert (
+        "- **open PRs** (100, TRUNCATED at --limit 100 — list may be incomplete):"
+    ) in rendered
+    assert (
+        "- **merged since** 2026-09-29T00:00:00Z (--since) "
+        "(100, TRUNCATED at --limit 100 — list may be incomplete):"
+    ) in rendered
+
+
+def test_a_list_below_the_limit_is_not_flagged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _fake_gh(monkeypatch, open_prs=_rows(99), merged_prs=_rows(99))
+
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    rendered = session_state.render(snapshot)
+
+    assert not snapshot.open_truncated
+    assert not snapshot.merged_truncated
+    assert "- **open PRs** (99):" in rendered
+    assert "(--since) (99):" in rendered
+    assert "TRUNCATED" not in rendered
+
+
+def _dispatch(argv: list[str], repo: Path) -> object:
+    """Run the real main.py parser + dispatch; return the SystemExit code."""
+    args = cli_main.setup_parser().parse_args(argv)
+    try:
+        cli_main.run_command(args, repo)
+    except SystemExit as exc:
+        return exc.code
+    message = "session-state dispatch did not exit"
+    raise AssertionError(message)
+
+
+def test_cli_dispatch_forwards_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M1: main.py must forward --since to session_state.main."""
+    repo = _repo(tmp_path)
+    calls = _fake_gh(monkeypatch)
+
+    assert _dispatch(["session-state", "--since", "2026-09-29T20:00:00Z"], repo) == 0
+    assert "merged:>=2026-09-29T20:00:00Z" in calls[2]
+
+
+def test_cli_dispatch_forwards_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C})
+    calls = _fake_gh(monkeypatch)
+
+    code = _dispatch(
+        ["session-state", "--for", ".agent/plans/session-2026-09-29c.md"], repo
+    )
+
+    assert code == 0
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
