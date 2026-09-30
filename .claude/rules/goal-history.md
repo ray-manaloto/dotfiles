@@ -10,6 +10,11 @@ digest`, `Current goal digest`, `Changed requirement`, `Reason`, `Evidence`,
 the current goal text and a Mermaid workflow. Use `NONE (bootstrap)` only when
 no prior tracked iteration exists. A digest identifies exact goal text; it does
 not prove that the goal was completed.
+The digest is `sha256` of the quoted goal lines with `> ` stripped, joined by
+`\n`, no trailing newline (`_goal_text`/`_iteration_errors` in
+`python/src/dotfiles_setup/session_review.py`); `tests/test_session_review.py`
+validates the tracked file, so `mise run gate -- run pytest` is the check — do
+not hand-roll a hasher or validator.
 
 Each iteration opens with the heading `## YYYY-MM-DD — <title>`: a bare date, a space, an em dash. Session review
 splits entries on `^## \d{4}-\d{2}-\d{2} — ` (`_GOAL_HISTORY_ENTRY` in `python/src/dotfiles_setup/session_review.py`),

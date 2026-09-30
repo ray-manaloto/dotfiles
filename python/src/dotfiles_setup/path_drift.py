@@ -15,6 +15,17 @@ that cost a diagnosis cycle each); ``renovate-config-validator`` 44.13.2 against
 ``mise install`` that exited 0; and 14 tools at once when this module was
 written, hk / uv / python / npm:renovate among them.
 
+Mid-session drift inside Claude Code's Bash tool has its own mechanism and an
+existing fix: every Bash call re-sources a shell snapshot whose LAST line is a
+literal ``export PATH`` captured at session start, so a pin bump never reaches
+the running session (knowledge-base memory
+``the-bash-tool-freezes-path-in-a-snapshot``, 2026-09-03). knowledge-base
+already ships the refresh: ``kb_setup/env_refresh.py`` +
+``[tasks.kb-env-refresh]`` write ``$CLAUDE_ENV_FILE`` on
+startup|resume|clear|compact|fork (knowledge-base #702, PR #709). Reuse it; on
+2026-09-30 Ray ruled that the ``mise hook-env`` refresh moves into ``kb_setup``
+for both repos. Do not design a second one.
+
 Why this cannot live in ``mise run lint`` or any other mise task
 ----------------------------------------------------------------
 

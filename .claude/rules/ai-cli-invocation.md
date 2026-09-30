@@ -90,6 +90,10 @@ Recover background output by `Read`ing the task's output file path — the
 belongs in this file: it is a user/session concern, and no environment variable
 is a reason to invent new argv here.
 
+A Workflow task's output file is ONE pretty-printed JSON object —
+`json.load(f)["result"]` is the script's return value (no string search: it is
+indented); an Agent task's output file is its JSONL transcript instead.
+
 A plausible-looking environment-variable name is the cheapest thing for a lane
 to invent; grep the `$CC/` corpus for it before citing it.
 

@@ -17,6 +17,7 @@ Requires **Python 3.14**.
 | `uv.lock` | Reproducible dependency lockfile (managed by uv) |
 | `requirements.txt` | Legacy; prefer `uv sync` |
 | `src/dotfiles_setup/` | Package source; `DotfilesConfig(BaseSettings)` centralizes 16 env vars via Pydantic config DI |
+| `src/dotfiles_setup/main.py` | The `dotfiles-setup` CLI: every subcommand's argparse parser and the name→handler dispatch table (no separate CLI module) |
 | `verification/suites.toml` | Structured verification contracts run by `dotfiles-setup verify run` (CI: contract-preflight) |
 
 ## Working in this directory

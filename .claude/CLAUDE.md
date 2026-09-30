@@ -65,6 +65,9 @@ Every lane resolves to codex or to Claude. Route by this fixed table:
 Repo-owned agents: `gate-runner`, `cold-reviewer`, `graphify-operator`, `graphify-researcher`,
 `spec-scribe`, `pwf-scribe`, `issue-filer`, `claude-advisor`, `premise-verifier`.
 Saved workflows (`.claude/workflows/*.js`): `/gated-implementation`, `/graphify-refresh`, `/modernization-audit`, `/research-sweep-run`.
+A new saved workflow must dry-run in `tests/test_workflows_js.py` (Bun, stubbed `agent`/`phase`/`log`): add its
+node label prefixes to `KNOWN_LABEL_PREFIXES` (every `agentType` must be a `.claude/agents` name or a builtin), and
+add it to the list above.
 
 Two model families per role: `codex-sol-*` (authored) and `codex-astra-*`
 (generated — `mise run codex-lane-mirror`). Neither is a default.

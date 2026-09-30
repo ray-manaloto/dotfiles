@@ -35,6 +35,7 @@ mise run land -- 123                 # after merge: waits on main CI, validates
 gh pr checks 123 --json name,bucket  # one-shot read of PR checks
 gh issue view 123 --json title,body,comments  # never --comments: exclusive with --json, and non-TTY it prints ONLY comments
 gh run view 1234567890 --json conclusion --jq '.conclusion'  # one run
+gh api 'repos/cli/cli/commits?path=x&per_page=1' --jq '.[0].sha'  # QUOTE a query string: zsh globs `?` → "no matches found", rc=1
 ```
 
 ## Anti-pattern

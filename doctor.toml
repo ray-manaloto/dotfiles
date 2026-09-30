@@ -315,4 +315,7 @@ required = ["pre-commit", "commit-msg", "pre-push"]
 # Why it exists: Docker Desktop quit on 2026-09-29 and stopped both containers;
 # `land`/`sync` re-created only the default amd64, and the arm64 container sat
 # exited for ~24 h with nothing saying so (docs/specs/doctor-devcontainer-arches.md).
+# WHY Docker Desktop stopped: grep 'Quitting whole Docker Desktop'
+# ~/Library/Containers/com.docker.docker/Data/log/host/electron-<YYYY-MM-DD>.log
+# (com.docker.backend.log rotates every few hours, so it is usually gone).
 arches = ["amd64", "arm64"]
