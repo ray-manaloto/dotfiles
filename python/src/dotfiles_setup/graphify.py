@@ -35,10 +35,23 @@ _MANIFEST_FILE = "manifest.json"
 _BUILD_RECEIPT = "build-receipt.json"
 _MAX_AGENT_OUTPUT_BYTES = 65_536
 
-# Every provider credential or backend selector read by Graphify 0.9.65's
-# backend detection, plus the additional provider keys named by this repo's
-# zero-token policy. Bound by workflow.graphify-zero-token-boundary.
+# Every provider credential, endpoint or backend selector the installed
+# Graphify package reads, plus the additional provider keys named by this
+# repo's zero-token policy. Bound by workflow.graphify-zero-token-boundary;
+# ``test_scrub_covers_every_credential_name_the_installed_graphify_reads``
+# re-derives the set from the installed package, so a version bump that reads
+# a new name fails there instead of reaching a provider (0.9.72 added
+# GRAPHIFY_API_KEY, AWS_ACCESS_KEY_ID, GRAPHIFY_TRIAGE_BACKEND and the
+# *_BASE_URL endpoints to what 0.9.65's list covered).
 GRAPHIFY_REBUILD_SCRUB_ENV: tuple[str, ...] = (
+    "GRAPHIFY_API_KEY",
+    "GRAPHIFY_TRIAGE_BACKEND",
+    "AWS_ACCESS_KEY_ID",
+    "ANTHROPIC_BASE_URL",
+    "DEEPSEEK_BASE_URL",
+    "GEMINI_BASE_URL",
+    "KIMI_BASE_URL",
+    "OPENAI_BASE_URL",
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
     "OPENAI_API_KEY",

@@ -216,6 +216,17 @@ def test_write_release_receipts_are_tracked_per_release(tmp_path: Path) -> None:
     )
 
 
+def test_release_receipt_ends_in_exactly_one_newline(tmp_path: Path) -> None:
+    """A body ending in blank lines still yields a lint-clean receipt (0.9.72 bump)."""
+    note = graphify_currency.ReleaseNote(
+        NEWER, f"v{NEWER}", PUBLISHED, "Notes.\r\n\n\n"
+    )
+    (receipt,) = graphify_currency.write_release_receipts(tmp_path, [note])
+    text = receipt.read_text(encoding="utf-8")
+    assert text.endswith("Notes.\n")
+    assert not text.endswith("\n\n")
+
+
 def test_upgrade_lock_runs_native_uv_commands_sequentially(tmp_path: Path) -> None:
     calls: list[list[str]] = []
 

@@ -16,6 +16,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import graphify_currency
 from dotfiles_setup.pin_parity import (
     REGISTRY_NAME,
     check_all,
@@ -177,7 +178,9 @@ def test_graphify_registry_uses_one_lock_entry_plus_three_stamps() -> None:
     lock_site = sites[0]
     reading = read_site(PROJECT_ROOT, lock_site["path"], lock_site["pattern"])
     assert reading is not None
-    assert reading.versions == ("0.9.65",)
+    # Cross-checked against uv.lock parsed as TOML (a different route than the
+    # registry's regex), so a Graphify bump needs no edit here.
+    assert reading.versions == (graphify_currency.locked_version(PROJECT_ROOT),)
 
 
 def test_every_real_pattern_still_matches_its_file() -> None:

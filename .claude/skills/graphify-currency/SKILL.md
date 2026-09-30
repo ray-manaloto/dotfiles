@@ -55,6 +55,12 @@ copies the bundles and their packaged references, then stamps them. The
 `agents` surface is stamp-only: its `DELIBERATE STUB` stays byte-identical
 and no `references/` directory is created.
 
+Graphify 0.9.72's own auto-refresh (#3895, `GRAPHIFY_NO_AUTO_REFRESH`) does NOT
+cover these project-local surfaces — measured 2026-09-30: a stale, edited
+`.claude/skills/graphify` in the repo was left untouched, while the same skill
+under a scratch `$HOME` was refreshed with a `SKILL.md.bak`. It is a HOME-level
+feature, so this task's refresh stays necessary.
+
 A differing destination `SKILL.md` is copied to
 `.agent/graphify/backups/<platform>-SKILL.md.<timestamp>` before replacement,
 and the task prints that path. No `SKILL.md.bak` is left beside a managed
@@ -103,8 +109,10 @@ exact file with the same PATH. This is deliberately different from the project
 venv's Graphify used by `uv run --project python`.
 
 The rebuild subprocess removes every known LLM-provider credential/backend
-selector and forces the project venv to the front of PATH. Installed Graphify
-0.9.65 ignores `--no-label` on `update`, so no such flag is passed. Residual:
+selector and forces the project venv to the front of PATH (the scrub list is
+re-derived from the installed package by a test, so a bump that reads a new
+name fails there). Graphify 0.9.65 was measured ignoring `--no-label` on
+`update`, so no such flag is passed. Residual:
 PATH must remain available for Graphify/git, and a future vendor update could
 still discover the keyless `claude` CLI fallback. The environment scrub reduces
 provider reachability; the AST argv gate is the repository-owned hard boundary.

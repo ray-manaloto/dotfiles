@@ -13,8 +13,10 @@ it:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import io
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -54,7 +56,7 @@ from dotfiles_setup.graphify import (
 )
 from dotfiles_setup.graphify_currency import locked_version
 
-GRAPHIFY_VERSION = "0.9.65"
+GRAPHIFY_VERSION = "0.9.72"
 
 
 @pytest.fixture(autouse=True)
@@ -1566,3 +1568,31 @@ def test_graphify_health_is_fresh_when_the_graph_matches_head(
     result = graphify_health(tmp_path)
     assert result.status is GraphifyStatus.FRESH
     assert result.ok
+
+
+_CREDENTIAL_SHAPED = re.compile(
+    r'"([A-Z][A-Z0-9_]*(?:API_KEY|_TOKEN|_BACKEND|_ENDPOINT|_HOST|_PROFILE'
+    r'|_REGION|_BASE_URL|ACCESS_KEY_ID))"'
+)
+
+
+def test_scrub_covers_every_credential_name_the_installed_graphify_reads() -> None:
+    """Every credential-shaped name the installed package reads is scrubbed.
+
+    Re-derived from the package bytes on each run, so a Graphify bump that starts
+    reading a new provider name fails here before a rebuild can reach it (0.9.72
+    added five names that 0.9.65's hand-kept list lacked).
+    """
+    spec = importlib.util.find_spec("graphify")
+    assert spec is not None
+    assert spec.origin is not None
+    package = Path(spec.origin).parent
+    names = {
+        match
+        for source in package.rglob("*.py")
+        for match in _CREDENTIAL_SHAPED.findall(source.read_text(errors="replace"))
+    }
+    assert "OPENAI_API_KEY" in names, "control: the scan must see a known name"
+    assert names <= set(GRAPHIFY_REBUILD_SCRUB_ENV), sorted(
+        names - set(GRAPHIFY_REBUILD_SCRUB_ENV)
+    )
