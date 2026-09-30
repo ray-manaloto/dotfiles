@@ -362,6 +362,11 @@ def _publish_target(arch: str) -> PublishTarget:
     )
 
 
+def published_platform(arch: str) -> str:
+    """The exact published triple for ``arch`` (what `sync` and bake accept)."""
+    return _publish_target(arch).platform
+
+
 def published_targets() -> tuple[PublishTarget, ...]:
     """Every architecture the image PUBLISHES (an OCI index entry), in order.
 
@@ -600,7 +605,9 @@ def find_violations(repo_root: Path) -> list[PlatformLiteral]:
             )
             for lineno, line in enumerate(text.splitlines(), start=1)
             for match in _LITERAL_RE.finditer(line)
-            if profile is None or platform_arch(match.group(0)) != profile
+            # A profile may carry only its arch's exact published triple: a
+            # level-less `linux/arm64` shares the arch word but `sync` rejects it.
+            if profile is None or match.group(0) != published_platform(profile)
         )
     return violations
 

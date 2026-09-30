@@ -98,7 +98,11 @@ from dotfiles_setup.path_drift import (
 # each to be in CHECKS, so an imported one would be an unregistrable false
 # positive — the guard caught this import on its first run.
 from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
-from dotfiles_setup.platform_target import PLATFORM_ENV_VAR, platform_arch
+from dotfiles_setup.platform_target import (
+    PLATFORM_ENV_VAR,
+    platform_arch,
+    published_platform,
+)
 from dotfiles_setup.plugin_health import check_plugin_health as plugin_health_findings
 
 if TYPE_CHECKING:
@@ -1412,11 +1416,16 @@ _GIT_TIMEOUT_S = 10.0
 #: `mise env --json` measured at 0.07 s on this host (2026-09-30); the bound
 #: only stops a wedged mise (a hung credential child) from holding the session.
 _MISE_ENV_TIMEOUT_S = 20.0
+_MISE_STDERR_LINES = 3
 #: Dropped from the `mise env` child so it answers from CONFIG alone.
 #: ``mise.toml`` templates DOTFILES_PLATFORM from the ambient value, so a parent
 #: running under ``MISE_ENV=arm64`` would otherwise make arm64 the "default".
+#: ``MISE_PROFILE``/``MISE_ENVIRONMENT`` are aliases mise 2026.9.18 honours for
+#: ``MISE_ENV`` (measured: ``MISE_PROFILE=arm64`` resolved the arm64 triple).
 _MISE_AMBIENT_VARS = (
     "MISE_ENV",
+    "MISE_PROFILE",
+    "MISE_ENVIRONMENT",
     PLATFORM_ENV_VAR,
     devcontainer_names.SSH_PORT_ENV_VAR,
 )
@@ -1523,6 +1532,10 @@ def mise_env_resolution(
     argv = ["mise", *(("-E", mise_env) if mise_env else ()), "env", "--json"]
     label = " ".join(argv[:-2])
     child_env = {k: v for k, v in environ.items() if k not in _MISE_AMBIENT_VARS}
+    # mise's env cache is keyed without the caller's env values, so a parent run
+    # that saw an ambient DOTFILES_PLATFORM could serve it to this stripped child
+    # (cold review of 4ccb98a5, measured on a clone without a local pin).
+    child_env["MISE_ENV_CACHE"] = "0"
     try:
         proc = subprocess.run(
             argv,
@@ -1544,9 +1557,10 @@ def mise_env_resolution(
         msg = f"`{label} env` could not run: {exc}"
         raise MiseEnvError(msg) from exc
     if proc.returncode != 0:
-        said = proc.stderr.strip().splitlines()
-        first = said[0] if said else "no stderr"
-        msg = f"`{label} env` exited {proc.returncode}: {first}"
+        said = [line.strip() for line in proc.stderr.splitlines() if line.strip()]
+        # Up to three lines: mise puts the cause ("not trusted") on line 2.
+        detail = " | ".join(said[:_MISE_STDERR_LINES]) if said else "no stderr"
+        msg = f"`{label} env` exited {proc.returncode}: {detail}"
         raise MiseEnvError(msg)
     try:
         data = json.loads(proc.stdout)
@@ -1632,11 +1646,13 @@ def _profile_findings(
 ) -> list[str]:
     """Does ``MISE_ENV=<arch>`` really select ``arch``, on its own port?"""
     findings: list[str] = []
-    if profile.arch != arch:
+    published = published_platform(arch)
+    if profile.platform != published:
         findings.append(
             f"devcontainers: `MISE_ENV={arch}` resolves "
-            f"{_PLATFORM_ENV_VAR}={profile.platform}, so `MISE_ENV={arch} mise "
-            f"run up` would bring up {profile.arch}; check mise.{arch}.toml"
+            f"{_PLATFORM_ENV_VAR}={profile.platform}, not the published "
+            f"{published}, so `MISE_ENV={arch} mise run up` would bring up "
+            f"{profile.arch or 'an unpublished platform'}; check mise.{arch}.toml"
         )
     if profile.ssh_port and profile.ssh_port == default.ssh_port:
         findings.append(

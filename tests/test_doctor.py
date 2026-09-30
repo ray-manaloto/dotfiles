@@ -1543,8 +1543,8 @@ def test_devcontainers_a_profile_resolving_the_wrong_arch_is_named(
     assert doctor.check_devcontainers_running(_arches_setup()) == [
         (
             "devcontainers: `MISE_ENV=arm64` resolves DOTFILES_PLATFORM="
-            f"{_AMD64_PLATFORM}, so `MISE_ENV=arm64 mise run up` would bring up amd64; "
-            "check mise.arm64.toml"
+            f"{_AMD64_PLATFORM}, not the published {_ARM64_PLATFORM}, so "
+            "`MISE_ENV=arm64 mise run up` would bring up amd64; check mise.arm64.toml"
         ),
         (
             "devcontainers: `MISE_ENV=arm64` resolves DEVCONTAINER_SSH_PORT=26233, the "
@@ -1874,7 +1874,11 @@ def test_mise_env_resolution_asks_mise_from_config_alone(
     assert seen["timeout"] == 20.0
     assert seen["stdin"] is subprocess.DEVNULL
     assert seen["check"] is False
-    assert seen["env"] == {"PATH": "/usr/bin", "HOME": "/home/u"}
+    assert seen["env"] == {
+        "PATH": "/usr/bin",
+        "HOME": "/home/u",
+        "MISE_ENV_CACHE": "0",
+    }
 
 
 def test_mise_env_resolution_reads_the_port_as_text(
@@ -1983,3 +1987,54 @@ def test_is_linked_worktree_fails_open_to_checking(
     monkeypatch.setattr(doctor.subprocess, "run", fake_run)
     assert doctor.is_linked_worktree(Path("/repo")) is False
     assert seen["timeout"] == 10.0
+
+
+def test_mise_env_resolution_strips_the_mise_env_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MISE_PROFILE / MISE_ENVIRONMENT select a profile like MISE_ENV (2026.9.18)."""
+    seen: dict[str, object] = {}
+
+    def fake_run(_cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return _completed(0, json.dumps({"DOTFILES_PLATFORM": _ARM64_PLATFORM}))
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    ambient = {"PATH": "/usr/bin", "MISE_PROFILE": "arm64", "MISE_ENVIRONMENT": "arm64"}
+    doctor.mise_env_resolution(Path("/repo"), ambient, None)
+    env = seen["env"]
+    assert isinstance(env, dict)
+    assert "MISE_PROFILE" not in env
+    assert "MISE_ENVIRONMENT" not in env
+    assert env["MISE_ENV_CACHE"] == "0"
+
+
+def test_mise_env_failure_quotes_the_cause_on_a_later_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mise prints the real cause ("not trusted") on line 2 of an untrusted config."""
+    stderr = "mise ERROR error parsing config file\nmise ERROR not trusted\nhint\nx\n"
+    monkeypatch.setattr(
+        doctor.subprocess,
+        "run",
+        lambda cmd, **_kwargs: subprocess.CompletedProcess(cmd, 1, "", stderr),
+    )
+    with pytest.raises(doctor.MiseEnvError) as info:
+        doctor.mise_env_resolution(Path("/repo"), {}, None)
+    assert "not trusted" in str(info.value)
+    assert "| x" not in str(info.value)
+
+
+def test_a_profile_resolving_a_level_less_triple_is_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A level-less arm64 triple shares the arch word; sync rejects it."""
+    _inject(
+        monkeypatch,
+        profiles={
+            **_HEALTHY_PROFILES,
+            "arm64": doctor.MiseResolution("linux/arm64", "arm64", ""),
+        },
+    )
+    findings = doctor.check_devcontainers_running(_arches_setup())
+    assert any(f"not the published {_ARM64_PLATFORM}" in f for f in findings)

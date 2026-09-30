@@ -765,3 +765,17 @@ def test_a_commented_out_arch_pin_is_not_a_violation(tmp_path: Path) -> None:
     )
 
     assert platform_target.find_pinned_image_arch(tmp_path) is None
+
+
+@pytest.mark.parametrize(
+    "literal", ["linux/arm64", "linux/aarch64/v8", "linux/arm64/v9"]
+)
+def test_an_arch_profile_must_carry_the_exact_published_triple(
+    tmp_path: Path, literal: str
+) -> None:
+    """Same arch word, wrong spelling: `sync` accepts only the published triple."""
+    repo = _tracked_repo(
+        tmp_path, {"mise.arm64.toml": f'[env]\nDOTFILES_PLATFORM = "{literal}"\n'}
+    )
+    violations = platform_target.find_violations(repo)
+    assert [(v.path, v.literal) for v in violations] == [("mise.arm64.toml", literal)]
