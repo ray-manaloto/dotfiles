@@ -85,6 +85,9 @@ KNOWN_LABEL_PREFIXES = {
     "adjudicate",
     "read-link",
     "codex-sol-advisor",
+    "deps",
+    "mirror",
+    "mirror-index",
 }
 
 ARGS = {
@@ -138,7 +141,24 @@ ARGS = {
     "advisor": True,
 }
 
-_STUBS = r"""
+#: JS helpers shared by every research-sweep stub: a code search that satisfies
+#: all three mandatory roles, and a dependency agent that reports one run per
+#: `mise run research-fanout` command its prompt names.
+_SWEEP_HELPERS = """
+const CODE_SEARCH_OK = [
+  { query: 'filename:mise.toml hk', role: 'query', count: 3, rc: 0 },
+  { query: 'repo:example/repo filename:README.md', role: 'must-hit', count: 1, rc: 0 },
+  { query: 'fresh-nonsense-token', role: 'known-absent', count: 0, rc: 0 },
+]
+const DEPS_OK = (prompt) => ({ runs: prompt.split('mise run research-fanout').slice(1)
+  .map((_, k) => ({ query: `q${k}`, manifest: `.agent/deps/${k}/manifest.json`,
+    rc: 0 })),
+  control: { count: 7, rc: 0, rateLimited: false } })
+"""
+
+_STUBS = (
+    _SWEEP_HELPERS
+    + r"""
 const calls = []
 const events = []
 const phase = (title) => events.push({ kind: 'phase', title })
@@ -208,9 +228,14 @@ const agent = async (_prompt, options = {}) => {
   if (label === 'plan+fetch') {
     return {
       runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
+      codeSearch: CODE_SEARCH_OK,
       sourceDive: true,
     }
   }
+  // the mandatory stages: one fan-out run per command the prompt names
+  if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'mirror-index') return { written: true }
+  if (label.startsWith('mirror')) return { rc: 0, bytes: 42 }
   if (label === 'triage') {
     return {
       read: [{ url: 'https://example.test', why: 'w' }],
@@ -232,6 +257,7 @@ const agent = async (_prompt, options = {}) => {
   return schemaValue(options.schema)
 }
 """
+)
 
 
 def _wrapped_source(source: str) -> str:
@@ -380,7 +406,8 @@ def _custom_stub_source(
         "const phase = (title) => events.push({ kind: 'phase', title })\n"
         "const log = (message) => events.push({ kind: 'log', message })\n"
         "const parallel = async (tasks) => Promise.all(tasks.map((task) => task()))\n"
-        "const agent = async (_prompt, options = {}) => {\n"
+        + _SWEEP_HELPERS
+        + "const agent = async (_prompt, options = {}) => {\n"
         "  const label = options.label || 'general-purpose'\n"
         "  calls.push({ label, agentType: options.agentType || 'general-purpose' })\n"
         f"  {agent_body}\n"
@@ -522,6 +549,10 @@ _SWEEP_ROUTING = {
     "adjudicate": ("general-purpose", "opus", "high"),
     "read-link": ("Explore", "sonnet", "low"),
     "reconcile": ("general-purpose", "sonnet", "medium"),
+    # the mandatory stages (2026-09-30): commands to run, so cheap and general-purpose
+    "deps": ("general-purpose", "sonnet", "low"),
+    "mirror": ("general-purpose", "haiku", ""),
+    "mirror-index": ("general-purpose", "haiku", ""),
     "codex-sol-advisor": ("codex-sol-advisor", "", ""),
 }
 
@@ -568,8 +599,11 @@ def test_research_sweep_rejects_a_relative_report_path(tmp_path: Path) -> None:
 _SWEEP_HAPPY_BODY = """
   if (label === 'plan+fetch') {
     return { runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
-      sourceDive: false }
+      codeSearch: CODE_SEARCH_OK, sourceDive: false }
   }
+  if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'mirror-index') return { written: true }
+  if (label.startsWith('mirror')) return { rc: 0, bytes: 42 }
   if (label === 'triage') {
     return {
       read: [{ url: 'https://gone.test', why: 'w' }],
@@ -674,8 +708,11 @@ _FLAG_VERDICT = (
 _SWEEP_TUNING_BODY = """
   if (label === 'plan+fetch') {
     return { runs: [{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }],
-      sourceDive: false }
+      codeSearch: CODE_SEARCH_OK, sourceDive: false }
   }
+  if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'mirror-index') return { written: true }
+  if (label.startsWith('mirror')) return { rc: 0, bytes: 42 }
   if (label === 'triage') {
     events.push({ kind: 'triage-prompt', prompt: _prompt })
     return { read: [
@@ -881,7 +918,11 @@ def test_research_sweep_caller_links_survive_a_null_plan(tmp_path: Path) -> None
     events = cast("list[dict[str, str]]", payload["events"])
     labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
     assert any(e["kind"] == "read" and "https://l.test" in e["prompt"] for e in events)
-    assert "triage" not in labels
+    # the mandatory dependency stage still ran, so triage reads ITS manifests only
+    assert "deps:example/repo" in labels
+    triage_prompt = next(e["prompt"] for e in events if e["kind"] == "triage-prompt")
+    assert ".agent/deps/0/manifest.json" in triage_prompt
+    assert "/m.json" not in triage_prompt
     # the failed stage is a named gap in synthesis and in the status (review N2)
     run_result = cast("dict[str, object]", payload["result"])
     assert run_result["status"] == "links-only"
@@ -936,3 +977,308 @@ def test_research_sweep_keeps_a_section_fragment(tmp_path: Path) -> None:
         e for e in events if e["kind"] == "read" and e["label"].startswith("read-link")
     )
     assert "https://p.test/post#on-omarchy" in link_read["prompt"]
+
+
+# The mandatory stages (docs/specs/research-enforcement-2026-09-30.md): the tuning
+# body records every mandatory-stage prompt so each test can pin what it dispatched.
+_SWEEP_MANDATORY_BODY = (
+    _SWEEP_TUNING_BODY.replace(
+        "  if (label.startsWith('deps')) return DEPS_OK(_prompt)\n",
+        "  if (label.startsWith('deps')) {\n"
+        "    events.push({ kind: 'deps', label, prompt: _prompt })\n"
+        "    return DEPS\n"
+        "  }\n",
+    )
+    .replace(
+        "  if (label.startsWith('mirror')) return { rc: 0, bytes: 42 }\n",
+        "  if (label.startsWith('mirror')) {\n"
+        "    events.push({ kind: 'mirror', label, prompt: _prompt })\n"
+        "    return MIRROR\n"
+        "  }\n",
+    )
+    .replace(
+        "  if (label === 'synthesize') {\n",
+        "  if (label === 'synthesize') {\n"
+        "    events.push({ kind: 'synth-prompt', prompt: _prompt })\n",
+    )
+)
+
+
+def _mandatory_run(
+    tmp_path: Path,
+    name: str,
+    extra_args: Mapping[str, object],
+    stubs: Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    """Run the sweep with the mandatory-stage stubs overridden by `stubs`."""
+    stub = {
+        "deps": "DEPS_OK(_prompt)",
+        "mirror": "{ rc: 0, bytes: 42 }",
+        "code_search": "CODE_SEARCH_OK",
+        **(stubs or {}),
+    }
+    deps, mirror, code_search = stub["deps"], stub["mirror"], stub["code_search"]
+    body = (
+        _SWEEP_MANDATORY_BODY.replace("REFUTE", _OK_VERDICT)
+        .replace("ADJUDICATE", "null")
+        .replace("return DEPS\n", f"return {deps}\n")
+        .replace("return MIRROR\n", f"return {mirror}\n")
+        .replace("codeSearch: CODE_SEARCH_OK", f"codeSearch: {code_search}")
+    )
+    return _sweep_custom(tmp_path, name, body, extra_args)
+
+
+def _of_kind(payload: Mapping[str, object], kind: str) -> list[dict[str, str]]:
+    events = cast("list[dict[str, str]]", payload["events"])
+    return [e for e in events if e["kind"] == kind]
+
+
+def test_research_sweep_mirrors_each_caller_link_once(tmp_path: Path) -> None:
+    """One mirror agent per caller link, via the mise-pinned firecrawl, plus a README.
+
+    FAIL arm: batch the links into one mirror prompt, or call a bare `firecrawl`,
+    and the per-link count or the `mise exec -- firecrawl` assertion fails.
+    """
+    links = ["https://a.test/x", "https://b.test/y"]
+    payload = _mandatory_run(tmp_path, "sweep-mirror.js", {"links": links})
+    mirrors = _of_kind(payload, "mirror")
+    labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
+    raw = f"{REPO_ROOT}/docs/research/kb/raw/research-sweep/links"
+
+    assert [m["label"] for m in mirrors] == ["mirror:1/2", "mirror:2/2"]
+    for n, (m, url) in enumerate(zip(mirrors, links, strict=True), start=1):
+        assert f"mise exec -- firecrawl scrape '{url}'" in m["prompt"]
+        assert "--format markdown --only-main-content" in m["prompt"]
+        assert f"-o '{raw}/{n}.md'" in m["prompt"]
+        assert links[2 - n] not in m["prompt"], "one link per mirror agent"
+    assert labels.count("mirror-index") == 1
+    link_read = next(
+        e for e in _of_kind(payload, "read") if e["label"].startswith("read-link")
+    )
+    assert f"(mirror: {raw}/1.md, 42 bytes)" in link_read["prompt"]
+    run_result = cast("dict[str, object]", payload["result"])
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_unfetchable_link_is_a_named_gap(tmp_path: Path) -> None:
+    """A link firecrawl cannot fetch is a named gap and is read live, not dropped."""
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-mirror-fail.js",
+        {"links": ["https://dead.test"]},
+        {"mirror": "{ rc: 1, bytes: 0, reason: 'HTTP 404' }"},
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+    link_read = next(
+        e for e in _of_kind(payload, "read") if e["label"].startswith("read-link")
+    )
+
+    assert run_result["mirrorGaps"] == ["https://dead.test: not mirrored (HTTP 404)"]
+    assert "MIRROR GAPS:" in synth
+    assert "(NO MIRROR: HTTP 404)" in link_read["prompt"]
+    # the stage RAN; the world said no — not a mandatory gap
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_dependency_stage_runs_per_repo_both_directions(
+    tmp_path: Path,
+) -> None:
+    """Every repo gets the three github sources, each relationship from both sides.
+
+    FAIL arm: leave the github-* runs to the planner and no `deps:` agent runs.
+    """
+    payload = _mandatory_run(
+        tmp_path, "sweep-deps.js", {"links": [], "relatedRepos": ["other/tool"]}
+    )
+    deps = {e["label"]: e["prompt"] for e in _of_kind(payload, "deps")}
+    sources = "--sources github-issues,github-discussions,github-releases"
+
+    assert sorted(deps) == ["deps:example/repo", "deps:other/tool"]
+    main_prompt, other_prompt = deps["deps:example/repo"], deps["deps:other/tool"]
+    assert main_prompt.count(sources) == 2
+    assert '"tool" --repo example/repo' in main_prompt
+    assert other_prompt.count(sources) == 1
+    assert '"repo" --repo other/tool' in other_prompt
+    run_result = cast("dict[str, object]", payload["result"])
+    assert len(cast("list[object]", run_result["dependencyRuns"])) == 3
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_empty_code_search_still_records_the_query(
+    tmp_path: Path,
+) -> None:
+    """A zero-count code search is evidence: its query reaches synthesis + result."""
+    empty = (
+        "[{ query: 'filename:nothing.toml zz', role: 'query', count: 0, rc: 0 },"
+        " CODE_SEARCH_OK[1], CODE_SEARCH_OK[2]]"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-code-empty.js", {"links": []}, {"code_search": empty}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+
+    assert code[0] == {
+        "query": "filename:nothing.toml zz",
+        "role": "query",
+        "count": 0,
+        "rc": 0,
+        "source": "planner",
+        "rateLimited": False,
+    }
+    assert "filename:nothing.toml zz" in synth
+    assert '"Code search" (query |' in synth
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_missing_dependency_stage_is_a_mandatory_gap(
+    tmp_path: Path,
+) -> None:
+    """The §4 control arm: the dependency stage stubbed out never reads `complete`.
+
+    FAIL arm: drop the null check on a dependency agent and status is `complete`.
+    """
+    payload = _mandatory_run(
+        tmp_path, "sweep-deps-null.js", {"links": []}, {"deps": "null"}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+
+    assert run_result["status"] == "mandatory-gap"
+    assert run_result["mandatoryGaps"] == [
+        "dependency-repo stage for example/repo: agent returned null — nothing ran"
+    ]
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+    assert "MANDATORY GAPS:" in synth
+
+
+_README_ZERO = (
+    "{ ...DEPS_OK(_prompt), control: { count: 0, rc: 0, rateLimited: false } }"
+)
+_README_CONTROL = "repo:example/repo filename:README.md"
+
+
+def test_research_sweep_planner_must_hit_miss_is_a_note_not_a_gap(
+    tmp_path: Path,
+) -> None:
+    """A planner's guessed must-hit of 0 is a NOTE; the README control carries it.
+
+    Live run wf_b74e66f5-ca3: `filename:skills.rs repo:jdx/mise` returned 0 and the
+    sweep read `mandatory-gap`. FAIL arm: drop the workflow-built control and this
+    run is `mandatory-gap` again.
+    """
+    guessed = (
+        "[CODE_SEARCH_OK[0], { query: 'filename:skills.rs repo:example/repo',"
+        " role: 'must-hit', count: 0, rc: 0 }, CODE_SEARCH_OK[2]]"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-guess.js", {"links": []}, {"code_search": guessed}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+    notes = cast("list[str]", run_result["codeSearchNotes"])
+    deps_prompt = _of_kind(payload, "deps")[0]["prompt"]
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+    assert f"-f q='{_README_CONTROL}' --jq .total_count" in deps_prompt
+    assert {
+        "query": _README_CONTROL,
+        "role": "must-hit",
+        "source": "workflow",
+        "count": 7,
+        "rc": 0,
+        "rateLimited": False,
+    } in code
+    assert len(notes) == 1
+    assert notes[0].startswith('planner must-hit control "filename:skills.rs')
+    assert "CODE SEARCH NOTES:" in synth
+    assert run_result["mandatoryGaps"] == []
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_readme_control_zero_is_a_gap(tmp_path: Path) -> None:
+    """The workflow-built README control at 0 IS a gap, even beside a planner hit.
+
+    FAIL arm: let any must-hit >0 excuse the README control and this reads `complete`.
+    """
+    payload = _mandatory_run(
+        tmp_path, "sweep-readme-zero.js", {"links": []}, {"deps": _README_ZERO}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+
+    assert run_result["status"] == "mandatory-gap"
+    assert run_result["mandatoryGaps"] == [
+        (
+            f'code search: workflow must-hit control "{_README_CONTROL}" returned'
+            " count=0 rc=0 — a gh auth, rate-limit or search problem"
+        )
+    ]
+
+
+def test_research_sweep_rate_limit_is_never_a_zero(tmp_path: Path) -> None:
+    """A 403 is reported as RATE-LIMITED, never as count 0 (row and gap text).
+
+    FAIL arm: drop `rateLimited` from the workflow control row and the report
+    shows a README count, which reads as a real zero.
+    """
+    limited = (
+        "{ ...DEPS_OK(_prompt), control: { count: -1, rc: 1, rateLimited: true } }"
+    )
+    payload = _mandatory_run(tmp_path, "sweep-403.js", {"links": []}, {"deps": limited})
+    run_result = cast("dict[str, object]", payload["result"])
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+    row = next(c for c in code if c["source"] == "workflow")
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+    assert row["rateLimited"] is True
+    assert row["count"] != 0
+    assert run_result["mandatoryGaps"] == [
+        (
+            f'code search: workflow must-hit control "{_README_CONTROL}" was'
+            " RATE-LIMITED (HTTP 403), not 0 — a gh auth, rate-limit or search problem"
+        )
+    ]
+    assert "write RATE-LIMITED, never 0" in synth
+
+
+def test_research_sweep_other_missing_stages_are_mandatory_gaps(
+    tmp_path: Path,
+) -> None:
+    """No code search, no controls, a failed fan-out, a null mirror, no repo at all."""
+    cases: list[tuple[dict[str, object], dict[str, str], str]] = [
+        ({"links": []}, {"code_search": "[]"}, "code search: no planner query ran"),
+        (
+            {"links": []},
+            {
+                "code_search": "[CODE_SEARCH_OK[0], CODE_SEARCH_OK[2]]",
+                "deps": _README_ZERO,
+            },
+            "code search: no must-hit control",
+        ),
+        (
+            {"links": []},
+            {"code_search": "[CODE_SEARCH_OK[0], CODE_SEARCH_OK[1]]"},
+            "code search: no fresh known-absent control",
+        ),
+        (
+            {"links": []},
+            {
+                "deps": "{ ...DEPS_OK(_prompt),"
+                " runs: [{ query: 'q', manifest: '/tmp/d.json', rc: 1 }] }"
+            },
+            'dependency-repo stage for example/repo: "q" rc=1',
+        ),
+        (
+            {"links": ["https://l.test"]},
+            {"mirror": "null"},
+            "mirror stage for https://l.test",
+        ),
+        ({"links": [], "repo": ""}, {}, "dependency-repo stage: no args.repo"),
+    ]
+    for n, (extra, stubs, expected) in enumerate(cases):
+        payload = _mandatory_run(tmp_path, f"sweep-gap-{n}.js", extra, stubs)
+        run_result = cast("dict[str, object]", payload["result"])
+        gaps = cast("list[str]", run_result["mandatoryGaps"])
+        assert run_result["status"] == "mandatory-gap", (n, gaps)
+        assert any(g.startswith(expected) for g in gaps), (n, gaps)

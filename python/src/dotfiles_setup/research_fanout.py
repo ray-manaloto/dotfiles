@@ -1253,13 +1253,25 @@ def _parse_sources(value: str | None, repo: str | None) -> tuple[str, ...]:
     return requested
 
 
+def _presence(source: str, request: FanoutRequest) -> str:
+    """`present`, `needs --repo` (gh works, no repo given) or `absent`.
+
+    A github source with gh on PATH is usable the moment a repo is named, so
+    reporting it `absent` made planners drop GitHub entirely (2026-09-30).
+    """
+    reason = _prerequisite_reason(source, request)
+    if reason is None:
+        return "present"
+    if reason == "needs --repo" and shutil.which("gh") is not None:
+        return "needs --repo"
+    return "absent"
+
+
 def _list_sources(repo: str | None) -> None:
     probe = FanoutRequest("", repo, (), 10, None)
     for source in _SOURCE_NAMES:
         transport, prerequisite = _SOURCE_DETAILS[source]
-        presence = (
-            "present" if _prerequisite_reason(source, probe) is None else "absent"
-        )
+        presence = _presence(source, probe)
         sys.stdout.write(f"{source}  {transport}  {prerequisite}  {presence}\n")
 
 

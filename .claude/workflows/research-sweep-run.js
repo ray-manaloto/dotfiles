@@ -3,9 +3,11 @@ export const meta = {
   description: 'Fan a research question out to many sources via `mise run research-fanout`, deep-read the best hits cheaply, synthesize once on Opus, and refute the load-bearing claims one by one.',
   whenToUse: 'When a question needs evidence from several sources (GitHub issues/PRs/discussions/releases/code, exa, context7, firecrawl, last30days) and one context should not spend frontier tokens on fetching and reading.',
   phases: [
-    { title: 'Plan', detail: 'pick sources and queries (incl. cross-repo both directions), then run research-fanout (sonnet, medium)' },
+    { title: 'Plan', detail: 'pick sources and queries, run research-fanout plus the MANDATORY GitHub code search with its two controls (sonnet, medium)' },
+    { title: 'Dependencies', detail: 'MANDATORY: github issues/discussions/releases for repo + every related repo, both directions (one sonnet/low agent per repo)' },
+    { title: 'Mirror', detail: 'MANDATORY: every caller link saved offline via `mise exec -- firecrawl scrape` + a README index (one haiku agent per link)' },
     { title: 'Triage', detail: 'rank and dedup the hits, choose what to deep-read; caller links always read (Explore + sonnet, low)' },
-    { title: 'Read', detail: 'caller links (sonnet) + triaged URLs (haiku) in batches; optional source dive at the release tag' },
+    { title: 'Read', detail: 'caller links from their offline mirror (sonnet) + triaged URLs (haiku) in batches; optional source dive at the release tag' },
     { title: 'Synthesize', detail: 'one Opus pass writes the report (opus, high)' },
     { title: 'Verify', detail: 'one independent refuter per load-bearing claim (sonnet), a completeness critic, an Opus adjudicator for any refuted or misleading flag, then reconcile' },
     { title: 'Advise', detail: 'optional codex-sol-advisor second opinion (codex tokens, not Claude)' },
@@ -46,6 +48,23 @@ export const meta = {
 // 10. The critic moved to medium effort and checks cross-repo directions and caller links.
 // 11. Every node's routing is returned as `routing` and written to the report's Provenance, so a
 //    reader can say which agent/model/effort produced which part.
+// Mandatory stages 2026-09-30 (Ray's rulings; docs/specs/research-enforcement-2026-09-30.md). Three
+// sweeps that day skipped GitHub because `--list-sources` called every github-* source `absent`
+// without --repo, and the planner obeyed it. So these no longer depend on a planner's choice:
+// 12. DEPENDENCIES: github issues/discussions/releases for REPO and every related repo, both
+//    directions, one sonnet/low agent per repo (query terms need a little judgment).
+// 13. MIRROR: every caller link saved by `mise exec -- firecrawl scrape` (never a stale PATH copy)
+//    into docs/research/kb/raw/<report-slug>/links/, one haiku agent per link (pure command
+//    execution; general-purpose because Explore may not create files) + one haiku README index.
+//    A link that will not fetch is a NAMED gap; a mirror agent that never ran is a mandatory gap.
+// 14. CODE SEARCH: the planner must run >=1 query of its own + a must-hit control + a fresh
+//    known-absent control; the workflow checks the rows, so skipping it cannot read as `complete`.
+//    Each dependency agent also runs ONE workflow-built must-hit (`repo:<r> filename:README.md`):
+//    a planner must-hit is a guess (live run wf_b74e66f5-ca3: `filename:skills.rs repo:jdx/mise`
+//    returned 0 and failed the sweep), so any must-hit >0 satisfies the requirement, a planner
+//    must-hit of 0 is a NOTE, and only a README control of 0 is a gap (gh/auth/rate limit). A 403
+//    is recorded as rateLimited, never as a count of 0.
+// A run missing any of the three returns status `mandatory-gap` with `mandatoryGaps` naming it.
 
 const A = args || {}
 if (typeof A.question !== 'string' || !A.question.trim()) throw new Error('args.question is required')
@@ -66,10 +85,28 @@ const READ_BATCH = 3                                                // URLs per 
 const VERIFY_MAX = Number.isInteger(A.verifyMax) ? A.verifyMax : 5  // claims refuted
 const SOURCES = ['github-issues', 'github-discussions', 'github-releases', 'exa', 'context7',
   'firecrawl-developer', 'firecrawl-search', 'last30days']
+// The mandatory dependency-repo stage (12): every repo the question is about, searched on GitHub.
+const DEP_SOURCES = 'github-issues,github-discussions,github-releases'
+const DEP_REPOS = [...new Set([REPO, ...RELATED].filter(Boolean))]
+// null = "short search terms from the QUESTION"; a name = the other side of a relationship.
+const depQueries = r => (r === REPO ? [null, ...RELATED.filter(o => o !== REPO).map(nameOf)] : [REPO ? nameOf(REPO) : null])
+// The mandatory mirror stage (13) writes under the report's repository.
+const REPORT_SLUG = A.reportPath.split('/').pop().replace(/\.md$/, '')
+const docsAt = A.reportPath.lastIndexOf('/docs/')
+const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot.replace(/\/+$/, '')
+  : docsAt > 0 ? A.reportPath.slice(0, docsAt) : ''
+if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
+const MIRROR_DIR = `${ROOT}/docs/research/kb/raw/${REPORT_SLUG}/links`
+const CODE_ROLES = ['query', 'must-hit', 'known-absent']
+// The deterministic must-hit (14): every repo has a README, so 0 means the search itself is broken.
+const README_CONTROL = r => `repo:${r} filename:README.md`
 
 // One routing table, used for dispatch AND returned as provenance, so the two cannot drift.
 const ROUTE = {
   plan: { model: 'sonnet', effort: 'medium' },
+  deps: { model: 'sonnet', effort: 'low' },
+  mirror: { model: 'haiku' },
+  mirrorIndex: { model: 'haiku' },
   triage: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   readLinks: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   read: { agentType: 'Explore', model: 'haiku' },
@@ -90,7 +127,7 @@ const run = (key, label, phaseName, prompt, extra = {}) => {
 
 const PLAN = {
   type: 'object',
-  required: ['runs', 'sourceDive'],
+  required: ['runs', 'codeSearch', 'sourceDive'],
   properties: {
     runs: {
       type: 'array',
@@ -109,14 +146,40 @@ const PLAN = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['query', 'count', 'rc'],
-        properties: { query: { type: 'string' }, count: { type: 'number' }, rc: { type: 'number' }, topUrls: { type: 'array', items: { type: 'string' } } },
+        required: ['query', 'role', 'count', 'rc'],
+        properties: {
+          query: { type: 'string' }, role: { type: 'string', enum: CODE_ROLES },
+          count: { type: 'number' }, rc: { type: 'number' }, rateLimited: { type: 'boolean' },
+          topUrls: { type: 'array', items: { type: 'string' } },
+        },
       },
     },
     sourceDive: { type: 'boolean' },
     rationale: { type: 'string' },
   },
 }
+const CODE_CONTROL = {
+  type: 'object',
+  required: ['count', 'rc', 'rateLimited'],
+  properties: { count: { type: 'number' }, rc: { type: 'number' }, rateLimited: { type: 'boolean' } },
+}
+const DEPS = {
+  type: 'object',
+  required: ['runs', 'control'],
+  properties: {
+    control: CODE_CONTROL,
+    runs: {
+      type: 'array',
+      items: { type: 'object', required: ['query', 'manifest', 'rc'], properties: { query: { type: 'string' }, manifest: { type: 'string' }, rc: { type: 'number' } } },
+    },
+  },
+}
+const MIRROR = {
+  type: 'object',
+  required: ['rc', 'bytes'],
+  properties: { rc: { type: 'number' }, bytes: { type: 'number' }, reason: { type: 'string' } },
+}
+const MIRROR_INDEX = { type: 'object', required: ['written'], properties: { written: { type: 'boolean' } } }
 const TRIAGE = {
   type: 'object',
   required: ['read', 'hits', 'unverifiedEmpty'],
@@ -171,7 +234,7 @@ const CRITIC = {
 }
 
 phase('Plan')
-const plan = await run('plan', 'plan+fetch', 'Plan', [
+const planPrompt = [
   `QUESTION: ${A.question}`,
   REPO ? `REPO: ${REPO}` : 'REPO: (none — do NOT pick github-* sources; if the question clearly names one project, say so in rationale so the caller can re-run with args.repo)',
   RELATED.length ? `RELATED REPOS: ${RELATED.join(', ')}` : '',
@@ -179,41 +242,122 @@ const plan = await run('plan', 'plan+fetch', 'Plan', [
   '~/dev/github/ray-manaloto/knowledge-base/sources/agent-harness-docs/docs/<tool>/; for a library in',
   'docs/research/mintlify-catalog.md grep docs/research/mintlify-cache/; and grep the offline mirrors under',
   'docs/research/kb/raw/. Fan out only for what those do not answer.',
-  `AVAILABLE SOURCES: ${SOURCES.join(', ')} (see \`mise run research-fanout -- --list-sources\`).`,
+  `AVAILABLE SOURCES: ${SOURCES.join(', ')} (see \`mise run research-fanout -- --list-sources\`; \`needs --repo\` means usable with --repo).`,
   'Choose only the sources that fit the question: API/library behaviour -> github-* + firecrawl-developer + context7;',
   'recent community sentiment -> last30days + exa; general web -> exa + firecrawl-search. Write 1-3 query variants',
   '(short search terms, not sentences). For each variant run exactly:',
   `  mise run research-fanout -- "<query>" ${REPO ? `--repo ${REPO} ` : ''}--sources <comma list>`,
   'and record the manifest path it prints and its real exit code.',
-  RELATED.length ? [
-    'CROSS-REFERENCE BOTH DIRECTIONS (queries use project NAMES, never owner/repo slugs):',
-    ...RELATED.map(r => REPO
-      ? `  - \`--repo ${r}\` with a query naming "${nameOf(REPO)}", AND \`--repo ${REPO}\` with a query naming "${nameOf(r)}"`
-      : `  - \`--repo ${r}\` with the question's own terms (no main REPO was given)`),
-    'A relationship searched from one side only is a gap, not a finding.',
-  ].join('\n') : '',
-  'GITHUB CODE SEARCH (for "how do real projects configure X" questions only): `gh api -X GET search/code -f q=\'<q>\'`.',
+  DEP_REPOS.length ? `A separate MANDATORY stage already runs ${DEP_SOURCES} for ${DEP_REPOS.join(', ')} (both directions for related repos); add github-* runs only for query variants it does not cover.` : '',
+  'GITHUB CODE SEARCH — MANDATORY on every run: `gh api -X GET search/code -f q=\'<q>\' --jq .total_count`.',
   'REST syntax: no OR, no parentheses, no `**`; use `filename:`/`path:`/`repo:`/`org:` and run one query per',
-  'alternative, then union. The bucket is 10 requests/min and a 403 is RATE LIMIT, not zero results. The tokenizer',
-  'drops punctuation, so re-fetch and grep each hit before counting it. Record every query with its count and rc in',
-  'codeSearch, plus one control query that must hit.',
+  'alternative, then union. The bucket is 10 requests/min and a 403 is RATE LIMIT, not zero results: record such a',
+  'row with rateLimited=true and count=-1, never count=0. The tokenizer',
+  'drops punctuation, so re-fetch and grep each hit before counting it. Record EVERY query in codeSearch with its',
+  'count and real rc — a zero-count query is still recorded — and a role:',
+  '  role "query": at least one query of your own for the QUESTION;',
+  '  role "must-hit": one control query you know matches (e.g. a file you know exists in REPO) — it should return >0',
+  `  (the workflow also runs \`repo:<r> filename:README.md\` per dependency repo${DEP_REPOS.length ? `: ${DEP_REPOS.join(', ')}` : ''});`,
+  '  role "known-absent": one control built from a nonsense token you invent FRESH now (never one copied from a report',
+  '  or rule — writing a control down destroys it) — it must return 0.',
   'Set sourceDive=true only when REPO is set AND the question is about what the code DOES (behaviour, a flag, a bug),',
   'where reading source at the release tag beats issues.',
-].filter(Boolean).join('\n'), { schema: PLAN })
-if (plan === null && !LINKS.length) return { status: 'plan-null', routing }
-const manifests = plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)
-if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, routing }
+].filter(Boolean).join('\n')
+const depPrompt = r => [
+  `MANDATORY DEPENDENCY-REPO STAGE for ${r}: it runs whatever any planner chose. QUESTION: ${A.question}`,
+  'From the repository root, run each command below exactly (queries are project NAMES or short search terms,',
+  'never owner/repo slugs), never piped, and record the manifest path it prints first and its real exit code:',
+  ...depQueries(r).map((q, k) => `  mise run research-fanout -- "${q === null ? '<2-4 short search terms from the QUESTION>' : q}" --repo ${r} --sources ${DEP_SOURCES} --out .agent/kb/raw/research-fanout/${REPORT_SLUG}/deps/${r.replace('/', '--')}/${k + 1}`),
+  'Return exactly one run per command, in order, with the query you actually used.',
+  'Then run this workflow-built code-search control once, never piped, and return it as control:',
+  `  gh api -X GET search/code -f q='${README_CONTROL(r)}' --jq .total_count`,
+  'control.rc = its real exit code; control.count = the number it printed, or -1 when it failed; control.rateLimited =',
+  'true when gh reported HTTP 403 or a rate limit (a 403 is a RATE LIMIT, never a count of 0). Never print environment values.',
+].join('\n')
+const mirrorPrompt = (url, n) => [
+  'MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, from the repository',
+  `root ${ROOT} (so mise resolves the pinned firecrawl, never a stale PATH copy), without a pipe:`,
+  `  mkdir -p '${MIRROR_DIR}' && mise exec -- firecrawl scrape '${url}' --format markdown --only-main-content -o '${MIRROR_DIR}/${n}.md'`,
+  `Record its real exit code as rc, and bytes = \`wc -c < '${MIRROR_DIR}/${n}.md'\` (0 if the file is missing). If rc is`,
+  'not 0 or bytes is 0, set reason to the first error line firecrawl printed. Do not retry with another tool, do not',
+  'edit the file, and never print environment values.',
+].join('\n')
+const [plan, depResults, mirrorResults] = await Promise.all([
+  run('plan', 'plan+fetch', 'Plan', planPrompt, { schema: PLAN }),
+  DEP_REPOS.length ? parallel(DEP_REPOS.map(r => () => run('deps', `deps:${r}`, 'Dependencies', depPrompt(r), { schema: DEPS }))) : [],
+  LINKS.length ? parallel(LINKS.map((u, i) => () => run('mirror', `mirror:${i + 1}/${LINKS.length}`, 'Mirror', mirrorPrompt(u, i + 1), { schema: MIRROR }))) : [],
+])
+
+// Mandatory-stage bookkeeping: a stage that did not run is a mandatory gap, never a silent skip.
+const mandatoryGaps = []
+if (!DEP_REPOS.length) mandatoryGaps.push('dependency-repo stage: no args.repo or args.relatedRepos, so no dependency repo issues/PRs/discussions/releases were searched — re-run with args.repo')
+const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
+  const want = depQueries(r).length
+  const got = depResults[i]
+  if (got === null) {
+    mandatoryGaps.push(`dependency-repo stage for ${r}: agent returned null — nothing ran`)
+    return []
+  }
+  if (got.runs.length < want) mandatoryGaps.push(`dependency-repo stage for ${r}: ${got.runs.length} of ${want} run(s) reported`)
+  got.runs.filter(x => !x.manifest || x.rc !== 0).forEach(x => mandatoryGaps.push(`dependency-repo stage for ${r}: "${x.query}" rc=${x.rc}${x.manifest ? '' : ', no manifest'}`))
+  return got.runs.map(x => ({ repo: r, ...x }))
+})
+const mirror = LINKS.map((url, i) => {
+  const m = mirrorResults[i]
+  const path = `${MIRROR_DIR}/${i + 1}.md`
+  if (m === null) mandatoryGaps.push(`mirror stage for ${url}: agent returned null — never fetched`)
+  return m === null ? { url, path, rc: null, bytes: 0, reason: 'mirror agent returned null — never fetched' }
+    : { url, path, rc: m.rc, bytes: m.bytes, reason: m.rc === 0 && m.bytes > 0 ? '' : m.reason || `rc=${m.rc}, ${m.bytes} bytes` }
+})
+// A link firecrawl could not fetch is the WORLD, not the process: a named gap, not a mandatory one.
+const mirrorGaps = mirror.filter(m => m.rc !== null && m.reason).map(m => `${m.url}: not mirrored (${m.reason})`)
+// Code search = the planner's rows + one workflow-built README must-hit per searched repo.
+const answered = c => c.rc === 0 && !c.rateLimited
+const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403), not 0' : `returned count=${c.count} rc=${c.rc}`)
+const workflowControls = DEP_REPOS.flatMap((r, i) => {
+  const got = depResults[i]
+  if (got === null) return []
+  const c = { query: README_CONTROL(r), role: 'must-hit', source: 'workflow', count: got.control.count, rc: got.control.rc, rateLimited: got.control.rateLimited === true }
+  if (!(answered(c) && c.count > 0)) mandatoryGaps.push(`code search: workflow must-hit control "${c.query}" ${outcome(c)} — a gh auth, rate-limit or search problem`)
+  return [c]
+})
+const plannerRows = plan === null ? [] : (plan.codeSearch || []).map(c => ({ ...c, source: 'planner', rateLimited: c.rateLimited === true }))
+const codeSearch = plannerRows.concat(workflowControls)
+// A planner control that missed is a guess that failed, recorded for the reader, never a gap.
+const codeSearchNotes = plannerRows.filter(c => c.role === 'must-hit' && !(answered(c) && c.count > 0))
+  .map(c => `planner must-hit control "${c.query}" ${outcome(c)} — a guessed control, not a gap; any other must-hit >0 carries the requirement`)
+if (plan === null) mandatoryGaps.push('code search: planner returned null — no code search ran')
+else {
+  const ok = (rows, role, hit) => rows.some(c => c.role === role && answered(c) && hit(c.count))
+  if (!ok(plannerRows, 'query', () => true)) mandatoryGaps.push('code search: no planner query ran with rc=0')
+  if (!ok(codeSearch, 'must-hit', n => n > 0)) mandatoryGaps.push('code search: no must-hit control returned a hit, so the search is not shown to discriminate')
+  if (!ok(plannerRows, 'known-absent', n => n === 0)) mandatoryGaps.push('code search: no fresh known-absent control returned 0')
+}
+
+const depManifests = dependencyRuns.filter(x => x.manifest).map(x => x.manifest)
+if (plan === null && !LINKS.length && !depManifests.length) return { status: 'plan-null', mandatoryGaps, routing }
+const manifests = (plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)).concat(depManifests)
+if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, mandatoryGaps, routing }
 const stageGaps = []
 if (plan === null || !manifests.length) {
   stageGaps.push(plan === null ? 'planner returned null — no fan-out ran' : 'fan-out produced no manifests')
-  log('Plan: no fanout results — continuing on the caller links alone (a named gap)')
+  log('Plan: no planner fanout results — continuing on the caller links and mandatory stages (a named gap)')
 }
-else log(`Plan: ${plan.runs.length} fanout run(s); ${(plan.codeSearch || []).length} code search(es); sourceDive=${plan.sourceDive}`)
-const codeSearch = plan === null ? [] : plan.codeSearch || []
+else log(`Plan: ${plan.runs.length} fanout run(s); ${codeSearch.length} code search(es); sourceDive=${plan.sourceDive}`)
+log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(m => m.rc === 0 && m.bytes > 0).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
 
 phase('Triage')
 const EMPTY_TRIAGE = { read: [], hits: [], unverifiedEmpty: [] }
-const triageOut = !manifests.length ? EMPTY_TRIAGE : await run('triage', 'triage', 'Triage', [
+// The mirror README is written beside the mirrors while triage runs; rows come from the workflow,
+// so a link whose mirror agent never ran still gets a row naming why.
+const indexPrompt = [
+  `Write ${MIRROR_DIR}/README.md (create or overwrite). Content: a heading "# Offline mirrors — ${REPORT_SLUG}", a line`,
+  `"Caller links for ${A.reportPath}, fetched with \`mise exec -- firecrawl scrape <url> --format markdown --only-main-content\`.",`,
+  'then a markdown table with columns n | url | file | rc | bytes | failure reason — one row per entry below, in',
+  'order, file as the basename. Do not fetch anything. Return written=true once the file exists.',
+  `ROWS: ${JSON.stringify(mirror.map((m, i) => ({ n: i + 1, ...m })))}`,
+].join('\n')
+const [triageOut, mirrorIndex] = await Promise.all([!manifests.length ? EMPTY_TRIAGE : run('triage', 'triage', 'Triage', [
   `QUESTION: ${A.question}`,
   `Read these research-fanout manifests and every <source>.json beside them:\n${manifests.join('\n')}`,
   codeSearch.length ? `Code-search hits (already verified by the planner): ${JSON.stringify(codeSearch)}` : '',
@@ -223,8 +367,11 @@ const triageOut = !manifests.length ? EMPTY_TRIAGE : await run('triage', 'triage
   'source per project the QUESTION names. List every source whose status is empty_unverified or error in',
   'unverifiedEmpty — those are gaps, not "no results".',
   LINKS.length ? `Do NOT choose these (the caller's links, read separately): ${LINKS.join(' ')}` : '',
-].filter(Boolean).join('\n'), { schema: TRIAGE })
-if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, routing }
+].filter(Boolean).join('\n'), { schema: TRIAGE }),
+LINKS.length ? run('mirrorIndex', 'mirror-index', 'Mirror', indexPrompt, { schema: MIRROR_INDEX }) : null,
+])
+if (LINKS.length && !(mirrorIndex && mirrorIndex.written)) mandatoryGaps.push(`mirror stage: README index ${MIRROR_DIR}/README.md was not written`)
+if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, mandatoryGaps, routing }
 if (triageOut === null) {
   stageGaps.push('triage returned null — no fan-out hit was read')
   log('Triage: null — continuing on the caller links alone (a named gap)')
@@ -241,8 +388,9 @@ const READ_RULES = [
   'entity in the QUESTION. Extract claims that bear on the QUESTION, each with a VERBATIM quote and the URL. Record a',
   'claim of ABSENCE ("X does not do Y") only with the exact search you ran and a control term that did match.',
   'GitHub issue/PR/discussion: `gh api` (issue + comments, PR body + review comments; discussions via `gh api graphql`).',
-  'Other pages: `firecrawl scrape <url> --format markdown` (or the offline copy under docs/research/kb/raw/ when one',
-  'exists — say which). Never print environment values.',
+  'Other pages: `mise exec -- firecrawl scrape <url> --format markdown --only-main-content` (never a bare `firecrawl`: the',
+  'PATH copy can be stale), or the offline copy under docs/research/kb/raw/ when one exists — say which. Never print',
+  'environment values.',
 ]
 // Each reader keeps its identity: a reader that returns null is a GAP the report must
 // name, never a silent drop (a null filtered away reads as "nothing to say").
@@ -251,8 +399,13 @@ for (let i = 0; i < LINKS.length; i += READ_BATCH) {
   const batch = LINKS.slice(i, i + READ_BATCH)
   const n = Math.floor(i / READ_BATCH) + 1
   readers.push({ urls: batch, run: () => run('readLinks', `read-link:${n}`, 'Read', [
-    `QUESTION: ${A.question}`, 'The caller named these links; every one must be read.', ...READ_RULES,
-    ...batch.map(u => `- ${u}`),
+    `QUESTION: ${A.question}`, 'The caller named these links; every one must be read.',
+    'Read each from its OFFLINE MIRROR (the firecrawl markdown the mandatory mirror stage saved), not the live page.',
+    'Only a link marked NO MIRROR is read live — and say in each of its claims that the mirror failed.', ...READ_RULES,
+    ...batch.map(u => {
+      const m = mirror[LINKS.indexOf(u)]
+      return m.rc === 0 && m.bytes > 0 ? `- ${u}  (mirror: ${m.path}, ${m.bytes} bytes)` : `- ${u}  (NO MIRROR: ${m.reason})`
+    }),
   ].join('\n'), { schema: CLAIMS }) })
 }
 const batches = []
@@ -289,6 +442,11 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   'Keep distinct claims distinct: what a project SHIPS in code, what its docs/discussions PROPOSE or recommend, and what',
   'a THIRD party documents about it are three different claims — never collapse them into one headline.',
   'Sections: Answer, Evidence (claim | URL or file:line | quote), Conflicts resolved, Gaps, Recommendation,',
+  'Evidence MUST also carry three tables, a row for EVERY input row even when its count is 0: "Code search" (query |',
+  'role | source | count | rc — write RATE-LIMITED, never 0, for a rateLimited row) from CODE SEARCH, with each CODE',
+  'SEARCH NOTE under it as a note (not a gap); "Dependency-repo fan-out" (repo | query | rc | manifest) from DEPENDENCY RUNS;',
+  '"Offline mirrors" (link | mirror file | rc | bytes | failure) from MIRRORS. Every MIRROR GAP and MANDATORY GAP is',
+  'a Gap; when MANDATORY GAPS is non-empty, the Answer must say the sweep is INCOMPLETE and name what did not run.',
   'Provenance (the ROUTING table below, as a table), ## GitHub repos touched (per .claude/rules/research-repo-enumeration.md).',
   `Return the path and the claims the Answer depends on (at most ${VERIFY_MAX}); mark absence=true on every claim`,
   'that something does NOT exist or does NOT happen — those are the easiest to get wrong.',
@@ -296,12 +454,17 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   `CLAIMS:\n${JSON.stringify(claims)}`,
   `TRIAGE:\n${JSON.stringify({ hits: triage.hits, unverifiedEmpty: triage.unverifiedEmpty })}`,
   `CODE SEARCH:\n${JSON.stringify(codeSearch)}`,
+  codeSearchNotes.length ? `CODE SEARCH NOTES:\n${JSON.stringify(codeSearchNotes)}` : '',
+  `DEPENDENCY RUNS:\n${JSON.stringify(dependencyRuns)}`,
+  `MIRRORS:\n${JSON.stringify(mirror)}`,
+  mirrorGaps.length ? `MIRROR GAPS:\n${JSON.stringify(mirrorGaps)}` : '',
+  mandatoryGaps.length ? `MANDATORY GAPS:\n${JSON.stringify(mandatoryGaps)}` : '',
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
   stageGaps.length ? `FAILED STAGES (each is a Gap; say the evidence base is only the caller links): ${JSON.stringify(stageGaps)}` : '',
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
-if (synth === null) return { status: 'synth-null', plan, triage, claims, routing }
+if (synth === null) return { status: 'synth-null', plan, triage, claims, mandatoryGaps, routing }
 
 phase('Verify')
 const loadBearing = synth.loadBearing.slice(0, VERIFY_MAX)
@@ -379,6 +542,7 @@ let reconciled = true
     `ADJUDICATION: ${JSON.stringify(adjudication)}`,
     `CRITIC GAPS: ${JSON.stringify(gaps)}`,
     `FAILED STAGES: ${JSON.stringify(stageGaps)}`,
+    `MANDATORY GAPS (keep each in Gaps; if any, the Answer must say the sweep is INCOMPLETE): ${JSON.stringify(mandatoryGaps)}`,
     `ROUTING: ${JSON.stringify(routing.concat([{ node: 'reconcile', agentType: 'general-purpose', ...ROUTE.reconcile }]))}`,
   ].join('\n'))
   reconciled = reconcile !== null
@@ -392,9 +556,12 @@ if (A.advisor) {
   if (advice === null) log('Advise: codex-sol-advisor returned null (escalation per .claude/token-routing.md item 1)')
 }
 
-// Status: complete | partial-verify | verify-null | reconcile-null | plan-null | no-manifests |
-// triage-null | synth-null | links-only. verify-null = EVERY refuter returned null; partial-verify = SOME did;
-// links-only = plan/fan-out/triage failed and only the caller links were read.
+// Status: complete | mandatory-gap | partial-verify | verify-null | reconcile-null | plan-null |
+// no-manifests | triage-null | synth-null | links-only. verify-null = EVERY refuter returned null;
+// partial-verify = SOME did; links-only = plan/fan-out/triage failed, so the evidence base is the caller
+// links plus the mandatory stages; mandatory-gap = a mandatory stage (dependency repos, mirror, code
+// search) did not run — `mandatoryGaps` names each, and such a run can never be `complete`.
 const status = verdicts.length && unverified.length === verdicts.length ? 'verify-null'
-  : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : stageGaps.length ? 'links-only' : 'complete'
-return { status, stageGaps, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, verdicts, adjudication, refuted, gaps, advice, routing }
+  : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : stageGaps.length ? 'links-only'
+  : mandatoryGaps.length ? 'mandatory-gap' : 'complete'
+return { status, stageGaps, mandatoryGaps, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, codeSearch, codeSearchNotes, dependencyRuns, mirror, mirrorGaps, verdicts, adjudication, refuted, gaps, advice, routing }

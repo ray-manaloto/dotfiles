@@ -102,6 +102,10 @@ Teach it a new type with `codec.register(T, encode=…, decode=…)` — both
 directions, because a half-registration encodes cleanly and loses the type at
 read time in another process. Never add a branch to the hook itself.
 
+**Scope: OUR serialization only** (Ray, 2026-09-30). A third-party library's own
+models — e.g. githubkit's pydantic response models — are allowed at that
+library's boundary; the `codec` rule governs the types and encodings we define.
+
 ## Dependencies
 
 Key packages: `msgspec` (models + serialization — via `codec` only, above),

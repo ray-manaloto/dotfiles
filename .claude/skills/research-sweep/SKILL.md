@@ -48,6 +48,22 @@ this repo use this skill and do not import `kb_setup.research`
   returns `routing` (node → agent type/model/effort), which the report's
   Provenance section carries — cite it when asked which agents researched what.
 
+  **Three mandatory stages** (Ray, 2026-09-30) run whatever the planner chooses:
+  **dependencies** (`github-issues,github-discussions,github-releases` for
+  `repo` and every `relatedRepos` entry, both directions, one agent per repo),
+  **mirror** (every link via
+  `mise exec -- firecrawl scrape <url> --format markdown --only-main-content`
+  into `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
+  readers read the mirror) and **code search** (at least one planner query plus a
+  must-hit and a fresh known-absent control; each dependency agent also runs a
+  workflow-built must-hit, `repo:<r> filename:README.md`, so a planner's guessed
+  must-hit of 0 is only a note, while a README control of 0 — or a 403, which is
+  recorded as rate-limited, never as 0 — is a gap). A stage that did not run returns
+  status `mandatory-gap` with `mandatoryGaps` naming it; a link that will not
+  fetch is a named gap (`mirrorGaps`) and is read live. Omitting `repo` is
+  itself a mandatory gap. `repoRoot` (absolute) is required with `links` when
+  `reportPath` is not under `<repo>/docs/`.
+
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
   for → run the in-lane steps below yourself. The fetch step needs network and `mise`;
   a codex lane under `--sandbox read-only` cannot run it — run the fan-out in a
@@ -61,7 +77,12 @@ this repo use this skill and do not import `kb_setup.research`
    for a library listed in `docs/research/mintlify-catalog.md`, grep
    `docs/research/mintlify-cache/`. Fan out only for what those do not answer.
 1. **Fan out.** `mise run research-fanout -- --list-sources` shows which sources
-   are usable here. Then run 1-3 query variants — short search terms, not
+   are usable here (`needs --repo` means usable once you pass `--repo` — never
+   drop a github source for it). Always run `--sources
+   github-issues,github-discussions,github-releases` against every dependency
+   repo, save every link you were given with `mise exec -- firecrawl scrape`,
+   and run a GitHub code search with its two controls (the mandatory stages
+   above). Then run 1-3 query variants — short search terms, not
    sentences — scoped with `--repo` whenever the question is about one project:
 
    ```bash
@@ -83,7 +104,8 @@ this repo use this skill and do not import `kb_setup.research`
    "nothing found" — carry it to the report.
 3. **Deep-read.** GitHub threads through `gh api` (issue + comments, PR body,
    discussions via `gh api graphql`); other pages through
-   `firecrawl scrape <url> --format markdown`. For a question about what code
+   `mise exec -- firecrawl scrape <url> --format markdown` (a bare `firecrawl`
+   can resolve a stale PATH copy). For a question about what code
    *does*, shallow-clone the repo at its latest release tag
    (`gh api repos/<r>/releases/latest --jq .tag_name`) into `$TMPDIR` — never
    inside this repo — read the source, delete the clone, then check whether the
@@ -111,13 +133,14 @@ this repo use this skill and do not import `kb_setup.research`
   workflow marks these `absence` and briefs their refuter to confirm them by a
   second route of a different kind; every refuter also judges
   misleading-by-omission, and a flagged claim is adjudicated one tier up.
-  Status values: `complete`, `partial-verify` (some refuters null),
+  Status values: `complete`, `mandatory-gap` (a mandatory stage did not run),
+  `partial-verify` (some refuters null),
   `links-only` (plan/fan-out/triage failed; only caller links were read),
   `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
   `triage-null`, `synth-null`. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and
   says so in the report's Verification section.
-- **GitHub code search** (config-pattern questions): `gh api -X GET search/code
+- **GitHub code search** (mandatory on every sweep): `gh api -X GET search/code
   -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
   a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and
   grep each hit. One query per alternative, then union; arm with a query that
