@@ -299,3 +299,16 @@ names = ["ponytail", "claudex-loop"]
 # CHECKOUT (the global event set is the cwd config's hooks, so pre-push is
 # included only then). Changing this list is a reviewed diff.
 required = ["pre-commit", "commit-msg", "pre-push"]
+
+[devcontainers]
+# Bare arch words, never platform triples (the `no_platform_literals` gate
+# rejects `linux/<arch>` outside its allowed sites). Architectures whose
+# workspace container must be RUNNING for this clone. A stopped one (Docker
+# Desktop quit, reboot) is reported with the command that restores it: `mise run
+# up` for the pinned default architecture, `MISE_ENV=<arch> mise run up` for any
+# other. Changing this list is a reviewed diff.
+#
+# Why it exists: Docker Desktop quit on 2026-09-29 and stopped both containers;
+# `land`/`sync` re-created only the default amd64, and the arm64 container sat
+# exited for ~24 h with nothing saying so (docs/specs/doctor-devcontainer-arches.md).
+arches = ["amd64", "arm64"]

@@ -1199,7 +1199,11 @@ def test_every_check_function_is_actually_registered() -> None:
     # + `hk-hooks` (2026-09-27): every hk hook event hk.pkl defines is installed
     # for this checkout from some scope — the repo stopped installing hooks from
     # mise's postinstall (jdx/hk#1376), so a fresh clone otherwise has none.
-    assert len(doctor.CHECKS) == 15, "every specified check must be wired"
+    # + `devcontainers` (2026-09-30): every architecture in doctor.toml's
+    # [devcontainers].arches has a RUNNING workspace container. Docker Desktop
+    # quit on 2026-09-29, `land`/`sync` brought back only amd64, and the arm64
+    # container sat exited ~24 h with nothing saying so.
+    assert len(doctor.CHECKS) == 16, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
@@ -1238,6 +1242,11 @@ def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None
     assert isinstance(claude, dict)
     assert "expected_install_method" in claude
     assert "enabled" in claude
+    # Bare arch words: `check_devcontainers_running` resolves each through
+    # `platform_arch`, and `no_platform_literals` rejects a triple in this file.
+    devcontainers = setup.baseline.get("devcontainers")
+    assert isinstance(devcontainers, dict)
+    assert devcontainers.get("arches") == ["amd64", "arm64"]
 
 
 def test_the_baseline_seam_still_discriminates_when_the_file_is_missing(
@@ -1327,3 +1336,287 @@ def test_collect_reads_the_real_repo_without_touching_the_real_home(
     # control arm: a non-empty expectation fails if `collect` reads nothing,
     # which `== []` could not.
     assert [s.name for s in setup.servers] == ["exa"]
+
+
+# --------------------------------------------------------------------------- #
+# check — devcontainers (every expected architecture has a RUNNING container)
+# --------------------------------------------------------------------------- #
+
+_ARCHES_BASELINE: dict[str, object] = {"devcontainers": {"arches": ["amd64", "arm64"]}}
+#: The pinned repo default is a TRIPLE with a microarchitecture level; the
+#: default-arch comparison must survive it (premise report MISSING 2).
+_PINNED_AMD64 = {"DOTFILES_PLATFORM": "linux/amd64/v2"}
+_ARM64_NAME = "dotfiles-dotfiles-u-273897ea-arm64-22975"
+_AMD64_NAME = "dotfiles-dotfiles-u-273897ea-amd64-26233"
+#: Raised by the down-daemon fixture; a literal in a `raise` trips EM101.
+_DAEMON_DOWN = "Cannot connect to the Docker daemon"
+
+
+def _fake_docker(
+    monkeypatch: pytest.MonkeyPatch,
+    rows_by_arch: dict[str, list[tuple[str, str, str]]],
+    *,
+    worktree: bool = False,
+) -> list[str]:
+    """Replace both subprocess seams; return the arch of every docker query made."""
+    queried: list[str] = []
+
+    def rows(
+        names: doctor.devcontainer_names.DevcontainerNames,
+    ) -> list[tuple[str, str, str]]:
+        queried.append(names.arch)
+        return rows_by_arch.get(names.arch, [])
+
+    monkeypatch.setattr(doctor, "docker_container_rows", rows)
+    monkeypatch.setattr(doctor, "is_linked_worktree", lambda _root: worktree)
+    return queried
+
+
+def _arches_setup(environ: dict[str, str] | None = None) -> doctor.Setup:
+    return _setup(
+        baseline=_ARCHES_BASELINE,
+        environ=_PINNED_AMD64 if environ is None else environ,
+    )
+
+
+def test_devcontainers_is_silent_when_every_arch_is_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The control arm: both containers up, nothing to say — and both were asked."""
+    queried = _fake_docker(
+        monkeypatch,
+        {
+            "amd64": [("e5ae", "running", _AMD64_NAME)],
+            "arm64": [("a914", "running", _ARM64_NAME)],
+        },
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == []
+    assert queried == ["amd64", "arm64"]
+
+
+def test_devcontainers_flags_the_incident_shape_with_dockers_own_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-09-29: arm64 exited after a Docker Desktop quit, amd64 re-created.
+
+    The name is docker's ``{{.Names}}``, whose port suffix (22975) differs from
+    the one ``resolve_names`` computes under a ``DEVCONTAINER_SSH_PORT`` pin.
+    """
+    _fake_docker(
+        monkeypatch,
+        {
+            "amd64": [("e5ae", "running", _AMD64_NAME)],
+            "arm64": [("a914", "exited", _ARM64_NAME)],
+        },
+    )
+    setup = _arches_setup({**_PINNED_AMD64, "DEVCONTAINER_SSH_PORT": "26233"})
+    assert doctor.check_devcontainers_running(setup) == [
+        (
+            f"devcontainers: arm64 container {_ARM64_NAME} is exited — run "
+            "`MISE_ENV=arm64 mise run up`"
+        )
+    ]
+
+
+def test_devcontainers_flags_a_missing_default_arch_with_plain_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No container at all for the default arch restores with bare ``mise run up``."""
+    _fake_docker(monkeypatch, {"arm64": [("a914", "running", _ARM64_NAME)]})
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        "devcontainers: no amd64 container for this clone — run `mise run up`"
+    ]
+
+
+def test_devcontainers_one_running_container_satisfies_the_arch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale exited sibling next to a running one is not a down architecture."""
+    _fake_docker(
+        monkeypatch,
+        {
+            "amd64": [("old1", "exited", "stale"), ("e5ae", "running", _AMD64_NAME)],
+            "arm64": [("a914", "running", _ARM64_NAME)],
+        },
+    )
+    assert doctor.check_devcontainers_running(_arches_setup()) == []
+
+
+@pytest.mark.parametrize(
+    ("platform", "restore"),
+    [
+        (
+            "linux/amd64/v2",
+            {"amd64": "mise run up", "arm64": "MISE_ENV=arm64 mise run up"},
+        ),
+        (
+            "linux/arm64/v8",
+            {"amd64": "MISE_ENV=amd64 mise run up", "arm64": "mise run up"},
+        ),
+        (
+            "linux/amd64",
+            {"amd64": "mise run up", "arm64": "MISE_ENV=arm64 mise run up"},
+        ),
+    ],
+)
+def test_devcontainers_default_arch_is_compared_as_an_arch_word(
+    monkeypatch: pytest.MonkeyPatch, platform: str, restore: dict[str, str]
+) -> None:
+    """The restore command follows the resolved platform's ARCH, never the triple."""
+    _fake_docker(monkeypatch, {})
+    findings = doctor.check_devcontainers_running(
+        _arches_setup({"DOTFILES_PLATFORM": platform})
+    )
+    assert findings == [
+        f"devcontainers: no {arch} container for this clone — run `{command}`"
+        for arch, command in restore.items()
+    ]
+
+
+def test_devcontainers_a_down_daemon_is_one_unverifiable_finding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Never "absent": a failed ``docker ps`` stops the check after one finding."""
+    queried: list[str] = []
+
+    def down(
+        names: doctor.devcontainer_names.DevcontainerNames,
+    ) -> list[tuple[str, str, str]]:
+        queried.append(names.arch)
+        raise doctor.DockerUnavailableError(_DAEMON_DOWN)
+
+    monkeypatch.setattr(doctor, "docker_container_rows", down)
+    monkeypatch.setattr(doctor, "is_linked_worktree", lambda _root: False)
+    assert doctor.check_devcontainers_running(_arches_setup()) == [
+        (
+            f"devcontainers: UNVERIFIABLE — docker ps failed ({_DAEMON_DOWN}); is "
+            "Docker Desktop running?"
+        )
+    ]
+    assert queried == ["amd64"]
+
+
+@pytest.mark.parametrize("section", [{}, {"arches": []}, {"arches": "amd64"}])
+def test_devcontainers_reports_an_unconfigured_baseline(
+    monkeypatch: pytest.MonkeyPatch, section: dict[str, object]
+) -> None:
+    """A missing list must not read as a healthy host — and docker is not asked."""
+    queried = _fake_docker(monkeypatch, {})
+    setup = _setup(baseline={"devcontainers": section}, environ=_PINNED_AMD64)
+    assert doctor.check_devcontainers_running(setup) == [
+        (
+            "devcontainers: doctor.toml has no [devcontainers].arches, so no "
+            "container is being checked"
+        )
+    ]
+    assert queried == []
+
+
+def test_devcontainers_is_silent_in_a_linked_worktree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Containers belong to the main checkout; a worktree would see none."""
+    queried = _fake_docker(monkeypatch, {}, worktree=True)
+    assert doctor.check_devcontainers_running(_arches_setup()) == []
+    assert queried == []
+
+
+def _completed(
+    returncode: int, stdout: str = "", stderr: str = ""
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
+def _names() -> doctor.devcontainer_names.DevcontainerNames:
+    return doctor.devcontainer_names.resolve_names(
+        workspace="/repo", user="u", platform="arm64", env={}
+    )
+
+
+def test_docker_container_rows_queries_both_labels_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Workspace AND arch label, ``-a`` for exited ones, and a hard timeout."""
+    seen: dict[str, object] = {}
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen["argv"] = argv
+        seen.update(kwargs)
+        return _completed(0, f"a914\texited\t{_ARM64_NAME}\n\n")
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    names = _names()
+    assert doctor.docker_container_rows(names) == [("a914", "exited", _ARM64_NAME)]
+    argv = seen["argv"]
+    assert isinstance(argv, list)
+    assert argv[:3] == ["docker", "ps", "-a"]
+    assert f"label={names.workspace_label}" in argv
+    assert f"label={names.arch_label}" in argv
+    assert "{{.ID}}\t{{.State}}\t{{.Names}}" in argv
+    assert seen["timeout"] == 10.0
+    assert seen["check"] is False
+
+
+def test_docker_container_rows_empty_output_is_no_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """rc=0 with nothing listed is a real "absent", distinct from a failure."""
+    monkeypatch.setattr(doctor.subprocess, "run", lambda *_a, **_k: _completed(0))
+    assert doctor.docker_container_rows(_names()) == []
+
+
+@pytest.mark.parametrize(
+    ("outcome", "message"),
+    [
+        (
+            _completed(1, stderr="Cannot connect to the Docker daemon\nIs it running?"),
+            "Cannot connect to the Docker daemon",
+        ),
+        (_completed(125), "exit 125"),
+        (_completed(0, "only-two\tfields\n"), "unparsable docker ps line"),
+        (subprocess.TimeoutExpired(["docker"], 10.0), "timed out after 10s"),
+        (FileNotFoundError(2, "No such file or directory", "docker"), "docker"),
+    ],
+    ids=["daemon-down", "silent-nonzero", "malformed", "timeout", "missing-binary"],
+)
+def test_docker_container_rows_keeps_the_return_code(
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: subprocess.CompletedProcess[str] | BaseException,
+    message: str,
+) -> None:
+    """The ``sync.container_state`` conflation, refused: every failure raises."""
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    with pytest.raises(doctor.DockerUnavailableError, match=message) as info:
+        doctor.docker_container_rows(_names())
+    assert "\n" not in str(info.value), "only the first line is reported"
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_is_linked_worktree_discriminates_main_worktree_and_non_repo(
+    tmp_path: Path,
+) -> None:
+    """Real git, both arms: the main checkout is False, a linked worktree True."""
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-b", "main")
+    _git(main, "commit", "--allow-empty", "-m", "init")
+    linked = tmp_path / "linked"
+    _git(main, "worktree", "add", str(linked))
+
+    assert doctor.is_linked_worktree(main) is False
+    assert doctor.is_linked_worktree(linked) is True
+    assert doctor.is_linked_worktree(tmp_path / "nowhere") is False

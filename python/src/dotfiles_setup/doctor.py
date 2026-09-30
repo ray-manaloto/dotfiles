@@ -67,7 +67,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import claude_doctor, codex_schema, hk_hooks, removed_plugins
+from dotfiles_setup import (
+    claude_doctor,
+    codex_schema,
+    devcontainer_names,
+    hk_hooks,
+    removed_plugins,
+)
 from dotfiles_setup.dependency_currency import (
     check_dependency_currency as dependency_currency_findings,
 )
@@ -91,6 +97,7 @@ from dotfiles_setup.path_drift import (
 # each to be in CHECKS, so an imported one would be an unregistrable false
 # positive — the guard caught this import on its first run.
 from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
+from dotfiles_setup.platform_target import platform_arch, resolve_platform
 from dotfiles_setup.plugin_health import check_plugin_health as plugin_health_findings
 
 if TYPE_CHECKING:
@@ -1394,6 +1401,151 @@ def check_hk_hooks(setup: Setup) -> list[str]:
     ]
 
 
+#: One `docker ps` per architecture; a hung daemon must not hold the session.
+_DOCKER_PS_TIMEOUT_S = 10.0
+#: The columns :func:`docker_container_rows` asks for, tab-separated, in order.
+_DOCKER_PS_FIELDS = ("{{.ID}}", "{{.State}}", "{{.Names}}")
+#: One output line each; they differ only in a linked worktree.
+_GIT_DIR_FLAGS = ("--git-dir", "--git-common-dir")
+
+
+class DockerUnavailableError(RuntimeError):
+    """``docker ps`` did not answer, so no container state can be concluded."""
+
+
+def docker_container_rows(
+    names: devcontainer_names.DevcontainerNames,
+) -> list[tuple[str, str, str]]:
+    """``(id, state, name)`` of every container this clone owns for one arch.
+
+    Not ``sync.container_state``, which runs the same query but ignores the
+    return code, so a down daemon reads as ``absent`` — the conflation this
+    helper exists to refuse. Every failure raises :class:`DockerUnavailableError`
+    carrying the first line of what docker said.
+    """
+    try:
+        proc = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                f"label={names.workspace_label}",
+                "--filter",
+                f"label={names.arch_label}",
+                "--format",
+                "\t".join(_DOCKER_PS_FIELDS),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_DOCKER_PS_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired as exc:
+        msg = f"timed out after {exc.timeout:g}s"
+        raise DockerUnavailableError(msg) from exc
+    except OSError as exc:
+        raise DockerUnavailableError(str(exc)) from exc
+    if proc.returncode != 0:
+        said = (proc.stderr.strip() or proc.stdout.strip()).splitlines()
+        msg = said[0] if said else f"exit {proc.returncode}"
+        raise DockerUnavailableError(msg)
+    rows: list[tuple[str, str, str]] = []
+    for line in proc.stdout.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split("\t")
+        if len(fields) != len(_DOCKER_PS_FIELDS):
+            msg = f"unparsable docker ps line {line!r}"
+            raise DockerUnavailableError(msg)
+        rows.append((fields[0], fields[1], fields[2]))
+    return rows
+
+
+def is_linked_worktree(repo_root: Path) -> bool:
+    """Whether ``repo_root`` is a linked git worktree rather than the main checkout.
+
+    Git that cannot answer is treated as "not a linked worktree", so the check
+    still runs — failing open to checking, not to silence.
+    """
+    proc = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "rev-parse",
+            "--path-format=absolute",
+            *_GIT_DIR_FLAGS,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = proc.stdout.splitlines()
+    if proc.returncode != 0 or len(lines) != len(_GIT_DIR_FLAGS):
+        return False
+    return Path(lines[0]).resolve() != Path(lines[1]).resolve()
+
+
+def check_devcontainers_running(setup: Setup) -> list[str]:
+    """Every architecture in ``[devcontainers].arches`` has a RUNNING container.
+
+    Docker Desktop quitting stops every workspace container, and nothing
+    restarts them by itself: `land`/`sync` bring back only the default
+    architecture, so on 2026-09-29 the arm64 container sat exited for ~24 h
+    unreported. Each finding names the command that restores that architecture.
+
+    A linked git worktree returns no finding: the devcontainers belong to the
+    main checkout, whose path is what their workspace label hashes, so from a
+    worktree every architecture would read as missing.
+    """
+    section = _str_keys(setup.baseline.get("devcontainers"))
+    arches = section.get("arches")
+    if not isinstance(arches, list) or not arches:
+        return [
+            (
+                "devcontainers: doctor.toml has no [devcontainers].arches, so no "
+                "container is being checked"
+            )
+        ]
+    if is_linked_worktree(setup.repo_root):
+        return []
+    env = dict(setup.environ)
+    default_arch = platform_arch(resolve_platform(None, env=env))
+    findings: list[str] = []
+    for entry in arches:
+        arch = str(entry)
+        names = devcontainer_names.resolve_names(
+            workspace=setup.repo_root, platform=arch, env=env
+        )
+        restore = (
+            "mise run up"
+            if names.arch == default_arch
+            else f"MISE_ENV={names.arch} mise run up"
+        )
+        try:
+            rows = docker_container_rows(names)
+        except DockerUnavailableError as exc:
+            return [
+                (
+                    f"devcontainers: UNVERIFIABLE — docker ps failed ({exc}); is "
+                    "Docker Desktop running?"
+                )
+            ]
+        if not rows:
+            findings.append(
+                f"devcontainers: no {names.arch} container for this clone — run "
+                f"`{restore}`"
+            )
+        elif not any(state == "running" for _, state, _ in rows):
+            _, state, name = rows[0]
+            findings.append(
+                f"devcontainers: {names.arch} container {name} is {state} — run "
+                f"`{restore}`"
+            )
+    return findings
+
+
 CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
@@ -1410,6 +1562,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("codex-schema", check_codex_schema),
     ("removed-plugins", check_removed_plugins),
     ("hk-hooks", check_hk_hooks),
+    ("devcontainers", check_devcontainers_running),
 )
 
 #: Only run with ``--live``: each entry spawns subprocesses.
