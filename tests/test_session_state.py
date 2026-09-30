@@ -7,18 +7,19 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import handoff_check, pr_facts, session_state
 from dotfiles_setup import main as cli_main
-from dotfiles_setup import session_state
 
 if TYPE_CHECKING:
     from typing import Literal, TypedDict, Unpack
-
-    import pytest
 
     class _RunKwargs(TypedDict):
         cwd: Path
@@ -50,6 +51,31 @@ def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
         check=True,
         timeout=_GIT_TIMEOUT,
     )
+
+
+def _fake_gh(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    branch: str = "[]",
+    open_prs: str = "[]",
+    merged_prs: str = "[]",
+) -> list[list[str]]:
+    """Answer each ``gh pr list`` query with its own payload; record every call."""
+    calls: list[list[str]] = []
+
+    def fake(args: list[str], _root: Path) -> tuple[int, str]:
+        calls.append(args)
+        if "--head" in args:
+            return 0, branch
+        if "open" in args:
+            return 0, open_prs
+        if "merged" in args:
+            return 0, merged_prs
+        message = f"unexpected gh call: {args}"
+        raise AssertionError(message)
+
+    monkeypatch.setattr(pr_facts, "run_gh", fake)
+    return calls
 
 
 def _repo(tmp_path: Path) -> Path:
@@ -168,17 +194,13 @@ def test_open_pr_and_check_summary_are_structured(
             "number": 42,
             "title": "Resume safely",
             "statusCheckRollup": [
-                {"conclusion": "SUCCESS"},
-                {"state": "SUCCESS"},
-                {"status": "IN_PROGRESS"},
+                {"name": "lint", "conclusion": "SUCCESS"},
+                {"context": "ci/legacy", "state": "SUCCESS"},
+                {"name": "build", "status": "IN_PROGRESS"},
             ],
         }
     ]
-    monkeypatch.setattr(
-        session_state,
-        "_gh",
-        lambda _args, _root: (0, json.dumps(rows)),
-    )
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
 
     snapshot = session_state.gather(repo)
 
@@ -227,11 +249,7 @@ def test_empty_check_rollup_is_known_zero_not_unknown(
 ) -> None:
     repo = _repo(tmp_path)
     rows = [{"number": 42, "title": "No checks yet", "statusCheckRollup": []}]
-    monkeypatch.setattr(
-        session_state,
-        "_gh",
-        lambda _args, _root: (0, json.dumps(rows)),
-    )
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
 
     snapshot = session_state.gather(repo)
 
@@ -243,7 +261,7 @@ def test_malformed_pr_rows_are_unverifiable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path)
-    monkeypatch.setattr(session_state, "_gh", lambda _args, _root: (0, '"not a list"'))
+    _fake_gh(monkeypatch, branch='"not a list"')
 
     assert session_state.gather(repo).pr == session_state.PullRequest(
         session_state.PrState.UNVERIFIABLE
@@ -255,11 +273,7 @@ def test_non_dict_check_rollup_is_unknown_instead_of_crashing(
 ) -> None:
     repo = _repo(tmp_path)
     rows = [{"number": 42, "title": "Bad rollup", "statusCheckRollup": ["bad"]}]
-    monkeypatch.setattr(
-        session_state,
-        "_gh",
-        lambda _args, _root: (0, json.dumps(rows)),
-    )
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
 
     assert session_state.gather(repo).pr == session_state.PullRequest(
         session_state.PrState.OPEN,
@@ -274,11 +288,7 @@ def test_boolean_pr_number_is_unverifiable(
 ) -> None:
     repo = _repo(tmp_path)
     rows = [{"number": True, "title": "Boolean number", "statusCheckRollup": []}]
-    monkeypatch.setattr(
-        session_state,
-        "_gh",
-        lambda _args, _root: (0, json.dumps(rows)),
-    )
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
 
     assert session_state.gather(repo).pr == session_state.PullRequest(
         session_state.PrState.UNVERIFIABLE
@@ -289,7 +299,7 @@ def test_empty_pr_result_is_none_but_gh_timeout_is_unverifiable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _repo(tmp_path)
-    monkeypatch.setattr(session_state, "_gh", lambda _args, _root: (0, "[]"))
+    _fake_gh(monkeypatch)
     assert session_state.gather(repo).pr == session_state.PullRequest(
         session_state.PrState.NONE
     )
@@ -351,3 +361,585 @@ def test_pr_state_values_preserve_the_three_way_contract() -> None:
         "open",
         "unverifiable",
     }
+
+
+_OPEN_ROWS = [
+    {
+        "number": 1449,
+        "title": "Update `image` inputs",
+        "author": {"login": "app/renovate"},
+        "autoMergeRequest": {"mergeMethod": "SQUASH"},
+        "statusCheckRollup": [
+            {"name": "build", "conclusion": "FAILURE"},
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"name": "smoke", "conclusion": "SKIPPED"},
+        ],
+    },
+    {
+        "number": 1141,
+        "title": "Add service",
+        "author": {"login": "sortakool"},
+        "autoMergeRequest": None,
+        "statusCheckRollup": [
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"context": "coderabbit", "state": "NEUTRAL"},
+        ],
+    },
+    {
+        "number": 1200,
+        "title": "Still running",
+        "author": {"login": "sortakool"},
+        "autoMergeRequest": None,
+        "statusCheckRollup": [
+            {"name": "lint", "conclusion": "SUCCESS"},
+            {"name": "build", "status": "IN_PROGRESS"},
+        ],
+    },
+    {
+        "number": 1201,
+        "title": "Nothing ran",
+        "author": {"login": "sortakool"},
+        "autoMergeRequest": None,
+        "statusCheckRollup": [],
+    },
+]
+_MERGED_ROWS = [
+    {
+        "number": 1455,
+        "title": "Update betterleaks",
+        "author": {"login": "app/renovate"},
+        "mergedAt": "2026-09-29T22:30:00Z",
+    }
+]
+
+
+def test_open_and_merged_prs_render_in_the_claim_grammar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    calls = _fake_gh(
+        monkeypatch,
+        open_prs=json.dumps(_OPEN_ROWS),
+        merged_prs=json.dumps(_MERGED_ROWS),
+    )
+
+    snapshot = session_state.gather(repo, since="2026-09-29T22:15:03Z")
+    rendered = session_state.render(snapshot)
+
+    assert snapshot.since_source == "--since"
+    assert "- **open PRs** (4):" in rendered
+    assert (
+        "  - #1449 OPEN, auto-merge armed, RED (fail:1 pending:0 pass:2) — "
+        "`Update 'image' inputs` (@app/renovate)"
+    ) in rendered
+    assert (
+        "  - #1141 OPEN, green (fail:0 pending:0 pass:2) — `Add service` (@sortakool)"
+    ) in rendered
+    assert "  - #1200 OPEN, PENDING (fail:0 pending:1 pass:1)" in rendered
+    assert "  - #1201 OPEN, no checks (fail:0 pending:0 pass:0)" in rendered
+    assert (
+        "- **merged since** 2026-09-29T22:15:03Z (--since) (1):\n"
+        "  - #1455 MERGED 2026-09-29T22:30:00Z — `Update betterleaks` (@app/renovate)"
+    ) in rendered
+    open_call, merged_call = calls[1], calls[2]
+    assert open_call[:5] == ["pr", "list", "--limit", "100", "--state"]
+    assert "open" in open_call
+    assert "number,title,author,autoMergeRequest,statusCheckRollup" in open_call
+    assert "merged:>=2026-09-29T22:15:03Z" in merged_call
+    assert "number,title,author,mergedAt" in merged_call
+
+
+def test_rendered_pr_rows_verify_themselves_through_handoff_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The row grammar IS the claim grammar: every rendered row must hold."""
+    repo = _repo(tmp_path)
+    _fake_gh(
+        monkeypatch,
+        open_prs=json.dumps(_OPEN_ROWS),
+        merged_prs=json.dumps(_MERGED_ROWS),
+    )
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    assert snapshot.open_prs is not None
+    assert snapshot.merged_prs is not None
+    facts = {
+        summary.number: pr_facts.PrFacts(
+            summary.number,
+            pr_facts.ItemKind.PR,
+            summary.state,
+            auto_merge=summary.auto_merge,
+            checks=summary.checks or pr_facts.CheckCounts(0, 0, 0),
+        )
+        for summary in (*snapshot.open_prs, *snapshot.merged_prs)
+    }
+
+    claims = handoff_check.extract_claims(
+        session_state.render(snapshot), source="state"
+    )
+
+    words = {(claim.number, claim.word.value) for claim in claims}
+    assert words == {
+        (1449, "OPEN"),
+        (1449, "auto-merge armed"),
+        (1449, "RED"),
+        (1141, "OPEN"),
+        (1141, "green"),
+        (1200, "OPEN"),
+        (1201, "OPEN"),
+        (1455, "MERGED"),
+    }
+    assert all(
+        handoff_check.claim_holds(claim.word, facts[claim.number]) for claim in claims
+    )
+
+
+def test_repo_pr_lookups_fail_closed_as_unverifiable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+
+    def failing(args: list[str], _root: Path) -> tuple[int, str]:
+        if "--head" in args:
+            return 0, "[]"
+        return 1, "HTTP 502"
+
+    monkeypatch.setattr(pr_facts, "run_gh", failing)
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    rendered = session_state.render(snapshot)
+
+    assert snapshot.open_prs is None
+    assert snapshot.merged_prs is None
+    assert (
+        "- **open PRs**: UNVERIFIABLE — gh did not return a usable answer" in rendered
+    )
+    assert (
+        "- **merged since** 2026-09-29T00:00:00Z (--since): UNVERIFIABLE — "
+        "gh did not return a usable answer"
+    ) in rendered
+
+
+def test_one_malformed_repo_row_fails_the_whole_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    rows = [*_OPEN_ROWS, {"number": "1", "title": "string number"}]
+    _fake_gh(monkeypatch, open_prs=json.dumps(rows))
+
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+
+    assert snapshot.open_prs is None
+    assert snapshot.merged_prs == ()
+
+
+def test_no_pr_renders_both_repo_lists_as_not_requested(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    rendered = session_state.render(session_state.gather(repo, with_pr=False))
+
+    assert "- **open PRs**: not requested (--no-pr)" in rendered
+    assert "- **merged since**: not requested (--no-pr)" in rendered
+
+
+def test_default_since_uses_the_newest_handoff_mtime(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    older = plans / "session-2026-09-29.md"
+    newest = plans / "session-2026-09-29b.md"
+    older.write_text("old\n")
+    newest.write_text("new\n")
+    stamp = datetime(2026, 9, 29, 22, 15, 3, tzinfo=UTC).timestamp()
+    os.utime(newest, (stamp, stamp))
+    os.utime(older, (stamp + 3600, stamp + 3600))
+
+    since, source = session_state.default_since(repo, datetime.now(UTC))
+
+    assert since == "2026-09-29T22:15:03Z"
+    assert source == ".agent/plans/session-2026-09-29b.md mtime"
+
+
+def test_default_since_falls_back_to_24h_without_a_handoff(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    now = datetime(2026, 9, 30, 1, 2, 3, tzinfo=UTC)
+
+    assert session_state.default_since(repo, now) == (
+        "2026-09-29T01:02:03Z",
+        "24h fallback",
+    )
+
+
+def test_gather_defaults_since_from_the_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    calls = _fake_gh(monkeypatch)
+
+    snapshot = session_state.gather(repo)
+
+    assert snapshot.since_source == "24h fallback"
+    assert f"merged:>={snapshot.since}" in calls[2]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-09-29T22:00:00Z", "2026-09-29T22:00:00Z"),
+        ("2026-09-29T15:00:00-07:00", "2026-09-29T22:00:00Z"),
+        ("2026-09-29T22:00:00", "2026-09-29T22:00:00Z"),
+        ("2026-09-29", "2026-09-29T00:00:00Z"),
+        ("yesterday", None),
+    ],
+)
+def test_parse_since_normalizes_to_utc(value: str, expected: str | None) -> None:
+    assert session_state.parse_since(value) == expected
+
+
+@pytest.mark.parametrize("args", [["--since", "not-a-date"], ["--since"]])
+def test_main_rejects_an_unparsable_since(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], args: list[str]
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert session_state.main(args, repo) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("session-state: --since needs an ISO-8601")
+
+
+def test_main_passes_a_normalized_since_to_the_merged_query(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    calls = _fake_gh(monkeypatch)
+    args = cli_main.setup_parser().parse_args(
+        ["session-state", "--since", "2026-09-29T15:00:00-07:00"]
+    )
+    assert args.since == "2026-09-29T15:00:00-07:00"
+
+    assert session_state.main(["--since", args.since], repo) == 0
+
+    assert "merged:>=2026-09-29T22:00:00Z" in calls[2]
+    assert "(--since)" in capsys.readouterr().out
+
+
+# --- S29-H round 1 (R2, R3, R5, R7-M1) ---------------------------------------
+
+
+def _handoffs(repo: Path, stamps: dict[str, int]) -> Path:
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name, stamp in stamps.items():
+        (plans / name).write_text("x\n")
+        os.utime(plans / name, (stamp, stamp))
+    return plans
+
+
+_T_B = int(datetime(2026, 9, 29, 22, 15, 3, tzinfo=UTC).timestamp())
+_T_C = _T_B + 3600
+
+
+def test_default_since_excludes_the_handoff_being_written(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plans = _handoffs(
+        repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C}
+    )
+    now = datetime.now(UTC)
+
+    assert session_state.default_since(repo, now) == (
+        "2026-09-29T23:15:03Z",
+        ".agent/plans/session-2026-09-29c.md mtime",
+    )
+    assert session_state.default_since(
+        repo, now, exclude=plans / "session-2026-09-29c.md"
+    ) == (
+        "2026-09-29T22:15:03Z",
+        (
+            ".agent/plans/session-2026-09-29b.md mtime "
+            "(excluding .agent/plans/session-2026-09-29c.md)"
+        ),
+    )
+
+
+def test_main_for_accepts_a_handoff_that_does_not_exist_yet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    calls = _fake_gh(monkeypatch)
+
+    assert (
+        session_state.main(["--for", ".agent/plans/session-2026-09-29c.md"], repo) == 0
+    )
+
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+    assert (
+        "(.agent/plans/session-2026-09-29b.md mtime "
+        "(excluding .agent/plans/session-2026-09-29c.md))"
+    ) in capsys.readouterr().out
+
+
+def test_main_since_wins_over_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    calls = _fake_gh(monkeypatch)
+
+    assert (
+        session_state.main(
+            ["--for", "session-2026-09-30.md", "--since", "2026-09-29T20:00:00Z"],
+            repo,
+        )
+        == 0
+    )
+    assert "merged:>=2026-09-29T20:00:00Z" in calls[2]
+
+
+def test_main_rejects_for_without_a_path(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+    assert session_state.main(["--for"], repo) == 2
+    assert capsys.readouterr().err == "session-state: --for needs a handoff path\n"
+
+
+def test_branch_pr_and_commit_subjects_render_as_code_spans(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pasted snapshot must not fail its own check on free text (R3)."""
+    repo = _repo(tmp_path)
+    (repo / "tracked.txt").write_text("two\n")
+    _git(repo, "commit", "-qam", "revert #12 so it is MERGED `now` and RED")
+    rows = [
+        {"number": 42, "title": "Keep #7 `OPEN` and green", "statusCheckRollup": []}
+    ]
+    _fake_gh(monkeypatch, branch=json.dumps(rows))
+
+    rendered = session_state.render(session_state.gather(repo, since="2026-09-29"))
+
+    assert (
+        "- **open PR**: #42 — `Keep #7 'OPEN' and green` (checks: 0/0 passing)"
+    ) in rendered
+    assert "` `revert #12 so it is MERGED 'now' and RED`" in rendered
+    assert handoff_check.extract_claims(rendered, source="state") == []
+
+
+def _rows(count: int) -> str:
+    return json.dumps(
+        [
+            {"number": n, "title": "t", "author": {"login": "a"}, "mergedAt": "x"}
+            for n in range(1, count + 1)
+        ]
+    )
+
+
+def test_a_list_that_fills_the_limit_says_it_may_be_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _fake_gh(monkeypatch, open_prs=_rows(100), merged_prs=_rows(100))
+
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    rendered = session_state.render(snapshot)
+
+    assert snapshot.open_truncated
+    assert snapshot.merged_truncated
+    assert (
+        "- **open PRs** (100, TRUNCATED at --limit 100 — list may be incomplete):"
+    ) in rendered
+    assert (
+        "- **merged since** 2026-09-29T00:00:00Z (--since) "
+        "(100, TRUNCATED at --limit 100 — list may be incomplete):"
+    ) in rendered
+
+
+def test_a_list_below_the_limit_is_not_flagged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _fake_gh(monkeypatch, open_prs=_rows(99), merged_prs=_rows(99))
+
+    snapshot = session_state.gather(repo, since="2026-09-29T00:00:00Z")
+    rendered = session_state.render(snapshot)
+
+    assert not snapshot.open_truncated
+    assert not snapshot.merged_truncated
+    assert "- **open PRs** (99):" in rendered
+    assert "(--since) (99):" in rendered
+    assert "TRUNCATED" not in rendered
+
+
+def _dispatch(argv: list[str], repo: Path) -> object:
+    """Run the real main.py parser + dispatch; return the SystemExit code."""
+    args = cli_main.setup_parser().parse_args(argv)
+    try:
+        cli_main.run_command(args, repo)
+    except SystemExit as exc:
+        return exc.code
+    message = "session-state dispatch did not exit"
+    raise AssertionError(message)
+
+
+def test_cli_dispatch_forwards_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M1: main.py must forward --since to session_state.main."""
+    repo = _repo(tmp_path)
+    calls = _fake_gh(monkeypatch)
+
+    assert _dispatch(["session-state", "--since", "2026-09-29T20:00:00Z"], repo) == 0
+    assert "merged:>=2026-09-29T20:00:00Z" in calls[2]
+
+
+def test_cli_dispatch_forwards_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C})
+    calls = _fake_gh(monkeypatch)
+
+    code = _dispatch(
+        ["session-state", "--for", ".agent/plans/session-2026-09-29c.md"], repo
+    )
+
+    assert code == 0
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+
+
+# --- S29-H round 2 (F1 generated stamp, F5 --for by handoff key) -------------
+
+_NOW = datetime(2026, 9, 30, 1, 2, 3, tzinfo=UTC)
+
+
+def test_render_stamps_the_generation_time_right_after_the_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+
+    snapshot = session_state.gather(repo, with_pr=False)
+    lines = session_state.render(snapshot).splitlines()
+
+    assert snapshot.generated_at == "2026-09-30T01:02:03Z"
+    assert lines[0] == "- **branch**: `work/123`"
+    assert lines[1] == "- **generated**: 2026-09-30T01:02:03Z"
+
+
+def test_gather_reads_one_clock_for_the_stamp_and_the_fallback_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+    calls = _fake_gh(monkeypatch)
+
+    snapshot = session_state.gather(repo)
+
+    assert snapshot.generated_at == "2026-09-30T01:02:03Z"
+    assert (snapshot.since, snapshot.since_source) == (
+        "2026-09-29T01:02:03Z",
+        "24h fallback",
+    )
+    assert "merged:>=2026-09-29T01:02:03Z" in calls[2]
+
+
+def test_default_since_prefers_the_generated_stamp_over_a_later_mtime(
+    tmp_path: Path,
+) -> None:
+    """F1: the handoff was saved at 22:15:03 but its State was generated at 22:00."""
+    repo = _repo(tmp_path)
+    plans = _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    handoff = plans / "session-2026-09-29b.md"
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:15:03Z",
+        ".agent/plans/session-2026-09-29b.md mtime",
+    )
+
+    handoff.write_text("## State\n- **generated**: 2026-09-29T22:00:00Z\n")
+    os.utime(handoff, (_T_B, _T_B))
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:00:00Z",
+        ".agent/plans/session-2026-09-29b.md generated stamp",
+    )
+    assert session_state.default_since(
+        repo, _NOW, exclude=Path("session-2026-09-29-c.md")
+    ) == (
+        "2026-09-29T22:00:00Z",
+        (
+            ".agent/plans/session-2026-09-29b.md generated stamp "
+            "(excluding session-2026-09-29-c.md)"
+        ),
+    )
+
+
+def test_default_since_takes_the_last_parsable_stamp(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plans = _handoffs(repo, {"session-2026-09-29b.md": _T_B})
+    (plans / "session-2026-09-29b.md").write_text(
+        "- **generated**: 2026-09-29T20:00:00Z\n"
+        "- **generated**: 2026-09-29T21:00:00Z  \n"
+        "- **generated**: not-a-time\n"
+        "  - **generated**: 2026-09-29T23:00:00Z\n"
+    )
+
+    assert session_state.default_since(repo, _NOW)[0] == "2026-09-29T21:00:00Z"
+
+
+def test_an_unreadable_handoff_falls_back_to_its_mtime(tmp_path: Path) -> None:
+    """A directory named like a handoff cannot be read, but it can be stat'd."""
+    repo = _repo(tmp_path)
+    plans = repo / ".agent" / "plans"
+    unreadable = plans / "session-2026-09-29b.md"
+    unreadable.mkdir(parents=True)
+    os.utime(unreadable, (_T_B, _T_B))
+
+    assert session_state.default_since(repo, _NOW) == (
+        "2026-09-29T22:15:03Z",
+        ".agent/plans/session-2026-09-29b.md mtime",
+    )
+
+
+def test_a_pasted_state_block_starts_the_next_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round trip: this run's render IS the next run's generated stamp."""
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(session_state, "utc_now", lambda: _NOW)
+    plans = repo / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    rendered = session_state.render(session_state.gather(repo, with_pr=False))
+    (plans / "session-2026-09-30.md").write_text("## State\n" + rendered + "\n")
+
+    assert session_state.default_since(repo, datetime.now(UTC)) == (
+        "2026-09-30T01:02:03Z",
+        ".agent/plans/session-2026-09-30.md generated stamp",
+    )
+
+
+def test_main_for_excludes_the_handoff_by_date_and_letter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F5: ``--for session-2026-09-29-c.md`` names the on-disk ``…29c.md``."""
+    repo = _repo(tmp_path)
+    _handoffs(repo, {"session-2026-09-29b.md": _T_B, "session-2026-09-29c.md": _T_C})
+    calls = _fake_gh(monkeypatch)
+
+    assert session_state.main(["--for", "session-2026-09-29-c.md"], repo) == 0
+    assert "merged:>=2026-09-29T22:15:03Z" in calls[2]
+
+
+def test_main_rejects_a_for_that_is_not_a_handoff_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = _repo(tmp_path)
+
+    assert session_state.main(["--for", "notes.md"], repo) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == (
+        "session-state: --for must name a session-YYYY-MM-DD[-x].md handoff\n"
+    )

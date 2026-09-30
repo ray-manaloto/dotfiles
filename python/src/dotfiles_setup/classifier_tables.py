@@ -331,6 +331,21 @@ REGISTRY: dict[str, ClassifierSpec] = {
             "roots carry different authority"
         ),
     ),
+    "dotfiles_setup.pr_facts:classify_check": ClassifierSpec(
+        module_path="python/src/dotfiles_setup/pr_facts.py",
+        function="classify_check",
+        subject_param=None,
+        subject_type=None,
+        axes=frozenset({"check"}),
+        table_path="tests/test_pr_facts.py",
+        table_symbol="_CLASSIFY_CHECK_TABLE",
+        table_excluded_classes=frozenset(),
+        reason=(
+            "S29-H: check buckets drive the RED/green/auto-merge claim verdicts; "
+            "conclusion>state>status precedence and non-string values must stay "
+            "enumerated"
+        ),
+    ),
 }
 
 # Where :func:`classifier_shaped` looks for classifiers that OUGHT to be

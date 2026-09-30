@@ -10,26 +10,36 @@ A failed ``gh`` lookup is deliberately not rendered as "no open PR".  Only a
 successful query returning an empty list earns :attr:`PrState.NONE`; command
 failure, timeout, malformed JSON, and detached HEAD are all
 :attr:`PrState.UNVERIFIABLE`.
+
+The repo's open PRs and the PRs merged since the previous handoff are rendered
+in the claim words ``handoff-check`` verifies ("#1449 OPEN, auto-merge armed,
+RED"), so a State section pasted from this output checks itself.
+
+Every render carries a ``generated`` stamp.  The next run starts its merged-since
+window at the previous handoff's stamp, not at its mtime: a handoff edited after
+its State was pasted would otherwise hide the merges in between from both.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING
+from pathlib import Path
 
-from dotfiles_setup import child_env
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from dotfiles_setup import child_env, handoff_check, pr_facts
 
 _GIT_TIMEOUT = 30
-_GH_TIMEOUT = 120
 _SHA_ABBREV = 7
 _STATUS_PREFIX_LENGTH = 3
+_PR_LIST_LIMIT = "100"
+_SINCE_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+_FALLBACK_WINDOW = timedelta(hours=24)
+_GENERATED_STAMP = re.compile(r"^- \*\*generated\*\*: (\S+)\s*$", re.MULTILINE)
 
 DEFAULT_COMMITS = 8
 
@@ -61,14 +71,39 @@ class Commit:
 
 
 @dataclass(frozen=True)
+class PrSummary:
+    """One repo PR, open or merged, in the facts handoff-check verifies."""
+
+    number: int
+    title: str
+    author: str
+    state: str
+    auto_merge: bool
+    checks: pr_facts.CheckCounts | None
+    merged_at: str | None
+
+
+@dataclass(frozen=True)
 class Snapshot:
-    """The repo state needed to reconcile a session handoff."""
+    """The repo state needed to reconcile a session handoff.
+
+    ``open_prs``/``merged_prs`` are None when GitHub did not answer usably, or
+    when PR lookups were not requested (``pr`` is then None too).  A list that
+    filled ``--limit`` may be truncated, and says so.
+    """
 
     branch: str | None
     clean: bool
     dirty_paths: tuple[str, ...]
     commits: tuple[Commit, ...]
     pr: PullRequest | None
+    open_prs: tuple[PrSummary, ...] | None
+    merged_prs: tuple[PrSummary, ...] | None
+    since: str | None
+    since_source: str | None
+    generated_at: str
+    open_truncated: bool = False
+    merged_truncated: bool = False
 
 
 def _git(args: list[str], repo_root: Path) -> tuple[int, str, str]:
@@ -141,43 +176,12 @@ def _recent_commits(repo_root: Path, limit: int) -> tuple[Commit, ...]:
     return tuple(commits)
 
 
-def _gh(args: list[str], repo_root: Path) -> tuple[int, str]:
-    """Run one bounded GitHub read; failures become an unverifiable state."""
-    try:
-        proc = subprocess.run(
-            ["gh", *args],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            check=False,
-            timeout=_GH_TIMEOUT,
-            env=child_env.without_git_context(),
-        )
-    except subprocess.TimeoutExpired:
-        return 124, "gh lookup timed out"
-    except OSError as exc:
-        return 127, str(exc)
-    if proc.returncode == 0:
-        return 0, proc.stdout or ""
-    return proc.returncode, proc.stderr or proc.stdout or "no diagnostic"
-
-
 def _checks_summary(row: dict[str, object]) -> str | None:
     """Summarize a well-formed statusCheckRollup as ``N/M passing``."""
-    rollup = row.get("statusCheckRollup")
-    if not isinstance(rollup, list):
+    counts = pr_facts.count_checks(row.get("statusCheckRollup"))
+    if counts is None:
         return None
-    if not all(isinstance(check, dict) for check in rollup):
-        return None
-
-    passing_values = frozenset({"SUCCESS", "NEUTRAL", "SKIPPED", "PASS"})
-    passing = 0
-    for check in rollup:
-        value = check.get("conclusion") or check.get("state") or check.get("status")
-        if isinstance(value, str) and value.upper() in passing_values:
-            passing += 1
-    return f"{passing}/{len(rollup)} passing"
+    return f"{counts.passed}/{counts.total} passing"
 
 
 def _pr_rows(out: str) -> list[dict[str, object]] | None:
@@ -195,7 +199,7 @@ def _pull_request(repo_root: Path, branch: str | None) -> PullRequest:
     """Return the branch's open PR, preserving every unanswered outcome."""
     if branch is None:
         return PullRequest(PrState.UNVERIFIABLE)
-    rc, out = _gh(
+    rc, out = pr_facts.run_gh(
         [
             "pr",
             "list",
@@ -229,22 +233,284 @@ def _pull_request(repo_root: Path, branch: str | None) -> PullRequest:
     )
 
 
+def _author(row: dict[str, object]) -> str:
+    """Return the row's author login (a bot renders as ``app/<name>``)."""
+    author = row.get("author")
+    login = author.get("login") if isinstance(author, dict) else None
+    return login if isinstance(login, str) else "unknown"
+
+
+def _summaries(
+    state: str, args: list[str], repo_root: Path
+) -> tuple[tuple[PrSummary, ...], bool] | None:
+    """Run one ``gh pr list --state <state>``; any malformed row fails the whole.
+
+    The bool is True when the answer filled ``--limit``: the list may be
+    truncated, and GitHub does not say whether it is.
+    """
+    rc, out = pr_facts.run_gh(
+        ["pr", "list", "--limit", _PR_LIST_LIMIT, "--state", state, *args], repo_root
+    )
+    if rc != 0:
+        return None
+    rows = _pr_rows(out)
+    if rows is None:
+        return None
+    summaries: list[PrSummary] = []
+    for row in rows:
+        number = row.get("number")
+        title = row.get("title")
+        merged_at = row.get("mergedAt")
+        if not isinstance(number, int) or isinstance(number, bool):
+            return None
+        rollup = row.get("statusCheckRollup")
+        summaries.append(
+            PrSummary(
+                number=number,
+                title=title if isinstance(title, str) else "",
+                author=_author(row),
+                state=state.upper(),
+                auto_merge=row.get("autoMergeRequest") is not None,
+                checks=None if rollup is None else pr_facts.count_checks(rollup),
+                merged_at=merged_at if isinstance(merged_at, str) else None,
+            )
+        )
+    return tuple(summaries), len(rows) >= int(_PR_LIST_LIMIT)
+
+
+def _open_prs(repo_root: Path) -> tuple[tuple[PrSummary, ...], bool] | None:
+    """Every open PR in the repo, with auto-merge and check facts."""
+    return _summaries(
+        "open",
+        [
+            "--json",
+            "number,title,author,autoMergeRequest,statusCheckRollup",
+        ],
+        repo_root,
+    )
+
+
+def _merged_prs(
+    repo_root: Path, since: str
+) -> tuple[tuple[PrSummary, ...], bool] | None:
+    """PRs merged at or after ``since`` (an ISO-8601 UTC timestamp)."""
+    return _summaries(
+        "merged",
+        [
+            "--search",
+            f"merged:>={since}",
+            "--json",
+            "number,title,author,mergedAt",
+        ],
+        repo_root,
+    )
+
+
+def _format_since(moment: datetime) -> str:
+    """Render a moment as ``YYYY-MM-DDTHH:MM:SSZ`` in UTC."""
+    return moment.astimezone(UTC).strftime(_SINCE_FORMAT)
+
+
+def parse_since(value: str) -> str | None:
+    """Normalize an ISO-8601 ``--since`` value to UTC; None when unparsable.
+
+    A value without an offset is read as UTC.
+    """
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return _format_since(moment)
+
+
+def _display(path: Path, repo_root: Path) -> str:
+    """A path relative to the repo when it is inside it."""
+    try:
+        return str(path.resolve().relative_to(repo_root.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _generated_stamp(handoff: Path) -> str | None:
+    """The last parsable ``- **generated**:`` stamp in a handoff, else None.
+
+    An unreadable file has no stamp: the caller falls back to its mtime.
+    """
+    try:
+        text = handoff.read_text(errors="replace")
+    except OSError:
+        return None
+    for match in reversed(list(_GENERATED_STAMP.finditer(text))):
+        stamp = parse_since(match.group(1))
+        if stamp is not None:
+            return stamp
+    return None
+
+
+def default_since(
+    repo_root: Path, now: datetime, *, exclude: Path | None = None
+) -> tuple[str, str]:
+    """The newest handoff's generated stamp (else its mtime), or ``now`` - 24 h.
+
+    ``exclude`` is the handoff being written: once it exists it is the newest,
+    and its own time would collapse the merged-since window to "now".
+    """
+    handoff = handoff_check.newest_handoff(repo_root, exclude=exclude)
+    if handoff is None:
+        return _format_since(now - _FALLBACK_WINDOW), "24h fallback"
+    excluding = (
+        "" if exclude is None else f" (excluding {_display(exclude, repo_root)})"
+    )
+    stamp = _generated_stamp(handoff)
+    if stamp is not None:
+        return stamp, f"{handoff.relative_to(repo_root)} generated stamp{excluding}"
+    mtime = datetime.fromtimestamp(handoff.stat().st_mtime, tz=UTC)
+    return _format_since(mtime), f"{handoff.relative_to(repo_root)} mtime{excluding}"
+
+
+def utc_now() -> datetime:
+    """The clock :func:`gather` reads once; tests pin it by patching this name."""
+    return datetime.now(UTC)
+
+
 def gather(
     repo_root: Path,
     *,
     limit: int = DEFAULT_COMMITS,
     with_pr: bool = True,
+    since: str | None = None,
+    for_handoff: Path | None = None,
 ) -> Snapshot:
-    """Gather a read-only session snapshot from git and, optionally, GitHub."""
+    """Gather a read-only session snapshot from git and, optionally, GitHub.
+
+    ``since`` wins over ``for_handoff``, which only excludes that handoff when
+    the window defaults to the previous handoff's stamp or mtime.
+    """
+    now = utc_now()
+    generated_at = _format_since(now)
     branch = _current_branch(repo_root)
     dirty_paths = _dirty_paths(repo_root)
+    commits = _recent_commits(repo_root, limit)
+    if not with_pr:
+        return Snapshot(
+            branch=branch,
+            clean=not dirty_paths,
+            dirty_paths=dirty_paths,
+            commits=commits,
+            pr=None,
+            open_prs=None,
+            merged_prs=None,
+            since=None,
+            since_source=None,
+            generated_at=generated_at,
+        )
+    if since is None:
+        since, since_source = default_since(repo_root, now, exclude=for_handoff)
+    else:
+        since_source = "--since"
+    pr = _pull_request(repo_root, branch)
+    open_prs = _open_prs(repo_root)
+    merged_prs = _merged_prs(repo_root, since)
     return Snapshot(
         branch=branch,
         clean=not dirty_paths,
         dirty_paths=dirty_paths,
-        commits=_recent_commits(repo_root, limit),
-        pr=_pull_request(repo_root, branch) if with_pr else None,
+        commits=commits,
+        pr=pr,
+        open_prs=None if open_prs is None else open_prs[0],
+        merged_prs=None if merged_prs is None else merged_prs[0],
+        since=since,
+        since_source=since_source,
+        generated_at=generated_at,
+        open_truncated=open_prs is not None and open_prs[1],
+        merged_truncated=merged_prs is not None and merged_prs[1],
     )
+
+
+def _check_word(checks: pr_facts.CheckCounts | None) -> str:
+    """The check word handoff-check parses, with its counts."""
+    if checks is None:
+        return "checks unknown"
+    if checks.failing >= 1:
+        word = "RED"
+    elif checks.total >= 1 and checks.pending == 0:
+        word = "green"
+    elif checks.total >= 1:
+        word = "PENDING"
+    else:
+        word = "no checks"
+    return (
+        f"{word} (fail:{checks.failing} pending:{checks.pending} pass:{checks.passed})"
+    )
+
+
+def _code(text: str) -> str:
+    """Free text inside one code span, so no word in it reads as a claim."""
+    return "`" + text.replace("`", "'") + "`"
+
+
+def _title(summary: PrSummary) -> str:
+    """A PR title as a code span."""
+    return _code(summary.title)
+
+
+def _count(items: tuple[PrSummary, ...], *, truncated: bool) -> str:
+    """The list size, flagged when it filled ``--limit``."""
+    if truncated:
+        return (
+            f"{len(items)}, TRUNCATED at --limit {_PR_LIST_LIMIT} — "
+            "list may be incomplete"
+        )
+    return str(len(items))
+
+
+def _open_row(summary: PrSummary) -> str:
+    """One open PR in the claim grammar handoff-check parses."""
+    words = ["OPEN"]
+    if summary.auto_merge:
+        words.append("auto-merge armed")
+    words.append(_check_word(summary.checks))
+    return (
+        f"  - #{summary.number} {', '.join(words)} — "
+        f"{_title(summary)} (@{summary.author})"
+    )
+
+
+def _merged_row(summary: PrSummary) -> str:
+    """One merged PR in the claim grammar handoff-check parses."""
+    when = f" {summary.merged_at}" if summary.merged_at else ""
+    return f"  - #{summary.number} MERGED{when} — {_title(summary)} (@{summary.author})"
+
+
+def _render_repo_prs(snapshot: Snapshot) -> list[str]:
+    """The repo-wide open and merged-since lists."""
+    if snapshot.pr is None:
+        return [
+            "- **open PRs**: not requested (--no-pr)",
+            "- **merged since**: not requested (--no-pr)",
+        ]
+    lines: list[str] = []
+    if snapshot.open_prs is None:
+        lines.append("- **open PRs**: UNVERIFIABLE — gh did not return a usable answer")
+    elif not snapshot.open_prs:
+        lines.append("- **open PRs**: none")
+    else:
+        count = _count(snapshot.open_prs, truncated=snapshot.open_truncated)
+        lines.append(f"- **open PRs** ({count}):")
+        lines.extend(_open_row(summary) for summary in snapshot.open_prs)
+
+    heading = f"- **merged since** {snapshot.since} ({snapshot.since_source})"
+    if snapshot.merged_prs is None:
+        lines.append(f"{heading}: UNVERIFIABLE — gh did not return a usable answer")
+    elif not snapshot.merged_prs:
+        lines.append(f"{heading}: none")
+    else:
+        count = _count(snapshot.merged_prs, truncated=snapshot.merged_truncated)
+        lines.append(f"{heading} ({count}):")
+        lines.extend(_merged_row(summary) for summary in snapshot.merged_prs)
+    return lines
 
 
 def render(snapshot: Snapshot) -> str:
@@ -254,7 +520,7 @@ def render(snapshot: Snapshot) -> str:
         if snapshot.branch is None
         else f"- **branch**: `{snapshot.branch}`"
     )
-    lines = [branch]
+    lines = [branch, f"- **generated**: {snapshot.generated_at}"]
     if snapshot.clean:
         lines.append("- **tree**: clean")
     else:
@@ -264,7 +530,7 @@ def render(snapshot: Snapshot) -> str:
     if snapshot.commits:
         lines.append("- **recent commits**:")
         lines.extend(
-            f"  - `{commit.sha[:_SHA_ABBREV]}` {commit.subject}"
+            f"  - `{commit.sha[:_SHA_ABBREV]}` {_code(commit.subject)}"
             for commit in snapshot.commits
         )
     else:
@@ -277,26 +543,59 @@ def render(snapshot: Snapshot) -> str:
     elif snapshot.pr.state is PrState.UNVERIFIABLE:
         lines.append("- **open PR**: UNVERIFIABLE — gh did not return a usable answer")
     else:
-        title = f" — {snapshot.pr.title}" if snapshot.pr.title else ""
+        title = f" — {_code(snapshot.pr.title)}" if snapshot.pr.title else ""
         checks = (
             f" (checks: {snapshot.pr.checks_summary})"
             if snapshot.pr.checks_summary
             else ""
         )
         lines.append(f"- **open PR**: #{snapshot.pr.number}{title}{checks}")
+    lines.extend(_render_repo_prs(snapshot))
     return "\n".join(lines)
 
 
 def main(args: list[str], repo_root: Path) -> int:
-    """Run ``session-state [--no-pr]`` and print the snapshot."""
-    unknown = [arg for arg in args if arg != "--no-pr"]
+    """Run ``session-state [--no-pr] [--since <ISO>] [--for <handoff>]``."""
+    with_pr = True
+    since: str | None = None
+    for_handoff: Path | None = None
+    unknown: list[str] = []
+    remaining = iter(args)
+    for arg in remaining:
+        if arg == "--no-pr":
+            with_pr = False
+        elif arg == "--for":
+            value = next(remaining, None)
+            if value is None:
+                sys.stderr.write("session-state: --for needs a handoff path\n")
+                return 2
+            requested = Path(value)
+            if handoff_check.handoff_key(requested) is None:
+                sys.stderr.write(
+                    "session-state: --for must name a "
+                    "session-YYYY-MM-DD[-x].md handoff\n"
+                )
+                return 2
+            for_handoff = requested if requested.is_absolute() else repo_root / value
+        elif arg == "--since":
+            value = next(remaining, None)
+            since = None if value is None else parse_since(value)
+            if since is None:
+                sys.stderr.write(
+                    "session-state: --since needs an ISO-8601 timestamp, "
+                    f"got {value!r}\n"
+                )
+                return 2
+        else:
+            unknown.append(arg)
     if unknown:
         sys.stderr.write(f"session-state: unknown argument(s): {', '.join(unknown)}\n")
         return 2
     try:
-        sys.stdout.write(
-            render(gather(repo_root, with_pr="--no-pr" not in args)) + "\n"
+        snapshot = gather(
+            repo_root, with_pr=with_pr, since=since, for_handoff=for_handoff
         )
+        sys.stdout.write(render(snapshot) + "\n")
     except RuntimeError as exc:
         sys.stderr.write(f"session-state: {exc}\n")
         return 1

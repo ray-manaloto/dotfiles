@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import handoff_check
+from dotfiles_setup import handoff_check, pr_facts
 from dotfiles_setup import main as cli_main
 
 _COMMAND_TIMEOUT = 30
@@ -533,3 +533,544 @@ def test_render_preserves_exact_citation_text() -> None:
     output = handoff_check.render([finding], source="handoff.md")
     assert "`python/src/foo.py:42-58`" in output
     assert "bad_line_range" in output
+
+
+def test_render_ok_line_keeps_its_prefix_and_counts_claims() -> None:
+    tally = handoff_check.ClaimTally(3, ())
+    assert handoff_check.render([], source="h.md", tally=tally) == (
+        "handoff-check: OK — h.md citations resolve; 3 PR claim(s) match GitHub"
+    )
+    assert handoff_check.render([], source="h.md").endswith(
+        "; 0 PR claim(s) match GitHub"
+    )
+
+
+# --- PR/issue state claims (S29-H) -------------------------------------------
+
+
+def _pr(
+    number: int,
+    state: str = "OPEN",
+    *,
+    auto_merge: bool = False,
+    checks: tuple[int, int, int] = (0, 0, 0),
+) -> pr_facts.PrFacts:
+    """``checks`` is (passed, failing, pending)."""
+    return pr_facts.PrFacts(
+        number,
+        pr_facts.ItemKind.PR,
+        state,
+        auto_merge=auto_merge,
+        checks=pr_facts.CheckCounts(*checks),
+    )
+
+
+def _issue(number: int, state: str) -> pr_facts.PrFacts:
+    return pr_facts.PrFacts(
+        number,
+        pr_facts.ItemKind.ISSUE,
+        state,
+        auto_merge=False,
+        checks=pr_facts.CheckCounts(0, 0, 0),
+    )
+
+
+def _words(text: str) -> list[tuple[int, str]]:
+    return [
+        (claim.number, claim.word.value)
+        for claim in handoff_check.extract_claims(text, source="h")
+    ]
+
+
+def test_extract_claims_reads_every_word_in_its_window() -> None:
+    assert _words("- #1454 MERGED + landed; #1449 OPEN, auto-merge armed, RED") == [
+        (1454, "MERGED"),
+        (1454, "landed"),
+        (1449, "auto-merge armed"),
+        (1449, "OPEN"),
+        (1449, "RED"),
+    ]
+
+
+def test_extract_claims_masks_armed_before_the_bare_word() -> None:
+    assert _words("#1 armed auto-merge") == [(1, "auto-merge armed")]
+    assert _words("#1 auto-merge armed, auto-merge") == [
+        (1, "auto-merge armed"),
+        (1, "auto-merge"),
+    ]
+    assert _words("#1 → auto-merge") == [(1, "auto-merge")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "#1 auto-merges when ready",
+        "#1 was auto-merged",
+        "#1 Open Merged Closed Red",
+        "KB#814 MERGED",
+        "ray-manaloto/knowledge-base#12 MERGED",
+        "`mise run land -- <PR#>` MERGED",
+        "##12 MERGED",
+        "`#1449 OPEN`",
+        "~~#1449 OPEN~~",
+        "#1449 ~~OPEN~~ `RED`",
+        "```\n#1449 OPEN\n```",
+        "no reference MERGED",
+    ],
+)
+def test_extract_claims_ignores_non_claims(text: str) -> None:
+    assert _words(text) == []
+
+
+def test_extract_claims_is_case_rules_and_dedupes() -> None:
+    assert _words("#7 GREEN and Landed, green again, MERGED MERGED") == [
+        (7, "MERGED"),
+        (7, "landed"),
+        (7, "green"),
+    ]
+
+
+def test_extract_claims_window_ends_at_the_next_reference() -> None:
+    assert _words("#1435 + #963 CLOSED") == [(963, "CLOSED")]
+
+
+def test_extract_claims_reports_source_file_lines() -> None:
+    claims = handoff_check.extract_claims(
+        "one\n```\n#1 OPEN\n```\n#2 MERGED\n", source="task_plan.md", line_offset=100
+    )
+    assert claims == [
+        handoff_check.Claim(2, handoff_check.ClaimWord.MERGED, "task_plan.md", 105)
+    ]
+
+
+def test_active_section_spans_the_last_next_session_heading() -> None:
+    plan = (
+        "# Plan\n## Old NEXT SESSION\n#1 OPEN\n## Done\n"
+        "## Phase 9 — NEXT SESSION\nbody\n### sub\nmore\n## Later\ntail\n"
+    )
+    assert handoff_check.active_section(plan) == (
+        "## Phase 9 — NEXT SESSION\nbody\n### sub\nmore\n"
+    )
+    assert handoff_check.active_section("## A NEXT SESSION\nto eof") == (
+        "## A NEXT SESSION\nto eof"
+    )
+    assert handoff_check.active_section("## Nothing\n") is None
+
+
+@pytest.mark.parametrize(
+    ("word", "facts", "holds"),
+    [
+        ("OPEN", _pr(1, "OPEN"), True),
+        ("OPEN", _pr(1, "MERGED"), False),
+        ("MERGED", _pr(1, "MERGED"), True),
+        ("CLOSED", _pr(1, "MERGED"), False),
+        ("CLOSED", _pr(1, "CLOSED"), True),
+        ("landed", _pr(1, "MERGED"), True),
+        ("landed", _pr(1, "OPEN", auto_merge=True), False),
+        ("auto-merge armed", _pr(1, "OPEN", auto_merge=True), True),
+        ("auto-merge armed", _pr(1, "OPEN", auto_merge=True, checks=(0, 2, 0)), True),
+        ("auto-merge armed", _pr(1, "MERGED", auto_merge=True), False),
+        ("auto-merge armed", _pr(1, "OPEN"), False),
+        ("auto-merge", _pr(1, "OPEN", auto_merge=True, checks=(0, 0, 3)), True),
+        ("auto-merge", _pr(1, "OPEN", auto_merge=True, checks=(0, 2, 0)), False),
+        ("auto-merge", _pr(1, "MERGED", auto_merge=True), False),
+        ("RED", _pr(1, checks=(0, 1, 0)), True),
+        ("RED", _pr(1, checks=(5, 0, 0)), False),
+        ("green", _pr(1, checks=(5, 0, 0)), True),
+        ("green", _pr(1, checks=(5, 0, 1)), False),
+        ("green", _pr(1, checks=(5, 1, 0)), False),
+        ("green", _pr(1), False),
+        ("OPEN", _issue(1, "OPEN"), True),
+        ("CLOSED", _issue(1, "OPEN"), False),
+        ("MERGED", _issue(1, "CLOSED"), None),
+        ("auto-merge", _issue(1, "OPEN"), None),
+        ("green", _issue(1, "OPEN"), None),
+    ],
+)
+def test_claim_holds_semantics(
+    word: str, facts: pr_facts.PrFacts, holds: object
+) -> None:
+    assert handoff_check.claim_holds(handoff_check.ClaimWord(word), facts) is holds
+
+
+def _attested_plan(repo: Path, text: str) -> handoff_check.Attestation:
+    (repo / "task_plan.md").write_text(text)
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    (repo / ".plan-attestation").write_text(digest + "\n")
+    return handoff_check.Attestation("task_plan.md", ".plan-attestation")
+
+
+def test_claims_in_handoff_and_active_plan_are_judged_once_per_number(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    state = _attested_plan(
+        repo,
+        "## Old\n#1454 OPEN\n## NEXT SESSION\nWATCH: #1449 CI → auto-merge\n"
+        "#963 CLOSED, #1454 landed\n",
+    )
+    live = {
+        1449: _pr(1449, "OPEN", auto_merge=True, checks=(12, 2, 0)),
+        1454: _pr(1454, "MERGED", auto_merge=True, checks=(13, 0, 0)),
+        963: _issue(963, "CLOSED"),
+    }
+    fetched: list[int] = []
+
+    def facts(_root: Path, number: int) -> pr_facts.PrFacts | str:
+        fetched.append(number)
+        return live[number]
+
+    findings, tally = handoff_check.check_with_claims(
+        repo,
+        "- #1454 auto-merge armed\n- #1449 OPEN, RED\n",
+        show=lambda _: state,
+        facts=facts,
+        source=".agent/plans/session-x.md",
+    )
+
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_MISMATCH,
+            "#1454 auto-merge armed (.agent/plans/session-x.md:1)",
+            "GitHub reports PR #1454 state=MERGED auto-merge=yes checks "
+            "fail:0 pending:0 pass:13",
+        ),
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_MISMATCH,
+            "#1449 auto-merge (task_plan.md:4)",
+            "GitHub reports PR #1449 state=OPEN auto-merge=yes checks "
+            "fail:2 pending:0 pass:12",
+        ),
+    ]
+    assert tally == handoff_check.ClaimTally(6, ())
+    assert sorted(fetched) == [963, 1449, 1454]
+
+
+def test_failed_lookup_is_one_unverifiable_finding_per_number(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    findings, tally = handoff_check.check_with_claims(
+        repo,
+        "#5 OPEN, green\n#5 RED\n#6 MERGED\n",
+        facts=lambda _root, number: (
+            "gh api exited 1: boom" if number == 5 else _pr(6, "MERGED")
+        ),
+    )
+
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_UNVERIFIABLE,
+            "#5",
+            "GitHub lookup failed (gh api exited 1: boom) — 3 claim(s) unchecked; "
+            "a failed lookup is never a pass",
+        )
+    ]
+    assert tally == handoff_check.ClaimTally(1, ())
+
+
+def test_claim_deadline_expiry_is_unverifiable_without_a_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(handoff_check, "CLAIMS_DEADLINE_S", 0.0)
+
+    def never(_root: Path, number: int) -> pr_facts.PrFacts | str:
+        message = f"fetched #{number} after the deadline"
+        raise AssertionError(message)
+
+    findings = handoff_check.check(repo, "#5 OPEN\n#5 RED\n#6 MERGED\n", facts=never)
+
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_UNVERIFIABLE,
+            f"#{number}",
+            "claim-check deadline (0 s) expired before lookup",
+        )
+        for number in (5, 6)
+    ]
+
+
+def test_default_facts_resolve_through_the_patched_run_gh(tmp_path: Path) -> None:
+    """facts=None must reach pr_facts.run_gh at call time (the pinned seam)."""
+    repo = _repo(tmp_path)
+    monkeypatch = pytest.MonkeyPatch()
+    calls: list[list[str]] = []
+
+    def fake(args: list[str], _root: Path) -> tuple[int, str]:
+        calls.append(args)
+        return 1, "HTTP 401: Bad credentials"
+
+    monkeypatch.setattr(pr_facts, "run_gh", fake)
+    try:
+        findings = handoff_check.check(repo, "#9 MERGED\n")
+    finally:
+        monkeypatch.undo()
+
+    assert calls == [["api", "repos/{owner}/{repo}/issues/9"]]
+    assert [finding.verdict for finding in findings] == [
+        handoff_check.Verdict.PR_CLAIM_UNVERIFIABLE
+    ]
+
+
+def test_main_counts_matching_claims_and_fails_on_a_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    (repo / "good.md").write_text("- #3 MERGED, landed\n")
+    (repo / "stale.md").write_text("- #3 auto-merge armed\n")
+
+    def fake(args: list[str], _root: Path) -> tuple[int, str]:
+        if args[0] == "api":
+            return 0, '{"state": "closed", "pull_request": {}}'
+        return 0, (
+            '{"state": "MERGED", "autoMergeRequest": {}, '
+            '"statusCheckRollup": [{"conclusion": "SUCCESS"}]}'
+        )
+
+    monkeypatch.setattr(pr_facts, "run_gh", fake)
+
+    assert handoff_check.main(["good.md"], repo) == 0
+    assert capsys.readouterr().out == (
+        "handoff-check: OK — good.md citations resolve; 2 PR claim(s) match GitHub\n"
+        "handoff-check: info — task_plan.md absent (fresh clone); "
+        "active-plan checks skipped\n"
+    )
+
+    assert handoff_check.main(["stale.md"], repo) == 1
+    out = capsys.readouterr().out
+    assert "- pr_claim_mismatch: `#3 auto-merge armed (stale.md:1)` — " in out
+    assert "state=MERGED auto-merge=yes checks fail:0 pending:0 pass:1" in out
+
+
+# --- S29-H round 1 (R1, R6, R7-M9/M10, newest_handoff exclude) ---------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- knowledge-base PR #611 MERGED and KB #509 OPEN",
+        "ray-manaloto/knowledge-base #12 MERGED",
+        "kb #5 OPEN",
+        "see KB issue #5 CLOSED",
+    ],
+)
+def test_space_qualified_foreign_references_are_not_claims(text: str) -> None:
+    assert _words(text) == []
+
+
+def test_unqualified_numbers_on_the_same_line_are_claims() -> None:
+    """Control arm for the foreign-qualifier rule: drop the qualifiers."""
+    assert _words("- PR #611 MERGED and #509 OPEN") == [
+        (611, "MERGED"),
+        (509, "OPEN"),
+    ]
+
+
+def test_a_foreign_reference_still_ends_the_previous_window() -> None:
+    assert _words("#1449 OPEN; KB #509 MERGED") == [(1449, "OPEN")]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("other-repo #5 MERGED", [(5, "MERGED")]),
+        ("owner/repo pr #7 landed", [(7, "landed")]),
+    ],
+)
+def test_an_unrecognised_repo_name_is_still_read_as_dotfiles(
+    text: str, expected: list[tuple[int, str]]
+) -> None:
+    """The documented limitation: only the KB spellings qualify (F4)."""
+    assert _words(text) == expected
+
+
+def test_a_slash_before_the_hash_is_not_a_reference() -> None:
+    assert _words("see https://docs.example.com/guide/#12 MERGED") == []
+
+
+def test_a_number_glued_to_a_word_is_not_a_reference() -> None:
+    assert _words("owner/repo#12 MERGED") == []
+    assert _words("KB#814 OPEN") == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- #1454 was RED; auto-merge disarmed on #1452",
+        "#1 never MERGED, not green, no longer OPEN",
+        "#1 were CLOSED",
+        "#1 was auto-merge armed",
+        "#1 auto-merge disabled",
+        "#1 auto-merge off",
+        "#1 auto-merge cancelled",
+        "#1 auto-merge canceled",
+        "#1 not landed",
+    ],
+)
+def test_negated_and_past_forms_are_not_claims(text: str) -> None:
+    assert _words(text) == []
+
+
+def test_a_positive_claim_beside_a_negated_one_still_counts() -> None:
+    assert _words("#1 was open but is now RED") == [(1, "RED")]
+    assert _words("#1454 RED") == [(1454, "RED")]
+
+
+def test_check_forwards_injected_facts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M9: check() must hand facts= through, or the real lookup runs instead."""
+    repo = _repo(tmp_path)
+
+    def no_network(args: list[str], _root: Path) -> tuple[int, str]:
+        return 1, f"unit test forbids gh {args[0]}"
+
+    monkeypatch.setattr(pr_facts, "run_gh", no_network)
+    asked: list[int] = []
+
+    def stub(_root: Path, number: int) -> pr_facts.PrFacts | str:
+        asked.append(number)
+        return _pr(number, "OPEN")
+
+    findings = handoff_check.check(repo, "#5 MERGED\n", facts=stub)
+
+    assert asked == [5]
+    assert findings == [
+        handoff_check.Finding(
+            handoff_check.Verdict.PR_CLAIM_MISMATCH,
+            "#5 MERGED (handoff:1)",
+            "GitHub reports PR #5 state=OPEN auto-merge=no checks "
+            "fail:0 pending:0 pass:0",
+        )
+    ]
+
+
+def test_newest_handoff_can_exclude_the_one_being_written(tmp_path: Path) -> None:
+    plans = tmp_path / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name in ("session-2026-09-29b.md", "session-2026-09-29c.md"):
+        (plans / name).write_text("x\n")
+
+    assert handoff_check.newest_handoff(tmp_path) == plans / "session-2026-09-29c.md"
+    assert (
+        handoff_check.newest_handoff(
+            tmp_path, exclude=tmp_path / ".agent/plans/../plans/session-2026-09-29c.md"
+        )
+        == plans / "session-2026-09-29b.md"
+    )
+    assert (
+        handoff_check.newest_handoff(tmp_path, exclude=plans / "session-2026-09-29z.md")
+        == plans / "session-2026-09-29c.md"
+    )
+
+
+# --- S29-H round 2 (F2, F3, F4, F5, F6) ---------------------------------------
+
+
+def test_the_second_number_of_a_slash_list_is_not_a_claim() -> None:
+    """``#A/#B``: the words belong to #A only (M10 for the right reason)."""
+    assert _words("- #1454/#1453 MERGED") == [(1454, "MERGED")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["- #1454 MERGED; KB#814 OPEN", "- #1454 MERGED; owner/repo#12 OPEN"],
+)
+def test_a_glued_foreign_number_ends_the_previous_window(text: str) -> None:
+    """F3: an unspaced foreign number must not lend its words to #1454."""
+    assert _words(text) == [(1454, "MERGED")]
+
+
+def test_a_slash_token_before_a_reference_is_not_a_qualifier() -> None:
+    """F4: ``lint/pytest`` is not ``owner/repo``; the claim must be judged."""
+    assert _words("- lint/pytest #1454 OPEN") == [(1454, "OPEN")]
+
+
+def test_a_pr_only_word_on_an_issue_is_skipped_counted_and_listed(
+    tmp_path: Path,
+) -> None:
+    """F2: the replayed 2026-09-02 shape passes, but never invisibly."""
+    repo = _repo(tmp_path)
+
+    findings, tally = handoff_check.check_with_claims(
+        repo,
+        "- #887 auto-merge armed, OPEN\n",
+        facts=lambda _root, number: _issue(number, "OPEN"),
+        source="task_plan.md",
+    )
+
+    skipped = handoff_check.Claim(
+        887, handoff_check.ClaimWord.AUTO_MERGE_ARMED, "task_plan.md", 1
+    )
+    assert findings == []
+    assert tally == handoff_check.ClaimTally(1, (skipped,))
+    info = (
+        "handoff-check: info — skipped #887 auto-merge armed (task_plan.md:1): "
+        "#887 is an issue, not a PR"
+    )
+    assert handoff_check.render(findings, source="h.md", tally=tally) == (
+        "handoff-check: OK — h.md citations resolve; 1 PR claim(s) match GitHub; "
+        "1 skipped (PR-only word on an issue)\n" + info
+    )
+    finding = handoff_check.Finding(handoff_check.Verdict.MISSING_PATH, "x.md:1", "d")
+    assert handoff_check.render([finding], source="h.md", tally=tally) == (
+        "handoff-check: 1 finding(s) in h.md\n- missing_path: `x.md:1` — d\n" + info
+    )
+
+
+def test_main_lists_skipped_claims_and_keeps_rc_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    repo = _repo(tmp_path)
+    (repo / "h.md").write_text("- #887 MERGED\n")
+
+    def fake(args: list[str], _root: Path) -> tuple[int, str]:
+        assert args == ["api", "repos/{owner}/{repo}/issues/887"]
+        return 0, '{"state": "open"}'
+
+    monkeypatch.setattr(pr_facts, "run_gh", fake)
+
+    assert handoff_check.main(["h.md"], repo) == 0
+    assert capsys.readouterr().out.splitlines()[:2] == [
+        (
+            "handoff-check: OK — h.md citations resolve; 0 PR claim(s) match GitHub; "
+            "1 skipped (PR-only word on an issue)"
+        ),
+        (
+            "handoff-check: info — skipped #887 MERGED (h.md:1): "
+            "#887 is an issue, not a PR"
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "exclude",
+    [
+        "session-2026-09-29-c.md",
+        ".agent/plans/session-2026-09-29C.md",
+        "/elsewhere/session-2026-09-29c.md",
+    ],
+)
+def test_newest_handoff_excludes_by_date_and_letter_not_path(
+    tmp_path: Path, exclude: str
+) -> None:
+    """F5: every spelling of 29c excludes the on-disk ``session-2026-09-29c.md``."""
+    plans = tmp_path / ".agent" / "plans"
+    plans.mkdir(parents=True)
+    for name in ("session-2026-09-29b.md", "session-2026-09-29c.md"):
+        (plans / name).write_text("x\n")
+
+    assert (
+        handoff_check.newest_handoff(tmp_path, exclude=Path(exclude))
+        == plans / "session-2026-09-29b.md"
+    )
+
+
+def test_newest_handoff_rejects_an_exclude_that_is_not_a_handoff(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="not a session-YYYY-MM-DD"):
+        handoff_check.newest_handoff(tmp_path, exclude=Path("notes.md"))

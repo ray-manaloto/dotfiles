@@ -1969,3 +1969,39 @@ flowchart LR
     P["S29-0 native pwf restructure"] --> F["S29-00 fix #1449"] --> K["S29-K three skills"] --> M["S29-M mise dotfiles, in reviewed pieces"] --> U["S29-R /ultrareview at big cutovers"]
     K --> R["S29-1..4 queued remainder"]
 ```
+
+## 2026-09-29 — session 7ad65526 (09-29c): S29-H machine-checked handoff PR claims
+
+- **Iteration ID:** `dotfiles-goal-20260929-045`
+- **Prior goal digest:** `sha256:8ca5e36dde30d364502d71a6d385ccbaa8c5a457a55f1396361a1f48582d5deb`
+- **Current goal digest:** `sha256:b0bed4e3cb13350c13e18a0450a5a29bd8d76fdec0f023d30fb21166e8285ae9`
+- **Changed requirement:**
+  - Order: S29-H (machine-checked PR claims + generated handoff state) now precedes S29-0 (Ray, AskUserQuestion,
+    2026-09-29b-late, after 044 merged).
+  - Standing protocol (Ray, same ruling): catch a handoff/resume/review finding by machine — research, build the
+    armed deterministic check, then fix the text; the model round-trip is the last-line detector, not the gate.
+- **Reason:** Two repeats of stale PR state surviving into a handoff (2026-09-29 #1449, 2026-09-29b #1454), each
+  caught only by the probabilistic round-trip; `findings.md` § "root cause: stale PR state".
+- **Evidence:**
+  - Spec `docs/specs/s29h-machine-checked-handoff.md`; premise report `premise-verify-s29h-2026-09-29.md`;
+    implementer report `implement-s29h-2026-09-29.md` (Opus fallback; codex usage-limited until 2026-10-03,
+    probed rc=1 this session).
+  - Real stale-case arm: `mise run handoff-check -- .agent/plans/session-2026-09-29b.md` rc=1 with exactly two
+    `pr_claim_mismatch` findings (`task_plan.md:1108`, `:1162`, "#1449 … → auto-merge" while #1449 is RED); after the
+    coordinator corrected those two lines and re-attested, rc=0 with "19 PR claim(s) match GitHub".
+- **Affected tickets:** none closed; #1449 still red (S29-00).
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect (session 7ad65526). Delegates: premise-verifier,
+  one Opus implementer (stated fallback for codex-sol-implementer; allowlist extended once, for the classifier
+  registry). Codex cross-family lens owed on this PR's commits (S29-D).
+
+### Current goal
+
+> Next session, in order (Ray, 2026-09-29b-late): S29-H make the handoff/resume workflow reliable by machine — handoff-check compares every #NNNN state claim in the handoff and the plan's active section with GitHub (mismatch fails, a failed lookup is unverifiable, never a pass) and session-state generates the handoff's PR state; then S29-0 restructure task_plan.md into planning-with-files' native layout, then S29-00 fix red #1449, then S29-K the three skills, with S29-M moving in reviewed pieces. Standing protocol: a finding from a model round-trip or review is fixed by first building the deterministic check that fails on it, armed on the real stale case, and only then correcting the text. Done means land rc=0 with the gates run through mise run gate, /code-review, the cross-family lens (stated fallback while codex is unavailable), the mattpocock pair for spec'd diffs, and a handoff that ends in a fresh-session round-trip with no DISAGREEMENT. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    H["S29-H machine-checked handoff"] --> P["S29-0 native pwf restructure"] --> F["S29-00 fix #1449"] --> K["S29-K three skills"] --> M["S29-M mise dotfiles, in reviewed pieces"]
+```

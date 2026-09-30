@@ -1003,7 +1003,7 @@ description = "Arm GitHub-native auto-merge on a BOT-opened PR (Renovate / refre
 run = 'uv run --project python dotfiles-setup pr automerge'
 
 [tasks.session-state]
-description = "Paste-ready session snapshot: branch/tree/commits/PR: mise run session-state [-- --no-pr]"
+description = "Paste-ready session snapshot: branch/tree/commits/PR + open and merged-since PRs in handoff-check claim words: mise run session-state [-- --no-pr] [-- --since <ISO-8601>] [-- --for <handoff>]"
 # Thin caller; python/src/dotfiles_setup/session_state.py.
 run = 'uv run --project python dotfiles-setup session-state'
 
@@ -1013,7 +1013,7 @@ description = "Attest the planning-with-files plan (agent-runnable since 2026-09
 run = 'uv run --project python dotfiles-setup plan-attest'
 
 [tasks.handoff-check]
-description = "Verify a handoff's own citations (paths, file:line, mise task names): mise run handoff-check [-- <path>]"
+description = "Verify a handoff's citations (paths, file:line, mise task names) and its + the active plan's PR state claims against live GitHub: mise run handoff-check [-- <path>]"
 # Thin caller; python/src/dotfiles_setup/handoff_check.py.
 run = 'uv run --project python dotfiles-setup handoff-check'
 

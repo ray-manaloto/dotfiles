@@ -103,6 +103,11 @@ merge, start the next task, or report completion. If any check is red,
 that is the current task — investigate and resolve it ([[zero-skip-policy]]),
 do not defer past it.
 
+**Catch it by machine, never by hand** (Ray, 2026-09-29b-late): a finding a
+model round-trip or reviewer surfaced (handoff, resume, review) is fixed by
+first building the deterministic check that fails on it — armed on the real
+stale case — and only then correcting the text. See `session-handoff` step 5.
+
 ## Applies to
 
 Every task in this repo — local edits, PRs, merges, multi-step work, and
