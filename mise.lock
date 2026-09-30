@@ -6076,41 +6076,41 @@ conda_deps = [
 ]
 
 [[tools.docker-cli]]
-version = "29.8.1"
+version = "29.8.2"
 backend = "aqua:docker/cli"
 
 [tools.docker-cli."platforms.linux-arm64"]
-url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.linux-arm64-musl"]
-url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.linux-x64"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.linux-x64-baseline"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl-baseline"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.macos-arm64"]
-url = "https://download.docker.com/mac/static/stable/aarch64/docker-29.8.1.tgz"
+url = "https://download.docker.com/mac/static/stable/aarch64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.macos-x64"]
-url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.macos-x64-baseline"]
-url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.1.tgz"
+url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.2.tgz"
 
 [tools.docker-cli."platforms.windows-x64"]
-url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.1.zip"
+url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.2.zip"
 
 [tools.docker-cli."platforms.windows-x64-baseline"]
-url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.1.zip"
+url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.2.zip"
 
 [[tools.doppler]]
 version = "3.76.6"
@@ -6534,7 +6534,7 @@ version = "0.5.12"
 backend = "npm:ctx7"
 
 [[tools."npm:firecrawl-cli"]]
-version = "1.25.0"
+version = "1.25.1"
 backend = "npm:firecrawl-cli"
 
 [[tools."npm:markdownlint-cli2"]]
@@ -6550,7 +6550,7 @@ version = "0.15.6"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.125.1"
+version = "44.125.2"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
