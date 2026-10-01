@@ -110,12 +110,17 @@ class PendingUpdate:
     dep_name: str
     current_value: str
     new_value: str
+    # The PR branch Renovate would push this update to. It is the only field
+    # that shows GROUPING, so it answers "which PR does a bump land in?" — the
+    # question #1449 needed (one python bump held ten other tools hostage).
+    branch_name: str = "?"
 
     def render(self) -> str:
         """Render as one aligned report row."""
         return (
             f"  [{self.manager}] {self.dep_name}: "
             f"{self.current_value} -> {self.new_value}  ({self.package_file})"
+            f"  -> {self.branch_name}"
         )
 
 
@@ -260,6 +265,7 @@ def parse_report(raw: str, *, complete: bool = True) -> DryRunResult:
                         dep_name=dep.get("depName", "?"),
                         current_value=dep.get("currentValue", "?"),
                         new_value=upd.get("newValue", "?"),
+                        branch_name=upd.get("branchName", "?"),
                     )
                     for upd in pending
                 )
