@@ -43,10 +43,10 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 doppler = "3.76.6"
 colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.0"
-"github:agent-sh/agnix" = "0.56.0"
+"github:agent-sh/agnix" = "0.56.1"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.126.0"
+"npm:renovate" = "44.126.1"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -100,7 +100,7 @@ pipx = "1.17.8"
 # lockfile path onto legacy version-only locking (see commit 3744cea).
 "pypi:azure-cli" = { version = "2.90.0", uvx = false }
 docker-cli = "29.8.2"
-opencode = "1.18.33"
+opencode = "1.18.34"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
