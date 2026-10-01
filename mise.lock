@@ -6542,7 +6542,7 @@ version = "0.23.3"
 backend = "npm:markdownlint-cli2"
 
 [[tools."npm:oh-my-claude-sisyphus"]]
-version = "5.5.0"
+version = "5.6.0"
 backend = "npm:oh-my-claude-sisyphus"
 
 [[tools."npm:portless"]]
@@ -6550,7 +6550,7 @@ version = "0.15.6"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.126.1"
+version = "44.128.1"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
