@@ -432,6 +432,11 @@ def typecheck_modules(
                 "mise",
                 "exec",
                 tool_spec(_REPO_ROOT, TSC_TOOL),
+                # The isolated MISE_STATE_DIR has no deps record, so mise's
+                # `[deps.uv] auto` reads "stale (no previous state)" and runs
+                # `uv sync` into stderr before tsc. Type-checking TS needs no
+                # python deps; probed 2026-10-01: stderr 125 bytes -> 0.
+                "--no-deps",
                 "--",
                 "tsc",
                 "--noEmit",

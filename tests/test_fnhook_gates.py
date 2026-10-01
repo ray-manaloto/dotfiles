@@ -296,6 +296,7 @@ def test_typecheck_uses_discovered_files_and_committed_config(
         "mise",
         "exec",
         fnhook_gates.tool_spec(REPO_ROOT, fnhook_gates.TSC_TOOL),
+        "--no-deps",
         "--",
         "tsc",
         "--noEmit",
