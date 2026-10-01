@@ -4,8 +4,8 @@
 #
 # Invoked by hk.pkl:claude_agents_md_pairs on pre-commit.
 #
-# Every tracked CLAUDE.md (excluding .claude/**) MUST have a sibling
-# AGENTS.md in the same directory, and vice versa.
+# Every tracked CLAUDE.md (excl. .claude/**, docs/research/kb/raw/**) MUST
+# have a sibling AGENTS.md in the same directory, and vice versa.
 #
 # Rationale: CLAUDE.md is a thin `@AGENTS.md` import for Claude Code;
 # AGENTS.md is the agent-agnostic equivalent shared with Codex/Gemini.
@@ -13,8 +13,8 @@
 # file; an AGENTS.md without a sibling CLAUDE.md would mean Claude
 # doesn't load that scope's project instructions.
 #
-# .claude/** is exempt — that scope is Claude-specific (no AGENTS.md
-# counterpart).
+# .claude/** is exempt (Claude-specific scope); docs/research/kb/raw/** is
+# exempt (byte-verbatim vendored mirrors, artifact-conventions rule 8; #1472).
 set -euo pipefail
 
 rc=0
@@ -36,10 +36,10 @@ check_pair() {
 
 while IFS= read -r f; do
   check_pair "$f" "AGENTS.md"
-done < <(git ls-files | grep -E '(^|/)CLAUDE\.md$' | grep -v '^\.claude/' || true)
+done < <(git ls-files | grep -E '(^|/)CLAUDE\.md$' | grep -v -E '^(\.claude|docs/research/kb/raw)/' || true)
 
 while IFS= read -r f; do
   check_pair "$f" "CLAUDE.md"
-done < <(git ls-files | grep -E '(^|/)AGENTS\.md$' | grep -v '^\.claude/' || true)
+done < <(git ls-files | grep -E '(^|/)AGENTS\.md$' | grep -v -E '^(\.claude|docs/research/kb/raw)/' || true)
 
 exit "$rc"

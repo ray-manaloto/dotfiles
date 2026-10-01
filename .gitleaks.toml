@@ -77,24 +77,63 @@ paths = [
   '''^docs/research/runs/research-20260709-r2-secrets/agents/ssh-r2-model\.md$''',
 ]
 
-# Offline mise docs mirror (2026-09-29b, Ray-approved suppression, AskUserQuestion):
-# the upstream mise.jdx.dev docs contain mise's PUBLIC minisign release-signing key
-# (`ARG MISE_MINISIGN_KEY=...` in the Docker cookbook) and an illustrative
-# `PASSWORD = "my_password"` example. Both were read and judged; neither is a secret.
-[[allowlists]]
-description = "mise docs mirror: public minisign key in the Docker cookbook."
-targetRules = ["generic-api-key"]
-paths = [
-  '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/mise-docs/mise-cookbook_docker\.md$''',
-]
+# ── Vendored raw mirrors under docs/research/kb/raw/ (Ray, 2026-10-01, AskUserQuestion; #1472) ──
+# Mirrors of upstream repos/docs are committed BYTE-VERBATIM (agent-artifact-conventions.md rule 8),
+# so their false positives are allowlisted by CONTENT rather than one path entry per mirrored file.
+# Entries 1-3 are scoped to the mirror tree by `paths`; entry 4 is content-only and REPO-WIDE by
+# design (see its comment). Each value below was read and judged before it was listed.
+#
+# ⚠️ TRAP — every entry here MUST keep its `targetRules` (or carry no `paths` at all). Measured on
+# gitleaks 8.30.1 (2026-10-01, scratch probe): a GLOBAL `[[allowlists]]` (no `targetRules`) that
+# has `paths` blinds gitleaks to EVERY finding under that path, even with `condition = "AND"` and
+# `regexes` — a planted GitHub PAT in the mirror tree went unreported. Rule-scoped entries honour
+# AND in both gitleaks and betterleaks (betterleaks 1.9.0 is not blinded by the global form). Do not
+# "simplify" an entry below into a global one; `tests/test_gitleaks_raw_mirror_allowlist.py` plants
+# tokens to catch exactly that, and to catch an entry widened within its own rule.
 
-# betterleaks-only rule `generic-password`; gitleaks refuses an unknown `targetRules`
-# (see the generic-credential-uri entry above), so this single file is path-only.
+# 1. Git SHAs: gitleaks' `sourcegraph-access-token` also matches a BARE 40-hex string (its legacy
+#    token form) in any file mentioning "sourcegraph", so every commit/tree/blob URL in a mirrored
+#    GitHub page trips it. A commit SHA is public by definition. The regex matches the SECRET, not
+#    the line: a line-target URL regex (the first version) also hid real `sgp_`-prefixed tokens on
+#    any line carrying a commit URL — the whole file when minified (cold review F1, 2026-10-01).
+#    ACCEPTED TRADE-OFF: a bare lowercase 40-hex legacy-format token in the raw tree is suppressed,
+#    because it is byte-indistinguishable from a commit SHA. Prefixed `sgp_` tokens stay reported.
 [[allowlists]]
-description = "mise docs mirror: illustrative my_password example in environments.md."
-paths = [
-  '''^docs/research/kb/raw/mise-dotfiles-2026-09-29/mise-docs/environments\.md$''',
+description = "raw mirrors: bare 40-hex git SHAs (sourcegraph-access-token legacy form)."
+condition = "AND"
+targetRules = ["sourcegraph-access-token"]
+regexes = ['''^[0-9a-f]{40}$''']
+paths = ['''(^|/)docs/research/kb/raw/''']
+
+# 2. Exact judged public values tripping `generic-api-key`: mise's PUBLIC minisign release-signing
+#    key (`MISE_MINISIGN_KEY` in the Docker cookbook) and the Algolia DocSearch SEARCH-ONLY key in
+#    mise's vitepress config (DocSearch keys ship to every browser by design). Exact match only.
+[[allowlists]]
+description = "raw mirrors: mise public minisign key and Algolia DocSearch search-only key."
+condition = "AND"
+targetRules = ["generic-api-key"]
+regexes = [
+  '''^RWTC3g8W3z4RZK3V3qv7fa1QY4JEWyBtqIHW\+85QlJpZc5yG\+uNYNBSZ$''',
+  '''^ad09b96a7d2a30eddc2771800da7a1cf$''',
 ]
+paths = ['''(^|/)docs/research/kb/raw/''']
+
+# 3. mise showreel test captures: `"key": "<sha256>"` lines are content hashes, not credentials.
+[[allowlists]]
+description = "raw mirrors: sha256 cache keys in mise showreel test captures."
+condition = "AND"
+targetRules = ["generic-api-key"]
+regexTarget = "line"
+regexes = ['''^\s*"key": "[0-9a-f]{64}",?\s*$''']
+paths = ['''(^|/)docs/research/kb/raw/.*/showreel/test/captures/[^/]+\.json$''']
+
+# 4. The illustrative `my_password` value in mise's environments docs trips betterleaks-only rule
+#    `generic-password`. gitleaks REFUSES an unknown `targetRules` name, so this entry is
+#    content-only: no `paths` (the TRAP above needs `paths`) and no `targetRules`, exact value. That
+#    makes it repo-wide on purpose; it suppresses only this literal placeholder.
+[[allowlists]]
+description = "mise docs: illustrative my_password placeholder (betterleaks generic-password)."
+regexes = ['''^my_password$''']
 
 # Omarchy mirror (2026-09-29b, Ray-approved, AskUserQuestion): plain prose ("credentials, <word>
 # rules, packages ...") in a mirrored community README trips generic-api-key. Read and judged.

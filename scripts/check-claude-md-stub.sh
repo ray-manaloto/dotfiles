@@ -3,7 +3,7 @@
 #
 # Invoked by hk.pkl:claude_md_import_stub on pre-commit.
 #
-# Every tracked CLAUDE.md (excluding .claude/**) MUST consist solely of:
+# Every tracked CLAUDE.md (excl. .claude/**, docs/research/kb/raw/**) MUST be only:
 #   - exactly one `@AGENTS.md` import line
 #   - optional blank lines
 #   - optional HTML comments (single- or multi-line)
@@ -12,8 +12,8 @@
 # agent-agnostic equivalent shared with Codex/Gemini. Keeping CLAUDE.md
 # as a thin `@AGENTS.md` import avoids drift between the two.
 #
-# .claude/** is exempt — that scope is Claude-specific (e.g.,
-# .claude/CLAUDE.md holds OMC orchestration that other agents don't load).
+# .claude/** is exempt (Claude-specific scope); docs/research/kb/raw/** is exempt
+# (byte-verbatim vendored mirrors, agent-artifact-conventions.md rule 8; #1472).
 set -euo pipefail
 
 rc=0
@@ -52,6 +52,6 @@ while IFS= read -r f; do
       }
     }
   ' "$f" || rc=1
-done < <(git ls-files | grep -E '(^|/)CLAUDE\.md$' | grep -v '^\.claude/' || true)
+done < <(git ls-files | grep -E '(^|/)CLAUDE\.md$' | grep -v -E '^(\.claude|docs/research/kb/raw)/' || true)
 
 exit "$rc"
