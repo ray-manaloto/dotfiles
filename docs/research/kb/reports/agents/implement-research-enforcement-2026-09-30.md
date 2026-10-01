@@ -447,3 +447,42 @@ Base: `b5c089d8`. Status: IN PROGRESS.
 7. Not done: R9 (to be ticketed), F4, F5, F9, F11 and F12.
 
 Status: COMPLETE (round 4 commit follows).
+
+### Round 4b — dot-segment guard + planner role enum (team-lead ruling on round-4 dissent 1 and 3)
+
+**Dissent 1 → guard.** `repoOk(r)` = `REPO_SHAPE.test(r)` AND no `/`-segment matching `^\.+$`;
+`args.repo` and every `args.relatedRepos` entry go through it at arg parse, and the throw names
+`owner/repo ([A-Za-z0-9_.-], no dot-only segment)`. A segment that merely contains dots
+(`owner/.github`) stays legal — that is the control arm.
+
+**Dissent 3 → planner enum.** `CODE_ROLES` is replaced by `PLAN_ROLES = ['query','must-hit','known-absent']`
+in the planner schema. Choice: BOTH arms, because the bun stub harness does not enforce a schema, so a
+schema-only fix is untestable behaviourally. The schema keeps `health` out of the planner's vocabulary
+(test captures the `options.schema` the plan agent receives and pins the enum), and `plannerRows`
+normalises a stray planner `health` tag to `query`, so the only `health` row in `codeSearch` is the
+workflow's search-health row.
+
+Tests: `rejects_a_dot_only_repo_segment[repo-dot-dot|related-dot-dot]`, `accepts_a_dotted_repo_name`
+(control), `planner_health_role_is_workflow_only`. SKILL.md (+ regenerated `.agents/` mirror) names both.
+
+| Mutation (in place, `git diff` rc=0 after each restore) | Result |
+|---|---|
+| pristine | GREEN, 56 passed |
+| M4b-1 drop the dot-only clause from `repoOk` | RED — both `rejects_a_dot_only_repo_segment` cases |
+| M4b-2a put `health` back in `PLAN_ROLES` | RED — `planner_health_role_is_workflow_only` |
+| M4b-2b drop the planner `health`→`query` normalisation | RED — `planner_health_role_is_workflow_only` |
+| CTRL widen the dot check to any dot | RED — `accepts_a_dotted_repo_name` |
+| pristine after | GREEN, 56 passed |
+
+Gates (round 4b tree, each rc file-captured):
+
+| Command | rc | Summary |
+|---|---|---|
+| `mise run gate -- run lint` | 0 | passed |
+| `mise run gate -- run pytest` | 0 | 4401 passed, 11 deselected |
+| `mise run gate -- run verify` | 0 | 166 passed, 0 failed, 4 skipped |
+| `mise run gate -- run lint-docs` | 0 | passed |
+| `mise run skills-mirror -- --check` | 0 | `.agents/skills` matches the generator |
+| `KB_REPO_PATH=… mise run rule-sync` | 0 | 22 rules hold in dotfiles, knowledge-base |
+
+Status: COMPLETE (round 4b commit follows).

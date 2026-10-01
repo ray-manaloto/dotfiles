@@ -78,14 +78,17 @@ const A = args || {}
 if (typeof A.question !== 'string' || !A.question.trim()) throw new Error('args.question is required')
 if (typeof A.reportPath !== 'string' || !A.reportPath.startsWith('/')) throw new Error('args.reportPath must be an absolute path')
 // Every repo name reaches shell commands (`--repo`, `gh api repos/…`, `-f q='repo:…'`, `--out`), so its
-// SHAPE is the guard: owner/repo characters only, never a quote, space, `;` or `$`.
+// SHAPE is the guard: owner/repo characters only, never a quote, space, `;` or `$`. A segment of only
+// dots (`../..`) is shell-safe but turns `gh api repos/<r>` into another API path, so it is refused too.
 const REPO_SHAPE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
+const repoOk = r => REPO_SHAPE.test(r) && !r.split('/').some(s => /^\.+$/.test(s))
+const REPO_RULE = 'owner/repo ([A-Za-z0-9_.-], no dot-only segment)'
 const REPO = typeof A.repo === 'string' ? A.repo : ''
-if (REPO && !REPO_SHAPE.test(REPO)) throw new Error(`args.repo must be owner/repo ([A-Za-z0-9_.-]), got ${JSON.stringify(REPO)}`)
+if (REPO && !repoOk(REPO)) throw new Error(`args.repo must be ${REPO_RULE}, got ${JSON.stringify(REPO)}`)
 // Other projects the question is ABOUT, beside REPO: searched in both directions
 // (REPO's tracker for each name, each repo's tracker for REPO's name).
 const RELATED = Array.isArray(A.relatedRepos) ? A.relatedRepos.filter(r => typeof r === 'string' && r) : []
-RELATED.forEach(r => { if (!REPO_SHAPE.test(r)) throw new Error(`args.relatedRepos entries must be owner/repo ([A-Za-z0-9_.-]), got ${JSON.stringify(r)}`) })
+RELATED.forEach(r => { if (!repoOk(r)) throw new Error(`args.relatedRepos entries must be ${REPO_RULE}, got ${JSON.stringify(r)}`) })
 // Search terms are project NAMES, not owner/repo slugs: `repo:jdx/mise omarchy` found 17 hits
 // where `repo:jdx/mise omacom/omarchy` found 3 (cold review 94f4e161 row 8).
 const nameOf = r => r.split('/').pop()
@@ -112,8 +115,10 @@ const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.re
   : docsAt > 0 ? A.reportPath.slice(0, docsAt) : ''
 if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
 const MIRROR_DIR = `${ROOT}/docs/research/kb/raw/${REPORT_SLUG}/links`
-// `health` is the workflow's search-health row: its own role, so it can never satisfy the must-hit.
-const CODE_ROLES = ['query', 'must-hit', 'known-absent', 'health']
+// The roles a PLANNER row may carry. `health` is workflow-only (the search-health row has its own role so
+// it can never satisfy the must-hit), so it is not offered here, and a planner row tagged `health` anyway
+// is read as a plain `query` (plannerRows) — the only `health` row in codeSearch is the workflow's.
+const PLAN_ROLES = ['query', 'must-hit', 'known-absent']
 // Two questions, two controls (14). SEARCH_HEALTH_CONTROL asks "does code search answer at all?" (a
 // repo known to be indexed; 9 hits measured 2026-09-30). README_CONTROL asks "is a README.md of THIS
 // repo indexed?": a 0 there is not proof the search is broken — an unindexed repo (a low-star fork), a
@@ -122,7 +127,7 @@ const CODE_ROLES = ['query', 'must-hit', 'known-absent', 'health']
 const SEARCH_HEALTH_CONTROL = 'repo:cli/cli filename:README.md'
 const README_CONTROL = r => `repo:${r} filename:README.md`
 // Single-quote a value for the shell: a caller URL may carry `'` (legal, common in Wikipedia URLs).
-// Every shell command below interpolates only a constant, a shape-checked value (REPO_SHAPE,
+// Every shell command below interpolates only a constant, a shape-checked value (repoOk,
 // REPORT_SLUG, an integer) or a shq()-quoted one.
 const shq = v => `'${v.replace(/'/g, "'\\''")}'`
 
@@ -173,7 +178,7 @@ const PLAN = {
         type: 'object',
         required: ['query', 'role', 'count', 'rc'],
         properties: {
-          query: { type: 'string' }, role: { type: 'string', enum: CODE_ROLES },
+          query: { type: 'string' }, role: { type: 'string', enum: PLAN_ROLES },
           count: { type: 'number' }, rc: { type: 'number' }, rateLimited: { type: 'boolean' },
           topUrls: { type: 'array', items: { type: 'string' } },
         },
@@ -386,7 +391,7 @@ const workflowControls = DEP_REPOS.flatMap((r, i) => {
   else if (c.count === 0 && healthOk) readmeNotes.push(`"${c.query}" returned 0 although ${r} exists — either code search does not index it (e.g. a low-star fork) or it has no README.md (e.g. README.rst); not a gap`)
   return [c]
 })
-const plannerRows = plan === null ? [] : (plan.codeSearch || []).map(c => ({ ...c, source: 'planner', rateLimited: c.rateLimited === true }))
+const plannerRows = plan === null ? [] : (plan.codeSearch || []).map(c => ({ ...c, role: c.role === 'health' ? 'query' : c.role, source: 'planner', rateLimited: c.rateLimited === true }))
 const codeSearch = plannerRows.concat(healthRow ? [healthRow] : [], workflowControls)
 // A planner control that missed is a guess that failed, recorded for the reader, never a gap.
 const codeSearchNotes = plannerRows.filter(c => c.role === 'must-hit' && !(answered(c) && c.count > 0))

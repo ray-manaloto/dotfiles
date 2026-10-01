@@ -1782,6 +1782,70 @@ def test_research_sweep_rejects_an_unsafe_shell_argument(
     assert "[A-Za-z0-9_.-]" in result.stderr
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [{"repo": "../.."}, {"relatedRepos": ["a/.."]}],
+    ids=["repo-dot-dot", "related-dot-dot"],
+)
+def test_research_sweep_rejects_a_dot_only_repo_segment(
+    tmp_path: Path, bad: dict[str, object]
+) -> None:
+    """A `..` segment passes the character class but rewrites `gh api repos/<r>`.
+
+    Round-4 dissent 1: `../..` turns `gh api -i repos/../..` into another API
+    path. FAIL arm: drop the dot-only clause from `repoOk` and this dry-runs clean.
+    """
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"), {**ARGS, **bad}, "  return null"
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-dots.js")
+    assert result.returncode != 0
+    assert "no dot-only segment" in result.stderr
+
+
+def test_research_sweep_accepts_a_dotted_repo_name(tmp_path: Path) -> None:
+    """Control arm: a name that merely CONTAINS dots (`owner/.github`) is legal.
+
+    FAIL arm: widen the dot-only check to any dot and this throws at arg parse.
+    """
+    payload = _mandatory_run(
+        tmp_path, "sweep-dotted.js", {"links": [], "relatedRepos": ["owner/.github"]}
+    )
+    deps = _of_kind(payload, "deps")
+    assert any("gh api -i repos/owner/.github " in d["prompt"] for d in deps)
+
+
+def test_research_sweep_planner_health_role_is_workflow_only(tmp_path: Path) -> None:
+    """`health` is not a planner role; a planner row tagged so is read as `query`.
+
+    Round-4 dissent 3. The planner schema offers query|must-hit|known-absent
+    only, and the stub harness does not enforce a schema, so a stray `health`
+    tag is also normalised: the only `health` row in codeSearch is the
+    workflow's. FAIL arms: put `health` back in the planner enum, or drop the
+    normalisation.
+    """
+    plan = (
+        "(events.push({ kind: 'plan-schema', roles: options.schema.properties"
+        ".codeSearch.items.properties.role.enum }), { runs: "
+        + _PLAN_RUNS_OK
+        + ", codeSearch: [...CODE_SEARCH_OK, { query: 'planner-health',"
+        " role: 'health', count: 0, rc: 0 }], sourceDive: false })"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-plan-roles.js", {"links": []}, {"plan": plan}
+    )
+    schema = cast("list[dict[str, object]]", _of_kind(payload, "plan-schema"))
+    run_result = cast("dict[str, object]", payload["result"])
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+
+    assert schema[0]["roles"] == ["query", "must-hit", "known-absent"]
+    stray = next(c for c in code if c["query"] == "planner-health")
+    assert stray["role"] == "query"
+    assert [(c["query"], c["source"]) for c in code if c["role"] == "health"] == [
+        (_HEALTH_CONTROL, "workflow")
+    ]
+
+
 def test_research_sweep_question_slot_must_not_be_a_repo_name(tmp_path: Path) -> None:
     """F6 in the other direction: a NAME in the question-terms slot is a gap (R8).
 

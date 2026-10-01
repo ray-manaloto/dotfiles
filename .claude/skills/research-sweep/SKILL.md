@@ -58,8 +58,10 @@ this repo use this skill and do not import `kb_setup.research`
   fresh known-absent control, and a must-hit >0 from the planner or a README
   control). The workflow adds its own controls for two separate questions:
   *does code search answer at all?* — one search-health control
-  (`repo:cli/cli filename:README.md`, role `health`, which never counts as the
-  must-hit), whose 0 or failure is a gap — and, per dependency repo, *does it
+  (`repo:cli/cli filename:README.md`, role `health` — workflow-only: the
+  planner's roles are `query`/`must-hit`/`known-absent`, and a planner row tagged
+  `health` is read as `query` — which never counts as the must-hit), whose 0 or
+  failure is a gap — and, per dependency repo, *does it
   exist under this name?* (`gh api -i repos/<r>`: a 404 is "not found", a
   403/429/other is "could not check", and a rename such as `jdx/rtx` →
   `jdx/mise` is a gap naming the canonical repo) and *is a README.md of it
@@ -67,7 +69,8 @@ this repo use this skill and do not import `kb_setup.research`
   its own name is only a note, and only when health passed — either the repo is
   not indexed, e.g. a low-star fork, or it has no README.md, e.g. README.rst).
   `repo`, `relatedRepos` and the report file name are shape-checked
-  (`[A-Za-z0-9_.-]`) because they reach shell commands. A planner's guessed
+  (`[A-Za-z0-9_.-]`; a repo segment of only dots, such as `../..`, is refused)
+  because they reach shell commands and API paths. A planner's guessed
   must-hit of 0 is a note; a 403 is recorded as rate-limited, never as 0. A
   dependency agent must run the cross-direction NAME in its slot and question
   terms (never a repo name) in the other. A mandatory stage that did not run or
