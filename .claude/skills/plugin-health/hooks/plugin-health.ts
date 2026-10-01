@@ -43,7 +43,7 @@ async function readPluginHealth($: {
         timeoutMs: 30_000,
       },
     );
-    // The rc is authoritative (unlike claude-doctor), so we read it.
+    // The rc is authoritative (unlike install-doctor), so we read it.
     // But the JSON carries the detail either way.
     return JSON.parse(stdout) as PluginHealthReport;
   } catch {

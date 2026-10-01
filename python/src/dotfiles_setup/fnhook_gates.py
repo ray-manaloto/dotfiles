@@ -338,7 +338,7 @@ def assert_modules_are_typed(dirs: list[Path]) -> GateResult:
 def assert_escape_hatch_permitted(dirs: list[Path]) -> GateResult:
     """Require every deny-capable module to permit the escape-hatch tools.
 
-    Measured 2026-09-13: the ``claude-doctor`` hook denied ``AskUserQuestion``
+    Measured 2026-09-13: the ``install-doctor`` hook denied ``AskUserQuestion``
     and ``SendUserMessage`` while reporting a broken install, so three sessions
     in a row could see the finding and had no way to ask about it or report it.
     The fix had to be dictated as plain text and applied by hand. Its own

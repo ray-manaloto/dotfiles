@@ -27,7 +27,6 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.bounded_wait import DEFAULT_INTERVAL_S, WaitRequest
 from dotfiles_setup.bounded_wait import main as bounded_wait_main
 from dotfiles_setup.classifier_tables import classifier_axes_main
-from dotfiles_setup.claude_doctor import claude_doctor_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_agent_validate import (
     validate_main as codex_agent_validate_main,
@@ -103,6 +102,7 @@ from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.image_lock import image_lock_main
+from dotfiles_setup.install_doctor import install_doctor_main
 from dotfiles_setup.instructions_report import instructions_report_main
 from dotfiles_setup.lane_result import lane_receipt_main
 from dotfiles_setup.lint import (
@@ -1666,7 +1666,7 @@ def _add_hook_subcommands(
     # schema-vendor has nothing to do with Claude Code hooks.
     _add_schema_vendor_subcommands(subparsers)
     _add_fnhook_subcommands(subparsers)
-    _add_claude_doctor_subcommand(subparsers)
+    _add_install_doctor_subcommand(subparsers)
     _add_plugin_health_subcommands(subparsers)
     _add_dependency_currency_subcommand(subparsers)
     _add_pin_parity_subcommand(subparsers)
@@ -1685,10 +1685,10 @@ def _add_fnhook_subcommands(subparsers: _SubParsers) -> None:
     )
 
 
-def _add_claude_doctor_subcommand(subparsers: _SubParsers) -> None:
+def _add_install_doctor_subcommand(subparsers: _SubParsers) -> None:
     """Register the machine-readable ``claude doctor`` verdict command."""
     parser = subparsers.add_parser(
-        "claude-doctor",
+        "install-doctor",
         help="Emit a machine-readable verdict for `claude doctor` as JSON",
     )
     parser.add_argument(
@@ -2895,8 +2895,8 @@ def _build_command_handlers(
         "schema-vendor": lambda: handle_schema_vendor(args),
         "fnhook-gates": lambda: sys.exit(fnhook_gates_main()),
         "fnhook-types-refresh": lambda: sys.exit(fnhook_types_refresh_main()),
-        "claude-doctor": lambda: sys.exit(
-            claude_doctor_main(
+        "install-doctor": lambda: sys.exit(
+            install_doctor_main(
                 force_refresh=not args.no_refresh, project_root=project_root
             )
         ),

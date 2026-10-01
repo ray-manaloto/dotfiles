@@ -85,7 +85,7 @@ sites = [
 description = """
 Claude Code has NO mise pin — `6d1ae23` removed the `[tools]` entry so the \
 native installer owns PATH (grilling decision Q1), and `currency.toml:29-39` \
-sends its currency to doctor's `claude-doctor` check instead. That left \
+sends its currency to doctor's `install-doctor` check instead. That left \
 `schemas/sources.toml` as the sole pin with NOTHING checking the sites that \
 must track it, which is exactly the manifest-outside blind spot this file \
 exists to close: `mise outdated` cannot see a tool it does not manage at all. \
@@ -99,8 +99,8 @@ declarations lag the release: measured 2026-09-15, tags v2.1.272 and v2.1.273 \
 serve a byte-identical file whose header reads "Written by Claude Code \
 2.1.271". Those headers are a record of upstream's content, not our pin, and \
 registering them would make this check demand a value Anthropic does not \
-publish. Same for `claude_doctor.py`'s docstrings and the `2.1.270` fixtures in \
-`tests/test_claude_doctor.py`, which are about PARSING a version string, not \
+publish. Same for `install_doctor.py`'s docstrings and the `2.1.270` fixtures in \
+`tests/test_install_doctor.py`, which are about PARSING a version string, not \
 about being current."""
 sites = [
   # TWO patterns against the SAME file, deliberately. The `version` field and

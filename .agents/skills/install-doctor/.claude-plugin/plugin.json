@@ -1,0 +1,8 @@
+{
+  "name": "install-doctor",
+  "version": "1.0.0",
+  "description": "Reports the install-doctor verdict at session start and refuses tool calls while the install is provably broken",
+  "author": {
+    "name": "Raymond Manaloto"
+  }
+}

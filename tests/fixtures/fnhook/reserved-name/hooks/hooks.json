@@ -1,0 +1,4 @@
+{
+  "description": "Valid typed function-hook module",
+  "modules": ["./register.ts"]
+}

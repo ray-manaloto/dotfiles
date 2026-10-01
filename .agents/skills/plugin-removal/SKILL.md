@@ -62,7 +62,7 @@ they differ. This wrapper owns the judgment and repository workflow around it.
    `plugin-health` must exit 0. `doctor --strict` exits 1 on ANY drift, so its
    rc is not the verdict: require **zero** `DRIFT doctor[removed-plugins]`
    lines, record the rc, and name every other DRIFT line as pre-existing or
-   new. Without `DOTFILES_AMBIENT_PATH` the path-drift and claude-doctor checks
+   new. Without `DOTFILES_AMBIENT_PATH` the path-drift and install-doctor checks
    are BLIND under `mise run`; bare `mise run doctor` always exits 0 and proves
    nothing.
 

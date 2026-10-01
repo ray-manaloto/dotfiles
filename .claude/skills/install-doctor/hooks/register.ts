@@ -23,7 +23,7 @@ import type { Register } from "claude-code";
  * `claude doctor` plus a release-list lookup on every attempt.
  */
 
-/** Mirrors `DoctorVerdict.to_json()` in `python/src/dotfiles_setup/claude_doctor.py`. */
+/** Mirrors `DoctorVerdict.to_json()` in `python/src/dotfiles_setup/install_doctor.py`. */
 type DoctorReport = {
   verdict: "ok" | "invalid" | "unknown" | "drift";
   enforcement_eligible: boolean;
@@ -123,7 +123,7 @@ async function readVerdict($: HookServices): Promise<DoctorReport | null> {
     const ambientPath = await $.env.get("PATH");
     const projectDir = await $.env.get("CLAUDE_PROJECT_DIR");
     const { stdout } = await $.process.run(
-      ["uv", "run", "--project", "python", "dotfiles-setup", "claude-doctor"],
+      ["uv", "run", "--project", "python", "dotfiles-setup", "install-doctor"],
       {
         cwd: projectDir,
         env: ambientPath ? { DOTFILES_AMBIENT_PATH: ambientPath } : {},
@@ -352,7 +352,7 @@ export const register: Register = (on) => {
       return {
         ...result,
         additionalContext: [
-          "claude-doctor: the check could not run. This is not a clean bill of health - it is an unanswered question.",
+          "install-doctor: the check could not run. This is not a clean bill of health - it is an unanswered question.",
         ],
       };
     }
@@ -366,16 +366,16 @@ export const register: Register = (on) => {
       return {
         ...result,
         additionalContext: [
-          ["claude-doctor: your install is current, with a note.", ...cachedReport.findings].join(" "),
+          ["install-doctor: your install is current, with a note.", ...cachedReport.findings].join(" "),
         ],
       };
     }
     const lead =
       cachedReport.verdict === "invalid"
-        ? "claude-doctor: your Claude Code install failed a required check — repair it before continuing."
+        ? "install-doctor: your Claude Code install failed a required check — repair it before continuing."
         : cachedReport.verdict === "drift"
-          ? "claude-doctor: the repository's Claude Code pin is stale."
-          : "claude-doctor: could not determine whether your install is current (this is NOT 'it is fine').";
+          ? "install-doctor: the repository's Claude Code pin is stale."
+          : "install-doctor: could not determine whether your install is current (this is NOT 'it is fine').";
     return {
       ...result,
       additionalContext: [[lead, ...cachedReport.findings].join(" ")],
@@ -420,7 +420,7 @@ export const register: Register = (on) => {
     // class the typecheck exists to catch.
     return {
       deny: [
-        "claude-doctor: refusing tool calls until the Claude Code install is repaired.",
+        "install-doctor: refusing tool calls until the Claude Code install is repaired.",
         ...(cachedReport?.findings ?? []),
       ].join(" "),
       additionalContext: result.additionalContext,

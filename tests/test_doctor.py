@@ -1182,7 +1182,7 @@ def test_every_check_function_is_actually_registered() -> None:
     # (2026-08-31): the graphify skill surface's reviewed, DELIBERATE shape —
     # the deliberate-stub marker, and the forbidden vendor-install AGENTS.md
     # marker — the commit-time twin of hk's `graphify_skill_surface` step.
-    # + `claude-doctor` (2026-09-13): is the `claude` THIS shell runs the newest
+    # + `install-doctor` (2026-09-13): is the `claude` THIS shell runs the newest
     # published build, and does `claude doctor` itself report clean. Host state,
     # like `path-drift`, and blind for the same reason unless the SessionStart
     # hook captured PATH first. It exists because the repo's own
@@ -1236,7 +1236,7 @@ def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None
     assert "scope_servers" in mcp
     assert isinstance(mcp.get("mutating_tools"), dict)
     # KEY PRESENCE again, for the same reason: a missing [claude] section makes
-    # `check_claude_doctor` fall back to its module default silently, so the
+    # `check_install_doctor` fall back to its module default silently, so the
     # reviewed decision about which install method is expected would live
     # nowhere a reviewer looks.
     claude = setup.baseline.get("claude")

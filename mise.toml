@@ -34,7 +34,7 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 # contradicted grilling decision Q1 ("Native installer owns claude. Not mise."),
 # recorded ~7 hours after the pin landed. `6d1ae23` removed it for good; the
 # native installer at ~/.local/bin/claude owns PATH and self-updates, its
-# currency lives in doctor's `claude-doctor` check (currency.toml:29-39), and
+# currency lives in doctor's `install-doctor` check (currency.toml:29-39), and
 # CI installs it from `schemas/sources.toml` (ci.yml, the lint job).
 "npm:typescript" = "7.0.2"
 # Critical host-side secrets transport for devcontainer initialization. Keep it
