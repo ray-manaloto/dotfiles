@@ -171,3 +171,22 @@ def test_clang_package_rule_leaves_the_image_group_after_it() -> None:
     assert rule["automerge"] is True
     assert rule["automergeType"] == "pr"
     assert rule["platformAutomerge"] is True
+
+
+def test_python_package_rule_leaves_the_image_group() -> None:
+    # S29-00 (#1449): a python bump lagging python-build-standalone blocked all
+    # ten other image-build inputs. A misspelled depName (e.g. `core:python`)
+    # matches NOTHING and silently returns python to the group, so pin the
+    # exact matcher the mise manager extracts, and its position.
+    rules = json.loads((REPO_ROOT / "renovate.json").read_text())["packageRules"]
+    image_index = next(
+        i for i, r in enumerate(rules) if r.get("groupName") == "image-build inputs"
+    )
+    python = [i for i, r in enumerate(rules) if r.get("groupName") == "image python"]
+    assert len(python) == 1, python
+    rule = rules[python[0]]
+    assert python[0] > image_index
+    assert rule["matchManagers"] == ["mise"]
+    assert rule["matchDepNames"] == ["python"]
+    assert rule["matchFileNames"] == [".config/mise/conf.d/shared.toml"]
+    assert "minimumReleaseAge" not in rule

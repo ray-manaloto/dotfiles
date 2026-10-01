@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import json
+import tomllib
 
 import pytest
 from dotfiles_setup.image import (
@@ -788,6 +789,19 @@ def test_smoke_script_tool_set_guard_dormant_without_tools() -> None:
     assert "tool-set guard dormant" in script
 
 
+def _shared_pin(tool: str) -> str:
+    """The exact pin in the shared fragment, read independently of the code under test.
+
+    Literal versions here broke every Renovate bump of these tools (#1449: hk
+    2.3.0 -> 2.4.0 and python 3.14.7 -> 3.14.8 failed pytest on the bot PR).
+    """
+    repo = Path(__file__).parent.parent
+    shared = repo / ".config" / "mise" / "conf.d" / "shared.toml"
+    pin = tomllib.loads(shared.read_text(encoding="utf-8"))["tools"][tool]
+    assert isinstance(pin, str), (tool, pin)
+    return pin
+
+
 def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
     """build_smoke_docker_cmd resolves and injects the repo's real [tools]."""
     cmd = build_smoke_docker_cmd(
@@ -799,7 +813,7 @@ def test_smoke_docker_cmd_injects_real_declared_tools() -> None:
     # A representative real tool from .devcontainer/mise-system.toml [tools]...
     assert "node\tlatest" in script
     # ...and from the merged shared conf.d fragment (#160 T5), exact-pinned.
-    assert "python\t3.14.7" in script
+    assert f"python\t{_shared_pin('python')}" in script
 
 
 def test_resolve_declared_tools_merges_system_and_shared() -> None:
@@ -810,8 +824,8 @@ def test_resolve_declared_tools_merges_system_and_shared() -> None:
     declared = resolve_declared_tools(arch="amd64")
 
     # From the shared fragment, exact-pinned.
-    assert declared["python"] == "3.14.7"
-    assert declared["hk"] == "2.3.0"
+    assert declared["python"] == _shared_pin("python")
+    assert declared["hk"] == _shared_pin("hk")
     # From mise-system.toml [tools].
     assert declared["node"] == "latest"
     # A representative conda build tool still declared via mise (#222 PR-C moved
