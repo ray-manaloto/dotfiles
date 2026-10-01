@@ -14,6 +14,12 @@ are actually present and not explicitly disabled, resolved through
     It does NOT report an id when it has no project-scoped row but exists in
     other scopes (user, other projects). That state is uninterpretable and
     silence is correct.
+
+    A declared ``<name>@builtin`` id is listed under ``builtin_unobservable``
+    and is never ``declared_not_installed``: built-in plugins ship inside the
+    Claude Code binary and ``claude plugin list --json`` emits no row for any
+    of them (measured on 2.1.287 — 0 ``@builtin`` rows while ``diff`` and
+    ``agents-md`` were active), so their absence from the list is not evidence.
 """
 
 from __future__ import annotations
@@ -80,7 +86,14 @@ class PluginHealthReport:
     declared_not_installed: list[str] = field(default_factory=list)
     declared_disabled_here: list[str] = field(default_factory=list)
     installed_not_declared: list[str] = field(default_factory=list)
+    builtin_unobservable: list[str] = field(default_factory=list)
     cli_failed_diagnostic: str | None = None
+
+
+#: Marketplace suffix of plugins bundled in the Claude Code binary. The CLI's
+#: ``plugin list --json`` never emits a row for them, so the check cannot see
+#: their install state at all.
+BUILTIN_SUFFIX = "@builtin"
 
 
 #: Cap on any diagnostic string copied into the report. Child stderr and msgspec
@@ -238,8 +251,16 @@ def evaluate(
             rows_by_id[row.id] = []
         rows_by_id[row.id].append(row)
 
+    # A built-in has no CLI row by construction, so it is reported as
+    # unobservable rather than as missing.
+    builtin_unobservable = sorted(
+        plugin_id for plugin_id in declared_set if plugin_id.endswith(BUILTIN_SUFFIX)
+    )
+
     # Three observable findings:
-    declared_not_installed = sorted(declared_set - installed)
+    declared_not_installed = sorted(
+        declared_set - installed - set(builtin_unobservable)
+    )
 
     declared_disabled_here: list[str] = []
     for plugin_id in declared:
@@ -271,6 +292,7 @@ def evaluate(
         declared_not_installed=declared_not_installed,
         declared_disabled_here=declared_disabled_here,
         installed_not_declared=installed_not_declared,
+        builtin_unobservable=builtin_unobservable,
     )
 
 

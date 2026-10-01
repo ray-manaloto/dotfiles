@@ -49,6 +49,24 @@ class TestEvaluate:
         assert report.declared_disabled_here == []
         assert report.installed_not_declared == []
 
+    def test_declared_builtin_is_unobservable_not_missing(self) -> None:
+        """A declared @builtin has no CLI row by construction → not DRIFT."""
+        declared = ["cc-plugin-you-should-know@builtin"]
+        report = evaluate(declared, [])
+        assert report.code == PluginHealthCode.OK
+        assert report.declared_not_installed == []
+        assert report.builtin_unobservable == ["cc-plugin-you-should-know@builtin"]
+
+    def test_builtin_exemption_does_not_hide_a_missing_marketplace_plugin(
+        self,
+    ) -> None:
+        """Control arm: only the @builtin suffix is exempt; a lookalike is not."""
+        declared = ["builtin@market", "x@builtin"]
+        report = evaluate(declared, [])
+        assert report.code == PluginHealthCode.DRIFT
+        assert report.declared_not_installed == ["builtin@market"]
+        assert report.builtin_unobservable == ["x@builtin"]
+
     def test_declared_disabled_here_drift(self, tmp_path: Path) -> None:
         """Declared plugin has project-root row with enabled=false → DRIFT."""
         project_root = tmp_path / "project"
