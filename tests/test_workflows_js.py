@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -143,17 +146,26 @@ ARGS = {
 
 #: JS helpers shared by every research-sweep stub: a code search that satisfies
 #: all three mandatory roles, and a dependency agent that reports one run per
-#: `mise run research-fanout` command its prompt names.
+#: `mise run research-fanout` command its prompt names — the cross-direction NAME
+#: where the prompt gives one, `q<k>` for question terms — the repo as existing,
+#: and the search-health control only when its prompt asks for it.
 _SWEEP_HELPERS = """
 const CODE_SEARCH_OK = [
   { query: 'filename:mise.toml hk', role: 'query', count: 3, rc: 0 },
   { query: 'repo:example/repo filename:README.md', role: 'must-hit', count: 1, rc: 0 },
   { query: 'fresh-nonsense-token', role: 'known-absent', count: 0, rc: 0 },
 ]
-const DEPS_OK = (prompt) => ({ runs: prompt.split('mise run research-fanout').slice(1)
-  .map((_, k) => ({ query: `q${k}`, manifest: `.agent/deps/${k}/manifest.json`,
-    rc: 0 })),
-  control: { count: 7, rc: 0, rateLimited: false } })
+const DEPS_OK = (prompt) => ({
+  runs: prompt.split('mise run research-fanout -- "').slice(1).map((part, k) => {
+    const query = part.split('"')[0]
+    return { query: query.startsWith('<') ? `q${k}` : query,
+      manifest: `.agent/deps/${k}/manifest.json`, rc: 0 }
+  }),
+  control: { count: 7, rc: 0, rateLimited: false },
+  exists: { rc: 0, fullName: 'stub/repo' },
+  ...(prompt.includes("q='repo:cli/cli filename:README.md'")
+    ? { health: { count: 9, rc: 0, rateLimited: false } } : {}),
+})
 """
 
 _STUBS = (
@@ -926,7 +938,15 @@ def test_research_sweep_caller_links_survive_a_null_plan(tmp_path: Path) -> None
     # the failed stage is a named gap in synthesis and in the status (review N2)
     run_result = cast("dict[str, object]", payload["result"])
     assert run_result["status"] == "links-only"
-    assert run_result["stageGaps"] == ["planner returned null — no fan-out ran"]
+    assert run_result["stageGaps"] == [
+        (
+            "planner returned null — no planner fan-out ran"
+            " (dependency-repo manifests, if any, were still read)"
+        )
+    ]
+    assert "code search: planner agent reported nothing (null)" in cast(
+        "list[str]", run_result["mandatoryGaps"]
+    )
 
 
 def test_research_sweep_some_null_refuters_is_partial_verify(tmp_path: Path) -> None:
@@ -1001,7 +1021,16 @@ _SWEEP_MANDATORY_BODY = (
         "  if (label === 'synthesize') {\n"
         "    events.push({ kind: 'synth-prompt', prompt: _prompt })\n",
     )
+    .replace(
+        "  return 'ok'\n",
+        "  if (label === 'reconcile')"
+        " events.push({ kind: 'reconcile', prompt: _prompt })\n"
+        "  return 'ok'\n",
+    )
 )
+
+
+_PLAN_RUNS_OK = "[{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 }]"
 
 
 def _mandatory_run(
@@ -1014,7 +1043,10 @@ def _mandatory_run(
     stub = {
         "deps": "DEPS_OK(_prompt)",
         "mirror": "{ rc: 0, bytes: 42 }",
+        "mirror_index": "{ written: true }",
         "code_search": "CODE_SEARCH_OK",
+        "plan_runs": _PLAN_RUNS_OK,
+        "plan": "",
         **(stubs or {}),
     }
     deps, mirror, code_search = stub["deps"], stub["mirror"], stub["code_search"]
@@ -1023,8 +1055,20 @@ def _mandatory_run(
         .replace("ADJUDICATE", "null")
         .replace("return DEPS\n", f"return {deps}\n")
         .replace("return MIRROR\n", f"return {mirror}\n")
+        .replace(
+            "if (label === 'mirror-index') return { written: true }",
+            f"if (label === 'mirror-index') return {stub['mirror_index']}",
+        )
         .replace("codeSearch: CODE_SEARCH_OK", f"codeSearch: {code_search}")
+        .replace(
+            f"return {{ runs: {_PLAN_RUNS_OK},", f"return {{ runs: {stub['plan_runs']},"
+        )
     )
+    if stub["plan"]:
+        body = body.replace(
+            "if (label === 'plan+fetch') {",
+            f"if (label === 'plan+fetch') {{ return {stub['plan']}",
+        )
     return _sweep_custom(tmp_path, name, body, extra_args)
 
 
@@ -1100,6 +1144,12 @@ def test_research_sweep_dependency_stage_runs_per_repo_both_directions(
     assert '"tool" --repo example/repo' in main_prompt
     assert other_prompt.count(sources) == 1
     assert '"repo" --repo other/tool' in other_prompt
+    # one --out per run: every related repo's query is the same name, so a shared
+    # default slug dir would let concurrent runs unlink each other's files (M8)
+    out = "--out .agent/kb/raw/research-fanout/research-sweep/deps"
+    assert f"{out}/example--repo/1" in main_prompt
+    assert f"{out}/example--repo/2" in main_prompt
+    assert f"{out}/other--tool/1" in other_prompt
     run_result = cast("dict[str, object]", payload["result"])
     assert len(cast("list[object]", run_result["dependencyRuns"])) == 3
     assert run_result["status"] == "complete"
@@ -1145,12 +1195,19 @@ def test_research_sweep_missing_dependency_stage_is_a_mandatory_gap(
     )
     run_result = cast("dict[str, object]", payload["result"])
 
+    gap = "dependency-repo stage for example/repo: agent reported nothing (null)"
     assert run_result["status"] == "mandatory-gap"
-    assert run_result["mandatoryGaps"] == [
-        "dependency-repo stage for example/repo: agent returned null — nothing ran"
-    ]
+    assert run_result["mandatoryGaps"] == [gap]
     synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
     assert "MANDATORY GAPS:" in synth
+    # the only lines that make the REPORT TEXT say INCOMPLETE (cold review M5, M6)
+    assert "the Answer must say the sweep is INCOMPLETE" in synth
+    reconcile = _of_kind(payload, "reconcile")[0]["prompt"]
+    assert (
+        "MANDATORY GAPS (keep each in Gaps; if any, the Answer must say the sweep"
+        in reconcile
+    )
+    assert gap in reconcile
 
 
 _README_ZERO = (
@@ -1197,23 +1254,109 @@ def test_research_sweep_planner_must_hit_miss_is_a_note_not_a_gap(
     assert run_result["status"] == "complete"
 
 
-def test_research_sweep_readme_control_zero_is_a_gap(tmp_path: Path) -> None:
-    """The workflow-built README control at 0 IS a gap, even beside a planner hit.
+_HEALTH_CONTROL = "repo:cli/cli filename:README.md"
 
-    FAIL arm: let any must-hit >0 excuse the README control and this reads `complete`.
+
+def test_research_sweep_readme_zero_for_an_existing_repo_is_a_note(
+    tmp_path: Path,
+) -> None:
+    """A README control of 0 for a repo that EXISTS is a note, not an auth gap (F3).
+
+    Measured 2026-09-30: `repo:virajp/mise filename:README.md` returns 0 although the
+    fork's README.md exists — code search does not index it. FAIL arm: treat the
+    README 0 as a gap again and this run reads `mandatory-gap`.
     """
     payload = _mandatory_run(
-        tmp_path, "sweep-readme-zero.js", {"links": []}, {"deps": _README_ZERO}
+        tmp_path, "sweep-readme-fork.js", {"links": []}, {"deps": _README_ZERO}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    deps_prompt = _of_kind(payload, "deps")[0]["prompt"]
+
+    assert "gh api repos/example/repo --jq .full_name" in deps_prompt
+    assert run_result["mandatoryGaps"] == []
+    assert run_result["codeSearchNotes"] == [
+        (
+            f'"{_README_CONTROL}" returned 0 although example/repo exists — GitHub code'
+            " search does not index it (e.g. a low-star fork); not a gap"
+        )
+    ]
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_search_health_is_asked_once_and_its_zero_is_a_gap(
+    tmp_path: Path,
+) -> None:
+    """The health control runs on the FIRST dependency agent only; a 0 there is a gap.
+
+    FAIL arm: drop the health check and a search that answers nothing reads
+    `complete` whenever a planner must-hit happened to hit.
+    """
+    zero = "{ ...DEPS_OK(_prompt), health: { count: 0, rc: 0, rateLimited: false } }"
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-health-zero.js",
+        {"links": [], "relatedRepos": ["other/tool"]},
+        {"deps": zero},
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    deps = {e["label"]: e["prompt"] for e in _of_kind(payload, "deps")}
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+
+    assert f"-f q='{_HEALTH_CONTROL}'" in deps["deps:example/repo"]
+    assert _HEALTH_CONTROL not in deps["deps:other/tool"]
+    assert [c["query"] for c in code if c["source"] == "workflow"] == [
+        _HEALTH_CONTROL,
+        _README_CONTROL,
+        "repo:other/tool filename:README.md",
+    ]
+    assert run_result["mandatoryGaps"] == [
+        (
+            f'code search: search-health control "{_HEALTH_CONTROL}" returned count=0'
+            " rc=0 — gh auth, rate-limit or search is broken"
+        )
+    ]
+    assert run_result["status"] == "mandatory-gap"
+
+
+def test_research_sweep_blames_auth_for_a_readme_failure_only_when_health_failed(
+    tmp_path: Path,
+) -> None:
+    """A rate-limited README control blames gh/auth only beside a failed health one."""
+    both = (
+        "{ ...DEPS_OK(_prompt), control: { count: -1, rc: 1, rateLimited: true },"
+        " health: { count: -1, rc: 1, rateLimited: true } }"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-health-403.js", {"links": []}, {"deps": both}
+    )
+    gaps = cast(
+        "list[str]", cast("dict[str, object]", payload["result"])["mandatoryGaps"]
+    )
+    assert (
+        f'code search: README control "{_README_CONTROL}" was RATE-LIMITED (HTTP 403),'
+        " not 0 — gh auth, rate-limit or search is broken"
+    ) in gaps
+
+
+def test_research_sweep_missing_dependency_repo_is_one_gap(tmp_path: Path) -> None:
+    """A repo the repos API cannot find is a gap — reported ONCE, not as auth failing.
+
+    FAIL arm: drop the exists check and a typo'd repo's README 0 reads as a note.
+    """
+    missing = (
+        "{ ...DEPS_OK(_prompt), exists: { rc: 1, fullName: '' },"
+        " control: { count: 0, rc: 0, rateLimited: false } }"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-repo-404.js", {"links": []}, {"deps": missing}
     )
     run_result = cast("dict[str, object]", payload["result"])
 
-    assert run_result["status"] == "mandatory-gap"
     assert run_result["mandatoryGaps"] == [
-        (
-            f'code search: workflow must-hit control "{_README_CONTROL}" returned'
-            " count=0 rc=0 — a gh auth, rate-limit or search problem"
-        )
+        "dependency repo example/repo not found via the repos API (rc=1)"
     ]
+    assert run_result["codeSearchNotes"] == []
+    assert run_result["status"] == "mandatory-gap"
 
 
 def test_research_sweep_rate_limit_is_never_a_zero(tmp_path: Path) -> None:
@@ -1228,31 +1371,206 @@ def test_research_sweep_rate_limit_is_never_a_zero(tmp_path: Path) -> None:
     payload = _mandatory_run(tmp_path, "sweep-403.js", {"links": []}, {"deps": limited})
     run_result = cast("dict[str, object]", payload["result"])
     code = cast("list[dict[str, object]]", run_result["codeSearch"])
-    row = next(c for c in code if c["source"] == "workflow")
+    row = next(
+        c for c in code if c["query"] == _README_CONTROL and c["source"] == "workflow"
+    )
     synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
 
     assert row["rateLimited"] is True
     assert row["count"] != 0
+    # health answered, so the README failure is not blamed on gh/auth
     assert run_result["mandatoryGaps"] == [
         (
-            f'code search: workflow must-hit control "{_README_CONTROL}" was'
-            " RATE-LIMITED (HTTP 403), not 0 — a gh auth, rate-limit or search problem"
+            f'code search: README control "{_README_CONTROL}" was RATE-LIMITED'
+            " (HTTP 403), not 0"
         )
     ]
     assert "write RATE-LIMITED, never 0" in synth
+
+
+@pytest.mark.parametrize("links", [[], ["https://l.test"]], ids=["no-link", "one-link"])
+def test_research_sweep_planner_fanout_without_manifests_is_not_complete(
+    tmp_path: Path, links: list[str]
+) -> None:
+    """Dependency manifests must not mask a planner fan-out that wrote none (F1, S2).
+
+    Cold review 836983e3 S2: a planner whose every run failed read `complete`,
+    because the dependency manifests satisfied the manifest count. FAIL arm: count
+    the planner and dependency manifests together again and this reads `complete`.
+    """
+    failed = "[{ query: 'q', sources: ['exa'], manifest: '', rc: 1 }]"
+    payload = _mandatory_run(
+        tmp_path, "sweep-s2.js", {"links": links}, {"plan_runs": failed}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+    assert run_result["status"] == "links-only"
+    assert run_result["stageGaps"] == [
+        (
+            "planner fan-out produced no manifests (q rc=1) —"
+            " exa/context7/firecrawl/github evidence from the planner is missing"
+        )
+    ]
+    assert run_result["fanoutGaps"] == ['planner fan-out "q" rc=1, no manifest']
+    assert "FANOUT GAPS" in synth
+    assert (
+        "say the evidence base is the caller links plus the mandatory-stage"
+        " (dependency-repo) manifests" in synth
+    )
+
+
+def test_research_sweep_null_planner_without_links_reads_dependency_manifests(
+    tmp_path: Path,
+) -> None:
+    """S1: a null planner with no links still reads the dependency manifests (F2)."""
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-s1.js",
+        {"links": []},
+        {"plan": "null"},
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    assert run_result["status"] == "links-only"
+    assert run_result["stageGaps"] == [
+        (
+            "planner returned null — no planner fan-out ran"
+            " (dependency-repo manifests, if any, were still read)"
+        )
+    ]
+
+
+def test_research_sweep_partial_planner_failure_is_a_gap_not_a_status(
+    tmp_path: Path,
+) -> None:
+    """One failed planner run beside a good one is a FANOUT GAP; status is unchanged."""
+    partial = (
+        "[{ query: 'q', sources: ['exa'], manifest: '/tmp/m.json', rc: 0 },"
+        " { query: 'q2', sources: ['context7'], manifest: '/tmp/m2.json', rc: 2 }]"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-partial-plan.js", {"links": []}, {"plan_runs": partial}
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+    assert run_result["fanoutGaps"] == ['planner fan-out "q2" rc=2']
+    assert 'planner fan-out \\"q2\\" rc=2' in synth
+    assert run_result["stageGaps"] == []
+    assert run_result["status"] == "complete"
+
+
+def test_research_sweep_cross_direction_query_must_be_the_one_that_ran(
+    tmp_path: Path,
+) -> None:
+    """The dependency check pins WHICH query ran, not just how many (F6, S3).
+
+    FAIL arm: keep only the run-count check and an agent that swapped the
+    cross-direction NAME for question terms reads `complete`.
+    """
+    swapped = (
+        "{ ...DEPS_OK(_prompt), runs: DEPS_OK(_prompt).runs"
+        ".map((x, k) => ({ ...x, query: `terms${k}` })) }"
+    )
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-s3.js",
+        {"links": [], "relatedRepos": ["other/tool"]},
+        {"deps": swapped},
+    )
+    run_result = cast("dict[str, object]", payload["result"])
+    assert run_result["mandatoryGaps"] == [
+        (
+            "dependency-repo stage for example/repo:"
+            ' cross-direction query "tool" not run (got "terms1")'
+        ),
+        (
+            'dependency-repo stage for other/tool: cross-direction query "repo" not run'
+            ' (got "terms0")'
+        ),
+    ]
+    assert run_result["status"] == "mandatory-gap"
+
+    short = "{ ...DEPS_OK(_prompt), runs: DEPS_OK(_prompt).runs.slice(0, 1) }"
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-s3-short.js",
+        {"links": [], "relatedRepos": ["other/tool"]},
+        {"deps": short},
+    )
+    gaps = cast(
+        "list[str]", cast("dict[str, object]", payload["result"])["mandatoryGaps"]
+    )
+    assert gaps == [
+        "dependency-repo stage for example/repo: 1 of 2 run(s) reported",
+        (
+            "dependency-repo stage for example/repo:"
+            ' cross-direction query "tool" not run (got "missing")'
+        ),
+    ]
+
+
+def test_research_sweep_link_is_one_shell_word(tmp_path: Path) -> None:
+    """A caller URL carrying `'` stays ONE quoted word in the mirror command (F8, S11).
+
+    FAIL arm: interpolate the URL inside bare single quotes again and the `'`
+    ends the quote, so `;touch` becomes a separate command.
+    """
+    url = "https://ex.test/it's;touch${IFS}/tmp/pwn;'"
+    payload = _mandatory_run(tmp_path, "sweep-s11.js", {"links": [url]})
+    prompt = _of_kind(payload, "mirror")[0]["prompt"]
+    command = next(line for line in prompt.splitlines() if "firecrawl scrape" in line)
+    raw = f"{REPO_ROOT}/docs/research/kb/raw/research-sweep/links"
+
+    assert shlex.split(command) == [
+        "mkdir",
+        "-p",
+        raw,
+        "&&",
+        "mise",
+        "exec",
+        "--",
+        "firecrawl",
+        "scrape",
+        url,
+        "--format",
+        "markdown",
+        "--only-main-content",
+        "-o",
+        f"{raw}/1.md",
+    ]
+
+
+def test_research_sweep_empty_mirror_is_not_read_as_a_mirror(tmp_path: Path) -> None:
+    """rc=0 with 0 bytes is NO MIRROR: the reader reads the link live (M7)."""
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-mirror-empty.js",
+        {"links": ["https://l.test"]},
+        {"mirror": "{ rc: 0, bytes: 0 }"},
+    )
+    link_read = next(
+        e for e in _of_kind(payload, "read") if e["label"].startswith("read-link")
+    )
+    assert "(NO MIRROR: rc=0, 0 bytes)" in link_read["prompt"]
+    assert "(mirror: " not in link_read["prompt"]
 
 
 def test_research_sweep_other_missing_stages_are_mandatory_gaps(
     tmp_path: Path,
 ) -> None:
     """No code search, no controls, a failed fan-out, a null mirror, no repo at all."""
+    health_zero = "health: { count: 0, rc: 0, rateLimited: false }"
     cases: list[tuple[dict[str, object], dict[str, str], str]] = [
         ({"links": []}, {"code_search": "[]"}, "code search: no planner query ran"),
         (
             {"links": []},
             {
                 "code_search": "[CODE_SEARCH_OK[0], CODE_SEARCH_OK[2]]",
-                "deps": _README_ZERO,
+                "deps": "{ ...DEPS_OK(_prompt),"
+                " control: { count: 0, rc: 0, rateLimited: false }, "
+                + health_zero
+                + " }",
             },
             "code search: no must-hit control",
         ),
@@ -1270,9 +1588,33 @@ def test_research_sweep_other_missing_stages_are_mandatory_gaps(
             'dependency-repo stage for example/repo: "q" rc=1',
         ),
         (
+            {"links": []},
+            {"deps": "{ ...DEPS_OK(_prompt), runs: [] }"},
+            "dependency-repo stage for example/repo: 0 of 1 run(s) reported",
+        ),
+        (
+            {"links": []},
+            # a self-reported rate limit with a count is still not an answer (M2)
+            {
+                "deps": "{ ...DEPS_OK(_prompt),"
+                " control: { count: 7, rc: 0, rateLimited: true } }"
+            },
+            f'code search: README control "{_README_CONTROL}" was RATE-LIMITED',
+        ),
+        (
+            {"links": []},
+            {"deps": "{ ...DEPS_OK(_prompt), health: undefined }"},
+            f'code search: search-health control "{_HEALTH_CONTROL}" was not run',
+        ),
+        (
             {"links": ["https://l.test"]},
             {"mirror": "null"},
-            "mirror stage for https://l.test",
+            "mirror stage for https://l.test: agent reported nothing (null)",
+        ),
+        (
+            {"links": ["https://l.test"]},
+            {"mirror_index": "{ written: false }"},
+            "mirror stage: README index ",
         ),
         ({"links": [], "repo": ""}, {}, "dependency-repo stage: no args.repo"),
     ]

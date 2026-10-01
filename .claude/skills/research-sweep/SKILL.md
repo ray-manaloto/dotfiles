@@ -55,13 +55,19 @@ this repo use this skill and do not import `kb_setup.research`
   `mise exec -- firecrawl scrape <url> --format markdown --only-main-content`
   into `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
   readers read the mirror) and **code search** (at least one planner query plus a
-  must-hit and a fresh known-absent control; each dependency agent also runs a
-  workflow-built must-hit, `repo:<r> filename:README.md`, so a planner's guessed
-  must-hit of 0 is only a note, while a README control of 0 — or a 403, which is
-  recorded as rate-limited, never as 0 — is a gap). A stage that did not run returns
-  status `mandatory-gap` with `mandatoryGaps` naming it; a link that will not
-  fetch is a named gap (`mirrorGaps`) and is read live. Omitting `repo` is
-  itself a mandatory gap. `repoRoot` (absolute) is required with `links` when
+  must-hit and a fresh known-absent control). The workflow adds its own controls
+  for two separate questions: *does code search answer at all?* — one
+  search-health control (`repo:cli/cli filename:README.md`), whose 0 or failure
+  is a gap — and, per dependency repo, *does it exist?* (`gh api repos/<r>`; a
+  miss is a gap) and *is it indexed?* (`repo:<r> filename:README.md`; a 0 for a
+  repo that exists is only a note, since code search skips some repos such as
+  low-star forks). A planner's guessed must-hit of 0 is a note; a 403 is
+  recorded as rate-limited, never as 0. A mandatory stage that did not run or
+  did not succeed adds to `mandatoryGaps`; status is `mandatory-gap` unless a
+  higher-precedence degraded status applies. A planner fan-out run that failed
+  is listed in `fanoutGaps`; a link that will not fetch is a named gap
+  (`mirrorGaps`) and is read live. Omitting both `repo` and `relatedRepos` is a
+  mandatory gap. `repoRoot` (absolute) is required with `links` when
   `reportPath` is not under `<repo>/docs/`.
 
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
@@ -133,9 +139,10 @@ this repo use this skill and do not import `kb_setup.research`
   workflow marks these `absence` and briefs their refuter to confirm them by a
   second route of a different kind; every refuter also judges
   misleading-by-omission, and a flagged claim is adjudicated one tier up.
-  Status values: `complete`, `mandatory-gap` (a mandatory stage did not run),
-  `partial-verify` (some refuters null),
-  `links-only` (plan/fan-out/triage failed; only caller links were read),
+  Status values: `complete`, `mandatory-gap` (a mandatory stage did not run or
+  did not succeed), `partial-verify` (some refuters null),
+  `links-only` (planner/fan-out/triage failed; the evidence base is the caller
+  links plus the mandatory-stage manifests),
   `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
   `triage-null`, `synth-null`. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and

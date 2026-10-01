@@ -59,12 +59,18 @@ export const meta = {
 //    A link that will not fetch is a NAMED gap; a mirror agent that never ran is a mandatory gap.
 // 14. CODE SEARCH: the planner must run >=1 query of its own + a must-hit control + a fresh
 //    known-absent control; the workflow checks the rows, so skipping it cannot read as `complete`.
-//    Each dependency agent also runs ONE workflow-built must-hit (`repo:<r> filename:README.md`):
-//    a planner must-hit is a guess (live run wf_b74e66f5-ca3: `filename:skills.rs repo:jdx/mise`
-//    returned 0 and failed the sweep), so any must-hit >0 satisfies the requirement, a planner
-//    must-hit of 0 is a NOTE, and only a README control of 0 is a gap (gh/auth/rate limit). A 403
-//    is recorded as rateLimited, never as a count of 0.
-// A run missing any of the three returns status `mandatory-gap` with `mandatoryGaps` naming it.
+//    A planner must-hit is a guess (live run wf_b74e66f5-ca3: `filename:skills.rs repo:jdx/mise`
+//    returned 0 and failed the sweep), so the workflow builds its own controls for two SEPARATE
+//    questions. "Is GitHub code search working?" — the first dependency agent runs
+//    SEARCH_HEALTH_CONTROL, and a 0 or a failure there is a gap blamed on gh/auth/rate limit.
+//    "Is this repo searchable?" — every dependency agent runs `gh api repos/<r>` (does it exist?)
+//    and `repo:<r> filename:README.md` (is it indexed?). A README of 0 for a repo that EXISTS is a
+//    NOTE, not a gap: code search does not index some repos (measured 2026-09-30: the 0-star fork
+//    virajp/mise returns 0 although its README.md is 8569 bytes). Any must-hit >0 satisfies the
+//    must-hit requirement; a planner must-hit of 0 is a NOTE. A 403 is recorded as rateLimited,
+//    never as a count of 0.
+// A mandatory stage that did not run or did not succeed adds to `mandatoryGaps`; status is
+// `mandatory-gap` unless a higher-precedence degraded status applies.
 
 const A = args || {}
 if (typeof A.question !== 'string' || !A.question.trim()) throw new Error('args.question is required')
@@ -98,8 +104,14 @@ const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.re
 if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
 const MIRROR_DIR = `${ROOT}/docs/research/kb/raw/${REPORT_SLUG}/links`
 const CODE_ROLES = ['query', 'must-hit', 'known-absent']
-// The deterministic must-hit (14): every repo has a README, so 0 means the search itself is broken.
+// Two questions, two controls (14). SEARCH_HEALTH_CONTROL asks "does code search answer at all?" (a
+// repo known to be indexed; 9 hits measured 2026-09-30). README_CONTROL asks "is THIS repo indexed?":
+// a 0 there is not proof the search is broken, because an existing but unindexed repo (a low-star
+// fork) also returns 0 — so the repos API settles existence, and only health decides "broken".
+const SEARCH_HEALTH_CONTROL = 'repo:cli/cli filename:README.md'
 const README_CONTROL = r => `repo:${r} filename:README.md`
+// Single-quote a value for the shell: a caller URL may carry `'` (legal, common in Wikipedia URLs).
+const shq = v => `'${v.replace(/'/g, "'\\''")}'`
 
 // One routing table, used for dispatch AND returned as provenance, so the two cannot drift.
 const ROUTE = {
@@ -165,9 +177,11 @@ const CODE_CONTROL = {
 }
 const DEPS = {
   type: 'object',
-  required: ['runs', 'control'],
+  required: ['runs', 'control', 'exists'],
   properties: {
     control: CODE_CONTROL,
+    exists: { type: 'object', required: ['rc', 'fullName'], properties: { rc: { type: 'number' }, fullName: { type: 'string' } } },
+    health: CODE_CONTROL,
     runs: {
       type: 'array',
       items: { type: 'object', required: ['query', 'manifest', 'rc'], properties: { query: { type: 'string' }, manifest: { type: 'string' }, rc: { type: 'number' } } },
@@ -263,7 +277,7 @@ const planPrompt = [
   'Set sourceDive=true only when REPO is set AND the question is about what the code DOES (behaviour, a flag, a bug),',
   'where reading source at the release tag beats issues.',
 ].filter(Boolean).join('\n')
-const depPrompt = r => [
+const depPrompt = (r, i) => [
   `MANDATORY DEPENDENCY-REPO STAGE for ${r}: it runs whatever any planner chose. QUESTION: ${A.question}`,
   'From the repository root, run each command below exactly (queries are project NAMES or short search terms,',
   'never owner/repo slugs), never piped, and record the manifest path it prints first and its real exit code:',
@@ -272,61 +286,82 @@ const depPrompt = r => [
   'Then run this workflow-built code-search control once, never piped, and return it as control:',
   `  gh api -X GET search/code -f q='${README_CONTROL(r)}' --jq .total_count`,
   'control.rc = its real exit code; control.count = the number it printed, or -1 when it failed; control.rateLimited =',
-  'true when gh reported HTTP 403 or a rate limit (a 403 is a RATE LIMIT, never a count of 0). Never print environment values.',
-].join('\n')
+  'true when gh reported HTTP 403 or a rate limit (a 403 is a RATE LIMIT, never a count of 0).',
+  i === 0 ? 'Then run the search-health control once, never piped, and return it as health (same fields as control):' : '',
+  i === 0 ? `  gh api -X GET search/code -f q='${SEARCH_HEALTH_CONTROL}' --jq .total_count` : '',
+  'Then run, never piped, and return it as exists (rc = its real exit code; fullName = what it printed, "" on failure):',
+  `  gh api repos/${r} --jq .full_name`,
+  'Never print environment values.',
+].filter(Boolean).join('\n')
 const mirrorPrompt = (url, n) => [
   'MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, from the repository',
   `root ${ROOT} (so mise resolves the pinned firecrawl, never a stale PATH copy), without a pipe:`,
-  `  mkdir -p '${MIRROR_DIR}' && mise exec -- firecrawl scrape '${url}' --format markdown --only-main-content -o '${MIRROR_DIR}/${n}.md'`,
-  `Record its real exit code as rc, and bytes = \`wc -c < '${MIRROR_DIR}/${n}.md'\` (0 if the file is missing). If rc is`,
+  `  mkdir -p ${shq(MIRROR_DIR)} && mise exec -- firecrawl scrape ${shq(url)} --format markdown --only-main-content -o ${shq(`${MIRROR_DIR}/${n}.md`)}`,
+  `Record its real exit code as rc, and bytes = \`wc -c < ${shq(`${MIRROR_DIR}/${n}.md`)}\` (0 if the file is missing). If rc is`,
   'not 0 or bytes is 0, set reason to the first error line firecrawl printed. Do not retry with another tool, do not',
   'edit the file, and never print environment values.',
 ].join('\n')
 const [plan, depResults, mirrorResults] = await Promise.all([
   run('plan', 'plan+fetch', 'Plan', planPrompt, { schema: PLAN }),
-  DEP_REPOS.length ? parallel(DEP_REPOS.map(r => () => run('deps', `deps:${r}`, 'Dependencies', depPrompt(r), { schema: DEPS }))) : [],
+  DEP_REPOS.length ? parallel(DEP_REPOS.map((r, i) => () => run('deps', `deps:${r}`, 'Dependencies', depPrompt(r, i), { schema: DEPS }))) : [],
   LINKS.length ? parallel(LINKS.map((u, i) => () => run('mirror', `mirror:${i + 1}/${LINKS.length}`, 'Mirror', mirrorPrompt(u, i + 1), { schema: MIRROR }))) : [],
 ])
 
-// Mandatory-stage bookkeeping: a stage that did not run is a mandatory gap, never a silent skip.
+// Mandatory-stage bookkeeping: a stage that did not run or did not succeed is a mandatory gap, never a silent skip.
 const mandatoryGaps = []
 if (!DEP_REPOS.length) mandatoryGaps.push('dependency-repo stage: no args.repo or args.relatedRepos, so no dependency repo issues/PRs/discussions/releases were searched — re-run with args.repo')
 const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
   const want = depQueries(r).length
   const got = depResults[i]
   if (got === null) {
-    mandatoryGaps.push(`dependency-repo stage for ${r}: agent returned null — nothing ran`)
+    mandatoryGaps.push(`dependency-repo stage for ${r}: agent reported nothing (null)`)
     return []
   }
   if (got.runs.length < want) mandatoryGaps.push(`dependency-repo stage for ${r}: ${got.runs.length} of ${want} run(s) reported`)
+  // The count alone cannot see an agent that swapped a cross-direction name for question terms.
+  depQueries(r).forEach((q, k) => {
+    if (q !== null && !(got.runs[k] && got.runs[k].query === q)) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${got.runs[k] ? got.runs[k].query : 'missing'}")`)
+  })
   got.runs.filter(x => !x.manifest || x.rc !== 0).forEach(x => mandatoryGaps.push(`dependency-repo stage for ${r}: "${x.query}" rc=${x.rc}${x.manifest ? '' : ', no manifest'}`))
   return got.runs.map(x => ({ repo: r, ...x }))
 })
 const mirror = LINKS.map((url, i) => {
   const m = mirrorResults[i]
   const path = `${MIRROR_DIR}/${i + 1}.md`
-  if (m === null) mandatoryGaps.push(`mirror stage for ${url}: agent returned null — never fetched`)
-  return m === null ? { url, path, rc: null, bytes: 0, reason: 'mirror agent returned null — never fetched' }
+  if (m === null) mandatoryGaps.push(`mirror stage for ${url}: agent reported nothing (null)`)
+  return m === null ? { url, path, rc: null, bytes: 0, reason: 'mirror agent reported nothing (null)' }
     : { url, path, rc: m.rc, bytes: m.bytes, reason: m.rc === 0 && m.bytes > 0 ? '' : m.reason || `rc=${m.rc}, ${m.bytes} bytes` }
 })
 // A link firecrawl could not fetch is the WORLD, not the process: a named gap, not a mandatory one.
 const mirrorGaps = mirror.filter(m => m.rc !== null && m.reason).map(m => `${m.url}: not mirrored (${m.reason})`)
-// Code search = the planner's rows + one workflow-built README must-hit per searched repo.
+// Code search = the planner's rows + the search-health control + one README control per searched repo.
 const answered = c => c.rc === 0 && !c.rateLimited
 const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403), not 0' : `returned count=${c.count} rc=${c.rc}`)
+const workflowRow = (query, c) => ({ query, role: 'must-hit', source: 'workflow', count: c.count, rc: c.rc, rateLimited: c.rateLimited === true })
+// Question 1, asked once (by the first dependency agent): does GitHub code search answer at all?
+const healthGot = DEP_REPOS.length && depResults[0] !== null ? depResults[0].health : undefined
+const healthRow = healthGot ? workflowRow(SEARCH_HEALTH_CONTROL, healthGot) : null
+const healthFailed = healthRow !== null && !(answered(healthRow) && healthRow.count > 0)
+if (healthFailed) mandatoryGaps.push(`code search: search-health control "${SEARCH_HEALTH_CONTROL}" ${outcome(healthRow)} — gh auth, rate-limit or search is broken`)
+else if (DEP_REPOS.length && depResults[0] !== null && !healthRow) mandatoryGaps.push(`code search: search-health control "${SEARCH_HEALTH_CONTROL}" was not run, so whether code search answers is unverified`)
+// Question 2, per repo: does it exist (repos API), and is it indexed (README control)?
+const readmeNotes = []
 const workflowControls = DEP_REPOS.flatMap((r, i) => {
   const got = depResults[i]
   if (got === null) return []
-  const c = { query: README_CONTROL(r), role: 'must-hit', source: 'workflow', count: got.control.count, rc: got.control.rc, rateLimited: got.control.rateLimited === true }
-  if (!(answered(c) && c.count > 0)) mandatoryGaps.push(`code search: workflow must-hit control "${c.query}" ${outcome(c)} — a gh auth, rate-limit or search problem`)
+  const c = workflowRow(README_CONTROL(r), got.control)
+  if (got.exists.rc !== 0) mandatoryGaps.push(`dependency repo ${r} not found via the repos API (rc=${got.exists.rc})`)
+  else if (!answered(c)) mandatoryGaps.push(`code search: README control "${c.query}" ${outcome(c)}${healthFailed ? ' — gh auth, rate-limit or search is broken' : ''}`)
+  else if (c.count === 0) readmeNotes.push(`"${c.query}" returned 0 although ${r} exists — GitHub code search does not index it (e.g. a low-star fork); not a gap`)
   return [c]
 })
 const plannerRows = plan === null ? [] : (plan.codeSearch || []).map(c => ({ ...c, source: 'planner', rateLimited: c.rateLimited === true }))
-const codeSearch = plannerRows.concat(workflowControls)
+const codeSearch = plannerRows.concat(healthRow ? [healthRow] : [], workflowControls)
 // A planner control that missed is a guess that failed, recorded for the reader, never a gap.
 const codeSearchNotes = plannerRows.filter(c => c.role === 'must-hit' && !(answered(c) && c.count > 0))
   .map(c => `planner must-hit control "${c.query}" ${outcome(c)} — a guessed control, not a gap; any other must-hit >0 carries the requirement`)
-if (plan === null) mandatoryGaps.push('code search: planner returned null — no code search ran')
+  .concat(readmeNotes)
+if (plan === null) mandatoryGaps.push('code search: planner agent reported nothing (null)')
 else {
   const ok = (rows, role, hit) => rows.some(c => c.role === role && answered(c) && hit(c.count))
   if (!ok(plannerRows, 'query', () => true)) mandatoryGaps.push('code search: no planner query ran with rc=0')
@@ -334,17 +369,21 @@ else {
   if (!ok(plannerRows, 'known-absent', n => n === 0)) mandatoryGaps.push('code search: no fresh known-absent control returned 0')
 }
 
+// Planner and dependency manifests are counted SEPARATELY: dependency manifests must never mask a
+// planner fan-out that produced nothing (it alone carries exa/context7/firecrawl).
 const depManifests = dependencyRuns.filter(x => x.manifest).map(x => x.manifest)
+const planManifests = plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)
+// A planner run that failed or wrote no manifest is a named Gap, even when its siblings succeeded.
+const fanoutGaps = plan === null ? [] : plan.runs.filter(r => r.rc !== 0 || !r.manifest)
+  .map(r => `planner fan-out "${r.query}" rc=${r.rc}${r.manifest ? '' : ', no manifest'}`)
 if (plan === null && !LINKS.length && !depManifests.length) return { status: 'plan-null', mandatoryGaps, routing }
-const manifests = (plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)).concat(depManifests)
-if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, mandatoryGaps, routing }
+const manifests = planManifests.concat(depManifests)
+if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, mandatoryGaps, fanoutGaps, routing }
 const stageGaps = []
-if (plan === null || !manifests.length) {
-  stageGaps.push(plan === null ? 'planner returned null — no fan-out ran' : 'fan-out produced no manifests')
-  log('Plan: no planner fanout results — continuing on the caller links and mandatory stages (a named gap)')
-}
+if (plan === null) stageGaps.push('planner returned null — no planner fan-out ran (dependency-repo manifests, if any, were still read)')
+else if (!planManifests.length) stageGaps.push(`planner fan-out produced no manifests (${plan.runs.length ? plan.runs.map(r => `${r.query} rc=${r.rc}`).join(', ') : 'no runs'}) — exa/context7/firecrawl/github evidence from the planner is missing`)
+if (stageGaps.length) log('Plan: no planner fanout results — continuing on the caller links and mandatory stages (a named gap)')
 else log(`Plan: ${plan.runs.length} fanout run(s); ${codeSearch.length} code search(es); sourceDive=${plan.sourceDive}`)
-log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(m => m.rc === 0 && m.bytes > 0).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
 
 phase('Triage')
 const EMPTY_TRIAGE = { read: [], hits: [], unverifiedEmpty: [] }
@@ -371,7 +410,8 @@ const [triageOut, mirrorIndex] = await Promise.all([!manifests.length ? EMPTY_TR
 LINKS.length ? run('mirrorIndex', 'mirror-index', 'Mirror', indexPrompt, { schema: MIRROR_INDEX }) : null,
 ])
 if (LINKS.length && !(mirrorIndex && mirrorIndex.written)) mandatoryGaps.push(`mirror stage: README index ${MIRROR_DIR}/README.md was not written`)
-if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, mandatoryGaps, routing }
+log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(m => m.rc === 0 && m.bytes > 0).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
+if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, mandatoryGaps, fanoutGaps, routing }
 if (triageOut === null) {
   stageGaps.push('triage returned null — no fan-out hit was read')
   log('Triage: null — continuing on the caller links alone (a named gap)')
@@ -459,12 +499,13 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   `MIRRORS:\n${JSON.stringify(mirror)}`,
   mirrorGaps.length ? `MIRROR GAPS:\n${JSON.stringify(mirrorGaps)}` : '',
   mandatoryGaps.length ? `MANDATORY GAPS:\n${JSON.stringify(mandatoryGaps)}` : '',
+  fanoutGaps.length ? `FANOUT GAPS (each is a Gap: a planner fan-out run that failed or wrote no manifest):\n${JSON.stringify(fanoutGaps)}` : '',
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
-  stageGaps.length ? `FAILED STAGES (each is a Gap; say the evidence base is only the caller links): ${JSON.stringify(stageGaps)}` : '',
+  stageGaps.length ? `FAILED STAGES (each is a Gap; say the evidence base is the caller links plus the mandatory-stage (dependency-repo) manifests): ${JSON.stringify(stageGaps)}` : '',
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
-if (synth === null) return { status: 'synth-null', plan, triage, claims, mandatoryGaps, routing }
+if (synth === null) return { status: 'synth-null', plan, triage, claims, mandatoryGaps, fanoutGaps, routing }
 
 phase('Verify')
 const loadBearing = synth.loadBearing.slice(0, VERIFY_MAX)
@@ -560,8 +601,8 @@ if (A.advisor) {
 // no-manifests | triage-null | synth-null | links-only. verify-null = EVERY refuter returned null;
 // partial-verify = SOME did; links-only = plan/fan-out/triage failed, so the evidence base is the caller
 // links plus the mandatory stages; mandatory-gap = a mandatory stage (dependency repos, mirror, code
-// search) did not run — `mandatoryGaps` names each, and such a run can never be `complete`.
+// search) did not run or did not succeed — `mandatoryGaps` names each, and such a run can never be `complete`.
 const status = verdicts.length && unverified.length === verdicts.length ? 'verify-null'
   : !reconciled ? 'reconcile-null' : unverified.length ? 'partial-verify' : stageGaps.length ? 'links-only'
   : mandatoryGaps.length ? 'mandatory-gap' : 'complete'
-return { status, stageGaps, mandatoryGaps, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, codeSearch, codeSearchNotes, dependencyRuns, mirror, mirrorGaps, verdicts, adjudication, refuted, gaps, advice, routing }
+return { status, stageGaps, mandatoryGaps, fanoutGaps, reportPath: synth.reportPath, plan, triage, claims: claims.length, failedReads, codeSearch, codeSearchNotes, dependencyRuns, mirror, mirrorGaps, verdicts, adjudication, refuted, gaps, advice, routing }

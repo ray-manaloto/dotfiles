@@ -6,7 +6,7 @@ the first option that returns the answer. Lower steps cost more tokens
 (per-query or per-conversation) — never skip a step that would have
 worked.
 
-## Always (Ray, 2026-09-30 — enforced by the `research-sweep-run` workflow)
+## Always (Ray, 2026-09-30 — items 2-4 enforced by the `research-sweep-run` workflow; item 1 is a rule)
 
 1. **Never guess.** Before building anything, research-sweep native tools and features first — mise,
    Claude Code and codex docs **and their issues**.

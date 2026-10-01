@@ -193,3 +193,114 @@ rc=0 count=5 (the two repos from the live run). I did not force a live 403; that
 
 I did not stage or touch your `docs/agents/goal-history.md` edit or the untracked `arm-enforced-sweep-2026-09-30`
 artifacts. Nothing is committed.
+
+## Round 3 — cold-review fixes (F1, F2, F3, F6, F7, F8, F10)
+
+Spec: `scratchpad/spec-n0-round3.md`. Findings source:
+`docs/research/kb/reports/agents/cold-review-research-enforcement-2026-09-30.md` (read, not modified).
+Status: IN PROGRESS.
+
+**Premise re-check (2026-09-30):**
+
+| # | probe | result |
+|---|---|---|
+| P1 | `research-sweep-run.js:339` | `manifests = (plan…).concat(depManifests)` — confirmed |
+| P2 | `:564-566` | `stageGaps.length ? 'links-only'` before `mandatoryGaps` — confirmed |
+| P3 | `gh api -X GET search/code -f q='repo:cli/cli filename:README.md' --jq .total_count` | `9`, rc=0 — confirmed |
+| P4 | `gh api repos/virajp/mise --jq .full_name` / `repos/no-such-owner-qq7x/nope` | `virajp/mise` rc=0 / HTTP 404 rc=1 — confirmed, discriminates |
+| P5 | `:92` `depQueries` | `[null, …names]` / `[nameOf(REPO)]` — confirmed |
+| P6 | `tests/test_workflows_js.py:533-1284` | bun harness over the real blob — confirmed |
+| P7 | `.agents/skills/research-sweep/SKILL.md` differs from `.claude/` only on the Codex line | confirmed (`diff`) |
+
+**Implementation (round 3):**
+
+- F1 — `planManifests` split from `depManifests`; a planner with no manifest pushes stage gap
+  `planner fan-out produced no manifests (<q> rc=<n>, …) — exa/context7/firecrawl/github evidence from the planner is missing`;
+  every planner run with `rc !== 0` or no manifest goes into the new `fanoutGaps` (synth `FANOUT GAPS`; returned on
+  the final, `no-manifests`, `triage-null` and `synth-null` results). Early returns unchanged.
+- F2 — null-planner stage gap and the synth FAILED STAGES clause reworded per spec; SKILL `links-only` fixed;
+  `…caller_links_survive_a_null_plan` now pins the true string.
+- F3 — `SEARCH_HEALTH_CONTROL` (deps agent 0 only) + per-repo `gh api repos/<r> --jq .full_name` (`exists`, required
+  in `DEPS`; `health` optional). README 0 for an existing repo → `codeSearchNotes`; repo 404 → one mandatory gap;
+  README rate-limited/rc≠0 → gap via `outcome()`, auth blame appended only when health also failed.
+- F6 — per-k cross-direction query content check beside the count check.
+- F8 — `shq()` single-quote escaping for the URL **and** the mirror paths (same interpolation class).
+- F10 — "agent reported nothing (null)" wording; SKILL/rule/spec prose; the `Mandatory:` log moved after the
+  README-index gap; header + status comments narrowed to "did not run or did not succeed".
+- Tests: `DEPS_OK` now echoes the cross-direction name, `exists`, and `health` only when its prompt asks;
+  `_mandatory_run` gained `plan`, `plan_runs`, `mirror_index` stubs and records the reconcile prompt.
+  First run: 34 research_sweep tests passed; ruff format/check clean.
+
+**Mutation table (round 3)** — in place on the checkout (files staged first); driver
+`scratchpad/mutate.py` asserts each anchor's count, writes the mutation, runs
+`uv run --project python pytest tests/test_workflows_js.py -q -k "research_sweep or every_saved"`, rewrites the
+original bytes, and checks `git diff --quiet` on the workflow (rc=0 after every row, i.e. worktree == index):
+
+| mutation | result | summary | failing tests | restore |
+|---|---|---|---|---|
+| PRISTINE | GREEN (rc=0) | 35 passed, 10 deselected in 7.57s |  | diff-after-restore rc=0 |
+| CTRL status drops mandatory-gap | RED (rc=1) | 5 failed, 30 passed, 10 deselected in 6.70s | test_research_sweep_cross_direction_query_must_be_the_one_that_ran, test_research_sweep_missing_dependency_repo_is_one_gap, test_research_sweep_missing_dependency_stage_is_a_mandatory_gap, test_research_sweep_other_missing_stages_are_mandatory_gaps, test_research_sweep_search_health_is_asked_once_and_its_zero_is_a_gap | diff-after-restore rc=0 |
+| M1 delete runs.length < want | RED (rc=1) | 2 failed, 33 passed, 10 deselected in 7.22s | test_research_sweep_cross_direction_query_must_be_the_one_that_ran, test_research_sweep_other_missing_stages_are_mandatory_gaps | diff-after-restore rc=0 |
+| F6 delete cross-direction content check | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.68s | test_research_sweep_cross_direction_query_must_be_the_one_that_ran | diff-after-restore rc=0 |
+| M2 answered drops !rateLimited | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.39s | test_research_sweep_other_missing_stages_are_mandatory_gaps | diff-after-restore rc=0 |
+| M3 delete README-index gap | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.74s | test_research_sweep_other_missing_stages_are_mandatory_gaps | diff-after-restore rc=0 |
+| M5 synth drops INCOMPLETE | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.95s | test_research_sweep_missing_dependency_stage_is_a_mandatory_gap | diff-after-restore rc=0 |
+| M6 reconcile drops MANDATORY GAPS line | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.93s | test_research_sweep_missing_dependency_stage_is_a_mandatory_gap | diff-after-restore rc=0 |
+| M7 reader mirror ok without bytes>0 | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.92s | test_research_sweep_empty_mirror_is_not_read_as_a_mirror | diff-after-restore rc=0 |
+| M8 dep command drops --out | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 8.06s | test_research_sweep_dependency_stage_runs_per_repo_both_directions | diff-after-restore rc=0 |
+| F1 stage gap keyed on combined manifests | RED (rc=1) | 2 failed, 33 passed, 10 deselected in 8.02s | test_research_sweep_planner_fanout_without_manifests_is_not_complete[no-link], test_research_sweep_planner_fanout_without_manifests_is_not_complete[one-link] | diff-after-restore rc=0 |
+| F1 fanoutGaps not passed to synthesis | RED (rc=1) | 3 failed, 32 passed, 10 deselected in 8.00s | test_research_sweep_partial_planner_failure_is_a_gap_not_a_status, test_research_sweep_planner_fanout_without_manifests_is_not_complete[no-link], test_research_sweep_planner_fanout_without_manifests_is_not_complete[one-link] | diff-after-restore rc=0 |
+| F2 old null-planner stage-gap text | RED (rc=1) | 2 failed, 33 passed, 10 deselected in 8.01s | test_research_sweep_caller_links_survive_a_null_plan, test_research_sweep_null_planner_without_links_reads_dependency_manifests | diff-after-restore rc=0 |
+| F2 old FAILED STAGES clause | RED (rc=1) | 2 failed, 33 passed, 10 deselected in 7.99s | test_research_sweep_planner_fanout_without_manifests_is_not_complete[no-link], test_research_sweep_planner_fanout_without_manifests_is_not_complete[one-link] | diff-after-restore rc=0 |
+| F3 health control ignored | RED (rc=1) | 2 failed, 33 passed, 10 deselected in 8.05s | test_research_sweep_blames_auth_for_a_readme_failure_only_when_health_failed, test_research_sweep_search_health_is_asked_once_and_its_zero_is_a_gap | diff-after-restore rc=0 |
+| F3 health asked of every deps agent | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 8.09s | test_research_sweep_search_health_is_asked_once_and_its_zero_is_a_gap | diff-after-restore rc=0 |
+| F3 health not-run gap deleted | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.70s | test_research_sweep_other_missing_stages_are_mandatory_gaps | diff-after-restore rc=0 |
+| F3 exists check deleted | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.99s | test_research_sweep_missing_dependency_repo_is_one_gap | diff-after-restore rc=0 |
+| F3 README 0 of existing repo is a gap again | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 8.06s | test_research_sweep_readme_zero_for_an_existing_repo_is_a_note | diff-after-restore rc=0 |
+| F3 README failure always blames auth | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.91s | test_research_sweep_rate_limit_is_never_a_zero | diff-after-restore rc=0 |
+| F3 README failure never blames auth | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 7.96s | test_research_sweep_blames_auth_for_a_readme_failure_only_when_health_failed | diff-after-restore rc=0 |
+| F8 URL back in bare quotes | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 8.04s | test_research_sweep_link_is_one_shell_word | diff-after-restore rc=0 |
+| F10 old deps-null wording | RED (rc=1) | 1 failed, 34 passed, 10 deselected in 8.06s | test_research_sweep_missing_dependency_stage_is_a_mandatory_gap | diff-after-restore rc=0 |
+
+**Scenario re-run (fixtures, no live calls; `scratchpad/scen.py` over `_mandatory_run`):**
+
+| scenario | status | gaps |
+|---|---|---|
+| C0 healthy | `complete` | none |
+| S1 planner null, no links, deps OK | `links-only` | stage: `planner returned null — no planner fan-out ran (dependency-repo manifests, if any, were still read)`; mandatory: `code search: planner agent reported nothing (null)` |
+| S2 planner runs rc=1 no manifest, no links | `links-only` (was `complete`) | stage: `planner fan-out produced no manifests (q rc=1) — …`; fanout: `planner fan-out "q" rc=1, no manifest` |
+| S2 + one link | `links-only` (was `complete`) | same as S2 |
+| S3 relatedRepos, cross-direction swapped | `mandatory-gap` (was `complete`) | `…example/repo: cross-direction query "tool" not run (got "terms1")`, `…other/tool: cross-direction query "repo" not run (got "terms0")` |
+| S11 apostrophe link | `complete` | command renders `scrape 'https://ex.test/it'\''s;touch${IFS}/tmp/pwn;'\'''`; `shlex.split` yields the URL as ONE word |
+
+**Gates (round 3, all on the staged tree):**
+
+| command | rc | summary |
+|---|---|---|
+| `mise run gate -- run lint` | 0 | `status: passed` (17 s) |
+| `mise run gate -- run pytest` | 0 | 4379 passed, 11 deselected |
+| `mise run gate -- run verify` | 0 | 166 passed, 0 failed, 4 skipped |
+| `mise run gate -- run lint-docs` | 0 | No issues found |
+| `mise run skills-mirror -- --check` | 0 | `.agents/skills matches the generator` |
+| `KB_REPO_PATH=~/dev/github/ray-manaloto/knowledge-base mise run rule-sync` | 0 | `OK … 22 rule(s) … hold` (presence-gated; the KB copy's content already differed before this round) |
+
+**Decisions / dissent (round 3):**
+
+1. *Health control not reported.* The spec says "Health not answered or count 0 → gap … gh auth, rate-limit or
+   search is broken". I applied that wording when the health control ran and failed. When the first dependency
+   agent ran but returned no `health` field (it is optional in the schema), the gap says
+   `… was not run, so whether code search answers is unverified`, with no auth blame. When that agent returned
+   null, no health gap is added, because the existing `agent reported nothing (null)` gap already covers it.
+2. *README control on a repo that does not exist.* Only the `not found via the repos API` gap is raised, even when
+   the README control was rate-limited or rc≠0. A code search against a missing repo fails (HTTP 422), so that
+   failure is explained by the missing repo.
+3. *`shq()` also quotes the mirror paths*, not just the URL. They share the same interpolation, and a report
+   slug can contain `'`. For ordinary inputs the rendered command is byte-identical, which the existing
+   `-o '<raw>/<n>.md'` test pins.
+4. *Not in the spec, but kept honest.* The header comment line "A run missing any of the three returns status
+   `mandatory-gap`" and the status comment had the same overclaim that F10 fixes in SKILL.md. Both now say
+   "did not run or did not succeed", with the precedence caveat.
+5. *Not done:* F4, F5, F9, F11, F12 (out of scope per spec). The `Mandatory:` log move has no test; it is
+   observational only.
+
+Status: COMPLETE (commit below).
