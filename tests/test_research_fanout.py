@@ -1853,6 +1853,39 @@ def test_list_sources_names_every_source_without_values(
     assert "SECRET-not-for-stdout" not in captured.out
 
 
+def _github_presence(
+    argv: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> set[str]:
+    rc = main(argv, tmp_path, runner=_unused_runner, http=FakeHttp({}))
+    assert rc == 0
+    return {
+        line.rsplit("  ", 1)[1]
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("github-")
+    }
+
+
+def test_list_sources_github_needs_repo_when_gh_present(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With gh but no --repo: `needs --repo`, never `absent` (2026-09-30).
+
+    FAIL arm: map every unmet prerequisite to `absent` again and a planner
+    reading this list drops every github-* source.
+    """
+    _install_path_tools(tmp_path, monkeypatch, "gh")
+
+    assert _github_presence(["--list-sources"], tmp_path, capsys) == {"needs --repo"}
+    # control arms: a repo makes them present; no gh makes them absent
+    assert _github_presence(
+        ["--list-sources", "--repo", "cli/cli"], tmp_path, capsys
+    ) == {"present"}
+    monkeypatch.setenv("PATH", "")
+    assert _github_presence(["--list-sources"], tmp_path, capsys) == {"absent"}
+
+
 def test_default_sources_exclude_last30days(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

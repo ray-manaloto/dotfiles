@@ -2005,3 +2005,40 @@ flowchart LR
 flowchart LR
     H["S29-H machine-checked handoff"] --> P["S29-0 native pwf restructure"] --> F["S29-00 fix #1449"] --> K["S29-K three skills"] --> M["S29-M mise dotfiles, in reviewed pieces"]
 ```
+
+## 2026-09-30 — session 7ad65526 (09-30): research enforcement; doctor arches, graphify 0.9.73, S29-H landed
+
+- **Iteration ID:** `dotfiles-goal-20260930-046`
+- **Prior goal digest:** `sha256:b0bed4e3cb13350c13e18a0450a5a29bd8d76fdec0f023d30fb21166e8285ae9`
+- **Current goal digest:** `sha256:e9fcbe69af7af3a25fb4200511c1c056fe6e15d7779a36189bad1bfa3fd120d5`
+- **Changed requirement:**
+  - Standing research doctrine made machine-enforced (research-sweep-run mandatory stages: firecrawl link
+    mirror, dependency-repo issues/PRs/discussions/releases, GitHub code search with controls; `mandatory-gap`).
+  - msgspec/codec rule scoped to OUR serialization; third-party library models allowed at their boundary.
+  - New queue: stale mise PATH (hook-env in kb_setup), github-watch, ty bump + ty LSP plugin, codebase-memory-mcp
+    alongside graphify, native CLI installers (Ray's rulings in docs/specs/native-cli-installers-2026-09-30.md).
+- **Reason:** Ray, session 7ad65526: "dont guess on what to do", "make sure we are always using github searches
+  [and] searching dependency repo issues/prs/discussions", "enforce always using firecrawl to get agent optimized
+  offline versions of links provided", "these decisions need to be enforced and not disappear on new sessions";
+  three sweeps skipped GitHub issues because `--list-sources` mislabelled them absent; a sweep's "mise has no
+  feature built for agents" was wrong (mise mcp, mise skills, packslip).
+- **Evidence:**
+  - Landed: S29-H #1461 (`725c79c9`), doctor devcontainer arches #1464 (`ea1eaa0b`), graphify 0.9.73 #1467 (`28a124a3`).
+  - Research + specs committed on `feat/native-cli-installers-workflow` (`7171fea0`); stale-PATH root cause in
+    `findings.md` 2026-09-30; enforcement spec `docs/specs/research-enforcement-2026-09-30.md`.
+- **Affected tickets:** #284 (ty LSP unpinned) advanced by the LSP research; #1457 (S29-H deferrals) filed.
+- **Disposition:** `ACCEPTED`.
+- **Topology and ownership:** One writer, the Claude architect. Delegates: Opus implementers (stated fallback —
+  codex usage-limited until 2026-10-03), Opus cold-reviewers, research-sweep workflows, premise-verifiers,
+  spec-scribe, issue-filer. Codex cross-family lens owed on every Claude-authored commit today.
+
+### Current goal
+
+> Standing (Ray, 2026-09-30): research before building and never guess — every design starts with a research sweep that always runs GitHub code search with control queries, always searches the dependency repos' issues/PRs/discussions/releases, always saves agent-optimized offline copies of caller links via firecrawl, and checks native tool features first (mise incl. mise mcp / mise skills / packslip, Claude Code, codex); decisions live in tracked files, not session memory. Queue: research enforcement (this PR), the stale-mise-PATH fix via per-command mise hook-env in the shared kb_setup engine (pending the mise agent-features research), github-watch (githubkit with its own models allowed at its boundary; one watches.toml for topic and dependency-feature watches), a ty bump then a repo-owned pinned ty LSP plugin, codebase-memory-mcp alongside graphify, and the native CLI installers for agy, codex and claude (worktree commits, auto-update on with a version-ledger, symlinked conf.d fragment, image and CI included). Done means land rc=0 with the gates through mise run gate, /code-review, the cross-family lens (stated Opus fallback while codex is unavailable), and a handoff whose PR claims handoff-check verifies. Keep task_plan.md as the sole task authority.
+
+### Current workflow
+
+```mermaid
+flowchart LR
+    E["research enforcement"] --> P["stale PATH (kb_setup hook-env)"] --> W["github-watch"] --> T["ty bump + ty LSP"] --> C["codebase-memory-mcp"] --> N["native CLI installers"]
+```

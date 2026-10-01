@@ -64,8 +64,8 @@ research-fanout QUERY [--repo OWNER/REPO] [--sources S1,S2,...] [--out DIR] [--l
   ≤60 chars.
 - `--limit`: max items per source (default 10). `--timeout`: per-source wall clock; when given it applies to EVERY
   source; when omitted, 60 s per source and 180 s for last30days.
-- `--list-sources`: print one line per source: name, transport, prerequisite, present/absent (presence only — never a
-  value). Exit 0.
+- `--list-sources`: print one line per source: name, transport, prerequisite, and `present` / `needs --repo` / `absent`
+  (presence only — never a value). Exit 0.
 
 Sources (name → transport; all reachable from a plain shell):
 

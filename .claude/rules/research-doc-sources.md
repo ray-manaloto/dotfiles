@@ -6,6 +6,17 @@ the first option that returns the answer. Lower steps cost more tokens
 (per-query or per-conversation) — never skip a step that would have
 worked.
 
+## Always (Ray, 2026-09-30 — items 2-4 enforced by the `research-sweep-run` workflow; item 1 is a rule)
+
+1. **Never guess.** Before building anything, research-sweep native tools and features first — mise,
+   Claude Code and codex docs **and their issues**.
+2. **Always GitHub code search** (`gh api -X GET search/code`), with a must-hit and a fresh known-absent control.
+3. **Always the dependency repos' issues/PRs/discussions/releases** — pass `--repo`; `--list-sources`
+   reporting `needs --repo` means usable, not absent.
+4. **Always an offline firecrawl mirror of every link you are given**:
+   `mise exec -- firecrawl scrape <url> --format markdown --only-main-content` into
+   `docs/research/kb/raw/<report-slug>/links/`. A link that will not fetch is a named gap.
+
 ## The chain
 
 00. **For AGENT-HARNESS behaviour, grep the knowledge-base's offline sources
