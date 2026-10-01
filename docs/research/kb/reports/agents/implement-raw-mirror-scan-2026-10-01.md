@@ -153,3 +153,45 @@ The pair was then `git rm --cached` + deleted; `git status` shows neither file b
 ## GitHub repos touched
 
 - [gitleaks/gitleaks](https://github.com/gitleaks/gitleaks) — read v8.30.1 `config/gitleaks.toml` for the `sourcegraph-access-token` rule's regex, entropy and keywords
+
+## Round b — `claudeMdExcludes` (Ray, 2026-10-01, AskUserQuestion; upholds dissent 2)
+
+Change: `.claude/settings.json` gains `"claudeMdExcludes": ["**/docs/research/kb/raw/**"]`. Native anchors: `$CC/settings-reference.md:2727-2742`
+("Patterns match against absolute file paths"; scope "Any file") and `$CC/memory.md:325-341` ("Arrays merge across layers";
+managed-policy CLAUDE.md cannot be excluded).
+
+### Live arm (real headless sessions, `claude --help` re-probed first)
+
+Canary: an UNTRACKED `docs/research/kb/raw/zz-canary-<fresh token>/` holding a `CLAUDE.md` with the token and a `note.md`
+(`git check-ignore` rc=1, so it is not ignored and nested loading is free to find it). Both runs used:
+`mise exec -- claude -p "Read docs/research/kb/raw/zz-canary-<tok>/note.md, then say only whether any loaded memory/instruction
+file contains the string <tok> (answer YES or NO)." --allowedTools Read --model haiku --session-id <uuid> --output-format stream-json --verbose`
+
+| Arm | Session | rc | note.md read (transcript tool_result) | InstructionsLoaded observer: canary CLAUDE.md | Transcript `nested_memory` attachment carrying the token | Model answer |
+|---|---|---|---|---|---|---|
+| setting ABSENT (before the edit) | `b31a4be8-4b25-441f-bd3a-df9b4f5ed6a3` | 0 | 1 | **1** (`load_reason: nested_traversal`) | **1** | NO (wrong) |
+| setting PRESENT | `48231ea5-504d-4099-bfd9-9ed9d7f77224` | 0 | 1 | **0** (28 other records) | **0** | NO |
+
+Evidence sources, in order of weight:
+1. This repo's InstructionsLoaded observer, `.agent/instructions-loaded/<session>.jsonl`, grepped for `zz-canary`.
+2. A second independent route: the native session transcript
+   `~/.claude/projects/-Users-rmanaloto-dev-github-ray-manaloto-dotfiles/<session>.jsonl`, grepped for a `"type":"nested_memory"`
+   attachment and the canary content line.
+
+The two routes agree on both arms, so the arm discriminates. stream-json was captured but does NOT surface
+nested-memory attachments (token hits there were only the prompt, the Read path, and the answer), so it could not serve
+as evidence. The model's own YES/NO was wrong on the absent arm (haiku answered NO while the file was attached) and was not used.
+
+The canary dir was deleted after the arms; `git status` was clean of it before staging.
+
+### Gates (canary removed, settings change staged)
+
+| Command | rc | Summary |
+|---|---|---|
+| `uv run --project python dotfiles-setup hook selfcheck` (ship's `hook-selfcheck`; not a `gate run` name) | 0 | "all wired host-side hooks pass" |
+| `mise run eval` (ship's `eval`) | 0 | 5 passed, 0 failed, 0 unarmed |
+| `mise run gate -- run lint` | 0 | passed |
+| `mise run gate -- run pytest` | 0 | passed, 312 s |
+| `mise run gate -- run verify` | 0 | 166 passed, 0 failed, 4 skipped (pre-existing human-only policies) |
+| `mise run gate -- run lint-docs` | 0 | passed |
+| `KB_REPO_PATH=~/dev/github/ray-manaloto/knowledge-base mise run rule-sync` | 0 | `OK rule-sync: 1 plugin(s) + 1 line(s) + 22 rule(s) + 2 agent(s)`; no settings drift |
