@@ -79,24 +79,30 @@ paths = [
 
 # ── Vendored raw mirrors under docs/research/kb/raw/ (Ray, 2026-10-01, AskUserQuestion; #1472) ──
 # Mirrors of upstream repos/docs are committed BYTE-VERBATIM (agent-artifact-conventions.md rule 8),
-# so their false positives are allowlisted by CONTENT, scoped to the mirror tree, rather than one
-# path entry per mirrored file. Each value below was read and judged before it was listed.
+# so their false positives are allowlisted by CONTENT rather than one path entry per mirrored file.
+# Entries 1-3 are scoped to the mirror tree by `paths`; entry 4 is content-only and REPO-WIDE by
+# design (see its comment). Each value below was read and judged before it was listed.
 #
 # ⚠️ TRAP — every entry here MUST keep its `targetRules` (or carry no `paths` at all). Measured on
 # gitleaks 8.30.1 (2026-10-01, scratch probe): a GLOBAL `[[allowlists]]` (no `targetRules`) that
 # has `paths` blinds gitleaks to EVERY finding under that path, even with `condition = "AND"` and
 # `regexes` — a planted GitHub PAT in the mirror tree went unreported. Rule-scoped entries honour
-# AND in both gitleaks and betterleaks. Do not "simplify" an entry below into a global one; the
-# pytest `tests/test_gitleaks_raw_mirror_allowlist.py` plants a token to catch exactly that.
+# AND in both gitleaks and betterleaks (betterleaks 1.9.0 is not blinded by the global form). Do not
+# "simplify" an entry below into a global one; `tests/test_gitleaks_raw_mirror_allowlist.py` plants
+# tokens to catch exactly that, and to catch an entry widened within its own rule.
 
-# 1. GitHub commit/tree/blob URL SHAs: a 40-hex git object id inside a github.com URL trips
-#    `sourcegraph-access-token`. A commit SHA is public by definition.
+# 1. Git SHAs: gitleaks' `sourcegraph-access-token` also matches a BARE 40-hex string (its legacy
+#    token form) in any file mentioning "sourcegraph", so every commit/tree/blob URL in a mirrored
+#    GitHub page trips it. A commit SHA is public by definition. The regex matches the SECRET, not
+#    the line: a line-target URL regex (the first version) also hid real `sgp_`-prefixed tokens on
+#    any line carrying a commit URL — the whole file when minified (cold review F1, 2026-10-01).
+#    ACCEPTED TRADE-OFF: a bare lowercase 40-hex legacy-format token in the raw tree is suppressed,
+#    because it is byte-indistinguishable from a commit SHA. Prefixed `sgp_` tokens stay reported.
 [[allowlists]]
-description = "raw mirrors: 40-hex git SHAs inside github.com commit/tree/blob URLs."
+description = "raw mirrors: bare 40-hex git SHAs (sourcegraph-access-token legacy form)."
 condition = "AND"
 targetRules = ["sourcegraph-access-token"]
-regexTarget = "line"
-regexes = ['''github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(commit|tree|blob)/[0-9a-f]{40}''']
+regexes = ['''^[0-9a-f]{40}$''']
 paths = ['''(^|/)docs/research/kb/raw/''']
 
 # 2. Exact judged public values tripping `generic-api-key`: mise's PUBLIC minisign release-signing
@@ -123,7 +129,8 @@ paths = ['''(^|/)docs/research/kb/raw/.*/showreel/test/captures/[^/]+\.json$''']
 
 # 4. The illustrative `my_password` value in mise's environments docs trips betterleaks-only rule
 #    `generic-password`. gitleaks REFUSES an unknown `targetRules` name, so this entry is
-#    content-only: no `paths` (the P1 trap needs `paths`) and no `targetRules`, exact value.
+#    content-only: no `paths` (the TRAP above needs `paths`) and no `targetRules`, exact value. That
+#    makes it repo-wide on purpose; it suppresses only this literal placeholder.
 [[allowlists]]
 description = "mise docs: illustrative my_password placeholder (betterleaks generic-password)."
 regexes = ['''^my_password$''']

@@ -2,20 +2,34 @@
 """Tests for the raw-mirror allowlist entries in `.gitleaks.toml` (#1472).
 
 Vendored mirrors under `docs/research/kb/raw/` are committed byte-verbatim, so
-their judged false positives are allowlisted by CONTENT. The trap these tests
-exist for: a GLOBAL `[[allowlists]]` entry (no `targetRules`) that carries
-`paths` blinds gitleaks 8.30.1 to EVERY finding under that path, even with
-`condition = "AND"` and `regexes`. Each test plants a real-shaped token so that
-"simplifying" an entry into a global one fails here.
+their judged false positives are allowlisted by CONTENT. Two ways an entry can
+go wrong, and the planted-token tests (every `test_planted_*`) catch both:
+
+- made GLOBAL: an `[[allowlists]]` entry with no `targetRules` that carries
+  `paths` blinds gitleaks 8.30.1 to EVERY finding under that path, even with
+  `condition = "AND"` and `regexes` (caught by the planted GitHub PAT);
+- widened WITHIN its rule: dropping an entry's `regexes` or `condition`, or
+  matching the line instead of the secret, hides every finding of that rule in
+  the raw tree (caught by the planted `generic-api-key` value and the planted
+  `sgp_` Sourcegraph tokens on a commit-URL line; cold review F3, 2026-10-01).
+
+The other tests are the control arm (the fixture really trips the default
+rules), the judged-false-positive arm, the scope arm (a commit SHA outside the
+raw tree is still reported) and a structural check for the global trap.
+
+Entry 4 (`my_password`, betterleaks-only `generic-password`) has NO coverage
+here: gitleaks has no such rule and betterleaks is host-only. Its arm is the
+betterleaks run recorded in the implementer report.
 
 Every fixture value is built at runtime from fragments, never written as one
 token, so this file stays clean to the hk gitleaks and betterleaks steps that
 scan `tests/`. Only gitleaks is exercised: it is pinned in the shared mise
-fragment (host, image and CI), betterleaks is host-only (`mise.toml`).
+fragment (host, image and CI); betterleaks is host-only (`mise.toml`).
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import shutil
@@ -48,6 +62,28 @@ def _planted_token() -> str:
     """A real-shaped GitHub PAT: the prefix, then 36 mixed-case alphanumerics."""
     vendor = "gh"
     return vendor + "p_" + (string.ascii_letters + string.digits)[7:43]
+
+
+def _sgp_token(*, prefixed_id: bool) -> str:
+    """Build a real-shaped Sourcegraph token.
+
+    Shapes per gitleaks 8.30.1's rule regex: `sgp_<40 hex>` or
+    `sgp_<16 hex>_<40 hex>`.
+    """
+    tail = hashlib.sha1(b"fixture-sgp", usedforsecurity=False).hexdigest()
+    head = hashlib.sha256(b"fixture-sgp-id").hexdigest()[:16]
+    vendor = "sg"
+    return vendor + "p_" + (f"{head}_{tail}" if prefixed_id else tail)
+
+
+def _generic_value() -> str:
+    """A 32-char high-entropy value that `generic-api-key` reports.
+
+    Measured: a run of consecutive letters (`string.ascii_letters[11:43]`) is
+    NOT reported, so the value is a base64 digest instead.
+    """
+    digest = hashlib.sha256(b"fixture-generic").digest()
+    return base64.urlsafe_b64encode(digest).decode()[:32]
 
 
 def _write(root: Path, rel: Path, body: str) -> None:
@@ -137,6 +173,40 @@ def test_planted_token_in_showreel_capture_is_still_reported(tree: Path) -> None
     rc, findings = _scan(tree, CONFIG)
     assert rc == 1
     assert ("github-pat", str(CAPTURE)) in _hits(findings)
+
+
+@pytest.mark.parametrize(
+    "prefixed_id", [False, True], ids=["sgp-40hex", "sgp-16hex-40hex"]
+)
+def test_planted_sgp_token_on_commit_url_line_is_still_reported(
+    tree: Path, *, prefixed_id: bool
+) -> None:
+    """Entry 1 must match the SECRET: a line-target URL regex hid this token."""
+    planted = MIRROR / "links.md"
+    url = f"https://github.com/DeusData/codebase-memory-mcp/commit/{_SHA1}"
+    body = f"sourcegraph notes\n{url} {_sgp_token(prefixed_id=prefixed_id)}\n"
+    _write(tree, planted, body)
+    rc, findings = _scan(tree, CONFIG)
+    assert rc == 1
+    assert _hits(findings) == {("sourcegraph-access-token", str(planted))}
+
+
+@pytest.mark.parametrize(
+    ("planted", "body"),
+    [
+        (MIRROR / "settings.md", "client_{kw} = {val}\n"),
+        (CAPTURE, '{{\n  "key": "' + _SHA256 + '",\n  "client_{kw}": "{val}"\n}}\n'),
+    ],
+    ids=["mirror", "showreel-capture"],
+)
+def test_planted_generic_api_key_is_still_reported(
+    tree: Path, planted: Path, body: str
+) -> None:
+    """Entries 2 and 3 must stay exact: dropping `regexes`/`condition` hid this."""
+    _write(tree, planted, body.format(kw="sec" + "ret", val=_generic_value()))
+    rc, findings = _scan(tree, CONFIG)
+    assert rc == 1
+    assert ("generic-api-key", str(planted)) in _hits(findings)
 
 
 def test_commit_sha_outside_raw_mirrors_is_still_reported(tree: Path) -> None:

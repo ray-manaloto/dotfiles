@@ -195,3 +195,64 @@ The canary dir was deleted after the arms; `git status` was clean of it before s
 | `mise run gate -- run verify` | 0 | 166 passed, 0 failed, 4 skipped (pre-existing human-only policies) |
 | `mise run gate -- run lint-docs` | 0 | passed |
 | `KB_REPO_PATH=~/dev/github/ray-manaloto/knowledge-base mise run rule-sync` | 0 | `OK rule-sync: 1 plugin(s) + 1 line(s) + 22 rule(s) + 2 agent(s)`; no settings drift |
+
+## Round c — cold-review fixes F1/F3/F4/F5 (review: `cold-review-raw-mirror-scan-2026-10-01.md`, SHIP-WITH-FIXES)
+
+F6 (stub/pairs skip non-ASCII paths) is pre-existing. The architect is ticketing it, so it is not touched here.
+
+- **F1** — entry 1 now matches the SECRET (`regexes = ['''^[0-9a-f]{40}$''']`; `regexTarget = "line"` and the URL regex are
+  removed; `condition`, `targetRules` and `paths` are kept). The comment names the accepted trade-off: a bare lowercase 40-hex
+  legacy-format Sourcegraph token in the raw tree is byte-indistinguishable from a commit SHA and stays suppressed. Prefixed
+  `sgp_` tokens are reported again.
+- **F3** — new runtime-built planted cases:
+  - `test_planted_sgp_token_on_commit_url_line_is_still_reported`, parametrized over both shapes in gitleaks 8.30.1's rule
+    regex (`sgp_<40 hex>` and `sgp_<16 hex>_<40 hex>`, read from `config/gitleaks.toml` v8.30.1), each on the same line as a
+    commit URL;
+  - `test_planted_generic_api_key_is_still_reported`, parametrized over a plain mirror file and a non-`"key"` line of a
+    showreel capture.
+  - Measured while writing it: a consecutive-letter run (`string.ascii_letters[11:43]`) is NOT reported by
+    `generic-api-key`, so the value is a urlsafe-base64 sha256 digest. Probe: 3 shapes reported, the consecutive run not.
+- **F4** — the header now says entries 1-3 are path-scoped and entry 4 is content-only and repo-wide by design. The undefined
+  "P1" label is gone, and the trap note records that betterleaks 1.9.0 is not blinded by the global form (review E2 m1).
+- **F5** — the test docstring now names which tests plant tokens and which are control, FP, scope and structural arms. It
+  states that entry 4 has no coverage there (gitleaks has no `generic-password`; betterleaks is host-only) and points to the
+  betterleaks arm.
+
+### Mutation table (in place on `.gitleaks.toml`; restored by copy and `cmp` after each; pristine re-run → 10 passed)
+
+| Mutation | pytest rc | Red tests |
+|---|---|---|
+| entry 2 `regexes` deleted (review m2) | 1 | generic-api-key[mirror], [showreel-capture] |
+| entry 2 `condition` deleted (m3) | 1 | generic-api-key[mirror], [showreel-capture] |
+| entry 1 `regexes` deleted (m4) | 1 | sgp[40hex], sgp[16hex-40hex] |
+| entry 3 `condition` deleted (m5) | 1 | generic-api-key[showreel-capture] |
+| F1 reverted (`regexTarget = "line"` + URL regex) | 1 | sgp[40hex], sgp[16hex-40hex] |
+| entry 1 `condition` deleted (m6) | 1 | sgp ×2, commit-sha-outside-raw |
+| entry 1 `targetRules` deleted (global trap) | 1 | 7: PAT ×2, sgp ×2, generic ×2, structural |
+| entry 2 `targetRules` deleted | 1 | the same 7 |
+| entry 3 `targetRules` deleted | 1 | PAT-in-capture, generic[showreel-capture], structural |
+| entry 4 deleted | 0 (expected) | none; betterleaks arm: FP tree rc=1 `generic-password environments.md` |
+
+All four mutations the review found green (m2, m3, m4, m5) and the F1 revert are now RED.
+
+### Scanner arms
+
+| Arm | gitleaks | betterleaks |
+|---|---|---|
+| 8 held files, scratch tree, new config | rc=0 | rc=0 |
+| held tree + planted PAT and an `sgp_` token on a commit-URL line | rc=1 (`github-pat` L1, `sourcegraph-access-token` L2) | rc=1 (the same two) |
+| test fixture: judged FPs | covered by pytest | rc=0 |
+| test fixture: `sgp_` 40hex / 16hex-40hex on a URL line | covered by pytest | rc=1 / rc=1 `sourcegraph-access-token` |
+| test fixture: generic in mirror / in capture | covered by pytest | rc=1 / rc=1 `generic-api-key` |
+| new test file scanned alone, repo config and defaults-only | rc=0 / rc=0 | rc=0 / rc=0 |
+
+### Gates (round c staged; the untracked cold-review report present but not staged)
+
+| Command | rc | Summary |
+|---|---|---|
+| `mise run gate -- run lint` | 0 | passed |
+| `mise run gate -- run pytest` | 0 | passed, 312 s |
+| `mise run gate -- run verify` | 0 | 166 passed, 0 failed, 4 skipped (pre-existing human-only policies) |
+| `mise run gate -- run lint-docs` | 0 | passed |
+| `uv run --project python dotfiles-setup hook selfcheck` | 0 | "all wired host-side hooks pass" |
+| `betterleaks dir … docs/research/kb` / `… docs/research/runs` / `gitleaks dir … .` | 0 / 0 / 0 | tracked tree clean under the new entry 1 |
