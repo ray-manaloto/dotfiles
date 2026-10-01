@@ -58,8 +58,8 @@ The devloop is `mise run up` → work inside the container → `mise run down`
 `.devcontainer/`, `.github/workflows/`, `python/` and `tests/` each carry their
 own `AGENTS.md` (guaranteed by `claude_agents_md_pairs`) — read that, not a
 table here. Two exceptions worth knowing: `.claude/` has its own `CLAUDE.md` and
-is exempt from the stub check; `home/` (chezmoi templates) lost its `AGENTS.md`
-in #80 deliberately.
+is exempt from the stub check (so is `docs/research/kb/raw/**`, #1486); `home/`
+(chezmoi templates) lost its `AGENTS.md` in #80 deliberately.
 
 ## Two Build Types
 

@@ -1,5 +1,9 @@
 # Research enforcement — make Ray's 2026-09-30 research rulings machine-enforced
 
+**Status: SHIPPED in #1475 (`3a861923`).** §2's code-search clause was refined in review rounds 2-4: the as-built
+contract (health control, planner-or-README must-hit, per-repo existence check) lives in
+`.claude/skills/research-sweep/SKILL.md`; follow-ups #1471 #1473 #1474.
+
 Rulings (Ray, 2026-09-30, verbatim intent): "dont guess on what to do"; "make sure we are always using github
 searches [and] searching dependency repo issues/prs/discussions/etc"; "enforce always using firecrawl to get agent
 optimized offline versions of links provided"; "these decisions need to be enforced and not disappear on new
