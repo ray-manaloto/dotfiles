@@ -100,6 +100,19 @@
       "extractVersion": "^v?(?<version>.+)$"
     },
     {
+      "description": "python (S29-00, #1449; Ray 2026-10-01): its OWN PR, pulled OUT of `image-build inputs`. mise's core:python installs python-build-standalone builds, which lag python.org releases: #1449 bumped python 3.14.7 -> 3.14.8 before any standalone 3.14.8 existed, Renovate's artifact step then failed (`failed to resolve python@3.14.8 ... refusing to replace locked version(s) 3.14.7`), so .config/mise/mise.lock was never updated for ANY of the group's 11 shared.toml bumps and every job died on `bun@1.4.2 is not in the lockfile`. Grouped, one lagging python held ten other tools hostage; alone, it blocks only itself and auto-merges once a standalone build exists. Cost trade-off accepted: a python bump is its own cold base build. Matched by depName + manager + file (packageRules[7] records that a guessed depName silently matches NOTHING; `python` is the depName the mise manager extracts from shared.toml, confirmed in `mise run renovate-dryrun`, which now prints each update's PR branch).",
+      "matchManagers": [
+        "mise"
+      ],
+      "matchFileNames": [
+        ".config/mise/conf.d/shared.toml"
+      ],
+      "matchDepNames": [
+        "python"
+      ],
+      "groupName": "image python"
+    },
+    {
       "description": "clang-p2996 (#1434/#1435, S28b-1): its OWN daily PR, pulled OUT of `image-build inputs` (packageRules[0] matches docker-bake.hcl by file name, which is what put the compiler into #1063). Each bump is a cold p2996 compile, so a once-a-day window bounds cost. minimumReleaseAge is INERT here: the git-refs datasource emits no releaseTimestamp, and this repo's timestamp-optional behaviour then proceeds immediately, so `schedule` is the only soak lever, and `updateNotScheduled: false` keeps an OPEN clang PR from being re-pushed outside that window (each push cancels an in-flight multi-hour compile). Auto-merge is GitHub-native and waits on the required `ci-gate`, which needs build-publish; docker-bake.hcl is in ci.yml's build path filter, so build-publish cannot skip for this PR.",
       "matchDepNames": [
         "bloomberg/clang-p2996"

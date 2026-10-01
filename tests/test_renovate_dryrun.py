@@ -55,7 +55,12 @@ _REPORT = {
                                 "depName": "npm:renovate",
                                 "currentValue": "43.260.2",
                                 "datasource": "npm",
-                                "updates": [{"newValue": "43.264.2"}],
+                                "updates": [
+                                    {
+                                        "newValue": "43.264.2",
+                                        "branchName": "renovate/npm-renovate-43.x",
+                                    }
+                                ],
                             }
                         ],
                     }
@@ -80,6 +85,14 @@ def test_parse_report_extracts_only_pending_updates() -> None:
     assert upd.new_value == "43.264.2"
     assert upd.manager == "mise"
     assert upd.package_file == "mise.toml"
+
+
+def test_parse_report_records_the_pr_branch_each_update_lands_in() -> None:
+    # The branch is the only field that shows grouping (#1449: a python bump
+    # sat in the image-build group's branch and blocked ten other tools).
+    result = renovate_dryrun.parse_report(json.dumps(_REPORT))
+    assert result.updates[0].branch_name == "renovate/npm-renovate-43.x"
+    assert "-> renovate/npm-renovate-43.x" in result.updates[0].render()
 
 
 def test_parse_report_ignores_current_pins() -> None:
