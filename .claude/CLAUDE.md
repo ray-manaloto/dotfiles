@@ -4,7 +4,8 @@ Claude-only configuration. The root `CLAUDE.md` is byte-exactly `@AGENTS.md`
 (`claude_md_import_stub`) and `AGENTS.md` is within ~500 characters of the 12,000-character
 ceiling agnix AGM-003 enforces (Windsurf's per-file limit; see `.claude/rules/md-size-budgets.md`),
 so anything Claude-specific that doesn't fit there lives here. `.claude/**`
-is exempt from the stub and pair checks precisely so this file can exist.
+is exempt from the stub and pair checks precisely so this file can exist;
+`docs/research/kb/raw/**` is exempt too, so vendored mirrors stay byte-verbatim (#1472).
 
 ## Agent skills, trackers and domain docs
 

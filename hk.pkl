@@ -765,7 +765,9 @@ local allSteps = new Mapping<String, Config.Step> {
   //     should always import the latter, never duplicate content.
   //     `.claude/**` is exempt because that scope is Claude-specific
   //     (e.g., `.claude/CLAUDE.md` holds the mattpocock-skills config
-  //     that other agents don't load). ---
+  //     that other agents don't load). `docs/research/kb/raw/**` is
+  //     exempt too: vendored mirrors stay byte-verbatim (rule 8 of
+  //     agent-artifact-conventions.md; #1472). ---
   ["claude_md_import_stub"] {
     check = "scripts/check-claude-md-stub.sh"
   }
@@ -774,8 +776,9 @@ local allSteps = new Mapping<String, Config.Step> {
   //     versa. A CLAUDE.md without a sibling AGENTS.md would import
   //     a non-existent file; an AGENTS.md without a sibling
   //     CLAUDE.md would mean Claude doesn't load that scope's
-  //     project instructions. `.claude/**` is exempt for the same
-  //     reason as `claude_md_import_stub` above. ---
+  //     project instructions. `.claude/**` and
+  //     `docs/research/kb/raw/**` are exempt for the same reasons as
+  //     `claude_md_import_stub` above. ---
   ["claude_agents_md_pairs"] {
     check = "scripts/check-claude-agents-md-pairs.sh"
   }
