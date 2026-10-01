@@ -63,22 +63,29 @@ export const meta = {
 //    returned 0 and failed the sweep), so the workflow builds its own controls for two SEPARATE
 //    questions. "Is GitHub code search working?" — the first dependency agent runs
 //    SEARCH_HEALTH_CONTROL, and a 0 or a failure there is a gap blamed on gh/auth/rate limit.
-//    "Is this repo searchable?" — every dependency agent runs `gh api repos/<r>` (does it exist?)
-//    and `repo:<r> filename:README.md` (is it indexed?). A README of 0 for a repo that EXISTS is a
-//    NOTE, not a gap: code search does not index some repos (measured 2026-09-30: the 0-star fork
-//    virajp/mise returns 0 although its README.md is 8569 bytes). Any must-hit >0 satisfies the
-//    must-hit requirement; a planner must-hit of 0 is a NOTE. A 403 is recorded as rateLimited,
-//    never as a count of 0.
+//    "Is this repo searchable?" — every dependency agent runs `gh api -i repos/<r>` (does it exist
+//    UNDER THIS NAME? a rename redirects, and a renamed repo's old name searches as 0) and
+//    `repo:<r> filename:README.md` (is a README.md of it indexed?). A README of 0 for a repo that
+//    exists under its own name is a NOTE, not a gap, and only when health passed: code search does
+//    not index some repos (measured 2026-09-30: the 0-star fork virajp/mise returns 0 although its
+//    README.md is 8569 bytes) and some have no README.md (sphinx-doc/sphinx: README.rst). The health
+//    row has its own role, so only a planner or README must-hit >0 satisfies the must-hit
+//    requirement; a planner must-hit of 0 is a NOTE. A 403 is recorded as rateLimited, never as 0.
 // A mandatory stage that did not run or did not succeed adds to `mandatoryGaps`; status is
 // `mandatory-gap` unless a higher-precedence degraded status applies.
 
 const A = args || {}
 if (typeof A.question !== 'string' || !A.question.trim()) throw new Error('args.question is required')
 if (typeof A.reportPath !== 'string' || !A.reportPath.startsWith('/')) throw new Error('args.reportPath must be an absolute path')
+// Every repo name reaches shell commands (`--repo`, `gh api repos/…`, `-f q='repo:…'`, `--out`), so its
+// SHAPE is the guard: owner/repo characters only, never a quote, space, `;` or `$`.
+const REPO_SHAPE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const REPO = typeof A.repo === 'string' ? A.repo : ''
+if (REPO && !REPO_SHAPE.test(REPO)) throw new Error(`args.repo must be owner/repo ([A-Za-z0-9_.-]), got ${JSON.stringify(REPO)}`)
 // Other projects the question is ABOUT, beside REPO: searched in both directions
 // (REPO's tracker for each name, each repo's tracker for REPO's name).
 const RELATED = Array.isArray(A.relatedRepos) ? A.relatedRepos.filter(r => typeof r === 'string' && r) : []
+RELATED.forEach(r => { if (!REPO_SHAPE.test(r)) throw new Error(`args.relatedRepos entries must be owner/repo ([A-Za-z0-9_.-]), got ${JSON.stringify(r)}`) })
 // Search terms are project NAMES, not owner/repo slugs: `repo:jdx/mise omarchy` found 17 hits
 // where `repo:jdx/mise omacom/omarchy` found 3 (cold review 94f4e161 row 8).
 const nameOf = r => r.split('/').pop()
@@ -98,19 +105,25 @@ const DEP_REPOS = [...new Set([REPO, ...RELATED].filter(Boolean))]
 const depQueries = r => (r === REPO ? [null, ...RELATED.filter(o => o !== REPO).map(nameOf)] : [REPO ? nameOf(REPO) : null])
 // The mandatory mirror stage (13) writes under the report's repository.
 const REPORT_SLUG = A.reportPath.split('/').pop().replace(/\.md$/, '')
+// The slug is unquoted in the dependency `--out` paths, so it is shape-checked like a repo name.
+if (!/^[A-Za-z0-9_.-]+$/.test(REPORT_SLUG)) throw new Error(`args.reportPath file name must be [A-Za-z0-9_.-]+.md, got ${JSON.stringify(REPORT_SLUG)}`)
 const docsAt = A.reportPath.lastIndexOf('/docs/')
 const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot.replace(/\/+$/, '')
   : docsAt > 0 ? A.reportPath.slice(0, docsAt) : ''
 if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
 const MIRROR_DIR = `${ROOT}/docs/research/kb/raw/${REPORT_SLUG}/links`
-const CODE_ROLES = ['query', 'must-hit', 'known-absent']
+// `health` is the workflow's search-health row: its own role, so it can never satisfy the must-hit.
+const CODE_ROLES = ['query', 'must-hit', 'known-absent', 'health']
 // Two questions, two controls (14). SEARCH_HEALTH_CONTROL asks "does code search answer at all?" (a
-// repo known to be indexed; 9 hits measured 2026-09-30). README_CONTROL asks "is THIS repo indexed?":
-// a 0 there is not proof the search is broken, because an existing but unindexed repo (a low-star
-// fork) also returns 0 — so the repos API settles existence, and only health decides "broken".
+// repo known to be indexed; 9 hits measured 2026-09-30). README_CONTROL asks "is a README.md of THIS
+// repo indexed?": a 0 there is not proof the search is broken — an unindexed repo (a low-star fork), a
+// repo with no README.md (README.rst) and a renamed repo's old name all return 0 — so the repos API
+// settles existence and name, and only health decides "broken".
 const SEARCH_HEALTH_CONTROL = 'repo:cli/cli filename:README.md'
 const README_CONTROL = r => `repo:${r} filename:README.md`
 // Single-quote a value for the shell: a caller URL may carry `'` (legal, common in Wikipedia URLs).
+// Every shell command below interpolates only a constant, a shape-checked value (REPO_SHAPE,
+// REPORT_SLUG, an integer) or a shq()-quoted one.
 const shq = v => `'${v.replace(/'/g, "'\\''")}'`
 
 // One routing table, used for dispatch AND returned as provenance, so the two cannot drift.
@@ -180,7 +193,7 @@ const DEPS = {
   required: ['runs', 'control', 'exists'],
   properties: {
     control: CODE_CONTROL,
-    exists: { type: 'object', required: ['rc', 'fullName'], properties: { rc: { type: 'number' }, fullName: { type: 'string' } } },
+    exists: { type: 'object', required: ['rc', 'status', 'fullName'], properties: { rc: { type: 'number' }, status: { type: 'number' }, fullName: { type: 'string' } } },
     health: CODE_CONTROL,
     runs: {
       type: 'array',
@@ -289,8 +302,9 @@ const depPrompt = (r, i) => [
   'true when gh reported HTTP 403 or a rate limit (a 403 is a RATE LIMIT, never a count of 0).',
   i === 0 ? 'Then run the search-health control once, never piped, and return it as health (same fields as control):' : '',
   i === 0 ? `  gh api -X GET search/code -f q='${SEARCH_HEALTH_CONTROL}' --jq .total_count` : '',
-  'Then run, never piped, and return it as exists (rc = its real exit code; fullName = what it printed, "" on failure):',
-  `  gh api repos/${r} --jq .full_name`,
+  'Then run, never piped, and return it as exists (rc = its real exit code; status = the HTTP status number on its',
+  'FIRST line, e.g. 200 from `HTTP/2.0 200 OK`, 404, 403, 429; fullName = its LAST line when status is 200, else ""):',
+  `  gh api -i repos/${r} --jq .full_name`,
   'Never print environment values.',
 ].filter(Boolean).join('\n')
 const mirrorPrompt = (url, n) => [
@@ -310,6 +324,9 @@ const [plan, depResults, mirrorResults] = await Promise.all([
 // Mandatory-stage bookkeeping: a stage that did not run or did not succeed is a mandatory gap, never a silent skip.
 const mandatoryGaps = []
 if (!DEP_REPOS.length) mandatoryGaps.push('dependency-repo stage: no args.repo or args.relatedRepos, so no dependency repo issues/PRs/discussions/releases were searched — re-run with args.repo')
+// An agent may echo a query with its quotes; compare the bare terms.
+const unquote = q => q.trim().replace(/^(["'])(.*)\1$/, '$2').trim()
+const REPO_NAMES = DEP_REPOS.map(r => nameOf(r).toLowerCase())
 const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
   const want = depQueries(r).length
   const got = depResults[i]
@@ -318,9 +335,12 @@ const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
     return []
   }
   if (got.runs.length < want) mandatoryGaps.push(`dependency-repo stage for ${r}: ${got.runs.length} of ${want} run(s) reported`)
-  // The count alone cannot see an agent that swapped a cross-direction name for question terms.
+  // The count alone cannot see an agent that swapped one slot's query for the other's, in EITHER
+  // direction: a name in the question-terms slot leaves the tracker unsearched for the QUESTION.
   depQueries(r).forEach((q, k) => {
-    if (q !== null && !(got.runs[k] && got.runs[k].query === q)) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${got.runs[k] ? got.runs[k].query : 'missing'}")`)
+    const ran = got.runs[k] ? unquote(got.runs[k].query) : null
+    if (q !== null && ran !== q) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${ran === null ? 'missing' : ran}")`)
+    if (q === null && ran !== null && REPO_NAMES.includes(ran.toLowerCase())) mandatoryGaps.push(`dependency-repo stage for ${r}: question-terms query "${ran}" is a repo name, so ${r} was not searched for the QUESTION`)
   })
   got.runs.filter(x => !x.manifest || x.rc !== 0).forEach(x => mandatoryGaps.push(`dependency-repo stage for ${r}: "${x.query}" rc=${x.rc}${x.manifest ? '' : ', no manifest'}`))
   return got.runs.map(x => ({ repo: r, ...x }))
@@ -340,19 +360,30 @@ const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403), not 0' : `re
 const workflowRow = (query, c) => ({ query, role: 'must-hit', source: 'workflow', count: c.count, rc: c.rc, rateLimited: c.rateLimited === true })
 // Question 1, asked once (by the first dependency agent): does GitHub code search answer at all?
 const healthGot = DEP_REPOS.length && depResults[0] !== null ? depResults[0].health : undefined
-const healthRow = healthGot ? workflowRow(SEARCH_HEALTH_CONTROL, healthGot) : null
+const healthRow = healthGot ? { ...workflowRow(SEARCH_HEALTH_CONTROL, healthGot), role: 'health' } : null
 const healthFailed = healthRow !== null && !(answered(healthRow) && healthRow.count > 0)
+const healthOk = healthRow !== null && !healthFailed
 if (healthFailed) mandatoryGaps.push(`code search: search-health control "${SEARCH_HEALTH_CONTROL}" ${outcome(healthRow)} — gh auth, rate-limit or search is broken`)
 else if (DEP_REPOS.length && depResults[0] !== null && !healthRow) mandatoryGaps.push(`code search: search-health control "${SEARCH_HEALTH_CONTROL}" was not run, so whether code search answers is unverified`)
-// Question 2, per repo: does it exist (repos API), and is it indexed (README control)?
+// Question 2, per repo: does it exist under THIS name (repos API), and is a README.md of it indexed?
+const RATE_LIMIT_STATUS = [403, 429]
+const repoCheckGap = (r, ex) => {
+  if (ex.status === 404) return `dependency repo ${r} not found via the repos API (HTTP 404)`
+  if (ex.status !== 200 || ex.rc !== 0 || !ex.fullName) return `could not check ${r} via the repos API (HTTP ${ex.status}${RATE_LIMIT_STATUS.includes(ex.status) ? ' — rate-limited or forbidden' : ''}${ex.status === 200 ? `, rc=${ex.rc}, fullName "${ex.fullName}"` : ''})`
+  // The API follows a rename (jdx/rtx -> jdx/mise, rc=0) while search under the old name returns 0.
+  if (ex.fullName.toLowerCase() !== r.toLowerCase()) return `dependency repo ${r} redirects to ${ex.fullName} — re-run with repo/relatedRepos set to ${ex.fullName}`
+  return ''
+}
 const readmeNotes = []
 const workflowControls = DEP_REPOS.flatMap((r, i) => {
   const got = depResults[i]
   if (got === null) return []
   const c = workflowRow(README_CONTROL(r), got.control)
-  if (got.exists.rc !== 0) mandatoryGaps.push(`dependency repo ${r} not found via the repos API (rc=${got.exists.rc})`)
+  const repoGap = repoCheckGap(r, got.exists)
+  if (repoGap) mandatoryGaps.push(repoGap)
   else if (!answered(c)) mandatoryGaps.push(`code search: README control "${c.query}" ${outcome(c)}${healthFailed ? ' — gh auth, rate-limit or search is broken' : ''}`)
-  else if (c.count === 0) readmeNotes.push(`"${c.query}" returned 0 although ${r} exists — GitHub code search does not index it (e.g. a low-star fork); not a gap`)
+  // Only a search shown to answer (health >0) can say anything about one repo's 0.
+  else if (c.count === 0 && healthOk) readmeNotes.push(`"${c.query}" returned 0 although ${r} exists — either code search does not index it (e.g. a low-star fork) or it has no README.md (e.g. README.rst); not a gap`)
   return [c]
 })
 const plannerRows = plan === null ? [] : (plan.codeSearch || []).map(c => ({ ...c, source: 'planner', rateLimited: c.rateLimited === true }))
@@ -379,9 +410,13 @@ const fanoutGaps = plan === null ? [] : plan.runs.filter(r => r.rc !== 0 || !r.m
 if (plan === null && !LINKS.length && !depManifests.length) return { status: 'plan-null', mandatoryGaps, routing }
 const manifests = planManifests.concat(depManifests)
 if (!manifests.length && !LINKS.length) return { status: 'no-manifests', plan, mandatoryGaps, fanoutGaps, routing }
+// Each failed stage carries its OWN evidence consequence, so synthesis is never handed one fixed
+// sentence that is false for a different stage (round-3 review R5).
 const stageGaps = []
-if (plan === null) stageGaps.push('planner returned null — no planner fan-out ran (dependency-repo manifests, if any, were still read)')
-else if (!planManifests.length) stageGaps.push(`planner fan-out produced no manifests (${plan.runs.length ? plan.runs.map(r => `${r.query} rc=${r.rc}`).join(', ') : 'no runs'}) — exa/context7/firecrawl/github evidence from the planner is missing`)
+const stageConsequences = []
+const failStage = (gap, consequence) => { stageGaps.push(gap); stageConsequences.push({ stage: gap, consequence }) }
+if (plan === null) failStage('planner agent reported nothing (null) — no planner fan-out manifest reached triage', 'no planner fan-out (exa/context7/firecrawl/github) result is in the evidence')
+else if (!planManifests.length) failStage(`planner fan-out produced no manifests (${plan.runs.length ? plan.runs.map(r => `${r.query} rc=${r.rc}`).join(', ') : 'no runs'}) — exa/context7/firecrawl/github evidence from the planner is missing`, 'no planner fan-out (exa/context7/firecrawl/github) result is in the evidence')
 if (stageGaps.length) log('Plan: no planner fanout results — continuing on the caller links and mandatory stages (a named gap)')
 else log(`Plan: ${plan.runs.length} fanout run(s); ${codeSearch.length} code search(es); sourceDive=${plan.sourceDive}`)
 
@@ -413,7 +448,7 @@ if (LINKS.length && !(mirrorIndex && mirrorIndex.written)) mandatoryGaps.push(`m
 log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(m => m.rc === 0 && m.bytes > 0).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
 if (triageOut === null && !LINKS.length) return { status: 'triage-null', plan, mandatoryGaps, fanoutGaps, routing }
 if (triageOut === null) {
-  stageGaps.push('triage returned null — no fan-out hit was read')
+  failStage('triage returned null — no fan-out hit was read', 'no hit from any fan-out manifest (planner or dependency-repo) was triaged or read')
   log('Triage: null — continuing on the caller links alone (a named gap)')
 }
 const triage = triageOut || EMPTY_TRIAGE
@@ -473,6 +508,14 @@ const failedReads = readers.flatMap((r, i) => (readResults[i] === null ? r.urls 
 log(`Read: ${claims.length} claim(s) from ${readers.length} reader(s) (${LINKS.length} caller link(s)); ${failedReads.length} unread`)
 
 phase('Synthesize')
+// What the report's evidence actually rests on, derived from what ran — never a fixed sentence.
+const evidenceBase = () => [
+  LINKS.length ? `the ${LINKS.length} caller link(s)` : '',
+  triageOut !== null && planManifests.length ? 'hits triaged from the planner fan-out manifests' : '',
+  triageOut !== null && depManifests.length ? 'hits triaged from the dependency-repo manifests' : '',
+  plan && plan.sourceDive && REPO ? `the ${REPO} source dive` : '',
+  'the code-search rows',
+].filter(Boolean).join(' + ')
 const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   `QUESTION: ${A.question}`,
   `Write the research report to ${A.reportPath}. Inputs: the claims JSON below, the triage hit list, the code-search`,
@@ -501,7 +544,7 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   mandatoryGaps.length ? `MANDATORY GAPS:\n${JSON.stringify(mandatoryGaps)}` : '',
   fanoutGaps.length ? `FANOUT GAPS (each is a Gap: a planner fan-out run that failed or wrote no manifest):\n${JSON.stringify(fanoutGaps)}` : '',
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
-  stageGaps.length ? `FAILED STAGES (each is a Gap; say the evidence base is the caller links plus the mandatory-stage (dependency-repo) manifests): ${JSON.stringify(stageGaps)}` : '',
+  stageGaps.length ? `FAILED STAGES (each is a Gap; state its consequence, and say the evidence base is: ${evidenceBase()}): ${JSON.stringify(stageConsequences)}` : '',
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })

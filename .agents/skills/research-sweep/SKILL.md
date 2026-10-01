@@ -54,15 +54,23 @@ this repo use this skill and do not import `kb_setup.research`
   **mirror** (every link via
   `mise exec -- firecrawl scrape <url> --format markdown --only-main-content`
   into `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
-  readers read the mirror) and **code search** (at least one planner query plus a
-  must-hit and a fresh known-absent control). The workflow adds its own controls
-  for two separate questions: *does code search answer at all?* — one
-  search-health control (`repo:cli/cli filename:README.md`), whose 0 or failure
-  is a gap — and, per dependency repo, *does it exist?* (`gh api repos/<r>`; a
-  miss is a gap) and *is it indexed?* (`repo:<r> filename:README.md`; a 0 for a
-  repo that exists is only a note, since code search skips some repos such as
-  low-star forks). A planner's guessed must-hit of 0 is a note; a 403 is
-  recorded as rate-limited, never as 0. A mandatory stage that did not run or
+  readers read the mirror) and **code search** (at least one planner query, a
+  fresh known-absent control, and a must-hit >0 from the planner or a README
+  control). The workflow adds its own controls for two separate questions:
+  *does code search answer at all?* — one search-health control
+  (`repo:cli/cli filename:README.md`, role `health`, which never counts as the
+  must-hit), whose 0 or failure is a gap — and, per dependency repo, *does it
+  exist under this name?* (`gh api -i repos/<r>`: a 404 is "not found", a
+  403/429/other is "could not check", and a rename such as `jdx/rtx` →
+  `jdx/mise` is a gap naming the canonical repo) and *is a README.md of it
+  indexed?* (`repo:<r> filename:README.md`; a 0 for a repo that exists under
+  its own name is only a note, and only when health passed — either the repo is
+  not indexed, e.g. a low-star fork, or it has no README.md, e.g. README.rst).
+  `repo`, `relatedRepos` and the report file name are shape-checked
+  (`[A-Za-z0-9_.-]`) because they reach shell commands. A planner's guessed
+  must-hit of 0 is a note; a 403 is recorded as rate-limited, never as 0. A
+  dependency agent must run the cross-direction NAME in its slot and question
+  terms (never a repo name) in the other. A mandatory stage that did not run or
   did not succeed adds to `mandatoryGaps`; status is `mandatory-gap` unless a
   higher-precedence degraded status applies. A planner fan-out run that failed
   is listed in `fanoutGaps`; a link that will not fetch is a named gap
@@ -141,8 +149,9 @@ this repo use this skill and do not import `kb_setup.research`
   misleading-by-omission, and a flagged claim is adjudicated one tier up.
   Status values: `complete`, `mandatory-gap` (a mandatory stage did not run or
   did not succeed), `partial-verify` (some refuters null),
-  `links-only` (planner/fan-out/triage failed; the evidence base is the caller
-  links plus the mandatory-stage manifests),
+  `links-only` (planner/fan-out/triage failed; `stageGaps` names which, and the
+  report states what the evidence actually rests on — caller links, hits
+  triaged from the planner or dependency-repo manifests, code search),
   `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
   `triage-null`, `synth-null`. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and
