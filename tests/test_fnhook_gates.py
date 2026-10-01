@@ -334,7 +334,6 @@ def test_valid_fixture_passes_both_real_tools(
     [
         ("bad-event", "validate", "is not an event"),
         ("parse-error", "validate", "does not parse"),
-        ("reserved-name", "validate", "is reserved"),
         ("bad-return", "typecheck", "not assignable to type 'string[]'"),
         ("untyped", "typed", "untyped function-hook module"),
     ],
@@ -358,6 +357,53 @@ def test_broken_fixtures_stay_invalid_for_the_intended_reason(
 
     assert result.rc != 0
     assert stdout_marker in result.stdout
+    assert result.stderr == ""
+
+
+def _running_claude_version() -> tuple[int, ...] | None:
+    """`claude --version` of the binary the gate actually runs, or None."""
+    try:
+        completed = subprocess.run(
+            [fnhook_gates.CLAUDE_BINARY, "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=REPO_ROOT,
+        )
+    except OSError:
+        return None
+    head = completed.stdout.split(maxsplit=1)
+    if completed.returncode != 0 or not head:
+        return None
+    try:
+        return tuple(int(part) for part in head[0].split("."))
+    except ValueError:
+        return None
+
+
+@_needs_real_tools
+def test_reserved_name_fixture_is_rejected_by_the_pinned_claude(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A `claude-` plugin name fails `validate` once 2.1.287's rule is in force.
+
+    The rule arrived in 2.1.287 (#1496). The devcontainer image installs
+    whatever `claude-code` was latest at build time (2.1.283 when this
+    landed), and that binary accepts the name, so the arm is bound to the
+    repository pin rather than to whichever claude happens to be on PATH: a
+    binary older than `schemas/sources.toml` cannot speak to the rule.
+    """
+    pin = tuple(int(p) for p in fnhook_gates.claude_code_pin(REPO_ROOT).split("."))
+    running = _running_claude_version()
+    if running is None or running < pin:
+        pytest.skip(
+            f"running claude {running} predates the pinned {pin}; "
+            "the reserved-name rule cannot be observed on it"
+        )
+    monkeypatch.chdir(REPO_ROOT)
+    result = fnhook_gates.validate_plugin(_fixture_plugins()["reserved-name"])
+    assert result.rc != 0
+    assert "is reserved" in result.stdout
     assert result.stderr == ""
 
 
