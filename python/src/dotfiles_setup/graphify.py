@@ -363,8 +363,9 @@ def _staleness_problem(
     thirteen days and 76 commits, through a rule that tells agents a ``fresh``
     graph is citable and a PreToolUse hook that makes querying it MANDATORY
     before grepping. Two symbols a session needed that day (``plan_attest_main``,
-    ``claude_doctor_main``) were absent because their modules postdated the
-    build; the graph answered as though they did not exist.
+    ``claude_doctor_main``, since renamed ``install_doctor_main``) were absent
+    because their modules postdated the build; the graph answered as though
+    they did not exist.
 
     The signal is ``built_at_commit``, which **graphify itself** writes from the
     repository HEAD at export time (``graphify/export.py:405-407``, via its own

@@ -69,10 +69,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import (
-    claude_doctor,
     codex_schema,
     devcontainer_names,
     hk_hooks,
+    install_doctor,
     removed_plugins,
 )
 from dotfiles_setup.dependency_currency import (
@@ -1253,14 +1253,14 @@ def check_path_drift(setup: Setup) -> list[str]:
     return [drift_advice(report.drifts, gate=report.gate_drifts(gate_tools))]
 
 
-def check_claude_doctor(setup: Setup) -> list[str]:
+def check_install_doctor(setup: Setup) -> list[str]:
     """Is the `claude` this shell runs the newest one, and does it report clean?
 
     Host state, so a doctor check rather than an hk step: the answer is a
     property of one operator's machine, and a CI runner installs afresh.
 
     Every verdict's findings are advisory here; the ``classic.PreToolUse`` half
-    of the ``claude-doctor`` plugin owns enforcement. It denies an ``INVALID``
+    of the ``install-doctor`` plugin owns enforcement. It denies an ``INVALID``
     report or one that explicitly sets ``enforcement_eligible`` and clears an
     established deny only after a positive OK, DRIFT, or disabled answer.
 
@@ -1268,16 +1268,16 @@ def check_claude_doctor(setup: Setup) -> list[str]:
     :func:`check_path_drift` is: ``uv run`` executes under mise's activated
     environment, so an uncaptured ``PATH`` resolves mise's pinned ``claude``
     rather than the operator's own install.
-    :func:`claude_doctor.evaluate` reports that blindness rather than passing.
+    :func:`install_doctor.evaluate` reports that blindness rather than passing.
     """
     baseline = _str_keys(setup.baseline.get("claude"))
     if baseline.get("enabled") is False:
         return []
     expected = baseline.get("expected_install_method")
-    verdict = claude_doctor.evaluate(
+    verdict = install_doctor.evaluate(
         expected_method=expected
         if isinstance(expected, str)
-        else claude_doctor.NATIVE_METHOD,
+        else install_doctor.NATIVE_METHOD,
     )
     return list(verdict.findings)
 
@@ -1769,7 +1769,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("listing-budget", check_listing_budget),
     ("path-drift", check_path_drift),
     ("graphify-skill-surface", check_graphify_skill_surface),
-    ("claude-doctor", check_claude_doctor),
+    ("install-doctor", check_install_doctor),
     ("codex-schema", check_codex_schema),
     ("removed-plugins", check_removed_plugins),
     ("hk-hooks", check_hk_hooks),

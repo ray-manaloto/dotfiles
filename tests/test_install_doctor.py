@@ -43,8 +43,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import claude_doctor
-from dotfiles_setup.claude_doctor import Verdict
+from dotfiles_setup import install_doctor
+from dotfiles_setup.install_doctor import Verdict
 from dotfiles_setup.path_drift import Provenance
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ MISE_DEPRECATION_WARN = (
     "This will be removed in mise 2027.7.0."
 )
 
-#: A root holding no ``doctor.toml``, so :func:`claude_doctor.load_baseline`
+#: A root holding no ``doctor.toml``, so :func:`install_doctor.load_baseline`
 #: returns its documented default instead of this repo's real baseline.
 NO_BASELINE = Path("/nonexistent/dotfiles-test-root")
 
@@ -141,15 +141,15 @@ def _stub_process_boundary(
         rc, stdout, stderr = responses.pop(0)
         return subprocess.CompletedProcess(argv, rc, stdout, stderr)
 
-    monkeypatch.setattr(claude_doctor.shutil, "which", which)
-    monkeypatch.setattr(claude_doctor.subprocess, "run", run)
+    monkeypatch.setattr(install_doctor.shutil, "which", which)
+    monkeypatch.setattr(install_doctor.subprocess, "run", run)
 
 
 @pytest.fixture(autouse=True)
 def _ambient(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default every test to a captured, trustworthy ambient PATH."""
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "resolve_ambient_path",
         lambda _environ: (AMBIENT, Provenance.EXPLICIT),
     )
@@ -161,12 +161,12 @@ def _ambient(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_parse_doctor_extracts_version_method_and_marker() -> None:
-    assert claude_doctor.parse_doctor(NATIVE_DOCTOR) == ("2.1.270", "native", True)
+    assert install_doctor.parse_doctor(NATIVE_DOCTOR) == ("2.1.270", "native", True)
 
 
 def test_parse_doctor_reads_a_hyphenated_install_method() -> None:
     r"""``npm-global`` is the shadowing case a ``\w+``-only pattern would miss."""
-    assert claude_doctor.parse_doctor(SHADOWED_DOCTOR) == (
+    assert install_doctor.parse_doctor(SHADOWED_DOCTOR) == (
         "2.1.269",
         "npm-global",
         True,
@@ -175,13 +175,13 @@ def test_parse_doctor_reads_a_hyphenated_install_method() -> None:
 
 def test_parse_doctor_returns_none_when_the_running_line_is_reworded() -> None:
     """A ``None`` version is the caller's signal to report UNKNOWN, not failure."""
-    version, method, _ = claude_doctor.parse_doctor("Now running: native 2.1.270")
+    version, method, _ = install_doctor.parse_doctor("Now running: native 2.1.270")
     assert version is None
     assert method is None
 
 
 def test_parse_doctor_reports_a_missing_clean_marker() -> None:
-    assert claude_doctor.parse_doctor("Running: native (2.1.270)\n") == (
+    assert install_doctor.parse_doctor("Running: native (2.1.270)\n") == (
         "2.1.270",
         "native",
         False,
@@ -204,7 +204,7 @@ def test_latest_version_reads_stdout_not_a_success_warning(
         calls=calls,
     )
 
-    assert claude_doctor.latest_version() == ("2.1.277", None)
+    assert install_doctor.latest_version() == ("2.1.277", None)
     _, kwargs = calls[0]
     assert kwargs["timeout"] == 20.0
     env = kwargs["env"]
@@ -225,11 +225,11 @@ def test_empty_oracle_stdout_is_unknown_even_when_stderr_has_text(
         ],
     )
 
-    assert claude_doctor.latest_version() == (
+    assert install_doctor.latest_version() == (
         None,
         f"version oracle returned no version; stderr: {diagnostic[:200]!r}",
     )
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
 
@@ -244,7 +244,7 @@ def test_non_version_oracle_stdout_is_unknown_never_invalid(
         oracle_responses=[(0, stdout, "")],
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
     assert "non-version output" in result.findings[0]
@@ -264,13 +264,13 @@ def test_running_version_shape_rejects_a_trailing_newline(
         oracle_responses=[(0, "2.1.277\n", "")],
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
 
     assert result.verdict is Verdict.UNKNOWN
     assert result.running_version == "2.1.277\n"
 
 
-def test_claude_doctor_is_read_across_stdout_and_stderr(
+def test_install_doctor_is_read_across_stdout_and_stderr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The defensive default survives if upstream moves ``Running:`` to stderr.
@@ -291,7 +291,7 @@ def test_claude_doctor_is_read_across_stdout_and_stderr(
         oracle_responses=[(0, "2.1.270\n", "")],
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
 
     assert result.verdict is Verdict.OK
     assert result.running_version == "2.1.270"
@@ -354,7 +354,7 @@ def test_unreadable_running_version_is_unknown_but_keeps_known_facts(
         calls=calls,
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
 
     assert result.verdict is expected_verdict
     assert result.enforcement_eligible is (expected_verdict is Verdict.INVALID)
@@ -382,7 +382,7 @@ def test_release_suffix_is_unreadable_not_an_enforcing_mismatch(
         oracle_responses=[(0, "2.1.277\n", "")],
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
 
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
@@ -404,24 +404,24 @@ def test_oracle_stderr_is_diagnostic_on_success_and_reason_on_failure(
         ],
     )
 
-    assert claude_doctor.latest_version() == ("2.1.277", None)
-    latest, reason = claude_doctor.latest_version()
+    assert install_doctor.latest_version() == ("2.1.277", None)
+    latest, reason = install_doctor.latest_version()
     assert latest is None
     assert reason is not None
     assert failure in reason
 
 
 def test_a_current_native_install_is_ok(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate(check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run())
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.OK
     assert result.findings == []
     assert result.enforcement_eligible is False
 
 
 def test_a_stale_version_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run(oracle=(0, "2.1.271\n")))
-    result = claude_doctor.evaluate(check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run(oracle=(0, "2.1.271\n")))
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert result.enforcement_eligible is True
     assert any("2.1.271 is published" in f for f in result.findings)
@@ -436,11 +436,11 @@ def test_a_shadowed_install_is_invalid_and_names_the_shadowing(
     a day of first being observed, so the assertion is the point of the test.
     """
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "_run",
         _fake_run(doctor=(0, SHADOWED_DOCTOR), oracle=(0, "2.1.269\n")),
     )
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert result.install_method == "npm-global"
     # The version assertion PASSES here (2.1.269 == 2.1.269), so this finding
@@ -457,11 +457,11 @@ def test_an_accepted_non_native_install_can_opt_out(
 ) -> None:
     """``expected_method=""`` skips the assertion rather than standing-finding."""
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "_run",
         _fake_run(doctor=(0, SHADOWED_DOCTOR), oracle=(0, "2.1.269\n")),
     )
-    result = claude_doctor.evaluate(expected_method="", check_pin=False)
+    result = install_doctor.evaluate(expected_method="", check_pin=False)
     assert result.verdict is Verdict.OK
 
 
@@ -469,9 +469,9 @@ def test_a_missing_binary_is_unknown_not_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(doctor=(127, "claude: not found on PATH"))
+        install_doctor, "_run", _fake_run(doctor=(127, "claude: not found on PATH"))
     )
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
 
@@ -481,9 +481,9 @@ def test_reworded_output_is_unknown_not_a_silent_pass(
 ) -> None:
     """A parse failure remains UNKNOWN but retains the known clean-marker fact."""
     monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(doctor=(0, "Now running: native 2.1.270"))
+        install_doctor, "_run", _fake_run(doctor=(0, "Now running: native 2.1.270"))
     )
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
     assert "could not parse" in result.findings[0]
@@ -501,7 +501,7 @@ def test_an_oracle_failure_is_unknown_never_current(
         oracle_responses=[(1, "", "network unreachable")],
     )
 
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
 
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
@@ -513,11 +513,11 @@ def test_an_oracle_failure_is_unknown_never_current(
 
 def test_a_missing_clean_marker_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "_run",
         _fake_run(doctor=(0, "Running: native (2.1.270)\nFound 1 problem.\n")),
     )
-    result = claude_doctor.evaluate(check_pin=False)
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert any("installation issues" in f for f in result.findings)
 
@@ -532,12 +532,12 @@ def test_a_rewritten_path_is_blind_and_therefore_unknown(
 ) -> None:
     """Blindness must never render as OK — that is a check that can only pass."""
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "resolve_ambient_path",
         lambda _environ: ("/rewritten", Provenance.BLIND),
     )
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate(check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run())
+    result = install_doctor.evaluate(check_pin=False)
     assert result.verdict is Verdict.UNKNOWN
     assert "BLIND" in result.findings[0]
     assert result.enforcement_eligible is False
@@ -549,12 +549,12 @@ def test_blindness_short_circuits_before_any_subprocess(
     """A blind check must not spend a ``claude doctor`` it cannot interpret."""
     seen: list[str | None] = []
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "resolve_ambient_path",
         lambda _environ: ("/rewritten", Provenance.BLIND),
     )
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run(seen=seen))
-    claude_doctor.evaluate(check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run(seen=seen))
+    install_doctor.evaluate(check_pin=False)
     assert seen == []
 
 
@@ -563,8 +563,8 @@ def test_both_probes_run_against_the_ambient_path(
 ) -> None:
     """The regression arm: an inherited PATH resolves the wrong ``claude``."""
     seen: list[str | None] = []
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run(seen=seen))
-    claude_doctor.evaluate(check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run(seen=seen))
+    install_doctor.evaluate(check_pin=False)
     assert seen == [AMBIENT, AMBIENT], (
         "every probe must resolve against the captured ambient PATH; an "
         "inherited one finds mise's pinned claude shim, not the operator's"
@@ -579,8 +579,8 @@ def test_both_probes_run_against_the_ambient_path(
 def test_to_json_is_parseable_and_carries_the_verdict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    payload = json.loads(claude_doctor.evaluate(check_pin=False).to_json())
+    monkeypatch.setattr(install_doctor, "_run", _fake_run())
+    payload = json.loads(install_doctor.evaluate(check_pin=False).to_json())
     assert payload["verdict"] == "ok"
     assert payload["enforcement_eligible"] is False
     assert payload["disabled_by_baseline"] is False
@@ -612,11 +612,11 @@ def test_the_cli_exit_code_tracks_enforcement_eligibility_only(
     the baseline-reading regression below was first caught.
     """
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "_run",
         _fake_run(doctor=(0, doctor_out), oracle=(0, oracle_out)),
     )
-    assert claude_doctor.claude_doctor_main(project_root=NO_BASELINE) == expected_rc
+    assert install_doctor.install_doctor_main(project_root=NO_BASELINE) == expected_rc
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] is not None
     assert payload["baseline_path"] == str((NO_BASELINE / "doctor.toml").absolute())
@@ -630,11 +630,11 @@ def test_the_cli_exit_code_tracks_enforcement_eligibility_only(
 def test_the_cli_subcommand_is_registered() -> None:
     """Green gates certify logic, not wiring — the seam must actually exist."""
     main_src = (REPO_ROOT / "python" / "src" / "dotfiles_setup" / "main.py").read_text()
-    assert "_add_claude_doctor_subcommand(subparsers)" in main_src, (
+    assert "_add_install_doctor_subcommand(subparsers)" in main_src, (
         "the subcommand helper is defined but never called, so `dotfiles-setup "
-        "claude-doctor` does not exist and the function hook has nothing to call"
+        "install-doctor` does not exist and the function hook has nothing to call"
     )
-    assert '"claude-doctor": lambda' in main_src
+    assert '"install-doctor": lambda' in main_src
 
 
 def test_a_non_native_expectation_does_not_blame_the_mise_shim(
@@ -647,8 +647,8 @@ def test_a_non_native_expectation_does_not_blame_the_mise_shim(
     *was* native. Caught by arming the doctor check with an expectation no host
     here satisfies, which is the only way that branch is reachable.
     """
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
-    result = claude_doctor.evaluate(expected_method="homebrew", check_pin=False)
+    monkeypatch.setattr(install_doctor, "_run", _fake_run())
+    result = install_doctor.evaluate(expected_method="homebrew", check_pin=False)
     assert result.verdict is Verdict.INVALID
     assert "not the expected 'homebrew'" in result.findings[0]
     assert "mise env -C" not in result.findings[0], (
@@ -687,18 +687,18 @@ def test_the_enforcing_cli_reads_expected_install_method_from_doctor_toml(
 ) -> None:
     """The lever documented in ``doctor.toml`` must move the blocking path.
 
-    Regression for the 2026-09-13 disconnect: ``claude_doctor_main`` defaulted
+    Regression for the 2026-09-13 disconnect: ``install_doctor_main`` defaulted
     to ``NATIVE_METHOD`` and never opened the file, so editing
-    ``expected_install_method`` silenced :func:`doctor.check_claude_doctor`'s
+    ``expected_install_method`` silenced :func:`doctor.check_install_doctor`'s
     advisory finding while ``classic.PreToolUse`` - the only path that can deny
     a tool call - kept enforcing the constant. Measured in one session: the
     doctor's finding disappeared and the hook's behaviour did not change.
     """
     monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+        install_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
     )
     root = _baseline(tmp_path, 'expected_install_method = "npm-global"')
-    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    assert install_doctor.install_doctor_main(project_root=root) == 0
     assert json.loads(capsys.readouterr().out)["verdict"] == Verdict.OK
 
 
@@ -714,10 +714,10 @@ def test_the_enforcing_cli_still_blocks_when_the_baseline_disagrees(
     test above.
     """
     monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+        install_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
     )
     root = _baseline(tmp_path, 'expected_install_method = "native"')
-    assert claude_doctor.claude_doctor_main(project_root=root) == 1
+    assert install_doctor.install_doctor_main(project_root=root) == 1
     assert json.loads(capsys.readouterr().out)["verdict"] == Verdict.INVALID
 
 
@@ -732,10 +732,10 @@ def test_the_baseline_off_switch_reaches_the_enforcing_path(
     "reports nothing, which reads exactly like a healthy host".
     """
     monkeypatch.setattr(
-        claude_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
+        install_doctor, "_run", _fake_run(doctor=(0, CURRENT_NON_NATIVE_DOCTOR))
     )
     root = _baseline(tmp_path, 'enabled = false\nexpected_install_method = "native"')
-    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    assert install_doctor.install_doctor_main(project_root=root) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == Verdict.UNKNOWN
     assert payload["enforcement_eligible"] is False
@@ -746,7 +746,7 @@ def test_the_baseline_off_switch_reaches_the_enforcing_path(
 
 def _baseline_read_failure_finding(baseline_path: Path) -> str:
     return (
-        f"claude-doctor could not read or parse {baseline_path}; asserted defaults: "
+        f"install-doctor could not read or parse {baseline_path}; asserted defaults: "
         "enabled = true and expected_install_method = 'native'."
     )
 
@@ -761,9 +761,9 @@ def test_a_missing_baseline_asserts_the_documented_default_silently(
     """
     baseline_path = (tmp_path / "doctor.toml").absolute()
     findings: list[str] = []
-    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+    assert install_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
-        claude_doctor.NATIVE_METHOD,
+        install_doctor.NATIVE_METHOD,
         baseline_path,
     )
     assert findings == []
@@ -774,9 +774,9 @@ def test_invalid_toml_asserts_defaults_with_a_finding(tmp_path: Path) -> None:
     (tmp_path / "doctor.toml").write_text("this is not = valid toml [[[")
     findings: list[str] = []
 
-    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+    assert install_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
-        claude_doctor.NATIVE_METHOD,
+        install_doctor.NATIVE_METHOD,
         baseline_path,
     )
     assert findings == [_baseline_read_failure_finding(baseline_path)]
@@ -788,9 +788,9 @@ def test_a_non_utf8_baseline_asserts_the_documented_default(tmp_path: Path) -> N
     baseline_path.write_bytes(b"\xff")
     findings: list[str] = []
 
-    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+    assert install_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
-        claude_doctor.NATIVE_METHOD,
+        install_doctor.NATIVE_METHOD,
         baseline_path,
     )
     assert findings == [_baseline_read_failure_finding(baseline_path)]
@@ -801,9 +801,9 @@ def test_an_os_error_asserts_defaults_with_a_finding(tmp_path: Path) -> None:
     baseline_path.mkdir()
     findings: list[str] = []
 
-    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+    assert install_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
-        claude_doctor.NATIVE_METHOD,
+        install_doctor.NATIVE_METHOD,
         baseline_path,
     )
     assert findings == [_baseline_read_failure_finding(baseline_path)]
@@ -826,9 +826,9 @@ def test_the_baseline_is_read_as_utf8(
     monkeypatch.setattr(Path, "read_text", read_text)
     findings: list[str] = []
 
-    assert claude_doctor.load_baseline(tmp_path, findings=findings) == (
+    assert install_doctor.load_baseline(tmp_path, findings=findings) == (
         True,
-        claude_doctor.NATIVE_METHOD,
+        install_doctor.NATIVE_METHOD,
         baseline_path,
     )
     assert seen == [("utf-8", None)]
@@ -841,11 +841,11 @@ def test_a_baseline_read_failure_is_non_enforcing_but_visible(
     tmp_path: Path,
 ) -> None:
     """The diagnostic is added after evaluation and cannot become an assertion."""
-    monkeypatch.setattr(claude_doctor, "_run", _fake_run())
+    monkeypatch.setattr(install_doctor, "_run", _fake_run())
     baseline_path = (tmp_path / "doctor.toml").absolute()
     baseline_path.write_bytes(b"\xff")
 
-    assert claude_doctor.claude_doctor_main(project_root=tmp_path) == 0
+    assert install_doctor.install_doctor_main(project_root=tmp_path) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == Verdict.OK
     assert payload["enforcement_eligible"] is False
@@ -861,12 +861,12 @@ def test_the_cli_hands_the_project_root_to_the_baseline_loader() -> None:
     """
     main_src = (REPO_ROOT / "python" / "src" / "dotfiles_setup" / "main.py").read_text()
     wired = (
-        "claude_doctor_main(\n"
+        "install_doctor_main(\n"
         "                force_refresh=not args.no_refresh, project_root=project_root\n"
         "            )"
     )
     assert wired in main_src, (
-        "`claude-doctor` must pass project_root, or the enforcing path resolves "
+        "`install-doctor` must pass project_root, or the enforcing path resolves "
         "doctor.toml against the process cwd instead of the repository"
     )
 
@@ -901,7 +901,7 @@ def test_unreadable_running_value_does_not_make_pin_drift_enforcing(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    result = claude_doctor.evaluate(project_root=root)
+    result = install_doctor.evaluate(project_root=root)
 
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
@@ -963,7 +963,7 @@ def test_verdict_matrix_preserves_host_enforcement_and_isolates_pin_drift(
         oracle_responses=[(0, f"{latest}\n", "")],
     )
 
-    result = claude_doctor.evaluate(project_root=root)
+    result = install_doctor.evaluate(project_root=root)
 
     assert result.verdict is expected
     assert result.enforcement_eligible is (expected is Verdict.INVALID)
@@ -988,7 +988,7 @@ def test_pin_only_is_reported_but_the_cli_returns_zero(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    assert claude_doctor.claude_doctor_main(project_root=root) == 0
+    assert install_doctor.install_doctor_main(project_root=root) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == "drift"
     assert payload["enforcement_eligible"] is False
@@ -1013,7 +1013,7 @@ def test_pin_plus_method_failure_still_returns_one(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    assert claude_doctor.claude_doctor_main(project_root=root) == 1
+    assert install_doctor.install_doctor_main(project_root=root) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == "invalid"
     assert payload["enforcement_eligible"] is True
@@ -1032,7 +1032,7 @@ def test_unreadable_running_value_with_current_pin_remains_unknown(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    result = claude_doctor.evaluate(project_root=root)
+    result = install_doctor.evaluate(project_root=root)
 
     assert result.verdict is Verdict.UNKNOWN
     assert result.enforcement_eligible is False
@@ -1054,7 +1054,7 @@ def test_findings_keep_head_order_method_version_pin_then_clean(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    result = claude_doctor.evaluate(project_root=root)
+    result = install_doctor.evaluate(project_root=root)
 
     assert result.verdict is Verdict.INVALID
     assert len(result.findings) == 4
@@ -1068,7 +1068,7 @@ def test_a_current_pin_reports_nothing(tmp_path: Path) -> None:
     """Control arm: without it the failing arm below proves nothing."""
     root = _sources_with("2.1.273", tmp_path)
 
-    assert claude_doctor.pin_currency_findings("2.1.273", root) == []
+    assert install_doctor.pin_currency_findings("2.1.273", root) == []
 
 
 def test_a_pin_behind_upstream_is_reported(tmp_path: Path) -> None:
@@ -1082,7 +1082,7 @@ def test_a_pin_behind_upstream_is_reported(tmp_path: Path) -> None:
     """
     root = _sources_with("2.1.272", tmp_path)
 
-    findings = claude_doctor.pin_currency_findings("2.1.273", root)
+    findings = install_doctor.pin_currency_findings("2.1.273", root)
 
     assert len(findings) == 1, findings
     assert "2.1.272" in findings[0]
@@ -1094,10 +1094,10 @@ def test_a_tree_without_sources_toml_is_not_this_repo(tmp_path: Path) -> None:
 
     Every other finding in this module is about the machine. Reporting one for
     a directory that simply has no `schemas/sources.toml` would make
-    `claude_doctor_main(project_root=<anything>)` fail on a question that does
+    `install_doctor_main(project_root=<anything>)` fail on a question that does
     not apply to it — which is how this seam was first caught.
     """
-    assert claude_doctor.pin_currency_findings("2.1.273", tmp_path) == []
+    assert install_doctor.pin_currency_findings("2.1.273", tmp_path) == []
 
 
 def test_an_unreadable_pin_is_a_finding_not_silence(tmp_path: Path) -> None:
@@ -1115,7 +1115,7 @@ def test_an_unreadable_pin_is_a_finding_not_silence(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    findings = claude_doctor.pin_currency_findings("2.1.273", tmp_path)
+    findings = install_doctor.pin_currency_findings("2.1.273", tmp_path)
 
     assert len(findings) == 1, findings
     assert "UNKNOWN" in findings[0]
@@ -1151,7 +1151,7 @@ def test_malformed_pin_shapes_emit_an_enforcing_verdict(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    assert claude_doctor.claude_doctor_main(project_root=tmp_path) == 1
+    assert install_doctor.install_doctor_main(project_root=tmp_path) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["verdict"] == Verdict.INVALID
     assert payload["enforcement_eligible"] is True
@@ -1180,7 +1180,7 @@ def test_an_unreadable_pin_keeps_its_prior_enforcement(
         oracle_responses=[(0, "2.1.273\n", "")],
     )
 
-    result = claude_doctor.evaluate(project_root=tmp_path)
+    result = install_doctor.evaluate(project_root=tmp_path)
 
     assert result.verdict is Verdict.INVALID
     assert result.enforcement_eligible is True
@@ -1198,17 +1198,17 @@ def test_the_pin_check_is_wired_into_evaluate(
     `evaluate` reaches it, and that `check_pin=False` really suppresses it.
     """
     monkeypatch.setattr(
-        claude_doctor,
+        install_doctor,
         "_run",
         _fake_run(doctor=(0, NATIVE_DOCTOR), oracle=(0, "2.1.270\n")),
     )
     root = _sources_with("2.1.269", tmp_path)
 
-    on = claude_doctor.evaluate(project_root=root)
+    on = install_doctor.evaluate(project_root=root)
     assert on.verdict is Verdict.DRIFT
     assert any("schemas/sources.toml pins claude-code" in item for item in on.findings)
 
-    off = claude_doctor.evaluate(check_pin=False, project_root=root)
+    off = install_doctor.evaluate(check_pin=False, project_root=root)
     assert off.verdict is Verdict.OK
     assert not any(
         "schemas/sources.toml pins claude-code" in item for item in off.findings

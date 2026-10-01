@@ -1,0 +1,8 @@
+{
+  "name": "claude-fnhook-fixture-reserved",
+  "version": "1.0.0",
+  "description": "Reserved-prefix plugin name: validate must reject it (#1496)",
+  "author": {
+    "name": "dotfiles test suite"
+  }
+}

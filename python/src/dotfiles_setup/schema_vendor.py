@@ -497,7 +497,7 @@ def sources_path(root: Path | None = None) -> Path:
     """Absolute path to ``schemas/sources.toml`` under ``root``.
 
     Public so a caller can ask "is this tree even this repo?" without importing
-    the private root resolver — :mod:`dotfiles_setup.claude_doctor` needs that
+    the private root resolver — :mod:`dotfiles_setup.install_doctor` needs that
     distinction to avoid manufacturing a finding for a directory that simply
     has no vendored schemas.
     """

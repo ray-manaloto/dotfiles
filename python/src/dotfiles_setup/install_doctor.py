@@ -129,7 +129,7 @@ NATIVE_METHOD: Final = "native"
 #: Blindness is therefore a finding, never a pass, exactly as in
 #: :mod:`dotfiles_setup.path_drift`.
 _BLIND_ADVICE: Final = (
-    "claude-doctor check is BLIND: mise already rewrote PATH for this process, "
+    "install-doctor check is BLIND: mise already rewrote PATH for this process, "
     "so the claude this shell would actually run is not visible here. This is "
     "NOT 'claude is fine'. Have the caller capture it: "
     'DOTFILES_AMBIENT_PATH="$PATH" mise run <task>'
@@ -544,7 +544,7 @@ _BASELINE_FILE: Final = "doctor.toml"
 #: Routing to ``UNKNOWN`` keeps the off-switch honest — it warns, and because
 #: only ``INVALID`` is enforcement-eligible it still never blocks.
 _DISABLED_ADVICE: Final = (
-    "claude-doctor is disabled: doctor.toml [claude] sets enabled = false. "
+    "install-doctor is disabled: doctor.toml [claude] sets enabled = false. "
     "This is NOT a clean bill of health - the question was not asked."
 )
 
@@ -555,11 +555,11 @@ def load_baseline(
     """Read ``[claude]`` and return enabled, method, and its absolute path.
 
     The ENFORCING path must read the same reviewed baseline the advisory one
-    does. It did not until 2026-09-13: :func:`claude_doctor_main` defaulted
+    does. It did not until 2026-09-13: :func:`install_doctor_main` defaulted
     ``expected_method`` to :data:`NATIVE_METHOD` and never opened the file, so
     ``doctor.toml``'s two documented levers moved
-    :func:`doctor.check_claude_doctor`'s advisory finding while the
-    ``classic.PreToolUse`` half of the ``claude-doctor`` plugin - the only path
+    :func:`doctor.check_install_doctor`'s advisory finding while the
+    ``classic.PreToolUse`` half of the ``install-doctor`` plugin - the only path
     that can BLOCK a tool call - went on asserting a hardcoded constant.
 
     Measured that day, one session, same config: editing
@@ -582,7 +582,7 @@ def load_baseline(
         return True, NATIVE_METHOD, baseline_path
     except OSError, ValueError:
         findings.append(
-            f"claude-doctor could not read or parse {baseline_path}; asserted "
+            f"install-doctor could not read or parse {baseline_path}; asserted "
             "defaults: enabled = true and expected_install_method = 'native'."
         )
         return True, NATIVE_METHOD, baseline_path
@@ -597,7 +597,7 @@ def load_baseline(
     )
 
 
-def claude_doctor_main(
+def install_doctor_main(
     *,
     force_refresh: bool = True,
     expected_method: str | None = None,

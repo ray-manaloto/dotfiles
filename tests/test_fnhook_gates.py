@@ -128,7 +128,7 @@ def _write_plugin_markers(plugin_dir: Path) -> None:
 
 
 def test_fixture_inventory_is_tree_derived_and_excluded_from_production() -> None:
-    """All seven complete fixtures are discoverable only when explicitly included."""
+    """All eight complete fixtures are discoverable only when explicitly included."""
     all_plugins = set(
         fnhook_gates.discover_plugin_dirs(REPO_ROOT, include_fixtures=True)
     )
@@ -141,6 +141,7 @@ def test_fixture_inventory_is_tree_derived_and_excluded_from_production() -> Non
         "escape-hatch-unconsulted",
         "no-escape-hatch",
         "parse-error",
+        "reserved-name",
         "untyped",
         "valid",
     }
@@ -333,6 +334,7 @@ def test_valid_fixture_passes_both_real_tools(
     [
         ("bad-event", "validate", "is not an event"),
         ("parse-error", "validate", "does not parse"),
+        ("reserved-name", "validate", "is reserved"),
         ("bad-return", "typecheck", "not assignable to type 'string[]'"),
         ("untyped", "typed", "untyped function-hook module"),
     ],

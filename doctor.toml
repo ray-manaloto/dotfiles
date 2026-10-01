@@ -243,8 +243,8 @@ gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
 [claude]
 # The `claude` binary this host runs, checked against the newest published
 # release and against `claude doctor`'s own summary line. The check is
-# `check_claude_doctor`; the judgement lives in
-# `python/src/dotfiles_setup/claude_doctor.py`.
+# `check_install_doctor`; the judgement lives in
+# `python/src/dotfiles_setup/install_doctor.py`.
 #
 # Grilling decision Q1 (2026-09-12): "Native installer owns claude. Not mise."
 # Asserted, not assumed, because the repo undermined it within hours: a

@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { register } from "../../../.claude/skills/claude-doctor/hooks/register.ts";
+import { register } from "../../../.claude/skills/install-doctor/hooks/register.ts";
 
 type DoctorReport = {
   verdict: "ok" | "invalid" | "unknown" | "drift";
@@ -61,7 +61,7 @@ const unknown = (finding = "the host question could not be asked"): DoctorReport
 });
 
 const disabled = (baselinePath: string): DoctorReport => ({
-  ...unknown("claude-doctor is disabled by doctor.toml"),
+  ...unknown("install-doctor is disabled by doctor.toml"),
   disabled_by_baseline: true,
   baseline_path: baselinePath,
 });
@@ -132,7 +132,7 @@ function makeServices(root: string, cwd = root) {
         spawnCount += 1;
         const response = responses.shift();
         if (response === undefined) {
-          throw new Error("scripted claude-doctor failure");
+          throw new Error("scripted install-doctor failure");
         }
         const eligible =
           typeof response === "object" &&
@@ -201,7 +201,7 @@ function assertDenied(result: Record<string, unknown>, expectedFinding?: string)
   const deny = result.deny as string;
   assert.match(
     deny,
-    /^claude-doctor: refusing tool calls until the Claude Code install is repaired\./,
+    /^install-doctor: refusing tool calls until the Claude Code install is repaired\./,
   );
   if (expectedFinding !== undefined) {
     assert.ok(deny.includes(expectedFinding), `deny omitted cached finding: ${expectedFinding}`);
@@ -209,7 +209,7 @@ function assertDenied(result: Record<string, unknown>, expectedFinding?: string)
   assert.equal("allow" in result, false, "a deny must not spread the allow result");
 }
 
-const scratch = await mkdtemp(join(tmpdir(), "claude-doctor-hook-"));
+const scratch = await mkdtemp(join(tmpdir(), "install-doctor-hook-"));
 const root = join(scratch, "repo");
 const otherRoot = join(scratch, "other-clone");
 await mkdir(join(root, "x"), { recursive: true });

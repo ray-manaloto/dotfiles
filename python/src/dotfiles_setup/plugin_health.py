@@ -352,7 +352,7 @@ def _declared_from_settings(*sources: Mapping[str, object]) -> list[str]:
 def plugin_health_main(*, project_root: Path | None = None) -> int:
     """Main entry point: check plugin health and print JSON report.
 
-    Mirrors claude_doctor_main: prints report as JSON on stdout, returns
+    Mirrors install_doctor_main: prints report as JSON on stdout, returns
     the PluginHealthCode as the process exit code.
     """
     if project_root is None:
