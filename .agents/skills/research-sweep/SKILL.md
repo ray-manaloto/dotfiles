@@ -53,8 +53,9 @@ this repo use this skill and do not import `kb_setup.research`
   `repo` and every `relatedRepos` entry, both directions, one agent per repo;
   EACH of the three must answer `ok`/`empty_verified`, read from the run's
   manifest — the fan-out's own rc is 0 when any one source answered, #1473 —
-  except a tracker the repos API reports DISABLED (`has_issues` /
-  `has_discussions` false), which is a note, not a gap (Ray, 2026-10-02);
+  except a tracker the repos API reports DISABLED (`has_discussions` false, or
+  `has_issues` AND `has_pull_requests` false — the issues search also returns
+  PRs), which is a note, not a gap (Ray, 2026-10-02);
   pass `runId` to stamp each fan-out with `--request-id` so only THIS run's
   manifests count, else freshness is a 1-hour age window),
   **mirror** (every link saved by the pinned firecrawl into

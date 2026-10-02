@@ -11,7 +11,7 @@ export const meta = {
     { title: 'Synthesize', detail: 'one Opus pass writes the report (opus, high)' },
     { title: 'Verify', detail: 'one independent refuter per load-bearing claim (sonnet), a completeness critic, an Opus adjudicator for any refuted or misleading flag, then reconcile' },
     { title: 'Advise', detail: 'optional codex-sol-advisor second opinion (codex tokens, not Claude)' },
-    { title: 'Retrospect', detail: 'a READ-ONLY Explore agent proposes tuning from what this run found hard; a haiku writer saves it as a PROPOSAL FILE beside the report — never applied (#1502)' },
+    { title: 'Retrospect', detail: 'a READ-ONLY Explore agent proposes tuning from what this run found hard; a haiku writer saves it as a PROPOSAL FILE under docs/research/kb/reports/agents/ — never applied (#1502)' },
   ],
 }
 
@@ -135,15 +135,15 @@ const DEP_REPOS = [REPO, ...RELATED].filter(Boolean)
 // manifest left by an EARLIER run of the same report is never this run's (cold review F3). Without it,
 // freshness falls back to the manifest's age.
 const RUN_ID = typeof A.runId === 'string' ? A.runId : ''
-if (RUN_ID && !/^[A-Za-z0-9_.-]+$/.test(RUN_ID)) throw new Error(`args.runId must be [A-Za-z0-9_.-]+, got ${JSON.stringify(RUN_ID)}`)
+if (RUN_ID && !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(RUN_ID)) throw new Error(`args.runId must be [A-Za-z0-9_.-]+ not starting with - or ., got ${JSON.stringify(RUN_ID)}`)
 // null = "short search terms from the QUESTION"; a name = the other side of a relationship.
-const depQueries = r => (r === REPO ? [null, ...RELATED.filter(o => o !== REPO).map(nameOf)] : [REPO ? nameOf(REPO) : null])
+const depQueries = r => (r === REPO ? [null, ...RELATED.filter(o => o.toLowerCase() !== REPO.toLowerCase()).map(nameOf)] : [REPO ? nameOf(REPO) : null])
 // The repository root: explicit, else the part of reportPath before its /docs/.
 const docsAt = A.reportPath.lastIndexOf('/docs/')
 // Normalised like python's Path() (so an echoed probe path still matches), and refused a `.`/`..` segment
 // for the same reason reportPath is.
-const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot.replace(/\/+/g, '/').replace(/\/+$/, '')
-  : docsAt > 0 ? A.reportPath.slice(0, docsAt) : ''
+const ROOT = (typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot
+  : docsAt > 0 ? A.reportPath.slice(0, docsAt) : '').replace(/\/+/g, '/').replace(/\/+$/, '')
 if (ROOT.split('/').some(s => s === '.' || s === '..')) throw new Error(`args.repoRoot must not contain a "." or ".." segment, got ${JSON.stringify(A.repoRoot)}`)
 if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
 // The report SLUG names this run's mirror and fan-out directories, so two reports must never share it
@@ -459,7 +459,10 @@ const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
   // A tracker the repo has DISABLED is the world, not a failed search: a repo with Discussions off returns
   // empty_unverified forever (cold review F1, live: rhysd/actionlint). The repos API says which are off.
   const check = probesOf(p, 'repo-check').find(x => x.repo === r) || {}
-  const disabled = [check.has_issues === false ? 'github-issues' : '', check.has_discussions === false ? 'github-discussions' : ''].filter(Boolean)
+  // github-issues searches search/issues, which also returns PULL REQUESTS: it is dead only when issues AND
+  // pull requests are both off (round-2 N1, live: apache/kafka has issues off, PRs on, and answers ok).
+  const disabled = [check.has_issues === false && check.has_pull_requests === false ? 'github-issues' : '',
+    check.has_discussions === false ? 'github-discussions' : ''].filter(Boolean)
   disabled.forEach(d => dependencyNotes.push(`${r} has ${d.replace('github-', '')} disabled (repos API) — ${d} not searchable there; not a gap`))
   return depQueries(r).map((q, k) => {
     const want = `${depOut(r, k)}/manifest.json`
@@ -618,7 +621,7 @@ LINKS.length ? run('mirrorIndex', 'mirror-index', 'Mirror', indexPrompt, { schem
 const indexRow = probesOf(readProbe(mirrorIndex, INDEX_OUT), 'mirror-index')[0]
 if (LINKS.length && !(indexRow && indexRow.written === true)) mandatoryGaps.push(`mirror stage: README index ${MIRROR_DIR}/README.md was not written`)
 log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(mirrored).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
-if (triageOut === null && !LINKS.length) return await finish(withStatuses('triage-null', { plan, mandatoryGaps, fanoutGaps, routing }))
+if (triageOut === null && !LINKS.length) return await finish(withStatuses('triage-null', { plan, mandatoryGaps, fanoutGaps, stageGaps, routing }))
 if (triageOut === null) {
   failStage('triage returned null — no fan-out hit was read', 'no hit from any fan-out manifest (planner or dependency-repo) was triaged or read')
   log('Triage: null — continuing on the caller links alone (a named gap)')

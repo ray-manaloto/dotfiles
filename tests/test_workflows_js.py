@@ -211,6 +211,7 @@ const DEPS = (prompt, o = {}) => {
       : []),
     { kind: 'repo-check', repo, rc: exists.rc, http_status: exists.status,
       full_name: exists.fullName, has_issues: exists.hasIssues,
+      has_pull_requests: exists.hasPullRequests,
       has_discussions: exists.hasDiscussions },
   ])
 }
@@ -2801,3 +2802,59 @@ def test_research_sweep_early_exit_lists_the_stage_status(tmp_path: Path) -> Non
     run_result = _result(payload)
     assert run_result["status"] == "synth-null"
     assert run_result["statuses"] == ["synth-null", "mandatory-gap", "stage-gap"]
+
+
+@pytest.mark.parametrize(
+    ("has_issues", "has_prs", "gaps"),
+    [(False, False, 0), (False, True, 1), (True, True, 1)],
+    ids=["issues-and-prs-off", "issues-off-prs-on", "both-on"],
+)
+def test_research_sweep_issues_exemption_needs_prs_off_too(
+    tmp_path: Path, *, has_issues: bool, has_prs: bool, gaps: int
+) -> None:
+    """Round-2 N1: github-issues hits search/issues, which returns PRs too.
+
+    Live: apache/kafka (issues off, PRs on) answers ok, so a FAILED issues search
+    there is a real failure. FAIL arm: exempt on has_issues alone and the
+    issues-off-prs-on case hides a failed search (#1473 re-opened).
+    """
+    failed = ["github-issues: error (exited 1: HTTP 403)"]
+    stub = (
+        "DEPS(_prompt, { runs: [{ query: 'q0', requiredFailed: "
+        f"{json.dumps(failed)} }}], exists: {{ rc: 0, status: 200,"
+        f" fullName: 'example/repo', hasIssues: {json.dumps(has_issues)},"
+        f" hasPullRequests: {json.dumps(has_prs)}, hasDiscussions: true }} }})"
+    )
+    payload = _mandatory_run(
+        tmp_path, f"sweep-n1-{has_issues}-{has_prs}.js", {"links": []}, {"deps": stub}
+    )
+    assert len(cast("list[str]", _result(payload)["mandatoryGaps"])) == gaps
+
+
+def test_research_sweep_round2_small_fixes(tmp_path: Path) -> None:
+    """Round-2 F9 (derived ROOT normalised), N3 (runId cannot be a flag), N8."""
+    report = f"{REPO_ROOT.parent}//{REPO_ROOT.name}/docs/research/runs/r9/report.md"
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-r2-f9.js",
+        {"links": ["https://l.test"], "reportPath": report, "repoRoot": None},
+    )
+    words = _command(_of_kind(payload, "mirror")[0]["prompt"], "--mirror-url")
+    assert words[words.index("--mirror-path") + 1].startswith(
+        f"{REPO_ROOT}/docs/research/kb/raw/"
+    )
+
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "runId": "-x"},
+        "  return null",
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-r2-n3.js")
+    assert result.returncode != 0
+    assert "args.runId must be" in result.stderr
+
+    payload = _mandatory_run(
+        tmp_path, "sweep-r2-n8.js", {"links": [], "relatedRepos": ["Example/Repo"]}
+    )
+    prompt = _of_kind(payload, "deps")[0]["prompt"]
+    assert prompt.count("--sources") == 1, "REPO is never searched for its own name"

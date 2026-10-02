@@ -1735,6 +1735,10 @@ def _repo_check_probe(
         "has_issues": body.get("has_issues")
         if isinstance(body.get("has_issues"), bool)
         else None,
+        # search/issues also returns PRs, so issues off + PRs on is still live.
+        "has_pull_requests": body.get("has_pull_requests")
+        if isinstance(body.get("has_pull_requests"), bool)
+        else None,
         "has_discussions": body.get("has_discussions")
         if isinstance(body.get("has_discussions"), bool)
         else None,
