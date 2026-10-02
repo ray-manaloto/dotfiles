@@ -87,7 +87,6 @@ from dotfiles_setup.graphify import (
     graphify_health_main,
     graphify_main,
     graphify_rebuild_main,
-    hook_guard_main,
     prs_main,
 )
 from dotfiles_setup.graphify_currency import (
@@ -95,11 +94,13 @@ from dotfiles_setup.graphify_currency import (
     graphify_update_main,
     graphify_upgrade_main,
 )
+from dotfiles_setup.graphify_hook import hook_guard_main
 from dotfiles_setup.graphify_skill import graphify_skill_refresh_main
 from dotfiles_setup.handoff_check import main as handoff_check_main
 from dotfiles_setup.hk_builtins_audit import hk_builtins_audit_main
 from dotfiles_setup.hook_guard import pretooluse_main
 from dotfiles_setup.hook_selfcheck import hook_selfcheck_main
+from dotfiles_setup.host_lock import host_lock_main
 from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.image_lock import image_lock_main
@@ -1193,6 +1194,15 @@ def _add_gate_subcommands(subparsers: _SubParsers) -> None:
         "read", help="Read a stored typed gate result"
     )
     read_parser.add_argument("gate_name")
+    heavy_parser = subparsers.add_parser(
+        "heavy-gate",
+        help=(
+            "Run a command under the host-wide heavy-gate lock "
+            "(`run [--label L] [--wait S] -- CMD...`), or print its holder "
+            "(`status`)"
+        ),
+    )
+    heavy_parser.add_argument("heavy_gate_argv", nargs=argparse.REMAINDER)
 
 
 def _add_verify_and_gate_subcommands(subparsers: _SubParsers) -> None:
@@ -2020,8 +2030,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
         type=Path,
         default=None,
         help="Write the report here instead of stdout (relative paths resolve "
-        "against the repo root). Used by the SessionEnd hook to refresh "
-        ".agent/command-audit.md once per session",
+        "against the repo root); by convention .agent/command-audit.md",
     )
 
     memory_index_parser = subparsers.add_parser(
@@ -3012,6 +3021,7 @@ def _build_command_handlers(
         "install": lambda: handle_install(project_root),
         "verify": lambda: handle_verify(args),
         "gate": _gate,
+        "heavy-gate": lambda: sys.exit(host_lock_main(args.heavy_gate_argv)),
         "lane-receipt": _lane_receipt,
         "sdlc-team": lambda: sys.exit(
             sdlc_team_main([args.request, "--repo-root", str(project_root)])

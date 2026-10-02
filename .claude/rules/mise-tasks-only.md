@@ -60,10 +60,10 @@ applies even in bypassPermissions mode); the **ship/land `hook-selfcheck` gate**
 driving the wired guard end-to-end, so a hook regression fails a PR like
 lint/pytest; **this rule + the `pr-workflow`/`devcontainer-sync` skills**
 (markdown alone is "relying on the LLM", never the only layer); the
-**self-learning loop `mise run command-audit`**, run per session by a
-**`SessionEnd`** hook, which mines transcripts for one-off commands the guard
-does not yet cover; and **contracts** in suites.toml asserting the whole chain
-exists. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
+**self-learning loop `mise run command-audit`**, run on demand (its
+`SessionEnd` hook was retired 2026-10-02 for host load), which mines transcripts
+for one-off commands the guard does not yet cover; and **contracts** in
+suites.toml asserting the whole chain exists. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
 
 ⚠️ **The hook fails OPEN on its own errors** and records every one (#343) — so a
 green session is not proof the guard ran. Hard bans that must never fail open

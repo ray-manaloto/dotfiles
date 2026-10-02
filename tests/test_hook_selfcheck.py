@@ -60,8 +60,8 @@ def _full_settings() -> dict:
         "hooks": {
             "PreToolUse": [
                 _hook(
-                    "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
-                    f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+                    "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob",
+                    f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
                 )
             ],
             "SessionStart": [
@@ -71,13 +71,6 @@ def _full_settings() -> dict:
                     f"bash {_ANCHOR}/scripts/web-setup.sh; else "
                     f"mise -C {_ANCHOR} run tool-currency-check; "
                     f"mise -C {_ANCHOR} run doctor; fi",
-                )
-            ],
-            "SessionEnd": [
-                _hook(
-                    None,
-                    f"mise -C {_ANCHOR} run command-audit -- "
-                    f"--output {_ANCHOR}/.agent/command-audit.md",
                 )
             ],
             "InstructionsLoaded": [
@@ -266,7 +259,7 @@ def test_partial_matcher_fails(tmp_path: Path) -> None:
     """
     settings = _full_settings()
     settings["hooks"]["PreToolUse"] = [
-        _hook("Bash", f"bash {_ANCHOR}/scripts/pretooluse-guard.sh")
+        _hook("Bash", f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh")
     ]
     failures = _wiring(tmp_path, settings)
     pretooluse_failures = [f for f in failures if "PreToolUse" in f]
@@ -296,8 +289,8 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
     settings = _full_settings()
     settings["hooks"]["PreToolUse"] = [
         _hook(
-            "Bash|AskUserQuestion|Write|NotebookEdit",
-            f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+            "Bash|AskUserQuestion|Write|NotebookEdit|Grep|Read|Glob",
+            f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
         )
     ]
     failures = _wiring(tmp_path, settings)
@@ -306,7 +299,7 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
     # 'Edit', so an unscoped positive assertion here could be satisfied by a
     # DIFFERENT row's failure and never actually prove PreToolUse was flagged.
     assert any("'Edit'" in f for f in pretooluse_failures)
-    # …and only that one: the four tokens actually present must not be
+    # …and only that one: the seven tokens actually present must not be
     # flagged, or the test would pass for the wrong reason. This scoping only
     # narrows what the negative assertion scans — it makes the assertion
     # EASIER to satisfy (weaker), guarding against a future false RED, not
@@ -317,8 +310,9 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
 def _full_settings_with_graphify_pretooluse() -> dict:
     """`_full_settings()`, but PreToolUse carries its REAL multi-entry shape.
 
-    `.claude/settings.json`'s PreToolUse has three entries (the deny guard
-    plus two graphify entries); `_full_settings()`'s single entry cannot
+    `.claude/settings.json` once had three PreToolUse entries (the deny guard
+    plus two graphify entries; merged into one on 2026-10-02). A sibling entry
+    is still a legal shape, and `_full_settings()`'s single entry cannot
     exhibit F1 — a required matcher token satisfied by a DIFFERENT entry than
     the one carrying the required command — because there is only one entry
     to draw from.
@@ -326,10 +320,10 @@ def _full_settings_with_graphify_pretooluse() -> dict:
     settings = _full_settings()
     settings["hooks"]["PreToolUse"] = [
         _hook(
-            "Bash|AskUserQuestion|Edit|Write|NotebookEdit",
-            f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+            "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob",
+            f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
         ),
-        _hook("Bash|Grep", f"bash {_ANCHOR}/scripts/graphify-hook-guard.sh search"),
+        _hook("Bash|Grep", f"/bin/bash {_ANCHOR}/scripts/sibling-hook.sh search"),
     ]
     return settings
 
@@ -356,7 +350,7 @@ def test_sibling_entry_matcher_does_not_satisfy_the_owning_entry(
     settings = _full_settings_with_graphify_pretooluse()
     settings["hooks"]["PreToolUse"][0] = _hook(
         "AskUserQuestion|Edit|Write|NotebookEdit",
-        f"bash {_ANCHOR}/scripts/pretooluse-guard.sh",
+        f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
     )
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f and "'Bash'" in f for f in failures)
@@ -372,10 +366,10 @@ def _full_settings_with_pretooluse_matcher_split_across_two_owners() -> dict:
     was never an owner and round 2's pooling across owners went unexercised.
     """
     settings = _full_settings()
-    guard_command = f"bash {_ANCHOR}/scripts/pretooluse-guard.sh"
+    guard_command = f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh"
     settings["hooks"]["PreToolUse"] = [
         _hook("Bash", guard_command),
-        _hook("AskUserQuestion|Edit|Write|NotebookEdit", guard_command),
+        _hook("AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob", guard_command),
     ]
     return settings
 
@@ -384,10 +378,10 @@ def test_matcher_tokens_split_across_two_owning_entries_fails(tmp_path: Path) ->
     """C1/C7: no SINGLE entry may satisfy the row by pooling with a sibling.
 
     Both entries here carry the guard's exact command, so round 2's per-owner
-    union would combine `Bash` from one with the other four tokens from the
-    other and report fully wired. Neither entry alone carries all five
+    union would combine `Bash` from one with the other seven tokens from the
+    other and report fully wired. Neither entry alone carries all eight
     required matcher tokens, so this must fail — the control arm is
-    `test_synthetic_full_settings_passes`, where the SAME five tokens live on
+    `test_synthetic_full_settings_passes`, where the SAME eight tokens live on
     ONE entry and the row passes cleanly.
     """
     failures = _wiring(
@@ -460,20 +454,42 @@ def test_session_start_without_the_currency_check_fails(tmp_path: Path) -> None:
     assert any("SessionStart" in f and "tool-currency-check" in f for f in failures)
 
 
-def test_missing_session_end_fails(tmp_path: Path) -> None:
-    """The recurring command-audit loop must stay wired (SessionEnd hook)."""
-    settings = _full_settings()
-    del settings["hooks"]["SessionEnd"]
-    failures = _wiring(tmp_path, settings)
-    assert any("SessionEnd" in f for f in failures)
+def test_real_hook_files_run_no_command_audit_at_session_end() -> None:
+    """The retired SessionEnd scan stays retired, on the Claude AND codex side.
+
+    Seven concurrent SessionEnd command-audit scans (~814 MB of transcripts
+    each, four orphaned past SessionEnd's 60 s cap) were the largest
+    attributable host load on 2026-10-02; the audit is on demand now.
+    """
+    for path in (_REAL_SETTINGS, _REPO / ".codex" / "hooks.json"):
+        hooks = json.loads(path.read_text())["hooks"]
+        for event in ("SessionEnd", "Stop"):
+            commands = [
+                hook["command"]
+                for entry in hooks.get(event, [])
+                for hook in entry["hooks"]
+            ]
+            assert not [c for c in commands if "command-audit" in c], (path, event)
 
 
-def test_session_end_without_output_path_fails(tmp_path: Path) -> None:
-    """A SessionEnd that drops `--output` would print to a debug log, not the report."""
+def test_pretooluse_through_path_bash_fails(tmp_path: Path) -> None:
+    """A bare `bash` resolves to a mise shim here (~200 ms on EVERY tool call)."""
     settings = _full_settings()
-    settings["hooks"]["SessionEnd"] = [_hook(None, "mise run command-audit")]
+    settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = (
+        f"bash {_ANCHOR}/scripts/pretooluse-guard.sh"
+    )
     failures = _wiring(tmp_path, settings)
-    assert any("SessionEnd" in f and "command-audit.md" in f for f in failures)
+    assert any("PreToolUse" in f and "/bin/bash" in f for f in failures), failures
+
+
+@pytest.mark.parametrize("tool", ["Grep", "Read", "Glob"])
+def test_pretooluse_dropping_a_graphify_tool_fails(tmp_path: Path, tool: str) -> None:
+    """The merged hook also carries graphify's nudge; each tool is required."""
+    settings = _full_settings()
+    entry = settings["hooks"]["PreToolUse"][0]
+    entry["matcher"] = "|".join(t for t in entry["matcher"].split("|") if t != tool)
+    failures = _wiring(tmp_path, settings)
+    assert any("PreToolUse" in f and f"'{tool}'" in f for f in failures), failures
 
 
 def test_missing_instructions_loaded_fails(tmp_path: Path) -> None:
@@ -557,7 +573,6 @@ def test_selfcheck_main_passes_on_real_repo() -> None:
     [
         "PreToolUse",
         "SessionStart",
-        "SessionEnd",
         "InstructionsLoaded",
         "PostToolUse",
         "SubagentStart",

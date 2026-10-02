@@ -135,13 +135,16 @@ fail-open caveat, which are the parts that change a decision at the call site.
    cover, so the layers above get refined over time. The *inverse* of Claude
    Code's `fewer-permission-prompts` skill (same transcript mine, opposite
    verdict). Review the report, then add a `mise run` task (+ a `_RULES`
-   redirect for a known-bad shape) for the top culprits. Ongoing: a **`SessionEnd`
-   hook** runs it per session (`--output .agent/command-audit.md`). `SessionEnd`
-   and not `Stop` — it fires once at termination and *cannot block*, while `Stop`
-   fires every turn and can block, and a transcript scan belongs on neither.
-   **Local-only by nature** (it reads `~/.claude` transcripts), so it is a hook
-   and never a GHA job — a CI runner has no transcripts. Report kept out of git
-   by `.gitignore`.
+   redirect for a known-bad shape) for the top culprits. **On demand**
+   (`mise run command-audit -- --output .agent/command-audit.md`). Until
+   2026-10-02 a **`SessionEnd` hook** ran it per session; that hook was the
+   largest attributable host load — seven concurrent ~814 MB scans, four orphaned
+   past SessionEnd's 60 s cap
+   (`docs/research/kb/reports/agents/host-load-review-2026-10-02.md`) — so it was
+   retired, and a second concurrent run now exits on a host-wide single-instance
+   lock (`host_lock.COMMAND_AUDIT`). **Local-only by nature** (it reads
+   `~/.claude` transcripts), so never a GHA job — a CI runner has no
+   transcripts. Report kept out of git by `.gitignore`.
 5. **Contracts** — `workflow.mise-tasks-enforcement`, `.hook-selfcheck-wiring`
    and `.command-audit-wiring` in suites.toml assert the whole chain exists
    (settings.json → wrapper → CLI → module → tests), so nothing drifts out.

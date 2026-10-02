@@ -77,12 +77,51 @@ def isolated_mise_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     return state_dir
 
 
+@pytest.fixture(autouse=True)
+def isolated_host_locks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Give every test its own host-lock directory (``host_lock.LOCK_DIR_ENV``).
+
+    The heavy-gate lock is HOST-wide by design, and the suite itself runs under
+    it (the pre-push ``test-hook-isolated`` task holds it). A test that drives
+    ``run_gate``/``ship_main`` against the real path would therefore wait on
+    the very run executing it — and parallel workers would wait on each other.
+    The inherited holder variables are dropped too, so a test never "re-enters"
+    a lock its own runner holds. A sibling of ``tmp_path``, like the dirs above.
+    """
+    lock_dir = tmp_path.parent / f"{tmp_path.name}.locks"
+    monkeypatch.setenv("DOTFILES_LOCK_DIR", str(lock_dir))
+    for name in list(os.environ):
+        if name.startswith("DOTFILES_LOCK_HOLDER_"):
+            monkeypatch.delenv(name)
+    return lock_dir
+
+
 def _ambient_mise_state_dir() -> Path:
     """The state dir mise would use without the fixture (its documented order)."""
     if explicit := os.environ.get("MISE_STATE_DIR"):
         return Path(explicit)
     xdg = os.environ.get("XDG_STATE_HOME")
     return (Path(xdg) if xdg else Path.home() / ".local" / "state") / "mise"
+
+
+#: Workers for `-n auto` when PYTEST_XDIST_AUTO_NUM_WORKERS is unset: a cap
+#: for a SHARED host (xdist's own default is every core — 12 here — and two
+#: concurrent suites at that width drove the load average past 100).
+DEFAULT_TEST_WORKERS = 4
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_auto_num_workers(config: pytest.Config) -> int | None:
+    """`-n auto` -> DEFAULT_TEST_WORKERS, unless the native knob is set.
+
+    Returning None when PYTEST_XDIST_AUTO_NUM_WORKERS is set hands the answer
+    to xdist's own implementation, which reads that variable — so there is one
+    knob, and it is xdist's.
+    """
+    _ = config
+    if os.environ.get("PYTEST_XDIST_AUTO_NUM_WORKERS"):
+        return None
+    return DEFAULT_TEST_WORKERS
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

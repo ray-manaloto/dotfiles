@@ -102,24 +102,16 @@ ALLOWLIST: dict[str, BashAllowance] = {
         74, "hk/mise precondition wrapper — starts Docker Desktop if the daemon is down"
     ),
     "scripts/pretooluse-guard.sh": BashAllowance(
-        42,
-        "fail-open shim — runs `dotfiles-setup hook pretooluse` (the guard is "
-        "Python). 25 -> 42 for #343: the shim must anchor every path to "
-        "$CLAUDE_PROJECT_DIR (it runs in the session's cwd, not the repo) and "
+        40,
+        "fail-open shim for the ONE merged per-tool-call PreToolUse hook — runs "
+        "`python -m dotfiles_setup.hook_dispatch` (the guard AND the graphify "
+        "nudge are Python). 25 -> 42 for #343: the shim must anchor every path "
+        "to $CLAUDE_PROJECT_DIR (it runs in the session's cwd, not the repo) and "
         "must RECORD each fail-open. Both have to be bash — they are the layer "
         "that runs when Python cannot, so a Python fail-open counter could "
-        "never observe the case it exists to count",
-    ),
-    "scripts/graphify-hook-guard.sh": BashAllowance(
-        31,
-        "fail-open shim — execs `dotfiles-setup graphify hook-guard "
-        "search|read` via `uv run --project $CLAUDE_PROJECT_DIR/python` (the "
-        "repo-pinned 0.9.65, matching graphify-query/health/update — not the "
-        "user-global PATH shim). 30 -> 31: the project path must be anchored "
-        "(a relative `--project python` fails rc=2 when this hook runs off "
-        "the repo root, e.g. a subagent). The nudge-text rewrite itself "
-        "lives in Python (graphify.py::rewrite_hook_nudge, unit-tested) per "
-        "zero-bash-logic; this shim stays a thin resolve-and-exec wrapper.",
+        "never observe the case it exists to count. 42 -> 40 (2026-10-02): it "
+        "absorbed graphify-hook-guard.sh and calls the venv interpreter "
+        "directly, falling back to `uv run`",
     ),
     "scripts/validate-devcontainer-json.sh": BashAllowance(
         73,

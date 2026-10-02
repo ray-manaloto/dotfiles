@@ -7,14 +7,14 @@ never drives the actual path the harness uses: ``.claude/settings.json`` ->
 hook pretooluse``. This module closes that gap. It:
 
 - asserts ``.claude/settings.json`` wires the project hooks
-  (:data:`_SETTINGS_WIRING`): the PreToolUse deny guard (scoped to ``Bash``,
-  ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``), the
-  SessionStart web-setup bootstrap, the SessionEnd command-audit refresh, the
-  InstructionsLoaded observer, and the PostToolUse mise-config-context
-  dispatcher, plus the unscoped SubagentStart contract and its parent-side
-  PostToolUse/``Agent`` half — six events in all;
+  (:data:`_SETTINGS_WIRING`): the ONE merged PreToolUse hook (the deny guard
+  for ``Bash``, ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``
+  plus graphify's nudge for ``Grep``, ``Read`` and ``Glob``), the SessionStart
+  web-setup bootstrap, the InstructionsLoaded observer, and the PostToolUse
+  mise-config-context dispatcher, plus the unscoped SubagentStart contract and
+  its parent-side PostToolUse/``Agent`` half — five events in all;
 - drives the REAL PreToolUse wrapper end-to-end — a denied command must DENY,
-  an allowed one must stay silent;
+  an allowed one must stay silent, and a graphify-only tool must never deny;
 - drives the REAL subagent-contract module entrypoint end-to-end — start must
   inject every clause of the file-role contract, PostToolUse must remind the
   parent only for the ``Agent`` tool, and there must be NO SubagentStop
@@ -56,6 +56,8 @@ _ALLOWED_SAMPLE = "git status --porcelain"
 #: Public: the tests drive this wrapper and the off-root arm by name.
 PRETOOLUSE_WRAPPER = "scripts/pretooluse-guard.sh"
 _WEB_SETUP = "scripts/web-setup.sh"
+#: The shell the wired hook names (never PATH `bash`, a mise shim on this host).
+_SYSTEM_BASH = "/bin/bash"
 _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 
 # Each settings.json hook event -> (command substrings that MUST appear in its
@@ -77,19 +79,25 @@ _HOOK_SCRIPTS = (PRETOOLUSE_WRAPPER, _WEB_SETUP)
 # let a matcher that dropped bare `Edit` report fully wired. See
 # check_settings_wiring.
 #
-# SessionEnd runs the command-audit refine loop once per session (the recurring
-# half of mise-tasks-only enforcement). A matcher would SCOPE it to particular
-# end reasons (clear/logout/resume/...) — it must fire on all of them, hence
-# None. Deliberately NOT a `Stop` hook: Stop fires every turn and can block,
-# which would put a transcript scan on the per-turn path.
+# The same PreToolUse entry also carries graphify's nudge (`Grep`, `Read`,
+# `Glob`, plus `Bash`): one process per tool call instead of two uv chains
+# (host-load review 2026-10-02). Its command must name `/bin/bash`, never a bare
+# `bash` — on this host `bash` resolves to a mise shim that alone costs ~200 ms
+# on every tool call in every session.
+#
+# There is deliberately NO SessionEnd row: the command-audit scan it carried was
+# the largest attributable host load (seven concurrent ~814 MB scans) and is
+# on demand now (`mise run command-audit`).
 #
 # SessionStart carries the two host-only checkups that no in-tree gate can do:
 # the offline tool-currency drift check, and the #418 project doctor (declared
 # setup vs this host). Both are silent when healthy and both always exit 0, so
 # neither can disrupt a session; asserting them here is what keeps them from
 # quietly falling out of settings.json, which is the only place they are wired.
-_SESSION_END_REPORT = ".agent/command-audit.md"
 SUBAGENT_CONTRACT_MODE = "subagent-contract"
+#: The tools the deny guard decides on, then the ones only graphify nudges.
+_GUARDED_TOOLS = ("Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit")
+_GRAPHIFY_TOOLS = ("Grep", "Read", "Glob")
 _SUBAGENT_CONTRACT_COMMAND = (
     f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
 )
@@ -102,15 +110,14 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
     # (`probes-need-a-control-arm.md`).
     (
         "PreToolUse",
-        (PRETOOLUSE_WRAPPER,),
-        ("Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit"),
+        (f"{_SYSTEM_BASH} ", PRETOOLUSE_WRAPPER),
+        (*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS),
     ),
     (
         "SessionStart",
         (_WEB_SETUP, "CLAUDE_CODE_REMOTE", "run tool-currency-check", "run doctor"),
         None,
     ),
-    ("SessionEnd", ("run command-audit", _SESSION_END_REPORT), None),
     # #917: the InstructionsLoaded observer. `None` matchers are deliberate,
     # not an oversight — a matcher would scope the hook to particular
     # `load_reason` values (session_start, path_glob_match, ...) and lose the
@@ -335,7 +342,7 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
     wrapper = str(project_root / PRETOOLUSE_WRAPPER)
 
     denied = _run(
-        ["bash", wrapper], stdin=_hook_payload(_DENIED_SAMPLE), cwd=project_root
+        [_SYSTEM_BASH, wrapper], stdin=_hook_payload(_DENIED_SAMPLE), cwd=project_root
     )
     if denied.returncode != 0:
         failures.append(
@@ -354,7 +361,7 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
         )
 
     allowed = _run(
-        ["bash", wrapper], stdin=_hook_payload(_ALLOWED_SAMPLE), cwd=project_root
+        [_SYSTEM_BASH, wrapper], stdin=_hook_payload(_ALLOWED_SAMPLE), cwd=project_root
     )
     if allowed.returncode != 0:
         failures.append(
@@ -365,6 +372,17 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
         failures.append(
             f"pretooluse wrapper was not silent on the allowed command "
             f"{_ALLOWED_SAMPLE!r}: {allowed.stdout.strip()!r}"
+        )
+    graphify_only = _run(
+        [_SYSTEM_BASH, wrapper],
+        stdin=json.dumps({"tool_name": "Grep", "tool_input": {"pattern": "x"}}),
+        cwd=project_root,
+    )
+    if graphify_only.returncode != 0 or '"permissionDecision"' in graphify_only.stdout:
+        failures.append(
+            f"pretooluse wrapper must only NUDGE a Grep call (graphify's half of "
+            f"the merged hook), never decide on it: rc={graphify_only.returncode} "
+            f"stdout={graphify_only.stdout.strip()!r}"
         )
     failures.extend(check_ask_quality_endtoend(project_root, wrapper))
     failures.extend(check_offroot_arm(project_root, wrapper))
@@ -411,7 +429,9 @@ def check_ask_quality_endtoend(project_root: Path, wrapper: str) -> list[str]:
     """
     failures: list[str] = []
 
-    denied = _run(["bash", wrapper], stdin=_ask_payload(cited=False), cwd=project_root)
+    denied = _run(
+        [_SYSTEM_BASH, wrapper], stdin=_ask_payload(cited=False), cwd=project_root
+    )
     if denied.returncode != 0:
         failures.append(
             f"pretooluse wrapper exited {denied.returncode} on a non-compliant "
@@ -423,7 +443,9 @@ def check_ask_quality_endtoend(project_root: Path, wrapper: str) -> list[str]:
             f"ask-quality gate is not reachable. stdout={denied.stdout.strip()!r}"
         )
 
-    allowed = _run(["bash", wrapper], stdin=_ask_payload(cited=True), cwd=project_root)
+    allowed = _run(
+        [_SYSTEM_BASH, wrapper], stdin=_ask_payload(cited=True), cwd=project_root
+    )
     if allowed.returncode != 0:
         failures.append(
             f"pretooluse wrapper exited {allowed.returncode} on a compliant "
@@ -492,7 +514,7 @@ def check_offroot_arm(project_root: Path, wrapper: str) -> list[str]:
     """
     with tempfile.TemporaryDirectory() as foreign:
         result = _run(
-            ["bash", wrapper],
+            [_SYSTEM_BASH, wrapper],
             stdin=_hook_payload(_DENIED_SAMPLE),
             cwd=Path(foreign),
             env=_offroot_env(project_root),

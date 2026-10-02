@@ -43,8 +43,8 @@ mise.*.local.toml
 # the tree and tripped `mise run ship`'s clean-tree gate (forcing stash dances).
 # Durable findings live in GH issues + `docs/research/`, not here.
 .agent/notepad.md
-# Regenerated every session by the SessionEnd command-audit hook (settings.json)
-# and derived from LOCAL ~/.claude transcripts, so it is per-clone by nature —
+# Written on demand by `mise run command-audit -- --output <this path>` and
+# derived from LOCAL ~/.claude transcripts, so it is per-clone by nature —
 # same clean-tree rationale as the notepad above. `.agent/` is ignored via
 # this clone's .git/info/exclude, which a fresh clone does not get.
 .agent/command-audit.md
@@ -80,8 +80,9 @@ mise.*.local.toml
 
 # ...and `.codex/hooks.json`, tracked from 2026-09-14. It is not runtime state:
 # it is the codex-side GUARD SURFACE — the `PreToolUse` wiring for
-# `scripts/pretooluse-guard.sh` and `scripts/graphify-hook-guard.sh`, the
-# `SessionStart` doctor/currency run, and the `SessionEnd` command audit. The
+# `scripts/pretooluse-guard.sh` (guard + graphify nudge, one process) and the
+# `SessionStart` doctor/currency run (the `SessionEnd` command audit left both
+# files on 2026-10-02: on demand now, see mise.toml [tasks.command-audit]). The
 # Claude half of exactly that wiring lives in the tracked `.claude/settings.json`.
 #
 # Untracked, it did not survive a clone, so every other checkout ran codex lanes

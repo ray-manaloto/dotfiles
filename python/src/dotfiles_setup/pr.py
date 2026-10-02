@@ -84,7 +84,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import child_env, process_env
+from dotfiles_setup import child_env, hk_hooks, host_lock, process_env
 from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
 
@@ -321,11 +321,50 @@ def changed_paths_vs_main(workspace: Path) -> list[str]:
     return sorted(merged)
 
 
-def gate_matrix(paths: list[str]) -> list[Gate]:
+#: hk's documented off-switches (hk docs: ``HK_SKIP_STEPS``/``hk.skipSteps``,
+#: ``HK_SKIP_HOOKS``/``HK_SKIP_HOOK``/``hk.skipHook``). Any of them may stop the
+#: pre-push suite from running, so ship then keeps its own pytest gate.
+_HK_SKIP_ENV = ("HK_SKIP_STEPS", "HK_SKIP_HOOKS", "HK_SKIP_HOOK")
+_HK_SKIP_GIT_CONFIG = ("hk.skipSteps", "hk.skipHook")
+
+
+def pre_push_runs_suite(workspace: Path) -> bool:
+    """Whether ``git push`` from ``workspace`` will run the pytest suite itself.
+
+    True only when an enabled hk ``pre-push`` hook is installed for this
+    checkout (git's own effective answer, :func:`hk_hooks.event_has_hk_hook`)
+    and none of hk's skip switches is set in the environment or git config.
+    hk.pkl's ``pre-push`` ``test`` step runs the WHOLE suite
+    (``test-hook-isolated``) and a failure there makes ``git push`` fail, which
+    ship already treats as fatal before it opens a PR or arms auto-merge.
+
+    Any doubt answers False — a second suite is slow, a missing one is a hole.
+    """
+    if any(os.environ.get(name) for name in _HK_SKIP_ENV):
+        return False
+    for key in _HK_SKIP_GIT_CONFIG:
+        configured = _run(
+            ["git", "-C", str(workspace), "config", "--get-all", key],
+            timeout=_PROBE_TIMEOUT_S,
+        )
+        if configured.returncode != 1:  # 1 = unset; 0 = set; else unreadable
+            return False
+    try:
+        return hk_hooks.event_has_hk_hook(workspace, "pre-push")
+    except hk_hooks.HookConfigUnreadableError:
+        return False
+
+
+def gate_matrix(paths: list[str], *, suite_at_push: bool = False) -> list[Gate]:
     """The ordered, path-aware gate list for ship — cheap gates first.
 
     Always: lint, pytest, verify contracts, hook-selfcheck (the wired
-    host-side hooks, end-to-end). Conditional per
+    host-side hooks, end-to-end). The one exception is pytest, dropped when
+    ``suite_at_push`` (see :func:`pre_push_runs_suite`): the push ship
+    performs right after the gates runs the same suite in hk's ``pre-push``
+    ``test`` step, so running it here too cost a second ~365 s serial suite per
+    ship (host-load review, 2026-10-02). ADR-0001 forbids the other fix,
+    skipping the hook step locally with ``HK_SKIP_STEPS``. Conditional per
     verify-before-advancing: pin-actions on .github changes, lint-docs on
     agent-doc changes, verify-apt-pins on apt-pin inputs
     (:func:`changes_apt_pin_inputs`). The full-sync hard gate runs LAST (most expensive)
@@ -334,12 +373,15 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     which the local base cannot validate the branch and container validation
     defers to CI (module docstring). No *operator* override either way.
     """
-    gates = [
-        Gate("lint", ("mise", "run", "lint")),
-        Gate(
-            "pytest",
-            ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
-        ),
+    gates = [Gate("lint", ("mise", "run", "lint"))]
+    if not suite_at_push:
+        gates.append(
+            Gate(
+                "pytest",
+                ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
+            )
+        )
+    gates += [
         Gate(
             "verify-contracts",
             ("uv", "run", "--project", "python", "dotfiles-setup", "verify", "run"),
@@ -607,6 +649,44 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     return int(json.loads(view.stdout)["number"])
 
 
+def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+    """Run ship's gate matrix, then push — one heavy-gate lock around both.
+
+    One heavy run at a time host-wide: the gates AND the push hold the lock,
+    because the push's hk pre-push hook runs the whole suite and re-enters this
+    lock as a descendant. When that hook will run the suite, ship's own pytest
+    gate is dropped (:func:`pre_push_runs_suite`) — one suite per ship — and a
+    failing test fails ``git push``, so ship stops before the PR and before
+    auto-merge is armed. Returns False after printing the failure.
+    """
+    suite_at_push = pre_push_runs_suite(workspace)
+    if suite_at_push:
+        sys.stdout.write(
+            "==> pytest runs ONCE, in the hk pre-push hook during `git push` "
+            "(a failure there fails the push, and ship stops before the PR)\n"
+        )
+    try:
+        with host_lock.held(host_lock.HEAVY_GATE, f"ship {branch} ({workspace})"):
+            if not run_gates(
+                workspace, gate_matrix(paths, suite_at_push=suite_at_push)
+            ):
+                return False
+            push_rc = process_env.run_with_fnox(
+                push_command(workspace, branch), cwd=workspace
+            )
+    except host_lock.HostLockTimeoutError as exc:
+        sys.stdout.write(f"FAIL  ship: {exc}\n")
+        return False
+    if push_rc != 0:
+        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
+        sys.stdout.write(
+            f"FAIL  ship: git push rc={push_rc}{why} (the pre-push hook runs the "
+            "test suite; a failing test lands here)\n"
+        )
+        return False
+    return True
+
+
 def ship_main(workspace: Path, *, title: str | None = None) -> int:
     """Gates → push → open PR → enable native auto-merge → return.
 
@@ -638,13 +718,7 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
             "base-build + smoke gate the PR (watched below). "
             "See verify-before-advancing.md.\n"
         )
-    if not run_gates(workspace, gate_matrix(paths)):
-        return 1
-
-    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
-    if push_rc != 0:
-        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
-        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
+    if not _gate_and_push(workspace, branch, paths):
         return 1
 
     number = _open_or_update_pr(workspace, title)

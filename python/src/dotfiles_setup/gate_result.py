@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import quote
 
-from dotfiles_setup import codec
+from dotfiles_setup import codec, host_lock
 
 __all__ = [
     "GATE_COMMANDS",
+    "HEAVY_GATES",
     "RESULTS_DIR",
     "STATUS_EXIT_CODES",
     "GateResult",
@@ -61,6 +62,11 @@ GATE_COMMANDS: Final[dict[str, tuple[str, ...]]] = {
     "lint-docs": ("mise", "run", "lint-docs"),
     "pin-actions": ("mise", "run", "pin-actions"),
 }
+
+# The gates that saturate the host and so queue on the host-wide heavy-gate
+# lock (host_lock.HEAVY_GATE): two concurrent suites drove the load average to
+# 128 on 2026-10-02. lint-docs and pin-actions take seconds and run unlocked.
+HEAVY_GATES: Final = frozenset({"lint", "pytest", "verify"})
 
 # Shell-compatible exit codes let callers use the JSON or only the process rc.
 STATUS_EXIT_CODES: Final[dict[GateStatus, int]] = {
@@ -135,6 +141,10 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
     and 2 sentinel values are used only when no child starts because the
     executable is missing or the gate name is unknown. The CLI maps the typed
     ``TIMED_OUT`` status to 124 independently of the child's return code.
+
+    A :data:`HEAVY_GATES` member first queues on the host-wide heavy-gate lock;
+    a wait that outlasts its bound is reported as ``TIMED_OUT`` without
+    starting the child.
     """
     command = GATE_COMMANDS.get(gate)
     if command is None:
@@ -148,6 +158,28 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
         _write_result(repo_root, result)
         return result
 
+    if gate not in HEAVY_GATES:
+        return _run_declared(repo_root, gate, command, timeout_s)
+    try:
+        with host_lock.held(host_lock.HEAVY_GATE, f"gate {gate} ({repo_root})"):
+            return _run_declared(repo_root, gate, command, timeout_s)
+    except host_lock.HostLockTimeoutError as error:
+        result = GateResult(
+            gate=gate,
+            status=GateStatus.TIMED_OUT,
+            returncode=STATUS_EXIT_CODES[GateStatus.TIMED_OUT],
+            duration_s=0.0,
+            command=command,
+            failures=(str(error),),
+        )
+        _write_result(repo_root, result)
+        return result
+
+
+def _run_declared(
+    repo_root: Path, gate: str, command: tuple[str, ...], timeout_s: float | None
+) -> GateResult:
+    """Run one known gate command and publish its typed result."""
     log_path = _log_path(repo_root, gate)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()

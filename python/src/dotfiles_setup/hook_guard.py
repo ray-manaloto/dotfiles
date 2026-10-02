@@ -1030,6 +1030,17 @@ def _read_payload() -> tuple[str, dict[str, object], dict[str, object]]:
         ``tool_input`` object.
     """
     raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    return parse_payload(raw)
+
+
+def parse_payload(raw: str) -> tuple[str, dict[str, object], dict[str, object]]:
+    """Tool name, tool input and root payload from a hook's stdin text.
+
+    Shared by :func:`pretooluse_main` and the merged per-tool-call hook
+    (:mod:`dotfiles_setup.hook_dispatch`), which must read stdin once and hand
+    the same text to graphify. An empty ``raw`` falls back to the legacy
+    ``CLAUDE_TOOL_INPUT`` variable.
+    """
     if raw:
         try:
             payload = json.loads(raw)
@@ -1094,16 +1105,21 @@ def pretooluse_main() -> int:
     tool_name, tool_input, _ = _read_payload()
     reason = decide_payload(tool_name, tool_input)
     if reason is not None:
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-            + "\n"
-        )
+        sys.stdout.write(deny_output(reason))
     return 0
+
+
+def deny_output(reason: str) -> str:
+    """The PreToolUse hook output that denies the pending call for ``reason``."""
+    return (
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+        + "\n"
+    )
