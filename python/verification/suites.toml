@@ -189,6 +189,18 @@ per_path_tokens = { ".devcontainer/devcontainer.json" = [
 ] }
 
 [[suite]]
+name = "build.devcontainer-no-secret-argv"
+description = "S1 secrets reach the container through `runArgs --env-file` and must never reach a HOST argv. @devcontainers/cli's default userEnvProbe reads the container environment through a login shell and re-sends every variable as `docker exec -e NAME=VALUE` on each lifecycle hook and `devcontainer exec`, which put every Doppler secret (DB_PASSWORD observed, 2026-10-02) in the host process table during land/dev-rebuild. `\"userEnvProbe\": \"none\"` stops it; docker exec already inherits the container env, so in-container visibility is unchanged. Armed with a dummy --env-file var on alpine:3 via the pinned CLI: default probe -> the dummy on the docker exec argv (1), none -> 0, in-container value still present (rc=0)."
+category = "build"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".devcontainer/devcontainer.json"]
+lines = [
+    "\"userEnvProbe\": \"none\",",
+]
+
+[[suite]]
 name = "build.devcontainer-names-arch-scoped"
 description = "#677: the container name, the home volume and the SSH port all carry the architecture, so amd64 and arm64 can be up in one working directory without sharing resources. The home volume is the dangerous one — it holds ~/.local/share/mise/installs, ~/.cargo and ~/.rustup, i.e. compiled output — and docker reuses a named volume on mount without a word, so a shared volume interleaves binaries of two architectures and surfaces far from its cause. devcontainer.json therefore NAMES whole values (${localEnv:DEVCONTAINER_NAME} / ${localEnv:DEVCONTAINER_HOME_VOLUME}) instead of composing them from parts: composition in a JSON string is a place an arch can go missing where neither no_platform_literals nor a reviewer would see it. mise.toml binds the resolver at the two sites that would otherwise re-derive a name — R3's container lookup and R1's port."
 category = "build"
