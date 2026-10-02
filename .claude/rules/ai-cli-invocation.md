@@ -22,8 +22,8 @@ printf '%s\n' "prompt" | mise exec -- codex exec -s read-only -
 printf '%s\n' "prompt" | mise exec -- codex exec \
   -c model_reasoning_effort='"xhigh"' -
 
-# Gemini/Antigravity pinned lane: --print TAKES the prompt as its value (agy 1.2.x); stdin is not read
-mise exec -- agy --output-format text --print "$(cat "$PROMPT_FILE")"
+# Gemini/Antigravity: NATIVE install only (no mise pin, Ray 2026-10-01); --print TAKES the prompt (agy 1.2.x)
+"$HOME/.local/bin/agy" --output-format text --print "$(cat "$PROMPT_FILE")"
 
 # OpenCode research: stdin prompt and structured event output
 printf '%s\n' "prompt" | mise exec -- opencode run --format json
@@ -63,9 +63,9 @@ contract.
 
 ## Gemini and OpenCode traps
 
-Use the pinned `agy`/Antigravity path through `mise exec -- agy`. A stale user
-installation can exist at `~/.local/bin/agy`, so keep the explicit `mise exec`
-form rather than relying on lookup order.
+Invoke agy by its NATIVE path, `"$HOME/.local/bin/agy"` (Ray, 2026-10-01: native installer only,
+self-updating via `agy update`; every mise name for it is in `disable_tools`). A leftover mise copy
+can sit AHEAD of it on PATH, so never rely on bare `agy` or `mise exec -- agy`.
 
 `agy --print --output-format …` fails rc=2 (`--print took "--output-format" as its prompt`); a stdin-only
 prompt is rejected (`flag needs an argument: -print`), and `--print -` takes `-` as the prompt (re-probed 2026-09-25, agy 1.2.11).
@@ -100,7 +100,7 @@ lane**. Before changing any invocation, run the pinned CLI's own help:
 
 ```text
 mise exec -- codex exec --help
-mise exec -- agy --help
+"$HOME/.local/bin/agy" --help
 mise exec -- opencode run --help
 ```
 
