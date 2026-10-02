@@ -123,8 +123,8 @@ fail-open caveat, which are the parts that change a decision at the call site.
    `tests/test_hook_guard.py`.
 2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
    `dotfiles-setup hook selfcheck` (`hook_selfcheck.py`) as an always-run gate
-   driving the WIRED guard end-to-end: settings.json wiring + the five-tool
-   matcher, **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real
+   driving the WIRED guard end-to-end: settings.json wiring + the eight-tool
+   matcher (guard + graphify nudge, one hook), **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real
    wrapper denying from **both** the project root and a foreign cwd (#343), and
    `bash -n` on the scripts. A hook regression fails a PR like lint/pytest.
 3. **The rule + skills** — `pr-workflow` and `devcontainer-sync` name the

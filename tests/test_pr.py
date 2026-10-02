@@ -135,6 +135,26 @@ def test_pre_push_runs_suite_is_false_under_an_hk_skip_env(
     assert not pr.pre_push_runs_suite(repo)
 
 
+def test_pre_push_runs_suite_is_false_under_the_global_hooks_hk_0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The installed global hook runs `test "${HK:-1}" = "0" || … hk run`."""
+    repo = _hook_repo(tmp_path, pre_push=True)
+    monkeypatch.setenv("HK", "0")
+    assert not pr.pre_push_runs_suite(repo)
+    monkeypatch.setenv("HK", "1")
+    assert pr.pre_push_runs_suite(repo)  # control: only "0" switches it off
+
+
+def test_pre_push_runs_suite_is_false_when_an_hkrc_names_a_skip_list(
+    tmp_path: Path,
+) -> None:
+    """Hk unions an hkrc's skip_steps/skip_hooks with every other switch."""
+    repo = _hook_repo(tmp_path, pre_push=True)
+    (repo / ".hkrc.pkl").write_text('skip_steps = List("test")\n')
+    assert not pr.pre_push_runs_suite(repo)
+
+
 @pytest.mark.parametrize("key", ["hk.skipSteps", "hk.skipHook"])
 def test_pre_push_runs_suite_is_false_under_an_hk_skip_git_config(
     tmp_path: Path, key: str

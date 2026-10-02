@@ -29,10 +29,13 @@ twice (#838) while a dotfiles ship ran.
 
 **Where.** Take it ONCE around the whole `kb_setup.gates` run (the concurrent
 `CONCURRENT_SAFE` batch is one heavy run, not four), and in the KB `test` task
-when invoked directly. Do not take it per gate inside the batch: the batch's own
-workers would deadlock on each other (they are threads in one process, but a
-per-gate `open()` creates separate open file descriptions, which flock treats as
-distinct holders).
+when invoked directly. Do not take it per gate inside the batch: the batch's
+workers are threads of ONE process, so under the re-entry rule a second thread
+sees its own pid recorded and re-enters — then the first thread to finish
+RELEASES the lock while the others still run (an early release, not a deadlock;
+cold review 2026-10-02, finding 14). Also pass the locked descriptor to each gate
+child (`pass_fds`) so a killed parent does not free the lock while its child
+still runs (dotfiles `gate_result._run_declared`).
 
 **Arms to reproduce (dotfiles measured all four, `tests/test_host_lock.py`):**
 A holds, B prints "waiting … held by A" and runs after A releases; `kill -9` of

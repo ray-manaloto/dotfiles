@@ -375,7 +375,14 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
         )
     graphify_only = _run(
         [_SYSTEM_BASH, wrapper],
-        stdin=json.dumps({"tool_name": "Grep", "tool_input": {"pattern": "x"}}),
+        # The payload carries a DENIED command: a Grep wrongly routed into the
+        # Bash guard would deny it, so this arm can fail.
+        stdin=json.dumps(
+            {
+                "tool_name": "Grep",
+                "tool_input": {"pattern": "x", "command": _DENIED_SAMPLE},
+            }
+        ),
         cwd=project_root,
     )
     if graphify_only.returncode != 0 or '"permissionDecision"' in graphify_only.stdout:

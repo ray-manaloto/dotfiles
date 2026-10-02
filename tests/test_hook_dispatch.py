@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -130,14 +131,61 @@ def test_wrapper_fast_path_denies_and_allows(tmp_path: Path) -> None:
 
 
 def test_wrapper_falls_back_to_uv_run_without_the_venv(tmp_path: Path) -> None:
-    """No venv interpreter at the resolved path: `uv run` still decides."""
+    """No venv interpreter at the resolved path: the wrapper asks `uv run`.
+
+    A stub `uv` stands in for the real one — a real fallback would build and
+    sync a whole second venv on every suite run. The stub records its argv and
+    execs the real interpreter with the module arguments, so the deny still
+    comes from the real guard.
+    """
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    argv_log = tmp_path / "uv-argv"
+    stub = stub_dir / "uv"
+    stub.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = python ]; then exit 0; fi\n'  # `uv python find` succeeds
+        f'echo "$@" > "{argv_log}"\n'
+        "shift 4\n"  # run --project <dir> python
+        f'exec "{sys.executable}" "$@"\n'
+    )
+    stub.chmod(0o755)
     denied = _wrapper(
         _payload("Bash", command=_DENIED),
         tmp_path,
         UV_PROJECT_ENVIRONMENT=str(tmp_path / "no-venv"),
+        PATH=f"{stub_dir}{os.pathsep}/usr/bin{os.pathsep}/bin",
     )
     assert denied.returncode == 0, denied.stderr
     assert '"permissionDecision": "deny"' in denied.stdout
+    assert argv_log.read_text().split() == [
+        "run",
+        "--project",
+        f"{_ROOT}/python",
+        "python",
+        "-P",
+        "-m",
+        "dotfiles_setup.hook_dispatch",
+        str(_ROOT),
+    ]
+
+
+def test_a_module_named_file_in_the_cwd_cannot_hijack_the_guard(
+    tmp_path: Path,
+) -> None:
+    """`python -P`: the session cwd is never on sys.path.
+
+    Measured before the fix (cold review, 2026-10-02): a `json.py` in the cwd
+    ran on every tool call, crashed the guard and the call was ALLOWED.
+    """
+    ran = tmp_path / "ran"
+    (tmp_path / "json.py").write_text(
+        f"import pathlib\npathlib.Path({str(ran)!r}).write_text('x')\n"
+        "raise SystemExit(7)\n"
+    )
+    denied = _wrapper(_payload("Bash", command=_DENIED), tmp_path)
+    assert '"permissionDecision": "deny"' in denied.stdout
+    assert not ran.exists()
 
 
 def test_wrapper_fails_open_and_records_it_when_nothing_can_run(tmp_path: Path) -> None:

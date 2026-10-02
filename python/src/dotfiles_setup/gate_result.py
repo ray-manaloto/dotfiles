@@ -142,7 +142,8 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
     executable is missing or the gate name is unknown. The CLI maps the typed
     ``TIMED_OUT`` status to 124 independently of the child's return code.
 
-    A :data:`HEAVY_GATES` member first queues on the host-wide heavy-gate lock;
+    A :data:`HEAVY_GATES` member first queues on the host-wide heavy-gate lock
+    (bounded by ``timeout_s`` when given, else ``DOTFILES_HEAVY_GATE_WAIT``);
     a wait that outlasts its bound is reported as ``TIMED_OUT`` without
     starting the child.
     """
@@ -158,11 +159,16 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
         _write_result(repo_root, result)
         return result
 
+    # A run that is killed while waiting or running must not leave the PREVIOUS
+    # run's result readable as if it were this one's.
+    result_path(repo_root, gate).unlink(missing_ok=True)
     if gate not in HEAVY_GATES:
         return _run_declared(repo_root, gate, command, timeout_s)
     try:
-        with host_lock.held(host_lock.HEAVY_GATE, f"gate {gate} ({repo_root})"):
-            return _run_declared(repo_root, gate, command, timeout_s)
+        with host_lock.held(
+            host_lock.HEAVY_GATE, f"gate {gate} ({repo_root})", wait_s=timeout_s
+        ) as lock_fd:
+            return _run_declared(repo_root, gate, command, timeout_s, lock_fd)
     except host_lock.HostLockTimeoutError as error:
         result = GateResult(
             gate=gate,
@@ -177,9 +183,17 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
 
 
 def _run_declared(
-    repo_root: Path, gate: str, command: tuple[str, ...], timeout_s: float | None
+    repo_root: Path,
+    gate: str,
+    command: tuple[str, ...],
+    timeout_s: float | None,
+    lock_fd: int | None = None,
 ) -> GateResult:
-    """Run one known gate command and publish its typed result."""
+    """Run one known gate command and publish its typed result.
+
+    ``lock_fd`` (the heavy-gate lock) is inherited by the child, so the lock
+    stays held while the gate runs even if this process is killed.
+    """
     log_path = _log_path(repo_root, gate)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.perf_counter()
@@ -189,6 +203,7 @@ def _run_declared(
             cwd=repo_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            pass_fds=() if lock_fd is None else (lock_fd,),
         )
         try:
             output, _ = process.communicate(timeout=timeout_s)

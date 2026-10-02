@@ -50,8 +50,9 @@ Design notes (deep-research verified, 2026-07-07 —
   CI. The local ``:dev`` base is built from the merge-base and cannot be
   made current for the branch (base builds are CI-only; a chezmoi/tool
   bump can even make the stale base's ``onCreate`` fail outright). Per
-  ``verify-before-advancing.md``, ship then runs lint/pytest/verify
-  locally, skips the impossible local container convergence, and still
+  ``verify-before-advancing.md``, ship then runs lint/verify locally
+  (pytest too, unless the pre-push hook runs it), skips the impossible
+  local container convergence, and still
   gates on CI's base-build + smoke via the watched PR checks
   (``watch_pr_checks``). CI is the validator — not a zero-skip
   violation. This closes the ship deadlock for base-tool bumps (a
@@ -66,7 +67,8 @@ Design notes (deep-research verified, 2026-07-07 —
   auto-merge race), reporting the PR's cumulative historical diff
   instead of what the eventual squash-merge commit actually changes —
   a false main-CI expectation on an otherwise-clean merge.
-- Gate order is cheap-first: lint → pytest → verify → conditional
+- Gate order is cheap-first: lint → pytest (dropped when the hk pre-push
+  hook runs the suite, :func:`pre_push_runs_suite`) → verify → conditional
   (pin-actions / lint-docs) → full sync last.
 
 Everything long-running streams to the terminal (never wait blind);
@@ -82,14 +84,11 @@ import os
 import subprocess
 import sys
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from dotfiles_setup import child_env, hk_hooks, host_lock, process_env
 from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 _PROBE_TIMEOUT_S = 120.0
 
@@ -326,6 +325,23 @@ def changed_paths_vs_main(workspace: Path) -> list[str]:
 #: pre-push suite from running, so ship then keeps its own pytest gate.
 _HK_SKIP_ENV = ("HK_SKIP_STEPS", "HK_SKIP_HOOKS", "HK_SKIP_HOOK")
 _HK_SKIP_GIT_CONFIG = ("hk.skipSteps", "hk.skipHook")
+#: hk's user rc files, in its discovery order (hk docs "hkrc"); their
+#: ``skip_steps``/``skip_hooks`` are UNIONED with the switches above.
+_HKRC_PATHS = (".hkrc.pkl", "~/.hkrc.pkl", "~/.config/hk/config.pkl")
+_HKRC_SKIP_KEYS = ("skip_steps", "skip_hooks")
+
+
+def _hkrc_may_skip(workspace: Path) -> bool:
+    """Whether any hk user rc mentions a skip list (conservative: by name)."""
+    for raw in _HKRC_PATHS:
+        path = Path(raw).expanduser() if raw.startswith("~") else workspace / raw
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if any(key in text for key in _HKRC_SKIP_KEYS):
+            return True
+    return False
 
 
 def pre_push_runs_suite(workspace: Path) -> bool:
@@ -333,14 +349,17 @@ def pre_push_runs_suite(workspace: Path) -> bool:
 
     True only when an enabled hk ``pre-push`` hook is installed for this
     checkout (git's own effective answer, :func:`hk_hooks.event_has_hk_hook`)
-    and none of hk's skip switches is set in the environment or git config.
+    and none of hk's skip switches is set — environment, git config, or an hk
+    user rc — and the global hook's own ``HK=0`` off-switch is not set.
     hk.pkl's ``pre-push`` ``test`` step runs the WHOLE suite
     (``test-hook-isolated``) and a failure there makes ``git push`` fail, which
     ship already treats as fatal before it opens a PR or arms auto-merge.
 
     Any doubt answers False — a second suite is slow, a missing one is a hole.
     """
-    if any(os.environ.get(name) for name in _HK_SKIP_ENV):
+    if os.environ.get("HK") == "0" or any(os.environ.get(n) for n in _HK_SKIP_ENV):
+        return False
+    if _hkrc_may_skip(workspace):
         return False
     for key in _HK_SKIP_GIT_CONFIG:
         configured = _run(
@@ -659,14 +678,17 @@ def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
     failing test fails ``git push``, so ship stops before the PR and before
     auto-merge is armed. Returns False after printing the failure.
     """
-    suite_at_push = pre_push_runs_suite(workspace)
-    if suite_at_push:
-        sys.stdout.write(
-            "==> pytest runs ONCE, in the hk pre-push hook during `git push` "
-            "(a failure there fails the push, and ship stops before the PR)\n"
-        )
     try:
         with host_lock.held(host_lock.HEAVY_GATE, f"ship {branch} ({workspace})"):
+            # Decided AFTER the (possibly long) lock wait, so it describes the
+            # hook state at push time.
+            suite_at_push = pre_push_runs_suite(workspace)
+            if suite_at_push:
+                sys.stdout.write(
+                    "==> pytest runs ONCE, in the hk pre-push hook during "
+                    "`git push` (a failure there fails the push, and ship "
+                    "stops before the PR)\n"
+                )
             if not run_gates(
                 workspace, gate_matrix(paths, suite_at_push=suite_at_push)
             ):

@@ -158,7 +158,7 @@ def nudge(project_root: Path, kind: str, raw: str) -> str:
         result = _run(
             [graphify_binary(), "hook-guard", kind], cwd=project_root, stdin=raw
         )
-    except OSError, subprocess.TimeoutExpired:
+    except OSError, subprocess.TimeoutExpired, UnicodeDecodeError:
         return ""
     if result.returncode != 0 or not result.stdout:
         return ""

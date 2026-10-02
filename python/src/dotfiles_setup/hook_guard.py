@@ -1,8 +1,10 @@
 # Copyright (c) 2026 Raymond Manaloto
 """PreToolUse Bash guard: canonical mise tasks over one-off commands.
 
-``dotfiles-setup hook pretooluse`` is the single project PreToolUse hook
-(wired in ``.claude/settings.json``). It reads the hook JSON from stdin
+The policy half of the single project PreToolUse hook: ``.claude/settings.json``
+-> ``scripts/pretooluse-guard.sh`` -> ``dotfiles_setup.hook_dispatch``, which
+calls :func:`decide_payload` (``dotfiles-setup hook pretooluse`` remains as a
+standalone entry). It reads the hook JSON from stdin
 and either allows the Bash call (silent exit 0) or denies it with a
 redirect reason via the documented JSON contract
 (``permissionDecision: "deny"`` — deterministic, applies even in

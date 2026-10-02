@@ -168,6 +168,57 @@ def test_cli_status_reports_free_and_held(holder: subprocess.Popen[str]) -> None
     assert free.stdout.strip() == "free"
 
 
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf"])
+def test_a_non_finite_wait_falls_back_to_the_bounded_default(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv(host_lock.WAIT_ENV, raw)
+    assert host_lock.default_wait_s() == host_lock.DEFAULT_WAIT_S
+
+
+def test_the_child_keeps_the_lock_when_its_wrapper_is_killed(tmp_path: Path) -> None:
+    """`heavy-gate run` hands the locked fd to its child (pass_fds)."""
+    pidfile = tmp_path / "child.pid"
+    child = (
+        "import os, sys, time\n"
+        "open(sys.argv[1], 'w').write(str(os.getpid()))\n"
+        "time.sleep(30)\n"
+    )
+    wrapper = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys\n"
+                "from dotfiles_setup.host_lock import host_lock_main\n"
+                "raise SystemExit(host_lock_main(['run', '--', *sys.argv[1:]]))\n"
+            ),
+            sys.executable,
+            "-c",
+            child,
+            str(pidfile),
+        ]
+    )
+    child_pid = 0
+    try:
+        deadline = time.monotonic() + 10
+        while not pidfile.is_file() or not pidfile.read_text():
+            assert time.monotonic() < deadline, "the child never started"
+            time.sleep(0.05)
+        child_pid = int(pidfile.read_text())
+        wrapper.send_signal(signal.SIGKILL)
+        wrapper.wait()
+        with (
+            pytest.raises(host_lock.HostLockTimeoutError),
+            host_lock.held(host_lock.HEAVY_GATE, "x", wait_s=0.3, out=io.StringIO()),
+        ):
+            pass
+    finally:
+        wrapper.kill()
+        if child_pid:
+            os.kill(child_pid, signal.SIGKILL)
+
+
 def test_cli_run_returns_the_command_rc() -> None:
     rc = host_lock.host_lock_main(
         ["run", "--", sys.executable, "-c", "raise SystemExit(3)"]

@@ -27,6 +27,10 @@ Two properties are deliberate:
   the holder and proceeds. A stale export cannot unlock anything: if the lock is
   actually free the descendant simply acquires it.
 
+Scope: ONE filesystem. Inside the devcontainer the default path is on the
+container's own home volume, so container runs do not queue against host runs
+even though they share the CPU (cold review 2026-10-02, finding 11).
+
 ``DOTFILES_LOCK_DIR`` relocates every lock (the test suite points it at a
 per-test directory so tests never contend with a real gate on the host).
 """
@@ -36,6 +40,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import math
 import os
 import subprocess
 import sys
@@ -94,9 +99,11 @@ def default_wait_s() -> float:
     """``DOTFILES_HEAVY_GATE_WAIT`` seconds, or one hour."""
     raw = os.environ.get(WAIT_ENV, "")
     try:
-        return float(raw) if raw else DEFAULT_WAIT_S
+        value = float(raw) if raw else DEFAULT_WAIT_S
     except ValueError:
         return DEFAULT_WAIT_S
+    # `nan`/`inf` parse as floats and would make the bounded wait unbounded.
+    return value if math.isfinite(value) else DEFAULT_WAIT_S
 
 
 def read_holder(name: str) -> str:
@@ -134,8 +141,13 @@ def held(
     *,
     wait_s: float | None = None,
     out: TextIO | None = None,
-) -> Iterator[None]:
+) -> Iterator[int | None]:
     """Hold host lock ``name`` for the duration of the block.
+
+    Yields the locked descriptor, or None when re-entering an ancestor's hold.
+    Pass it to a child (``pass_fds``) so the lock outlives a killed parent:
+    flock belongs to the open file description, and the kernel releases it
+    only when EVERY descriptor sharing it is closed.
 
     Args:
         name: Which lock (:data:`HEAVY_GATE`, :data:`COMMAND_AUDIT`).
@@ -149,6 +161,8 @@ def held(
     """
     stream = sys.stderr if out is None else out
     budget = default_wait_s() if wait_s is None else wait_s
+    if not math.isfinite(budget):
+        budget = DEFAULT_WAIT_S
     path = lock_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
     env_name = holder_env_name(name)
@@ -161,7 +175,7 @@ def held(
             inherited = os.environ.get(env_name, "")
             if inherited and inherited == _holder_pid(record):
                 # Busy, and held by the process we descend from: re-enter.
-                yield
+                yield None
                 return
             _wait_for(fd, name, budget, stream)
         handle.seek(0)
@@ -172,7 +186,7 @@ def held(
         previous = os.environ.get(env_name)
         os.environ[env_name] = str(os.getpid())
         try:
-            yield
+            yield fd
         finally:
             if previous is None:
                 os.environ.pop(env_name, None)
@@ -242,8 +256,9 @@ def host_lock_main(argv: Sequence[str] | None = None) -> int:
         parser.error("a command is required after --")
     label = args.label or " ".join(command)[:120]
     try:
-        with held(HEAVY_GATE, label, wait_s=args.wait):
-            return subprocess.run(command, check=False).returncode
+        with held(HEAVY_GATE, label, wait_s=args.wait) as fd:
+            fds = () if fd is None else (fd,)
+            return subprocess.run(command, check=False, pass_fds=fds).returncode
     except HostLockTimeoutError as exc:
         sys.stderr.write(f"FAIL  {exc}\n")
         return 124

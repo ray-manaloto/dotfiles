@@ -28,13 +28,15 @@ fail_open() {
 }
 
 # Builtin read, not $(cat): on this Mac `cat` is a mise shim (~200 ms a call).
+# `python -P`: never put the session's cwd on sys.path (a stray json.py there
+# would run on every call and fail the guard open).
 IFS= read -r -d '' payload || true
 if [ -x "$VENV/bin/python" ] &&
-  out="$(printf '%s' "$payload" | "$VENV/bin/python" -m dotfiles_setup.hook_dispatch "$ROOT")"; then
+  out="$(printf '%s' "$payload" | "$VENV/bin/python" -P -m dotfiles_setup.hook_dispatch "$ROOT")"; then
   printf '%s' "$out"
   exit 0
 fi
-command -v uv >/dev/null 2>&1 || fail_open "interpreter-absent"
-out="$(printf '%s' "$payload" | uv run --project "$ROOT/python" python -m dotfiles_setup.hook_dispatch "$ROOT")" ||
+{ command -v uv && uv python find '>=3.14'; } >/dev/null 2>&1 || fail_open "interpreter-absent"
+out="$(printf '%s' "$payload" | uv run --project "$ROOT/python" python -P -m dotfiles_setup.hook_dispatch "$ROOT")" ||
   fail_open "guard-error-rc=$?"
 printf '%s' "$out"
