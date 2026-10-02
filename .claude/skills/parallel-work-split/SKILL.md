@@ -1,0 +1,111 @@
+---
+name: parallel-work-split
+description: Split a backlog of plan items or open issues across dotfiles and knowledge-base into parallel git-worktree lanes with low merge-conflict risk, then brief each lane. Use when asked what can run in parallel, how to fan work out across worktrees or background sessions, which remaining task_plan items collide, or before launching several `claude --bg` lanes at once. It orchestrates existing tools only (graphify blast-radius tasks, `git merge-tree`, `gh`); it adds no code.
+user-invocable: true
+---
+
+# parallel-work-split: backlog → conflict-free worktree lanes
+
+The output is a **lane plan**: lane → items → files → which in-flight branch
+it collides with → when it may start → where it sits in the ship order. Code
+is written in parallel; **shipping stays serial** — `mise run ship` runs from
+the main checkout, one PR at a time per repository (a linked-worktree ship
+fails `sync-full` whenever the diff needs it, #1481). The knowledge-base
+ships from its own main checkout with `kb-ship`, so the two repositories
+never share a shipper.
+
+## 1. Inventory — items and in-flight work
+
+- **Items:** the plan's Current Phase block (dotfiles `task_plan.md`; the KB
+  has no root plan, so use its open issues), each mapped to an issue number.
+  Read every issue body with
+  `gh issue view <n> [-R <owner/repo>] --json body`; never `--comments`.
+- **Closed is not remaining.** Check each issue's `state` and `git log
+  origin/main` before planning it — a plan block can trail merges by hours.
+- **In flight:** `git worktree list` plus `gh pr list --state open` in both
+  repositories. These own their files until they merge.
+
+## 2. File sets — predicted for items, measured for branches
+
+- **Branches:** `git diff --name-only origin/main...<branch>`.
+- **Items:** every path named in the issue body or its spec, plus the
+  module's tests, its skill and the `.agents` mirror, and registration sites
+  (`main.py`, `mise.toml` tasks, `suites.toml` contracts).
+- **Blast radius:** run `mise run graphify-health` first. Only on `fresh`,
+  use `mise run graphify-affected -- "<symbol>"` per changed symbol and
+  `mise run graphify-prs -- <PR#>` per open PR (see the `blast-radius`
+  skill). On `stale`/`missing`, say the graph is unavailable and fall back to
+  co-change history: `git log -150 --name-only --format= origin/main | sort |
+  uniq -c | sort -rn`. Never read a stale graph as "no dependents".
+
+## 3. Measure real conflicts — `git merge-tree`
+
+For every in-flight branch, and every pair of them:
+
+```bash
+git merge-tree --write-tree --name-only --no-messages origin/main <branch>   # rc 1 = conflict
+git merge-tree --write-tree --name-only --no-messages <branch-a> <branch-b>
+```
+
+rc 1 lists the conflicting paths after the tree id. Arm it: at least one pair
+should report a conflict you expect, or confirm one by hand, before trusting
+a column of zeros. A branch that conflicts with `main` on files it barely
+touched is usually **stacked on a squash-merged parent** — fix it with
+`git rebase --onto origin/main <last-parent-commit>`, not by resolving hunks.
+
+Predicted file sets for unwritten items cannot be merge-tree'd; treat a
+shared file as a conflict when both sides edit the same region, and as a
+rebase chore when both only append (task registrations, new test functions).
+
+## 4. Overlap matrix and lanes
+
+Mark these **hot files** as conflict points on sight: `mise.toml`,
+`mise.lock`, `.config/mise/conf.d/shared.toml`, `python/pyproject.toml`,
+`python/uv.lock`, `python/verification/suites.toml`, `schemas/sources.toml`,
+`main.py`, `doctor.py`, `doctor.toml`, `hk.pkl`, `refresh.yml`,
+`.claude/settings.json`, `AGENTS.md`, `.claude/CLAUDE.md`.
+`task_plan.md` and `docs/agents/goal-history.md` are coordinator-only, so any item whose deliverable is a plan restructure is
+serial by definition.
+
+Grouping rules:
+
+1. Items that share a non-hot file go in **one lane**, shipped in order.
+2. An item touching an in-flight branch's files **starts after** that branch
+   merges, or writes now and rebases — state which.
+3. Items whose only overlap is a hot file stay separate lanes; sequence their
+   ships so the smaller diff rebases.
+4. A change to `uv.lock`/`pyproject.toml`/`shared.toml` joins **one serial
+   chain** — lockfile conflicts are regenerated, not merged.
+5. Cross-repo pairs (a rule-synced `settings.json` change, a KB library a
+   dotfiles pin consumes) are two lanes with an explicit order.
+
+Ship order: in-flight branches first (isolated ones before hot-file ones),
+then lanes in the order that minimises rebases.
+
+## 5. Launch a lane
+
+```bash
+git -C <repo> worktree add ../<repo>.worktrees/<lane>-<YYYYMMDD> -b <type>/<lane> origin/main
+cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <lane> "<brief>"
+```
+
+`claude --bg` runs in the current directory, so launch it from inside the
+worktree. Its positional prompt goes through slash-command expansion like
+`-p` does, so don't start the brief with `/`.
+
+Brief template — every field is required, because a lane cannot ask:
+
+```text
+LANE <lane> (<repo>, worktree <path>, branch <branch>). Items: <#issue …>.
+OWN ONLY: <file list>. DO NOT EDIT: <hot files + other lanes' files>.
+NATIVE-FIRST: research the tool's built-in before custom code (use-tool-builtins.md).
+GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc.
+PERSIST: report to <path> incrementally; findings.md/progress.md append-only; never task_plan.md.
+STOP AT: commit on the branch. Do NOT push, ship or open a PR — the coordinator ships serially.
+```
+
+## Output
+
+Give the lane plan as one table per repository, then the ship sequence, then
+the decisions that need the user (a branch the plan would retire, a ruling
+two items disagree on).
