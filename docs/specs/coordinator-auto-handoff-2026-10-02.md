@@ -360,6 +360,85 @@ reload commands queued in order, `/rename` args exact, defer path renames on fir
 nonconforming never calls `rename`, ERROR status on a throwing process. Live arm: a throwaway
 bg session without `-n` on a scratch branch shows the new name in `ListAgents`.
 
+## 9. Review round 1 — corrections to implement (respec of 21e46a08)
+
+Sources (verbatim, tracked): `docs/research/kb/reports/agents/review-{standards,spec,code-review,error-branches,codex-lens}-coordinator-auto-handoff-21e46a08.md`.
+Every item below was confirmed against the cited file:line by the architect. Implement all of
+them; each needs a test arm that FAILS on 21e46a08 and passes after (state which in the report).
+
+**R1 (P1 — all five reviews) No second successor.** `launch` writes `state["launch"]`; `decide`
+answers `fire:false, reason:"already-launched"` whenever that record exists, and `launch`
+refuses (rc 2, `already launched <successor name>`) when one exists. Stepped re-fire stays only
+for a handoff that never launched.
+
+**R2 (P2) One state location.** The state dir for `decide`, `launch` and `retire` is ALWAYS
+`<main checkout>/.agent/state/coordinator-handoff/` (main checkout = `git worktree list
+--porcelain` entry 0, resolved from the CWD's repo), never the package's own checkout. The
+successor brief prints the exact `--state-dir` it must pass to `retire` anyway (belt and braces).
+
+**R3 Fire is consumed only on delivery.** `decide` takes `--no-commit` (the hook passes it under
+DRY_RUN or PROBE) and then reports the would-be level without writing `last_fired`. New
+subcommand `coordinator-handoff release --session-id ID --level L`: if `last_fired == L`, restore
+the previous value (kept as `previous_fired` by `decide`); the hook calls it when delivery fails
+(skill not listed, `command.list` throws, `command.run` rejects). Status stays `handoff ERROR:`.
+
+**R4 Role check once per session.** The hook calls python `decide` on the FIRST context
+measurement of a session regardless of percent, caches the role (`coordinator` / `not`) in module
+scope keyed by session id, and afterwards: not-coordinator → status `handoff n/a` and NO process
+ever again for that session; coordinator → the cheap pre-filter as before. All reads of `e.*`
+move inside the `try`.
+
+**R5 Lock.** Every read-modify-write of a state file (`decide`, `launch`, `release`, session-start
+state) holds an exclusive `fcntl.flock` on `<state file>.lock` (bounded wait 10 s → reason
+`state-locked`, treated like `state-write-failed`).
+
+**R6 Distinct retire codes.** 0 retired; 1 BLOCKED (live recorded run / harness tasks); 2 refused
+(not coordinator, no launch record, unreadable state); 3 stop failed (`claude` missing,
+`claude stop` timeout 60 s, or its non-zero rc — print it). `launch`: every git/ps failure incl.
+`TimeoutExpired` → rc 2. `main_checkout` takes an injected runner and a named timeout constant.
+The brief explains all four codes.
+
+**R7 inFlight fails CLOSED.** Unreadable/missing/non-int `inFlight.tasks` → BLOCK (rc 1, reason
+`inFlight unknown`) unless `--accept-inflight`. (Supersedes §3b's "UNKNOWN, census decides".)
+
+**R8 Census coverage.** `HEAVY_COMMAND_RE` also matches `mise run` / `mise -C <dir> run` /
+`mise run --` forms of `dev-rebuild|up|persistence|gate|lock-image|lock-shared|kb-ship|kb-land|
+ship|land|sync|verify-local|verify-container-latest|bounded-wait|automerge`. Table-driven test.
+
+**R9 Real log path.** For each heavy run, the log path is the regular file that the heavy
+process's (or its first descendant's) fd 1 points at, read with `lsof -a -p <pid> -d 1 -Fn`;
+the redirect text is only a fallback, and a fallback containing `$` is recorded as
+`unexpanded:<text>` so the brief never tells the successor to wait on `$LOG`.
+
+**R10 session-start fails CLOSED on an unknown name.** A name is "user-given" when the job record
+has `name` with `nameSource == "user"`, OR the session's own `claude` process argv (nearest
+`claude` ancestor of the python process, via `reap`) carries `-n`/`--name`. Decision table:
+user-given conforming → `keep`; user-given nonconforming → `nonconforming`; job record present
+and no user name → rename/defer; NO job record AND argv is a bg spare (`--bg-spare` /
+`bg-pty-host`) → `unknown` (no rename, status `session-start: name unknown`); no record and a
+foreground argv without `-n` → rename/defer.
+
+**R11 Completion result shape.** `$.model.complete` result is handled as
+`typeof r === "string" ? r : (r.isAnswered ? r.text : undefined)` behind one typed helper (the
+vendored types are 2.1.277; the engine is 2.1.288 — flag the vendored-types bump to the
+coordinator, do not do it here). Harness arms for BOTH shapes and for `isAnswered:false`.
+
+**R12 Rename/defer bookkeeping.** `renamed` is recorded and `ok (renamed)` shown only after
+`command.run` for `rename` RESOLVES; a rejection keeps the pending prefix and shows ERROR. The
+deferred-prefix state lives in python (already); after a plugin reload wipes module memory, the
+first `prompt.submit` asks `session-start pending --session-id ID` ONCE (cached) instead of
+relying on module memory (E8). Queue `rename` (when known at start) BEFORE the reloads.
+
+**R13 Standards.** Reason/action strings become string-literal union types in TS mirrored from a
+python `Enum`/`Literal`; general helpers (`chicago_stamp`, `stamped_name`, state read/write+lock,
+`now_iso`, `valid_session_id`, `session_name`, `default_jobs_dir`, main-checkout resolution) move
+to `python/src/dotfiles_setup/session_common.py`. The two hook modules stay self-contained
+(each plugin loads independently — duplication there is accepted, say so in a header comment).
+
+**R14 Docs.** session-handoff "Unattended run" adds the early docs-branch PR line (req 8); the
+md-size bullet trim there is recorded in the commit body as a budget offset; §3c lists every
+refusal reason incl. `invalid-session-id`/`invalid-percent` and census-unavailable.
+
 ## GitHub repos touched
 
 _None._ (Offline vendor docs in the knowledge-base corpus and the bundled CC 2.1.288 type file only.)
