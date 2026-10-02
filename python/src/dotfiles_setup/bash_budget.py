@@ -65,7 +65,10 @@ class BashAllowance:
 # entry is a reviewable diff — keep the justification honest.
 ALLOWLIST: dict[str, BashAllowance] = {
     ".devcontainer/scripts/on-create.sh": BashAllowance(
-        74,
+        # 74 -> 78 (native-cli-devcontainer-2026-10-01): one call into
+        # `devcontainer native-clis install` plus its comment; the install
+        # logic lives in python (native_clis_container.py).
+        78,
         "devcontainer postCreate lifecycle hook — thin wrapper from devcontainer.json",
     ),
     "scripts/benchmark-docker.sh": BashAllowance(
@@ -88,7 +91,9 @@ ALLOWLIST: dict[str, BashAllowance] = {
     "scripts/devcontainer-smoke.sh": BashAllowance(
         # 157 -> 163 (#1183): pre-tier git probe names a missing workspace
         # safe.directory before libgit2 consumers obscure the ownership error.
-        163,
+        # 163 -> 166 (native-cli-devcontainer-2026-10-01): one call into
+        # `devcontainer native-clis check` (provenance lives in python).
+        166,
         "tier 1-3 smoke harness — thin wrapper; the non-trivial tier-1/tier-3 "
         "cores live in `dotfiles-setup image smoke-script` (#223)",
     ),

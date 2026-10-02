@@ -273,6 +273,24 @@ def test_check_drift_reports_an_unresolvable_pin(tmp_path: Path) -> None:
     assert "could not resolve" in findings[0]
 
 
+@pytest.mark.parametrize("tool", ["codex", "claude-code"])
+def test_check_drift_treats_a_native_installer_tool_as_vendored(
+    tmp_path: Path, tool: str
+) -> None:
+    """Native-installer tools (codex, claude-code) have no mise pin to resolve.
+
+    The control arm is the test above — the same rename to an unknown tool
+    reports "could not resolve" — so this passes only because the tool is
+    known-vendored, not because the check went quiet.
+    """
+    _seed_repo(tmp_path)
+    sources = tmp_path / "schemas/sources.toml"
+    sources.write_text(
+        sources.read_text().replace('tool = "ruff"', f'tool = "{tool}"', 1)
+    )
+    assert check_drift(tmp_path) == []
+
+
 # ──────────────────────────────────────────────────────────────────────
 # _source_url
 # ──────────────────────────────────────────────────────────────────────
@@ -432,10 +450,8 @@ def test_refresh_rederives_the_codex_agent_schema_with_its_source(
     (codex review of 613d822a).
     """
     _seed_repo(tmp_path)
-    shared = tmp_path / ".config/mise/conf.d/shared.toml"
-    shared.write_text(
-        shared.read_text() + '"npm:@openai/codex" = { version = "0.154.0" }\n'
-    )
+    # codex has no mise pin (native installer; vendored like claude-code), so
+    # nothing is seeded into shared.toml: the sources.toml `version` IS the pin.
     old_config = b'{"type": "object", "properties": {"model": {"type": "string"}}}\n'
     (tmp_path / "schemas/codex-config.json").write_bytes(old_config)
     (tmp_path / "schemas/codex-agent.json").write_text("{}\n")
@@ -446,7 +462,7 @@ def test_refresh_rederives_the_codex_agent_schema_with_its_source(
         'file = "schemas/codex-config.json"\n'
         'version = "0.154.0"\n'
         'source = "https://example.invalid/config-schema.json"\n'
-        'pin_source = ".config/mise/conf.d/shared.toml"\n'
+        'pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"\n'
         f'sha256 = "{hashlib.sha256(old_config).hexdigest()}"\n'
     )
     new_config = {

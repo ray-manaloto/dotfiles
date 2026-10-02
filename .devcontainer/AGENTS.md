@@ -32,8 +32,8 @@ spec), not a bootstrap shell wrapper:
   initialize-host`, which stages `authorized_keys` AND downloads the
   Doppler secrets (KEY=VALUE for `--env-file`). #893 moved the
   download out of the shell chain into python.
-- `onCreateCommand` (in container, once): `chezmoi init --apply` against
-  `/workspaces/${localWorkspaceFolderBasename}` (renders it as the gitconfig's scoped
+- `onCreateCommand` (in container, once): native self-updating claude/codex/agy into the home volume
+  (`devcontainer native-clis install`), then `chezmoi init --apply` against `/workspaces/<basename>` (scoped
   `safe.directory`, #1183), chowns named-volume mountpoints to `${USER}:${USER}`.
 - `postCreateCommand` (once): chowns the magic SSH socket, installs
   `authorized_keys` from `/tmp/dotfiles-host-state/` for R1, seeds

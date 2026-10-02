@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from kb_setup import evals
 
-from dotfiles_setup import image_lock
+from dotfiles_setup import image_lock, native_clis_container
 from dotfiles_setup.agentsview_pass import PassRequest
 from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
@@ -361,6 +361,18 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "captured via `teardown --all-arches` (#803 I11) — skips re-running "
         "the `docker ps` query. Pass an empty string for 'captured, and "
         "there were none'; omit the flag entirely to resolve fresh (#803 C6)",
+    )
+    native_clis_parser = devcontainer_sub.add_parser(
+        "native-clis",
+        help="In-container only: install the vendors' native, self-updating "
+        "claude/codex/agy into the home volume (on-create), or check their "
+        "provenance (smoke tier 3)",
+    )
+    native_clis_parser.add_argument(
+        "native_clis_command",
+        choices=("install", "check"),
+        help="install: run each missing tool's vendor installer; check: "
+        "assert each resolves to its native install and no mise copy exists",
     )
     migrate_parser = devcontainer_sub.add_parser(
         "migrate-home",
@@ -2284,6 +2296,13 @@ def setup_parser() -> argparse.ArgumentParser:
 
 
 def handle_devcontainer(args: argparse.Namespace) -> int:
+    """Dispatch `devcontainer native-clis`; every name verb goes to its own handler."""
+    if getattr(args, "devcontainer_command", None) == "native-clis":
+        return native_clis_container.main(args.native_clis_command)
+    return _handle_devcontainer_names(args)
+
+
+def _handle_devcontainer_names(args: argparse.Namespace) -> int:
     """Dispatch `devcontainer <env|name|migrate-home|teardown[-images]>` (#677)."""
     command = getattr(args, "devcontainer_command", None)
     if command == "env":
@@ -2298,7 +2317,7 @@ def handle_devcontainer(args: argparse.Namespace) -> int:
         return teardown_images_main(container_ids=args.container_ids)
     logger.error(
         "devcontainer: pick a subcommand — one of env, name, migrate-home, "
-        "teardown, teardown-images",
+        "native-clis, teardown, teardown-images",
     )
     return 2
 

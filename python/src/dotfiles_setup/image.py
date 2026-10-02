@@ -1041,8 +1041,15 @@ grep -q 'python.uv_venv_auto = "source"' "$MISE_CFG" || {
         + _TIER3_COMPILER_BODY
         + """\
 echo "=== AI CLI checks ==="
-for tool in claude codex gemini; do
-  command -v "$tool" >/dev/null 2>&1 || { echo "FAIL: missing $tool"; exit 1; }
+command -v gemini >/dev/null 2>&1 || { echo "FAIL: missing gemini"; exit 1; }
+# claude/codex/agy come ONLY from their native installers, run at container
+# create into the home volume (`devcontainer native-clis install`). A baked
+# copy is a second, non-updating install that wins wherever ~/.local/bin is
+# not first on PATH.
+for tool in claude codex agy; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "FAIL: $tool baked into the image at $(command -v "$tool")"; exit 1
+  fi
 done
 echo "=== zero-warning check ==="
 warn_count=$(echo "$mise_output" | grep -ci "WARN" || true)

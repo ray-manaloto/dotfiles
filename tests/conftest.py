@@ -2,7 +2,7 @@
 """Shared pytest configuration: the `host_only` CI skip and the composite's commands.
 
 `host_only` marks the handful of tests asserting facts about a real
-developer host — a host-installed CLI (`claude`, `gemini`) or a
+developer host — a host-installed CLI (`claude`, `codex`, `gemini`) or a
 chezmoi-applied `~/.zshenv` under zsh. No amount of `mise install` on a
 runner makes them pass, so they are skipped there and ONLY there; on the
 Mac host (and under `mise run ship`) they run normally.

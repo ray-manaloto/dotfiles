@@ -409,5 +409,5 @@ for keyfile in ~/.config/git/*.asc; do
 done
 """
 
-# [hooks] postinstall removed — Claude Code now installed via mise http:claude backend
-# For per-user native binary in overlay: run `claude install` in Dockerfile.host-user
+# [hooks] postinstall removed. claude/codex/agy come from their vendors' native
+# installers at container create (on-create.sh -> `devcontainer native-clis install`).
