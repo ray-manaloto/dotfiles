@@ -90,10 +90,22 @@ class PluginHealthReport:
     cli_failed_diagnostic: str | None = None
 
 
-#: Marketplace suffix of plugins bundled in the Claude Code binary. The CLI's
-#: ``plugin list --json`` never emits a row for them, so the check cannot see
-#: their install state at all.
-BUILTIN_SUFFIX = "@builtin"
+#: Marketplace of plugins bundled in the Claude Code binary. ``plugin list
+#: --json`` never emits a row for them, and ``plugin details <id>@builtin``
+#: resolves only some of them (4 of 11 on 2.1.287), so no CLI surface can
+#: confirm one reliably; they are reported as unobservable instead.
+BUILTIN_MARKETPLACE = "builtin"
+
+
+def _is_builtin_id(plugin_id: str) -> bool:
+    """``<name>@builtin`` with exactly one ``@`` and a non-empty name."""
+    name, sep, marketplace = plugin_id.partition("@")
+    return (
+        bool(sep)
+        and bool(name)
+        and "@" not in marketplace
+        and (marketplace == BUILTIN_MARKETPLACE)
+    )
 
 
 #: Cap on any diagnostic string copied into the report. Child stderr and msgspec
@@ -236,7 +248,8 @@ def evaluate(
         project_root: the project root path (for matching the wire's projectPath)
 
     Returns:
-        Report with code DRIFT if any list is non-empty, OK otherwise.
+        Report with code DRIFT if any of the three finding lists is non-empty,
+        OK otherwise. ``builtin_unobservable`` is informational and never DRIFT.
     """
     declared_set = set(declared)
     project_root_str = str(project_root.resolve()) if project_root else None
@@ -254,7 +267,7 @@ def evaluate(
     # A built-in has no CLI row by construction, so it is reported as
     # unobservable rather than as missing.
     builtin_unobservable = sorted(
-        plugin_id for plugin_id in declared_set if plugin_id.endswith(BUILTIN_SUFFIX)
+        plugin_id for plugin_id in declared_set if _is_builtin_id(plugin_id)
     )
 
     # Three observable findings:

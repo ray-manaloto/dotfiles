@@ -61,10 +61,21 @@ class TestEvaluate:
         self,
     ) -> None:
         """Control arm: only the @builtin suffix is exempt; a lookalike is not."""
-        declared = ["builtin@market", "x@builtin"]
+        declared = [
+            "builtin@market",
+            "x@notbuiltin",
+            "@builtin",
+            "a@b@builtin",
+            "x@builtin",
+        ]
         report = evaluate(declared, [])
         assert report.code == PluginHealthCode.DRIFT
-        assert report.declared_not_installed == ["builtin@market"]
+        assert report.declared_not_installed == [
+            "@builtin",
+            "a@b@builtin",
+            "builtin@market",
+            "x@notbuiltin",
+        ]
         assert report.builtin_unobservable == ["x@builtin"]
 
     def test_declared_disabled_here_drift(self, tmp_path: Path) -> None:
