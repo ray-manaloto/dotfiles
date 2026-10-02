@@ -6480,7 +6480,7 @@ version = "0.5.12"
 backend = "npm:ctx7"
 
 [[tools."npm:firecrawl-cli"]]
-version = "1.25.2"
+version = "1.25.3"
 backend = "npm:firecrawl-cli"
 
 [[tools."npm:markdownlint-cli2"]]
