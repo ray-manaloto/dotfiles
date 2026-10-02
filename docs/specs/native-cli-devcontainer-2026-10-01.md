@@ -111,10 +111,31 @@ dotfiles-setup devcontainer native-clis check     # rc 0 native; 1 any finding (
 
 - **Self-update stays ON in the image.** The probe-only switches never reach the tools' normal runs.
 - **An existing tool is never reinstalled.** On an existing volume the self-updater owns it, which is ruling 2.
-- **Fail loud.** A failed install fails `onCreateCommand`, the same as the overlay `mise install`.
+- **Fail loud, but last.** A failed install fails `onCreateCommand`, the same as the overlay
+  `mise install` does. `on-create.sh` holds the rc and returns it at the end, so a vendor outage still runs
+  chezmoi, the ownership repair and the overlay install (rev 1, `/code-review` finding 2).
+- **Proxy and CA variables pass through** to the installers (`*_PROXY`, `SSL_CERT_*`, `CURL_CA_BUNDLE`).
+  They are network plumbing, not credentials (rev 1, `/code-review` finding 3).
+- **codex's vendored `version` is a label.** Its schema `source` is unversioned, so `version` only names
+  which codex the bytes were reviewed against. `sha256` is what verifies them; the `sources.toml` header
+  says so (rev 1, `/code-review` finding 1).
 - **No new `.sh` files and no `curl | sh`.** Logic lives in python; bash grows only by thin call lines.
 - **Installers never see the container's Doppler credentials.** Their env is `HOME PATH USER LOGNAME LANG
-  SHELL TMPDIR` plus every `MISE_*` (rev 1), plus `CODEX_NON_INTERACTIVE=1` for codex.
+  SHELL TMPDIR` plus the network variables (`*_PROXY`, `SSL_CERT_*`, `CURL_CA_BUNDLE`), plus every `MISE_*`
+  name that is **not** credential-shaped (`TOKEN|SECRET|PASSW|KEY|AUTH|CREDENTIAL|COOKIE`), plus
+  `CODEX_NON_INTERACTIVE=1` for codex. Cold review of `93d70c96` (HIGH, finding 1) found that a bare
+  `MISE_*` prefix rule handed Doppler's `MISE_GITHUB_TOKEN` to all three vendor scripts. A
+  `MISE_GITHUB_TOKEN` canary test pins the fix. Removing the filter fails 2 tests.
+- **Wiring is a verify contract.** `workflow.native-clis-container-wiring` binds the on-create call, the
+  held rc, the smoke call, the CLI dispatch, the mise-copy finding, the credential filter and the CI
+  baked-copy failure. Deleting the on-create call fails `verify` (cold review finding 4).
+- **Accepted residuals from cold review:**
+  - Installer output is buffered until the installer exits, up to 600 s, and a timeout kills only the
+    direct child (finding 10).
+  - `verify-container-latest` fails on this branch until the `pr-NNN` image is synced, because the
+    current `:dev` image still carries the mise copies (finding 13).
+  - The `lock-image` regen also bumped 8 `latest`-pinned tools (finding 11). They are named in the
+    commit and the PR.
 - **What each installer verifies**, read from the installer sources fetched 2026-10-01:
 
   | Installer | Verification it performs | Replaced mechanism |

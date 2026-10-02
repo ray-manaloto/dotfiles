@@ -2013,6 +2013,57 @@ def test_build_tier1_script_injects_python_version() -> None:
     assert "not a mise install under" in s
 
 
+def _ai_cli_fragment() -> str:
+    """The CI smoke's AI-CLI block, cut from the REAL generated script."""
+    script = build_smoke_script(_FAKE_P2996_SHA)
+    start = script.index('echo "=== AI CLI checks ==="')
+    end = script.index('echo "=== zero-warning check ==="')
+    return script[start:end]
+
+
+def _run_fragment(tmp_path: Path, present: tuple[str, ...]) -> tuple[int, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name in present:
+        tool = bin_dir / name
+        tool.write_text("#!/bin/sh\n")
+        tool.chmod(0o755)
+    done = subprocess.run(
+        ["bash", "-c", _ai_cli_fragment()],
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.returncode, done.stdout
+
+
+def test_ai_cli_smoke_passes_with_only_gemini_in_the_image(tmp_path: Path) -> None:
+    """claude/codex/agy are native, installed into the home volume at create.
+
+    The no-mount CI image therefore carries gemini and none of the three.
+    """
+    assert _run_fragment(tmp_path, ("gemini",))[0] == 0
+
+
+@pytest.mark.parametrize("baked", ["claude", "codex", "agy"])
+def test_ai_cli_smoke_fails_on_a_baked_native_cli(tmp_path: Path, baked: str) -> None:
+    """A mise/npm copy re-added to the image config must fail the CI smoke.
+
+    The message is asserted too: the pre-change loop REQUIRED claude+codex, so
+    it also exits 1 here — for the opposite reason.
+    """
+    rc, out = _run_fragment(tmp_path, ("gemini", baked))
+    assert rc == 1
+    assert f"FAIL: {baked} baked into the image" in out
+
+
+def test_ai_cli_smoke_fails_without_gemini(tmp_path: Path) -> None:
+    rc, out = _run_fragment(tmp_path, ())
+    assert rc == 1
+    assert "FAIL: missing gemini" in out
+
+
 def test_build_tier1_script_python_guard_dormant_without_data() -> None:
     """No python version => the guard is emitted but inert."""
     s = build_tier1_script()

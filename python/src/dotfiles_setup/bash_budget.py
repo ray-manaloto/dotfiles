@@ -65,10 +65,11 @@ class BashAllowance:
 # entry is a reviewable diff — keep the justification honest.
 ALLOWLIST: dict[str, BashAllowance] = {
     ".devcontainer/scripts/on-create.sh": BashAllowance(
-        # 74 -> 78 (native-cli-devcontainer-2026-10-01): one call into
-        # `devcontainer native-clis install` plus its comment; the install
-        # logic lives in python (native_clis_container.py).
-        78,
+        # 74 -> 81 (native-cli-devcontainer-2026-10-01): one call into
+        # `devcontainer native-clis install`, its comment, and holding its rc
+        # to the end so a vendor outage cannot skip chezmoi/overlay install;
+        # the install logic lives in python (native_clis_container.py).
+        81,
         "devcontainer postCreate lifecycle hook — thin wrapper from devcontainer.json",
     ),
     "scripts/benchmark-docker.sh": BashAllowance(

@@ -186,6 +186,10 @@ def _curl_env(tmp_path: Path, home: Path) -> dict[str, str]:
     # derived from the path so no literal looks like a password.
     env["DOPPLER_TOKEN"] = tmp_path.name
     env["MISE_SYSTEM_CONFIG_DIR"] = "/usr/local/share/mise"
+    env["HTTPS_PROXY"] = "http://proxy.invalid:3128"
+    # The REAL leak shape: Doppler injects MISE_GITHUB_TOKEN, and the MISE_*
+    # passthrough must not carry it (cold review of 93d70c96, finding 1).
+    env["MISE_GITHUB_TOKEN"] = tmp_path.name
     return env
 
 
@@ -205,6 +209,9 @@ def test_install_fetches_https_only_and_strips_credentials(tmp_path: Path) -> No
     assert install_env["MISE_SYSTEM_CONFIG_DIR"] == "/usr/local/share/mise", (
         "the container's curl is a mise shim; it needs the MISE_* settings"
     )
+    assert install_env["HTTPS_PROXY"] == "http://proxy.invalid:3128"
+    assert "MISE_GITHUB_TOKEN" not in fetch_env
+    assert "MISE_GITHUB_TOKEN" not in install_env
 
 
 def test_existing_volume_chezmoi_wrapper_is_moved_aside_and_replaced(
@@ -224,7 +231,8 @@ def test_existing_volume_chezmoi_wrapper_is_moved_aside_and_replaced(
     )
     assert rc == 0
     assert len(run.calls) == 2, "the vendor installer must run"
-    assert (home / ".local/bin/.claude.pre-native").read_text() == wrapper_text
+    (aside,) = (home / ".local/bin").glob(".claude.pre-native-*")
+    assert aside.read_text() == wrapper_text
     assert ncc.vendor_finding(_BY_NAME["claude"], home) is None
 
 
@@ -292,3 +300,41 @@ def test_cli_reaches_check(monkeypatch: pytest.MonkeyPatch) -> None:
         main()
     assert exc.value.code == 0
     assert seen == ["check"]
+
+
+def test_version_probe_switches_updaters_off_and_drops_credentials(
+    tmp_path: Path,
+) -> None:
+    """The probe-only switches reach `--version`; no credential does."""
+    home = tmp_path / "home"
+    _native_layout(home)
+    env = _env(home)
+    env["MISE_GITHUB_TOKEN"] = tmp_path.name
+    env["DOPPLER_TOKEN"] = tmp_path.name
+    seen: list[dict[str, str]] = []
+
+    def run(argv: Sequence[str], probe_env: Mapping[str, str]) -> tuple[int, str]:
+        del argv
+        seen.append(dict(probe_env))
+        return 0, "1.0.0"
+
+    assert ncc.check_one(_BY_NAME["agy"], home=home, environ=env, run=run) == []
+    (probe_env,) = seen
+    assert probe_env["DISABLE_AUTOUPDATER"] == "1"
+    assert probe_env["AGY_CLI_DISABLE_AUTO_UPDATE"] == "true"
+    assert "MISE_GITHUB_TOKEN" not in probe_env
+    assert "DOPPLER_TOKEN" not in probe_env
+
+
+def test_a_second_move_aside_keeps_the_first_backup(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    first = home / ".local/bin/.claude.pre-native-20260101T000000Z"
+    _exe(first, "echo first")
+    _exe(home / ".local/bin/claude", "echo wrapper")
+    run = _FakeInstall(home, "claude")
+    rc = ncc.install_one(
+        _BY_NAME["claude"], home=home, environ=_curl_env(tmp_path, home), run=run
+    )
+    assert rc == 0
+    assert first.read_text() == "#!/bin/sh\necho first\n"
+    assert len(list((home / ".local/bin").glob(".claude.pre-native-*"))) == 2

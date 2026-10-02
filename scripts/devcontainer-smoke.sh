@@ -90,7 +90,7 @@ echo "[tier3] sanitizers + reflection compilers (python-generated shared core)"
 tier3_core="$(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup image smoke-script --tier 3)"
 bash -lc "$tier3_core"
 
-echo "[tier3] native claude/codex/agy provenance (home volume, no mise/npm copy)"
+echo "[tier3] native claude/codex/agy provenance (home volume; no active mise copy)"
 (cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup devcontainer native-clis check)
 
 echo "[tier3] home volume ownership + seed survivors"

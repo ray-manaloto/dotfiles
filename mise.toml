@@ -154,7 +154,7 @@ pin = true
 # list REPLACES the global one (`mise settings get disable_tools` here showed only the codex
 # entry while ~/.config/mise/config.toml listed antigravity-cli), so it is repeated here. The
 # former `npm:@openai/codex` entry went with the shared.toml codex pin it disabled
-# (docs/specs/native-cli-devcontainer-2026-10-01.md); the global list still covers codex/claude.
+# (docs/specs/native-cli-devcontainer-2026-10-01.md). No repo config pins codex/claude at all.
 disable_tools = ["antigravity-cli"]
 
 [settings.status]

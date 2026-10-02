@@ -37,9 +37,11 @@ set -euo pipefail
 
 WORKSPACE_FOLDER="${1:?first arg must be workspace folder absolute path}"
 
-# Native claude/codex/agy into the home volume (self-updating; skips a present
-# tool). BEFORE chezmoi: the agy installer appends PATH lines to the managed rc files.
-(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup devcontainer native-clis install)
+# Native claude/codex/agy into the home volume (self-updating; skips a present tool).
+# BEFORE chezmoi: the agy installer appends PATH lines to the managed rc files. A vendor
+# outage must not cost the dotfiles/tools below, so its rc is held and returned at the end.
+native_rc=0
+(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup devcontainer native-clis install) || native_rc=$?
 
 echo "[on-create] Running chezmoi init --apply from ${WORKSPACE_FOLDER}"
 chezmoi init --apply --source="${WORKSPACE_FOLDER}" --no-tty --force
@@ -76,3 +78,4 @@ else
 fi
 
 echo "[on-create] Done"
+exit "${native_rc}"

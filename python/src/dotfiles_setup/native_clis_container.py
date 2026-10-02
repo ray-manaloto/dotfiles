@@ -31,11 +31,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -47,12 +49,37 @@ _TIMEOUT_S = 600.0
 
 #: The environment names an installer or a probe may inherit. Everything else —
 #: notably the Doppler secrets ``runArgs --env-file`` injects — stays out.
-_ENV_PASSTHROUGH = ("HOME", "PATH", "USER", "LOGNAME", "LANG", "SHELL", "TMPDIR")
+_ENV_PASSTHROUGH = (
+    "HOME",
+    "PATH",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "SHELL",
+    "TMPDIR",
+    # Network plumbing, not credentials: without these a proxied or
+    # TLS-intercepted network fails the fetch the container's own curl passes.
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "CURL_CA_BUNDLE",
+)
 
 #: ``MISE_*`` also passes: the container's ``curl`` (and every other tool the
 #: installers call) is a mise shim, which cannot resolve without the system
-#: config dir / ignored-paths settings. None of them is a credential.
+#: config dir / ignored-paths settings.
 _ENV_PASSTHROUGH_PREFIX = "MISE_"
+
+#: ...EXCEPT a credential-shaped ``MISE_*`` name. Doppler injects
+#: ``MISE_GITHUB_TOKEN`` into the container (``doctor.toml`` ``[fnox].env_true``),
+#: and a bare prefix rule handed it to three unpinned vendor scripts (cold
+#: review of 93d70c96, finding 1). A shim needs config paths, never a secret.
+_CREDENTIAL_NAME = re.compile(r"TOKEN|SECRET|PASSW|KEY|AUTH|CREDENTIAL|COOKIE")
 
 #: Probe-only updater switches, so ``--version`` never triggers an update
 #: mid-smoke. They are set for the probe subprocess alone; the tools' normal
@@ -113,7 +140,8 @@ def _minimal_env(base: Mapping[str, str], extra: Mapping[str, str]) -> dict[str,
     env = {
         k: v
         for k, v in base.items()
-        if k in _ENV_PASSTHROUGH or k.startswith(_ENV_PASSTHROUGH_PREFIX)
+        if k in _ENV_PASSTHROUGH
+        or (k.startswith(_ENV_PASSTHROUGH_PREFIX) and not _CREDENTIAL_NAME.search(k))
     }
     env.update(extra)
     return env
@@ -163,30 +191,27 @@ def _mise_name(key: str) -> str:
     return bare.rsplit("/", 1)[-1]
 
 
-def install_one(
-    tool: NativeCli,
-    *,
-    home: Path,
-    environ: Mapping[str, str],
-    run: Runner = _default_run,
-) -> int:
-    """Install ``tool`` with its vendor installer unless it is already present.
+def _move_aside(tool: NativeCli, target: Path, stale: str) -> bool:
+    """Move a non-vendor file off the native path; False (logged) when it cannot.
 
-    Returns 0 when the tool is present afterwards, non-zero otherwise.
+    On an existing home volume this is the retired chezmoi `mise exec
+    claude-code` wrapper, or a stale link. It is moved aside — never deleted,
+    never over an earlier backup — so the vendor installer owns the path; the
+    vendor installers would otherwise skip or refuse it.
     """
-    target = native_path(tool, home)
-    stale = vendor_finding(tool, home)
-    if stale is None:
-        logger.info("%s: present at %s; its self-updater owns it", tool.name, target)
-        return 0
-    if target.is_symlink() or target.exists():
-        # A non-vendor file at the native path: on an existing home volume this
-        # is the retired chezmoi `mise exec claude-code` wrapper, or a stale
-        # link. Move it aside (never delete) so the vendor installer owns the
-        # path; the vendor installers would otherwise skip or refuse it.
-        aside = target.with_name(f".{tool.name}.pre-native")
-        target.replace(aside)
-        logger.info("%s: %s; moved it to %s", tool.name, stale, aside)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    aside = target.with_name(f".{tool.name}.pre-native-{stamp}")
+    try:
+        target.rename(aside)
+    except OSError:
+        logger.exception("%s: %s, and moving it aside failed", tool.name, stale)
+        return False
+    logger.info("%s: %s; moved it to %s", tool.name, stale, aside)
+    return True
+
+
+def _fetch_and_run(tool: NativeCli, *, environ: Mapping[str, str], run: Runner) -> int:
+    """Fetch the vendor installer https-only to a file, then run it; its rc."""
     curl = shutil.which("curl", path=environ.get("PATH"))
     if curl is None:
         logger.error("%s: curl not found on PATH; cannot fetch installer", tool.name)
@@ -224,6 +249,32 @@ def install_one(
         if rc != 0:
             logger.error("%s: installer exited rc=%s", tool.name, rc)
             return rc
+    return 0
+
+
+def install_one(
+    tool: NativeCli,
+    *,
+    home: Path,
+    environ: Mapping[str, str],
+    run: Runner = _default_run,
+) -> int:
+    """Install ``tool`` with its vendor installer unless it is already present.
+
+    Returns 0 when the tool is present afterwards, non-zero otherwise.
+    """
+    target = native_path(tool, home)
+    stale = vendor_finding(tool, home)
+    if stale is None:
+        logger.info("%s: present at %s; its self-updater owns it", tool.name, target)
+        return 0
+    if (target.is_symlink() or target.exists()) and not _move_aside(
+        tool, target, stale
+    ):
+        return 1
+    rc = _fetch_and_run(tool, environ=environ, run=run)
+    if rc != 0:
+        return rc
     if (finding := vendor_finding(tool, home)) is not None:
         logger.error("%s: installer exited 0 but %s", tool.name, finding)
         return 1
