@@ -1231,7 +1231,31 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--strict-five", action="store_true")
     parser.add_argument("--request-id")
     parser.add_argument("--last30days-plan", type=Path)
+    # Probe mode (#1514): record real exit codes instead of agent-typed ones.
+    parser.add_argument("--probe-out")
+    parser.add_argument("--code-search", action="append", metavar="ROLE=QUERY")
+    parser.add_argument("--repo-check", action="append", metavar="OWNER/REPO")
+    parser.add_argument("--fanout-manifest", action="append", type=Path)
+    parser.add_argument("--require", metavar="SOURCES")
+    parser.add_argument("--max-age", type=float, metavar="SECONDS")
+    parser.add_argument("--mirror-url")
+    parser.add_argument("--mirror-path", type=Path)
+    parser.add_argument("--mirror-index", type=Path, metavar="DIR")
+    parser.add_argument("--mirror-count", type=int)
     return parser
+
+
+_PROBE_ONLY_FLAGS = (
+    "code_search",
+    "repo_check",
+    "fanout_manifest",
+    "require",
+    "max_age",
+    "mirror_url",
+    "mirror_path",
+    "mirror_index",
+    "mirror_count",
+)
 
 
 def _parse_sources(value: str | None, repo: str | None) -> tuple[str, ...]:
@@ -1507,6 +1531,517 @@ def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, st
     return True, "all required sources completed"
 
 
+# Probe mode (#1514). A saved workflow has no filesystem or shell of its own
+# (`$CC/workflows.md:355`), so its mandatory-stage checks used to read numbers an
+# agent TYPED after running gh/firecrawl itself — an rc, a count, a byte size, an
+# HTTP status read off a header. Probe mode runs those calls here and records
+# what they really returned; the agent's whole job shrinks to running one
+# workflow-built command and copying its final `PROBE-JSON` line verbatim.
+_PROBE_ROLES = frozenset({"query", "must-hit", "known-absent", "health", "readme"})
+_PROBE_JSON_PREFIX = "PROBE-JSON "
+_DEFAULT_MANIFEST_MAX_AGE_S = 3600.0
+_MANIFEST_CLOCK_SKEW_S = 60.0
+# GitHub's code-search bucket is 10 requests/min; a wait longer than one window
+# means a different limit, so the probe records it instead of sleeping on it.
+_RATE_LIMIT_WAIT_CAP_S = 60.0
+_HTTP_CLIENT_ERROR = 400
+_HTTP_FORBIDDEN = 403
+_HTTP_TOO_MANY = 429
+_RC_TIMEOUT = 124
+_RC_NOT_FOUND = 127
+_REPO_SHAPE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_STATUS_LINE = re.compile(r"^HTTP/\S+\s+(\d{3})")
+_GH_HTTP_ERROR = re.compile(r"\(HTTP (\d{3})\)")
+_HEAD_BODY_SPLIT = re.compile(r"\r?\n\r?\n")
+
+
+class Sleeper(Protocol):
+    """Injected wait boundary (rate-limit backoff)."""
+
+    def __call__(self, seconds: float, /) -> None:
+        """Block for ``seconds``."""
+        ...
+
+
+class Clock(Protocol):
+    """Injected wall clock (rate-limit reset and manifest age)."""
+
+    def __call__(self) -> float:
+        """Return the current UNIX time in seconds."""
+        ...
+
+
+@dataclass(frozen=True)
+class _ProbeSpec:
+    probe_out: str
+    manifest: Path
+    code_searches: tuple[tuple[str, str], ...]
+    repo_checks: tuple[str, ...]
+    fanout_manifests: tuple[Path, ...]
+    required: tuple[str, ...]
+    max_age_s: float
+    mirror: tuple[str, Path] | None
+    mirror_index: tuple[Path, int] | None
+    timeout: float
+
+
+@dataclass(frozen=True)
+class ProbeTiming:
+    """The wait and clock boundaries probe mode reads; injected by tests."""
+
+    sleep: Sleeper
+    clock: Clock
+
+
+_REAL_TIMING = ProbeTiming(time.sleep, time.time)
+
+
+@dataclass(frozen=True)
+class _ProbeBoundaries:
+    runner: Runner
+    sleep: Sleeper
+    clock: Clock
+
+
+@dataclass(frozen=True)
+class _GhResponse:
+    rc: int
+    status: int
+    body: object | None
+    rate_limited: bool
+
+
+def _repo_ok(repo: str) -> bool:
+    # A dot-only segment is shell-safe but turns `repos/<r>` into another API path.
+    return bool(_REPO_SHAPE.match(repo)) and not any(
+        re.fullmatch(r"\.+", part) for part in repo.split("/")
+    )
+
+
+def _parse_gh_include(
+    completed: subprocess.CompletedProcess[bytes],
+) -> tuple[int, dict[str, str], object | None, str]:
+    """Split `gh api -i` output into status, lower-cased headers, JSON body, text."""
+    out = (completed.stdout or b"").decode(errors="replace")
+    err = (completed.stderr or b"").decode(errors="replace")
+    head, body = (*_HEAD_BODY_SPLIT.split(out, maxsplit=1), "")[:2]
+    lines = head.splitlines()
+    status_match = _STATUS_LINE.match(lines[0]) if lines else None
+    fallback = _GH_HTTP_ERROR.search(err)
+    status = int(
+        status_match.group(1) if status_match else fallback.group(1) if fallback else 0
+    )
+    headers = {
+        name.strip().lower(): value.strip()
+        for name, sep, value in (line.partition(":") for line in lines[1:])
+        if sep
+    }
+    try:
+        payload: object | None = _decode_json(body.encode()) if body.strip() else None
+    except ValueError:
+        payload = None
+    return status, headers, payload, f"{body}\n{err}"
+
+
+def _rate_limit_wait(headers: dict[str, str], clock: Clock) -> float | None:
+    retry_after = headers.get("retry-after", "")
+    if retry_after.isdigit():
+        return float(retry_after)
+    reset = headers.get("x-ratelimit-reset", "")
+    if reset.isdigit():
+        return max(0.0, float(reset) - clock())
+    return None
+
+
+def _gh_include(
+    tail: list[str], *, boundaries: _ProbeBoundaries, timeout: float
+) -> _GhResponse:
+    """One `gh api -i` call, retried ONCE after a short documented rate-limit wait."""
+    for attempt in range(2):
+        try:
+            completed = boundaries.runner(
+                ["gh", "api", "-i", *tail], timeout=timeout, env=_gh_env()
+            )
+        except subprocess.TimeoutExpired:
+            return _GhResponse(_RC_TIMEOUT, 0, None, rate_limited=False)
+        except FileNotFoundError:
+            return _GhResponse(_RC_NOT_FOUND, 0, None, rate_limited=False)
+        status, headers, payload, text = _parse_gh_include(completed)
+        rate_limited = status == _HTTP_TOO_MANY or (
+            status == _HTTP_FORBIDDEN
+            and (
+                headers.get("x-ratelimit-remaining") == "0"
+                or "rate limit" in text.casefold()
+            )
+        )
+        wait = _rate_limit_wait(headers, boundaries.clock) if rate_limited else None
+        if attempt == 0 and wait is not None and wait <= _RATE_LIMIT_WAIT_CAP_S:
+            boundaries.sleep(wait + 1.0)
+            continue
+        return _GhResponse(completed.returncode, status, payload, rate_limited)
+    message = "unreachable: the retry loop always returns"
+    raise AssertionError(message)
+
+
+def _code_search_probe(
+    role: str, query: str, *, boundaries: _ProbeBoundaries, timeout: float
+) -> dict[str, object]:
+    response = _gh_include(
+        ["-X", "GET", "search/code", "-f", f"q={query}"],
+        boundaries=boundaries,
+        timeout=timeout,
+    )
+    total = (
+        response.body.get("total_count") if isinstance(response.body, dict) else None
+    )
+    # -1 = "no count": a failed or rate-limited search is never a zero.
+    count = total if response.rc == 0 and isinstance(total, int) else -1
+    return {
+        "kind": "code-search",
+        "role": role,
+        "query": query,
+        "rc": response.rc,
+        "http_status": response.status,
+        "count": count,
+        "rate_limited": response.rate_limited,
+    }
+
+
+def _repo_check_probe(
+    repo: str, *, boundaries: _ProbeBoundaries, timeout: float
+) -> dict[str, object]:
+    response = _gh_include([f"repos/{repo}"], boundaries=boundaries, timeout=timeout)
+    full_name = (
+        response.body.get("full_name") if isinstance(response.body, dict) else None
+    )
+    return {
+        "kind": "repo-check",
+        "repo": repo,
+        "rc": response.rc,
+        "http_status": response.status,
+        # Trimmed: a stray newline must never read as a rename (round-4 L5).
+        "full_name": full_name.strip()
+        if response.status == _HTTP_OK and isinstance(full_name, str)
+        else "",
+        "rate_limited": response.rate_limited,
+    }
+
+
+def _manifest_age(manifest: dict[str, object], clock: Clock) -> float | None:
+    stamp = manifest.get("generated_at")
+    if not isinstance(stamp, str):
+        return None
+    try:
+        return clock() - datetime.fromisoformat(stamp).timestamp()
+    except ValueError:
+        return None
+
+
+def _fanout_manifest_probe(
+    path: Path, required: tuple[str, ...], *, max_age_s: float, clock: Clock
+) -> dict[str, object]:
+    """Read one fan-out manifest: which query REALLY ran, and each source's status.
+
+    The process rc of `research-fanout` is 0 when ANY source answered, so a
+    dependency run whose github-issues search failed read as a success (#1473).
+    """
+    row: dict[str, object] = {
+        "kind": "fanout-manifest",
+        "path": str(path),
+        "exists": path.is_file(),
+        "query": None,
+        "age_s": None,
+        "fresh": False,
+        "sources": {},
+        "required_failed": [],
+    }
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        rows = manifest["sources"]
+        statuses = {r["source"]: (r["status"], r.get("reason")) for r in rows}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
+        row["required_failed"] = [f"{name}: {reason}" for name in required]
+        return row
+    age = _manifest_age(manifest, clock)
+    row["query"] = manifest.get("query")
+    row["age_s"] = None if age is None else round(age, 1)
+    # An agent that skipped its run leaves the PREVIOUS sweep's manifest behind.
+    row["fresh"] = age is not None and -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s
+    row["sources"] = {name: status for name, (status, _) in statuses.items()}
+    successful = {Status.OK.value, Status.EMPTY_VERIFIED.value}
+    failed = []
+    for name in required:
+        status, reason = statuses.get(name, (None, None))
+        if status not in successful:
+            detail = f" ({reason})" if reason else ""
+            failed.append(f"{name}: {status or 'not run'}{detail}")
+    row["required_failed"] = failed
+    return row
+
+
+def _mirror_probe(
+    url: str, path: Path, *, runner: Runner, timeout: float
+) -> dict[str, object]:
+    """Save one caller link with the pinned firecrawl and measure what landed.
+
+    `--json` carries the page's HTTP status: firecrawl exits 0 and returns a
+    full body for a 404 (measured 2026-10-02: a 328-byte "Error 404" page), so a
+    size check alone saves an error page as a successful mirror.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # A failed scrape must not leave an EARLIER sweep's file to be measured.
+    path.unlink(missing_ok=True)
+    env = child_env.clean_env(keep=frozenset({"FIRECRAWL_API_KEY"}))
+    argv = [
+        "firecrawl",
+        "scrape",
+        url,
+        "--format",
+        "markdown",
+        "--only-main-content",
+        "--json",
+    ]
+    status = 0
+    try:
+        completed = runner(argv, timeout=timeout, env=env)
+        rc = completed.returncode
+        # _subprocess_error redacts credentials and joins stderr lines with " | ".
+        redacted = _subprocess_error(completed, env).partition(": ")[2]
+        reason = next((p.strip() for p in redacted.split(" | ") if p.strip()), "")
+        if rc == 0:
+            status, markdown, reason = _scrape_payload(completed.stdout or b"")
+            if markdown:
+                path.write_text(markdown, encoding="utf-8")
+    except subprocess.TimeoutExpired:
+        rc, reason = _RC_TIMEOUT, "timed out"
+    except FileNotFoundError:
+        rc, reason = _RC_NOT_FOUND, "firecrawl not found on PATH"
+    size = path.stat().st_size if path.is_file() else 0
+    if not reason and not (rc == 0 and size > 0):
+        reason = f"rc={rc}, {size} bytes"
+    return {
+        "kind": "mirror",
+        "url": url,
+        "path": str(path),
+        "rc": rc,
+        "http_status": status,
+        "bytes": size,
+        "reason": reason,
+    }
+
+
+def _scrape_payload(raw: bytes) -> tuple[int, str, str]:
+    """(HTTP status, markdown, failure reason) from `firecrawl scrape --json`."""
+    try:
+        payload = _decode_json(raw)
+    except ValueError:
+        return 0, "", "firecrawl output was not JSON"
+    data = payload.get("data", payload) if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return 0, "", "unexpected firecrawl JSON shape"
+    metadata = data.get("metadata")
+    status = metadata.get("statusCode") if isinstance(metadata, dict) else None
+    status = status if isinstance(status, int) else 0
+    markdown = data.get("markdown")
+    markdown = markdown if isinstance(markdown, str) else ""
+    reason = f"HTTP {status}" if status >= _HTTP_CLIENT_ERROR else ""
+    return status, markdown, reason
+
+
+def _cell(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _mirror_index_probe(directory: Path, count: int) -> dict[str, object]:
+    """Write the mirror README from the mirror probes on disk, not from agent rows."""
+    rows = []
+    for n in range(1, count + 1):
+        try:
+            data = json.loads((directory / f"{n}.probe.json").read_text("utf-8"))
+            mirror = next(p for p in data["probes"] if p["kind"] == "mirror")
+            rows.append(
+                (
+                    n,
+                    mirror["url"],
+                    Path(mirror["path"]).name,
+                    mirror["rc"],
+                    mirror["bytes"],
+                    mirror["reason"],
+                )
+            )
+        except OSError, ValueError, KeyError, TypeError, StopIteration:
+            rows.append(
+                (n, "(unknown)", f"{n}.md", "", 0, "mirror probe missing or unreadable")
+            )
+    readme = directory / "README.md"
+    lines = [
+        f"# Offline mirrors — {directory.parent.name}",
+        "",
+        (
+            "Caller links fetched with `firecrawl scrape <url> --format markdown "
+            "--only-main-content --json` (the pinned binary, via `mise run "
+            "research-fanout -- --probe-out`); a page answering HTTP >= 400 is a "
+            "failure whatever its size. Every value below is read from the "
+            "`<n>.probe.json` beside it."
+        ),
+        "",
+        "| n | url | file | rc | bytes | failure reason |",
+        "|---|---|---|---|---|---|",
+        *("| " + " | ".join(_cell(v) for v in row) + " |" for row in rows),
+    ]
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        readme.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        written = True
+    except OSError:
+        written = False
+    return {
+        "kind": "mirror-index",
+        "path": str(readme),
+        "rows": count,
+        "missing": sum(1 for row in rows if row[1] == "(unknown)"),
+        "written": written,
+    }
+
+
+def _probe_code_searches(args: argparse.Namespace) -> tuple[tuple[str, str], ...]:
+    searches = []
+    for item in args.code_search or ():
+        role, sep, query = item.partition("=")
+        if not sep or role not in _PROBE_ROLES or not query.strip():
+            message = (
+                f"--code-search must be ROLE=QUERY, ROLE in {sorted(_PROBE_ROLES)}"
+            )
+            raise _UsageError(message)
+        searches.append((role, query))
+    return tuple(searches)
+
+
+def _probe_required(args: argparse.Namespace) -> tuple[str, ...]:
+    required = tuple(r for r in (args.require or "").split(",") if r)
+    if unknown := [r for r in required if r not in _SOURCE_NAMES]:
+        message = f"unknown --require source(s): {', '.join(unknown)}"
+        raise _UsageError(message)
+    if required and not args.fanout_manifest:
+        message = "--require needs --fanout-manifest"
+        raise _UsageError(message)
+    return required
+
+
+def _probe_mirror_flags(args: argparse.Namespace) -> None:
+    if (args.mirror_url is None) != (args.mirror_path is None):
+        message = "--mirror-url and --mirror-path go together"
+        raise _UsageError(message)
+    if (args.mirror_index is None) != (args.mirror_count is None) or (
+        args.mirror_count is not None and args.mirror_count < 0
+    ):
+        message = "--mirror-index needs --mirror-count >= 0 (and vice versa)"
+        raise _UsageError(message)
+
+
+def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
+    """Validate probe-mode flags; every failure is a usage error (rc 2)."""
+
+    def resolve(value: str | Path) -> Path:
+        path = Path(value)
+        return path if path.is_absolute() else repo_root / path
+
+    if args.query or args.sources or args.strict_five or args.list_sources:
+        message = (
+            "--probe-out takes no QUERY, --sources, --strict-five or --list-sources"
+        )
+        raise _UsageError(message)
+    searches = _probe_code_searches(args)
+    repos = tuple(args.repo_check or ())
+    if bad := [repo for repo in repos if not _repo_ok(repo)]:
+        message = f"--repo-check must be owner/repo with no dot-only segment: {bad}"
+        raise _UsageError(message)
+    required = _probe_required(args)
+    _probe_mirror_flags(args)
+    mirror = (args.mirror_url, resolve(args.mirror_path)) if args.mirror_url else None
+    index = (
+        None
+        if args.mirror_index is None
+        else (resolve(args.mirror_index), args.mirror_count)
+    )
+    fanouts = tuple(resolve(p) for p in args.fanout_manifest or ())
+    if not (searches or repos or fanouts or mirror or index):
+        message = "--probe-out needs at least one probe"
+        raise _UsageError(message)
+    return _ProbeSpec(
+        probe_out=args.probe_out,
+        manifest=resolve(args.probe_out),
+        code_searches=searches,
+        repo_checks=repos,
+        fanout_manifests=fanouts,
+        required=required,
+        max_age_s=_DEFAULT_MANIFEST_MAX_AGE_S if args.max_age is None else args.max_age,
+        mirror=mirror,
+        mirror_index=index,
+        timeout=args.timeout or _DEFAULT_TIMEOUT,
+    )
+
+
+def run_probes(
+    spec: _ProbeSpec, boundaries: _ProbeBoundaries
+) -> list[dict[str, object]]:
+    """Run every probe SEQUENTIALLY: concurrency would spend the search bucket."""
+    probes: list[dict[str, object]] = [
+        _code_search_probe(role, query, boundaries=boundaries, timeout=spec.timeout)
+        for role, query in spec.code_searches
+    ]
+    probes += [
+        _repo_check_probe(repo, boundaries=boundaries, timeout=spec.timeout)
+        for repo in spec.repo_checks
+    ]
+    probes += [
+        _fanout_manifest_probe(
+            path, spec.required, max_age_s=spec.max_age_s, clock=boundaries.clock
+        )
+        for path in spec.fanout_manifests
+    ]
+    if spec.mirror is not None:
+        url, path = spec.mirror
+        probes.append(
+            _mirror_probe(url, path, runner=boundaries.runner, timeout=spec.timeout)
+        )
+    if spec.mirror_index is not None:
+        probes.append(_mirror_index_probe(*spec.mirror_index))
+    return probes
+
+
+def _probe_main(spec: _ProbeSpec, boundaries: _ProbeBoundaries) -> int:
+    probes = run_probes(spec, boundaries)
+    payload = {
+        "kind": "probe",
+        # Exactly the string the caller passed, so a workflow can check that the
+        # manifest an agent hands back is the one it asked for.
+        "probe_out": spec.probe_out,
+        "manifest": str(spec.manifest),
+        "generated_at": datetime.fromtimestamp(boundaries.clock(), UTC).isoformat(),
+        "probes": probes,
+    }
+    try:
+        spec.manifest.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(spec.manifest, payload)
+    except OSError as exc:
+        sys.stderr.write(
+            f"research-fanout: could not write probe output ({type(exc).__name__})\n"
+        )
+        return 1
+    sys.stdout.write(f"{spec.manifest}\n")
+    for probe in probes:
+        rest = {k: v for k, v in probe.items() if k != "kind"}
+        sys.stdout.write(f"{probe['kind']}  {json.dumps(rest, sort_keys=True)}\n")
+    sys.stdout.write(
+        _PROBE_JSON_PREFIX
+        + json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    )
+    return 0
+
+
 def _print_summary(manifest_path: Path, results: list[SourceResult]) -> None:
     sys.stdout.write(f"{manifest_path}\n")
     for result in results:
@@ -1517,24 +2052,21 @@ def _print_summary(manifest_path: Path, results: list[SourceResult]) -> None:
         )
 
 
-def main(
-    argv: list[str],
+def _validate_mode(args: argparse.Namespace) -> None:
+    if given := [f for f in _PROBE_ONLY_FLAGS if getattr(args, f) is not None]:
+        flags = ", ".join("--" + f.replace("_", "-") for f in given)
+        message = f"{flags} only apply with --probe-out"
+        raise _UsageError(message)
+
+
+def _run_fanout(
+    args: argparse.Namespace,
+    sources: tuple[str, ...],
     repo_root: Path,
     *,
-    runner: Runner = default_runner,
-    http: Http = default_http,
+    runner: Runner,
+    http: Http,
 ) -> int:
-    """Run the research fanout CLI and return its process exit code."""
-    try:
-        args = _parser().parse_args(argv)
-        sources = _parse_sources(args.sources, args.repo)
-        _validate_args(args)
-        if args.list_sources:
-            _list_sources(args.repo)
-            return 0
-    except _UsageError as exc:
-        sys.stderr.write(f"research-fanout: {exc}\n")
-        return 2
     out_dir = args.out or (
         repo_root / ".agent/kb/raw/research-fanout" / _slug(args.query)
     )
@@ -1569,6 +2101,34 @@ def main(
         return 0 if passed else 1
     successful = {Status.OK, Status.EMPTY_VERIFIED}
     return 0 if any(result.status in successful for result in results) else 1
+
+
+def main(
+    argv: list[str],
+    repo_root: Path,
+    *,
+    runner: Runner = default_runner,
+    http: Http = default_http,
+    timing: ProbeTiming = _REAL_TIMING,
+) -> int:
+    """Run the research fanout CLI and return its process exit code."""
+    try:
+        args = _parser().parse_args(argv)
+        if args.probe_out is not None:
+            spec = _probe_spec(args, repo_root)
+            return _probe_main(
+                spec, _ProbeBoundaries(runner, timing.sleep, timing.clock)
+            )
+        _validate_mode(args)
+        sources = _parse_sources(args.sources, args.repo)
+        _validate_args(args)
+        if args.list_sources:
+            _list_sources(args.repo)
+            return 0
+    except _UsageError as exc:
+        sys.stderr.write(f"research-fanout: {exc}\n")
+        return 2
+    return _run_fanout(args, sources, repo_root, runner=runner, http=http)
 
 
 def _repo_root() -> Path:
