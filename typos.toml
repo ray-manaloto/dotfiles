@@ -39,6 +39,11 @@ sherif = "sherif"
 # against the binary.
 gae = "gae"
 
+# `HEL` is the session/lane shorthand for the ray-manaloto/harness-evolution-ledger repo
+# (Ray, 2026-10-02 grilling: a machine allow-word, not prose). Exact identifier only:
+# lowercase `hel` stays flagged, since it is a real typo of "help" elsewhere.
+HEL = "HEL"
+
 
 # `CPY001` is ruff's rule code for a missing copyright notice
 # (flake8-copyright), not a misspelling of "COPY"/"CPU". It reaches this repo
