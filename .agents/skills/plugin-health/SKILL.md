@@ -39,7 +39,9 @@ so the SessionStart hook cannot drift from Python):
 
 Three **observable** findings, never an inferred verdict:
 
-- `declared_not_installed` — settings enable it, no CLI row exists anywhere.
+- `declared_not_installed` — settings enable it, no CLI row exists anywhere (never a
+  `<name>@builtin` id: built-ins have no CLI row, so they land in the informational
+  `builtin_unobservable` list instead).
 - `declared_disabled_here` — settings enable it, this project's row says off.
 - `installed_not_declared` — enabled for this project, absent from settings
   (it arrived outside a reviewed diff).

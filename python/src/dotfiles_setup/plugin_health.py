@@ -14,6 +14,12 @@ are actually present and not explicitly disabled, resolved through
     It does NOT report an id when it has no project-scoped row but exists in
     other scopes (user, other projects). That state is uninterpretable and
     silence is correct.
+
+    A declared ``<name>@builtin`` id is listed under ``builtin_unobservable``
+    and is never ``declared_not_installed``: built-in plugins ship inside the
+    Claude Code binary and ``claude plugin list --json`` emits no row for any
+    of them (measured on 2.1.287 — 0 ``@builtin`` rows while ``diff`` and
+    ``agents-md`` were active), so their absence from the list is not evidence.
 """
 
 from __future__ import annotations
@@ -80,7 +86,26 @@ class PluginHealthReport:
     declared_not_installed: list[str] = field(default_factory=list)
     declared_disabled_here: list[str] = field(default_factory=list)
     installed_not_declared: list[str] = field(default_factory=list)
+    builtin_unobservable: list[str] = field(default_factory=list)
     cli_failed_diagnostic: str | None = None
+
+
+#: Marketplace of plugins bundled in the Claude Code binary. ``plugin list
+#: --json`` never emits a row for them, and ``plugin details <id>@builtin``
+#: resolves only some of them (4 of 11 on 2.1.287), so no CLI surface can
+#: confirm one reliably; they are reported as unobservable instead.
+BUILTIN_MARKETPLACE = "builtin"
+
+
+def _is_builtin_id(plugin_id: str) -> bool:
+    """``<name>@builtin`` with exactly one ``@`` and a non-empty name."""
+    name, sep, marketplace = plugin_id.partition("@")
+    return (
+        bool(sep)
+        and bool(name)
+        and "@" not in marketplace
+        and (marketplace == BUILTIN_MARKETPLACE)
+    )
 
 
 #: Cap on any diagnostic string copied into the report. Child stderr and msgspec
@@ -223,7 +248,8 @@ def evaluate(
         project_root: the project root path (for matching the wire's projectPath)
 
     Returns:
-        Report with code DRIFT if any list is non-empty, OK otherwise.
+        Report with code DRIFT if any of the three finding lists is non-empty,
+        OK otherwise. ``builtin_unobservable`` is informational and never DRIFT.
     """
     declared_set = set(declared)
     project_root_str = str(project_root.resolve()) if project_root else None
@@ -238,8 +264,16 @@ def evaluate(
             rows_by_id[row.id] = []
         rows_by_id[row.id].append(row)
 
+    # A built-in has no CLI row by construction, so it is reported as
+    # unobservable rather than as missing.
+    builtin_unobservable = sorted(
+        plugin_id for plugin_id in declared_set if _is_builtin_id(plugin_id)
+    )
+
     # Three observable findings:
-    declared_not_installed = sorted(declared_set - installed)
+    declared_not_installed = sorted(
+        declared_set - installed - set(builtin_unobservable)
+    )
 
     declared_disabled_here: list[str] = []
     for plugin_id in declared:
@@ -271,6 +305,7 @@ def evaluate(
         declared_not_installed=declared_not_installed,
         declared_disabled_here=declared_disabled_here,
         installed_not_declared=installed_not_declared,
+        builtin_unobservable=builtin_unobservable,
     )
 
 
