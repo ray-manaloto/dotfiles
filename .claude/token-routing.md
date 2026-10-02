@@ -24,11 +24,14 @@ fell back. No agent silently becomes a different model. Agent files and the
 
 ## Two model families, and the name carries the choice (2026-09-11)
 
-Every codex role exists twice: **`codex-sol-<role>`** pinned to `gpt-5.6-sol`
+Every codex role exists twice: **`codex-sol-<role>`** pinned to `gpt-6.1-sol`
 and **`codex-astra-<role>`** pinned to `gpt-6-astra`. **Neither is a default** —
 the lane you name is the model you get, which is the whole point of the split.
 `codex_agent_parity` fails any lane that pins a model its name does not
 advertise, so a dispatch site cannot be silently served the other one.
+The exception is a dispatch path that names no lane: `sdlc-team` and
+`codex-lane` default to sol and the codex review lens to astra, each at
+`xhigh` (Ray, 2026-10-02) — they used to inherit the user-level codex config.
 
 The sol lanes are AUTHORED; the astra lanes are GENERATED from them by
 `mise run codex-lane-mirror` (`-- --check` gates the drift). Edit the sol lane

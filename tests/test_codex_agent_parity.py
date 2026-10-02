@@ -58,7 +58,7 @@ tools: Bash, Read, Grep, Glob, Write
 Shell out with both flags explicit:
 
     cat prompt.md | codex exec --ephemeral --sandbox read-only \\
-      --model gpt-5.6-sol \\
+      --model gpt-6.1-sol \\
       -c model_reasoning_effort="xhigh" -
 
 ## Hard limits
@@ -299,7 +299,7 @@ def test_the_md_model_value_is_deliberately_not_pinned(tmp_path: Path) -> None:
 
 
 def test_an_md_missing_the_model_flag_fails(tmp_path: Path) -> None:
-    root = _tree(tmp_path, md=_GOOD_MD.replace("--model gpt-5.6-sol", "--model auto"))
+    root = _tree(tmp_path, md=_GOOD_MD.replace("--model gpt-6.1-sol", "--model auto"))
     assert "md-missing-marker" in _kinds(root)
 
 

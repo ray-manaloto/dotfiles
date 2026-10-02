@@ -26,14 +26,14 @@ name: codex-sol-advisor
 model: haiku
 ---
 
-Runs on `gpt-5.6-sol` at xhigh.
+Runs on `gpt-6.1-sol` at xhigh.
 
-    --model gpt-5.6-sol \\
+    --model gpt-6.1-sol \\
 """
 
 _TOML = """# dotfiles-hand-authored-codex-lane (#884)
 name = "codex-sol-advisor"
-description = "Runs on codex (gpt-5.6-sol)."
+description = "Runs on codex (gpt-6.1-sol)."
 """
 
 
@@ -50,7 +50,7 @@ def test_render_md_substitutes_name_and_model_and_stamps() -> None:
     assert "name: codex-astra-advisor" in out
     assert "--model gpt-6-astra" in out
     # The ONLY sol mention left may be the notice naming its own source.
-    assert "gpt-5.6-sol" not in out
+    assert "gpt-6.1-sol" not in out
     assert clm.GENERATED_NOTICE in out
     # The frontmatter must still open at byte 0 or the agent loader skips it.
     assert out.startswith("---\n")
@@ -60,7 +60,7 @@ def test_render_toml_substitutes_and_keeps_the_sentinel() -> None:
     out = clm.render_toml(_TOML)
     assert 'name = "codex-astra-advisor"' in out
     assert "gpt-6-astra" in out
-    assert "gpt-5.6-sol" not in out
+    assert "gpt-6.1-sol" not in out
     # The parity gate's primary check must survive generation.
     assert "dotfiles-hand-authored-codex-lane" in out
     assert out.startswith("# " + clm.GENERATED_NOTICE)
@@ -85,7 +85,7 @@ def test_check_fails_when_an_astra_lane_is_hand_edited(tmp_path: Path) -> None:
     _tree(tmp_path)
     clm.write_mirror(tmp_path)
     twin = tmp_path / clm.CLAUDE_AGENT_DIR / "codex-astra-advisor.md"
-    twin.write_text(twin.read_text().replace("gpt-6-astra", "gpt-5.6-sol"))
+    twin.write_text(twin.read_text().replace("gpt-6-astra", "gpt-6.1-sol"))
     findings = clm.find_drift(tmp_path)
     assert len(findings) == 1
     assert "drifted from" in findings[0]

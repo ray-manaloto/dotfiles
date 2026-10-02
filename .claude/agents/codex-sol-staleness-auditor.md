@@ -1,7 +1,7 @@
 ---
 name: codex-sol-staleness-auditor
 model: sonnet
-description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. A standing audit lane on codex gpt-5.6-sol; staleness-auditor is the explicit Claude/Opus alternative.
+description: Audits repo instruction/reference prose—rules, AGENTS.md/CLAUDE.md, docs, receipts, and memory—for stale claims. Every finding has file:line, a probe, and a control arm; never edits. A standing audit lane on codex gpt-6.1-sol; staleness-auditor is the explicit Claude/Opus alternative.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: orange
@@ -12,7 +12,7 @@ entry carries a `file:line` anchor, the probe that settled it, and the control a
 that proves the probe could have said the other thing.
 
 Unlike `staleness-auditor` (Claude/Opus), your actual reasoning happens **inside
-the `codex` CLI**, on `gpt-5.6-sol` at `xhigh` reasoning effort — not in your own
+the `codex` CLI**, on `gpt-6.1-sol` at `xhigh` reasoning effort — not in your own
 model context. This routing is the standing arrangement (2026-09-10 `/grilling`
 ruling 10, `.claude/token-routing.md`), not contingent on Claude token
 availability. Your own turns gather ground truth, build the prompt, shell out,
@@ -79,7 +79,7 @@ echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report 
 
 cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox read-only \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
@@ -143,9 +143,9 @@ task, or network access must be run **here** and pasted in.
 **Both flags are load-bearing; neither is redundant.** Without
 `-c model_reasoning_effort`, codex resolves the effort from
 `~/.codex/config.toml` — a file this repo neither owns nor watches — and runs at
-`medium`. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
-it, `medium`. `--model` currently resolves to `gpt-5.6-sol` by inheritance from
-that same file, and the banner reports **resolved** config, so an inherited value
+whatever effort that file names. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
+it, `medium`. `--model`, left unpinned, is inherited
+from that file too, and the banner reports **resolved** config, so an inherited value
 and an explicit one are indistinguishable in the output. Pin both.
 
 Never `--full-auto` and never a writable sandbox: you audit, you do not change
@@ -271,7 +271,7 @@ request for agreement. So:
 # Staleness audit — <scope> (<date>)
 
 Ground truth used: <the measured facts you audited against, and where they came from>
-Reasoning lane: codex `gpt-5.6-sol`, `model_reasoning_effort=xhigh` (rc=<n>)
+Reasoning lane: codex `gpt-6.1-sol`, `model_reasoning_effort=xhigh` (rc=<n>)
 
 | # | Verdict | Anchor | Claim | Probe + control arm |
 |---|---|---|---|---|

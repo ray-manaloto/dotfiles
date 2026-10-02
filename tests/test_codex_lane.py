@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import codex_lane as cl
 from dotfiles_setup import codex_verdict as cv
 from dotfiles_setup import dag_tick
+from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -580,13 +581,18 @@ def test_the_argv_sandboxes_the_review_lane_read_only(tmp_path: Path) -> None:
 
 
 def test_a_model_override_is_passed_through_when_given(tmp_path: Path) -> None:
-    """And is absent otherwise, so codex's own configured default applies."""
+    """An explicit model wins; otherwise the lane pins SOL_MODEL at LANE_EFFORT.
+
+    Before D15 the default omitted `--model` and effort entirely, so a lane ran
+    whatever the user-global `~/.codex/config.toml` said (effort `low`).
+    """
     run_dir = cl.prepare_lane(tmp_path, NODE_ID)
-    assert "--model" not in cl.build_codex_argv(run_dir)
-    assert cl.build_codex_argv(run_dir, model="gpt-5.6")[-3:-1] == [
-        "--model",
-        "gpt-5.6",
-    ]
+    default = cl.build_codex_argv(run_dir)
+    assert default[default.index("--model") + 1] == SOL_MODEL
+    assert default[-3:-1] == ["-c", f'model_reasoning_effort="{cl.LANE_EFFORT}"']
+    assert cl.LANE_EFFORT == "xhigh"
+    explicit = cl.build_codex_argv(run_dir, model="gpt-6-astra")
+    assert explicit[explicit.index("--model") + 1] == "gpt-6-astra"
 
 
 def test_the_spawned_lane_really_has_the_planning_hooks_disabled(

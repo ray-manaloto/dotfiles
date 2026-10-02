@@ -24,6 +24,7 @@ from typing import Final
 from urllib.parse import quote
 
 from dotfiles_setup import codec, lane_result
+from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -67,6 +68,7 @@ class SdlcTeamRequest(codec.Struct, frozen=True):
     spec_file: str
     mode: SdlcMode = SdlcMode.REVIEW
     effort: str = "xhigh"
+    model: str = SOL_MODEL
     timeout_s: float | None = None
     allowlist: tuple[str, ...] = ()
     run_id: str = ""
@@ -650,10 +652,16 @@ def _request_error(request: SdlcTeamRequest, repo_root: Path) -> str | None:
     spec_file = Path(request.spec_file).expanduser()
     if not spec_file.is_absolute():
         return "spec_file must be an absolute path"
-    if not request.effort or not all(
-        character.isalnum() or character in "-_" for character in request.effort
+    for value, allowed, message in (
+        (request.effort, "-_", "effort must be a non-empty identifier"),
+        (request.model, "-_.", "model must be a non-empty model slug"),
     ):
-        return "effort must be a non-empty identifier"
+        if (
+            not value
+            or value.startswith("-")
+            or not all(char.isalnum() or char in allowed for char in value)
+        ):
+            return message
     if request.timeout_s is not None and (
         not math.isfinite(request.timeout_s) or request.timeout_s <= 0
     ):
@@ -804,6 +812,10 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         *launcher,
         "-c",
         f'model_reasoning_effort="{request.effort}"',
+        # D15 (Ray 2026-10-02): pin the model as well as the effort. Without
+        # it a lane ran whatever ~/.codex/config.toml named.
+        "--model",
+        request.model,
         "-C",
         paths.workdir,
         "-o",

@@ -1,7 +1,7 @@
 ---
 name: codex-sol-adversarial-critic
 model: sonnet
-description: Attacks a PROPOSAL—rule, gate, hook, convention, process change, or fix list—by replaying whether it catches its motivating defect. Reports file:line evidence and never edits. A standing critique lane on codex gpt-5.6-sol; adversarial-critic is the explicit Claude/Opus alternative.
+description: Attacks a PROPOSAL—rule, gate, hook, convention, process change, or fix list—by replaying whether it catches its motivating defect. Reports file:line evidence and never edits. A standing critique lane on codex gpt-6.1-sol; adversarial-critic is the explicit Claude/Opus alternative.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: red
@@ -12,7 +12,7 @@ carrying the replay that settled it: the real historical cases it was derived
 from, and whether it actually fires on them.
 
 Unlike `adversarial-critic` (Claude/Opus), your actual reasoning happens
-**inside the `codex` CLI**, on `gpt-5.6-sol` at `xhigh` reasoning effort — not in
+**inside the `codex` CLI**, on `gpt-6.1-sol` at `xhigh` reasoning effort — not in
 your own model context. This routing is the standing arrangement (2026-09-10
 `/grilling` ruling 10, `.claude/token-routing.md`), not contingent on Claude
 token availability. Your own turns gather the record, build the prompt, shell
@@ -102,7 +102,7 @@ echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report 
 
 cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox read-only \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
@@ -162,9 +162,9 @@ genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 **Both flags are load-bearing; neither is redundant.** Without
 `-c model_reasoning_effort`, codex resolves the effort from
 `~/.codex/config.toml` — a file this repo neither owns nor watches — and runs at
-`medium`. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
-it, `medium`. `--model` currently resolves to `gpt-5.6-sol` by inheritance from
-that same file, and the banner reports **resolved** config, so an inherited value
+whatever effort that file names. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
+it, `medium`. `--model`, left unpinned, is inherited
+from that file too, and the banner reports **resolved** config, so an inherited value
 and an explicit one are indistinguishable in the output. Pin both.
 
 Never `--full-auto` and never a writable sandbox: you critique, you do not
@@ -293,7 +293,7 @@ prompt that reads like a request for validation. So:
 # Adversarial critique — <scope> (<date>)
 
 Record replayed against: <the artifacts and commits, with paths>
-Reasoning lane: codex `gpt-5.6-sol`, `model_reasoning_effort=xhigh` (rc=<n>)
+Reasoning lane: codex `gpt-6.1-sol`, `model_reasoning_effort=xhigh` (rc=<n>)
 
 | # | Verdict | Proposal | Fires on its motivating cases? | Shape |
 |---|---|---|---|---|

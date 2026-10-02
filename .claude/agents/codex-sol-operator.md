@@ -1,7 +1,7 @@
 ---
 name: codex-sol-operator
 model: sonnet
-description: Runs ONE named `mise run` task that mutates git or host state — `land`, `automerge`, `sync`, `verify-local` — and reports its real exit code. Use when an operational command must run off this session's clock. Runs on codex (gpt-5.6-sol) at full access, because every narrower sandbox blocks git writes.
+description: Runs ONE named `mise run` task that mutates git or host state — `land`, `automerge`, `sync`, `verify-local` — and reports its real exit code. Use when an operational command must run off this session's clock. Runs on codex (gpt-6.1-sol) at full access, because every narrower sandbox blocks git writes.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: orange
@@ -66,7 +66,7 @@ echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report 
 
 cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox danger-full-access \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
@@ -125,8 +125,8 @@ genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 
 **Both flags are load-bearing.** Without `-c model_reasoning_effort`, codex
 resolves effort from `~/.codex/config.toml` — a file this repo neither owns nor
-watches — and runs at `medium`. `--model` currently resolves to `gpt-5.6-sol` by
-inheritance from that same file, and the startup banner reports *resolved*
+watches — and runs at whatever effort that file names. `--model`, left unpinned, is inherited
+from that file too, and the startup banner reports *resolved*
 config, so an inherited value and an explicit one look identical in the log.
 Pin both.
 

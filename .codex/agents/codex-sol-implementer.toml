@@ -8,7 +8,7 @@
 # the gate's only signal that this repo, rather than the exporter, owns these
 # bytes.
 name = "codex-sol-implementer"
-description = "Implements a ratified seven-part spec on the current branch and reports the real exit codes of the gates it ran. Use when delegated implementation should run on codex (gpt-5.6-sol) rather than inline. Runs at full access, because the repo's own gates write outside the working tree. Refuses a contradictory spec rather than guessing."
+description = "Implements a ratified seven-part spec on the current branch and reports the real exit codes of the gates it ran. Use when delegated implementation should run on codex (gpt-6.1-sol) rather than inline. Runs at full access, because the repo's own gates write outside the working tree. Refuses a contradictory spec rather than guessing."
 model_reasoning_effort = "xhigh"
 developer_instructions = '''
 # codex-sol-implementer — implement one ratified spec, report the real gate results
