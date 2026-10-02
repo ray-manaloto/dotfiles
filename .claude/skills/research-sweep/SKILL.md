@@ -52,20 +52,28 @@ this repo use this skill and do not import `kb_setup.research`
   **dependencies** (`github-issues,github-discussions,github-releases` for
   `repo` and every `relatedRepos` entry, both directions, one agent per repo;
   EACH of the three must answer `ok`/`empty_verified`, read from the run's
-  manifest — the fan-out's own rc is 0 when any one source answered, #1473),
+  manifest — the fan-out's own rc is 0 when any one source answered, #1473 —
+  except a tracker the repos API reports DISABLED (`has_issues` /
+  `has_discussions` false), which is a note, not a gap (Ray, 2026-10-02);
+  pass `runId` to stamp each fan-out with `--request-id` so only THIS run's
+  manifests count, else freshness is a 1-hour age window),
   **mirror** (every link saved by the pinned firecrawl into
   `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
   readers read the mirror) and **code search** (at least one planner query that
   is evidence, a fresh known-absent control, and a must-hit >0 from the planner
-  or a README control). **Every mandatory number is recorded by a probe, not
-  typed by an agent** (#1514): each stage runs one workflow-built
+  or a README control). **Every mandatory number is computed by a probe, not
+  interpreted by an agent** (#1514): each stage runs one workflow-built
   `mise run research-fanout -- --probe-out <path> ...` command (`--code-search
   ROLE=Q`, `--repo-check R`, `--fanout-manifest M --require ...`, `--mirror-url
   U --mirror-path F`, `--mirror-index DIR --mirror-count N`), which runs gh and
   firecrawl itself and writes real exit codes and HTTP statuses to that
-  manifest (a mirror whose page answered HTTP >= 400 is a failure even with
-  bytes: firecrawl exits 0 with a full 404 body); the agent copies the final `PROBE-JSON` line, and the workflow
-  accepts it only when it names the exact path it asked for. A planner query
+  manifest (a page answering HTTP >= 400 is a failure and is not saved:
+  firecrawl exits 0 with a full 404 body; a stale manifest or mirror probe from
+  an earlier sweep is a gap, never evidence); the agent copies the final
+  `PROBE-JSON` line, and the workflow accepts it only when it names the exact
+  path it asked for. That echo catches a miscopied line, not a fabricated one:
+  the workflow has no filesystem, so the manifests on disk are the evidence a
+  reader re-checks. A planner query
   that returns 0 is evidence only beside a planner must-hit >0 with the SAME
   qualifier set; otherwise it is an unarmed gap (`codeSearchGaps`, #1471). The workflow adds its own controls for two separate questions:
   *does code search answer at all?* — one search-health control
@@ -92,16 +100,19 @@ this repo use this skill and do not import `kb_setup.research`
   (`mirrorGaps`) and is read live. Omitting both `repo` and `relatedRepos` is a
   mandatory gap. `repoRoot` (absolute) is required with `links` when
   `reportPath` is not under `<repo>/docs/`. The report slug is the path below
-  `docs/research/` with `/` → `--` (so two `runs/<run>/report.md` never share a
-  mirror directory); a `.`/`..` path segment or a dot-only slug is refused.
+  `docs/` with `/` → `--` (so two `runs/<run>/report.md` never share a mirror
+  directory; outside `docs/` it is the file name); a `.`/`..` path segment or a
+  dot-only slug is refused.
 
   **Retrospect** (#1502) ends every run, early exits included: a READ-ONLY
   Explore agent records what was hard and proposes tuning, and a haiku writer
-  saves it to `<reportPath minus .md>.retrospect.md` — a proposal file only,
+  saves it to `docs/research/kb/reports/agents/research-sweep-retrospect-<slug>.md`
+  (beside the report when no repo root is known) — a proposal file only,
   never applied (tuning happens through a spec + PR). It never changes
   `status`; `retrospect.status` is `written`, `retrospect-null`, `write-null`,
-  `write-mismatch` (the writer reported another path: the phase failed) or
-  `skipped` (`retrospect: false`).
+  `write-failed`, `write-mismatch` (the writer REPORTED another path: the phase
+  failed; a writer that writes elsewhere but reports the right path cannot be
+  detected from the workflow) or `skipped` (`retrospect: false`).
 
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
   for → run the in-lane steps below yourself. The fetch step needs network and `mise`;

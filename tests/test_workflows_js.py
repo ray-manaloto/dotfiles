@@ -178,7 +178,7 @@ const PROBE_LINE = (prompt, probes) => ({ line: 'PROBE-JSON ' + JSON.stringify({
 const CS = (rows) => rows.map((r) => ({
   kind: 'code-search', role: r.role, query: r.query, rc: r.rc,
   http_status: r.rc === 0 ? 200 : 403, count: r.count,
-  rate_limited: r.rateLimited === true }))
+  rate_limited: r.rateLimited === true, incomplete_results: r.incomplete === true }))
 const CODE_SEARCH_OK = [
   { query: 'filename:mise.toml hk', role: 'query', count: 3, rc: 0 },
   { query: 'repo:example/repo filename:README.md', role: 'must-hit', count: 1, rc: 0 },
@@ -210,7 +210,8 @@ const DEPS = (prompt, o = {}) => {
       ? CS([{ query: 'repo:cli/cli filename:README.md', role: 'health', ...health }])
       : []),
     { kind: 'repo-check', repo, rc: exists.rc, http_status: exists.status,
-      full_name: exists.fullName },
+      full_name: exists.fullName, has_issues: exists.hasIssues,
+      has_discussions: exists.hasDiscussions },
   ])
 }
 const DEPS_OK = (prompt) => DEPS(prompt)
@@ -220,7 +221,7 @@ const MIRROR_OK = (prompt, o = {}) => PROBE_LINE(prompt, [{ kind: 'mirror',
 const INDEX_OK = (prompt, written = true) => PROBE_LINE(prompt, [{ kind: 'mirror-index',
   path: '/abs/README.md', rows: 1, missing: 0, written }])
 const RETRO_PATH_OF = (prompt) =>
-  (prompt.match(/ to (\\/\\S+\\.retrospect\\.md) EXACTLY/) || [])[1]
+  (prompt.match(/ to (\\/\\S+\\.md) EXACTLY/) || [])[1]
 """
 
 _STUBS = (
@@ -1238,7 +1239,7 @@ def test_research_sweep_mirrors_each_caller_link_once(tmp_path: Path) -> None:
     assert [m["label"] for m in mirrors] == ["mirror:1/2", "mirror:2/2"]
     for n, (m, url) in enumerate(zip(mirrors, links, strict=True), start=1):
         words = _command(m["prompt"], "--mirror-url")
-        assert words[3:] == [
+        assert words == [
             "mise",
             "run",
             "research-fanout",
@@ -1389,6 +1390,8 @@ def test_research_sweep_stale_dependency_manifest_is_not_this_runs_evidence(
     """An agent that skipped its run leaves the PREVIOUS sweep's manifest behind."""
     stale = "DEPS(_prompt, { runs: [{ query: 'q0', fresh: false, age_s: 7200 }] })"
     payload = _mandatory_run(tmp_path, "sweep-stale.js", {"links": []}, {"deps": stale})
+    # ...and it is never handed to triage as this run's evidence (review a09aa247)
+    assert _DEP_MANIFEST not in _of_kind(payload, "triage-prompt")[0]["prompt"]
     assert _result(payload)["mandatoryGaps"] == [
         (
             f"dependency-repo stage for example/repo: {_DEP_MANIFEST} is 7200s old"
@@ -1430,7 +1433,7 @@ def test_research_sweep_zero_code_search_needs_a_same_shape_must_hit(
     assert run_result["codeSearchGaps"] == [
         (
             'planner query "foo OR bar language:toml" returned 0 with no same-shape'
-            " must-hit (qualifiers: language:toml) — an unarmed negative: a gap, not"
+            " must-hit (qualifiers: OR language:toml) — an unarmed negative: a gap, not"
             " evidence of absence"
         )
     ]
@@ -1442,6 +1445,22 @@ def test_research_sweep_zero_code_search_needs_a_same_shape_must_hit(
         )
     ]
     assert run_result["status"] == "mandatory-gap"
+
+    # the issue's own example: a must-hit with the qualifier but WITHOUT the OR
+    # is another shape; one that also uses OR arms it
+    for must_hit, status in (
+        ("mise language:toml", "mandatory-gap"),
+        ("mise OR toml language:toml", "complete"),
+    ):
+        rows = (
+            "[{ query: 'foo OR bar language:toml', role: 'query', count: 0, rc: 0 },"
+            f" {{ query: '{must_hit}', role: 'must-hit', count: 4, rc: 0 }},"
+            " CODE_SEARCH_OK[2]]"
+        )
+        payload = _mandatory_run(
+            tmp_path, f"sweep-s4-or-{status}.js", {"links": []}, {"code_search": rows}
+        )
+        assert _result(payload)["status"] == status, must_hit
 
     # a must-hit of ANOTHER shape still does not arm it
     other_shape = (
@@ -1793,7 +1812,8 @@ def test_research_sweep_readme_note_needs_a_passing_health_control(
     )
     assert _result(payload)["codeSearchNotes"] == []
 
-    # the first deps agent null: health never ran, so other/tool's 0 gets no note
+    # the first deps agent null: health never ran, so other/tool's 0 gets no
+    # not-indexed note
     first_null = (
         "_prompt.includes('--repo example/repo') ? null : DEPS(_prompt,"
         " { control: { count: 0, rc: 0, rateLimited: false } })"
@@ -1805,7 +1825,14 @@ def test_research_sweep_readme_note_needs_a_passing_health_control(
         {"deps": first_null},
     )
     run_result = _result(payload)
-    assert run_result["codeSearchNotes"] == []
+    # ...but the uninterpretable 0 is SAID to be, never recorded silently
+    assert run_result["codeSearchNotes"] == [
+        (
+            '"repo:other/tool filename:README.md" returned 0, but whether code search'
+            " answers at all is unknown (no passing health control), so that 0 cannot"
+            " be read either way"
+        )
+    ]
     assert run_result["mandatoryGaps"] == [
         "dependency-repo stage for example/repo: agent reported nothing (null)"
     ]
@@ -2060,9 +2087,6 @@ def test_research_sweep_link_is_one_shell_word(tmp_path: Path) -> None:
     raw = f"{REPO_ROOT}/docs/research/kb/raw/research-sweep/links"
 
     assert _command(prompt, "--mirror-url") == [
-        "cd",
-        str(REPO_ROOT),
-        "&&",
         "mise",
         "run",
         "research-fanout",
@@ -2299,8 +2323,8 @@ def test_research_sweep_report_slug_is_unique_per_report(tmp_path: Path) -> None
         words = _command(_of_kind(payload, "mirror")[0]["prompt"], "--mirror-url")
         dirs.append(words[words.index("--mirror-path") + 1])
     assert dirs == [
-        f"{REPO_ROOT}/docs/research/kb/raw/runs--research-a--report/links/1.md",
-        f"{REPO_ROOT}/docs/research/kb/raw/runs--research-b--report/links/1.md",
+        f"{REPO_ROOT}/docs/research/kb/raw/research--runs--research-a--report/links/1.md",
+        f"{REPO_ROOT}/docs/research/kb/raw/research--runs--research-b--report/links/1.md",
     ]
 
 
@@ -2392,7 +2416,9 @@ def test_research_sweep_mirror_paths_are_quoted(tmp_path: Path) -> None:
     )
     words = _command(_of_kind(payload, "mirror")[0]["prompt"], "--mirror-url")
     raw = f"{root}/docs/research/kb/raw/research-sweep/links"
-    assert words[:3] == ["cd", root, "&&"]
+    # no `cd ROOT` (review of a09aa247): research-fanout is THIS repo's task, so a
+    # ROOT in another repo must not change where it runs
+    assert words[:4] == ["mise", "run", "research-fanout", "--"]
     assert words[words.index("--probe-out") + 1] == f"{raw}/1.probe.json"
     assert words[-1] == f"{raw}/1.md"
 
@@ -2555,7 +2581,11 @@ def test_research_sweep_retrospect_writes_a_proposal_file_only(tmp_path: Path) -
     calls = cast("list[dict[str, str]]", payload["calls"])
     retro_call = next(c for c in calls if c["label"] == "retrospect")
     write = _of_kind(payload, "retrospect-write")[0]["prompt"]
-    want = str(REPO_ROOT / ".agent" / "research-sweep.retrospect.md")
+    # the tracked findings tree, named by the unique report slug (#1502)
+    want = str(
+        REPO_ROOT
+        / "docs/research/kb/reports/agents/research-sweep-retrospect-research-sweep.md"
+    )
 
     assert retro_call["agentType"] == "Explore"
     assert "READ-ONLY" in _of_kind(payload, "retrospect")[0]["prompt"]
@@ -2636,3 +2666,138 @@ def test_research_sweep_retrospect_runs_on_an_early_exit(tmp_path: Path) -> None
     labels = [c["label"] for c in cast("list[dict[str, str]]", payload["calls"])]
     assert "retrospect" not in labels
     assert _result(payload)["retrospect"] == {"status": "skipped", "path": None}
+
+
+def test_research_sweep_repo_root_is_normalised_and_dot_segments_refused(
+    tmp_path: Path,
+) -> None:
+    """A `//` repoRoot is collapsed (python echoes it normalised); `..` is refused.
+
+    FAIL arm: keep `//` and every mirror's echoed path mismatches, so each reads as
+    "no PROBE-JSON line"; drop the `..` check and MIRROR_DIR escapes the repo.
+    """
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-root-slashes.js",
+        {
+            "links": ["https://l.test"],
+            "repoRoot": f"{REPO_ROOT.parent}//{REPO_ROOT.name}/",
+        },
+    )
+    words = _command(_of_kind(payload, "mirror")[0]["prompt"], "--mirror-url")
+    assert words[words.index("--mirror-path") + 1] == (
+        f"{REPO_ROOT}/docs/research/kb/raw/research-sweep/links/1.md"
+    )
+
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "repoRoot": f"{REPO_ROOT}/../elsewhere"},
+        "  return null",
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-root-dotdot.js")
+    assert result.returncode != 0
+    assert 'repoRoot must not contain a "." or ".." segment' in result.stderr
+
+
+def test_research_sweep_disabled_tracker_is_a_note_not_a_gap(tmp_path: Path) -> None:
+    """Cold review F1: a repo with Discussions DISABLED can never answer that search.
+
+    Live: rhysd/actionlint (has_discussions=false) -> empty_unverified forever.
+    FAIL arm: ignore the repos API flags and every such repo is a permanent
+    mandatory gap. Control arm: the same failure on a repo WITH discussions on is
+    still a gap.
+    """
+    failed = ["github-discussions: empty_unverified (canary returned 0 items)"]
+    for has, gaps in ((False, 0), (True, 1)):
+        stub = (
+            "DEPS(_prompt, { runs: [{ query: 'q0', requiredFailed: "
+            f"{json.dumps(failed)} }}],"
+            f" exists: {{ rc: 0, status: 200, fullName: 'example/repo',"
+            f" hasIssues: true, hasDiscussions: {json.dumps(has)} }} }})"
+        )
+        payload = _mandatory_run(
+            tmp_path, f"sweep-f1-{has}.js", {"links": []}, {"deps": stub}
+        )
+        run_result = _result(payload)
+        assert len(cast("list[str]", run_result["mandatoryGaps"])) == gaps, has
+        notes = cast("list[str]", run_result["codeSearchNotes"])
+        assert any("has discussions disabled" in n for n in notes) is (not has)
+
+
+def test_research_sweep_run_id_stamps_and_requires_this_runs_manifests(
+    tmp_path: Path,
+) -> None:
+    """Cold review F3: with args.runId, freshness means THIS run, not "recent"."""
+    payload = _mandatory_run(tmp_path, "sweep-f3.js", {"links": [], "runId": "run-42"})
+    prompt = _of_kind(payload, "deps")[0]["prompt"]
+    fanout = _command(prompt, "--sources")
+    probe = _command(prompt, "--probe-out")
+    assert fanout[fanout.index("--request-id") + 1] == "run-42"
+    assert probe[probe.index("--expect-request-id") + 1] == "run-42"
+
+    wrapped = _custom_stub_source(
+        RESEARCH_SWEEP.read_text(encoding="utf-8"),
+        {**ARGS, "runId": "x;y"},
+        "  return null",
+    )
+    result = _bun_run_wrapped(wrapped, tmp_path / "sweep-f3-bad.js")
+    assert result.returncode != 0
+    assert "args.runId must be" in result.stderr
+
+
+def test_research_sweep_placeholder_query_is_a_gap(tmp_path: Path) -> None:
+    """Cold review F12: the literal placeholder is not the QUESTION's terms."""
+    placeholder = "<2-4 short search terms from the QUESTION>"
+    stub = f"DEPS(_prompt, {{ runs: [{{ query: '{placeholder}' }}] }})"
+    payload = _mandatory_run(tmp_path, "sweep-f12.js", {"links": []}, {"deps": stub})
+    gaps = cast("list[str]", _result(payload)["mandatoryGaps"])
+    assert any("placeholder" in g and "ran verbatim" in g for g in gaps), gaps
+
+
+def test_research_sweep_incomplete_search_is_never_evidence(tmp_path: Path) -> None:
+    """Cold review F17: a timed-out search (incomplete_results) is not a 0."""
+    rows = (
+        "[{ query: 'filename:x.toml zz', role: 'query', count: 0, rc: 0,"
+        " incomplete: true },"
+        " { query: 'filename:x.toml mise', role: 'must-hit', count: 3, rc: 0 },"
+        " CODE_SEARCH_OK[2]]"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-f17.js", {"links": []}, {"code_search": rows}
+    )
+    run_result = _result(payload)
+    code = cast("list[dict[str, object]]", run_result["codeSearch"])
+    assert code[0]["incomplete"] is True
+    assert run_result["status"] == "mandatory-gap"
+
+
+def test_research_sweep_repos_dedupe_case_insensitively(tmp_path: Path) -> None:
+    """Cold review F18: `example/Repo` and `example/repo` are one repo, one deps dir."""
+    payload = _mandatory_run(
+        tmp_path, "sweep-f18.js", {"links": [], "relatedRepos": ["Example/Repo"]}
+    )
+    assert [e["label"] for e in _of_kind(payload, "deps")] == ["deps:example/repo"]
+
+
+def test_research_sweep_early_exit_lists_the_stage_status(tmp_path: Path) -> None:
+    """Cold review F13: `synth-null` with stage gaps still lists `stage-gap`."""
+    body = _sub(
+        _sub(_SWEEP_MANDATORY_BODY, "REFUTE", _OK_VERDICT), "ADJUDICATE", "null"
+    )
+    for old, new in (
+        ("return DEPS_STUB\n", "return DEPS_OK(_prompt)\n"),
+        ("return MIRROR_STUB\n", "return MIRROR_OK(_prompt)\n"),
+        ("return INDEX_STUB\n", "return INDEX_OK(_prompt)\n"),
+        ("return RETRO_STUB\n", "return null\n"),
+        ("return RETRO_WRITE_STUB\n", "return null\n"),
+        ("if (label === 'plan+fetch') {", "if (label === 'plan+fetch') { return null"),
+        (
+            "  if (label === 'synthesize') {\n",
+            "  if (label === 'synthesize') { return null\n",
+        ),
+    ):
+        body = _sub(body, old, new)
+    payload = _sweep_custom(tmp_path, "sweep-f13.js", body, {"links": []})
+    run_result = _result(payload)
+    assert run_result["status"] == "synth-null"
+    assert run_result["statuses"] == ["synth-null", "mandatory-gap", "stage-gap"]

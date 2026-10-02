@@ -1238,6 +1238,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--fanout-manifest", action="append", type=Path)
     parser.add_argument("--require", metavar="SOURCES")
     parser.add_argument("--max-age", type=float, metavar="SECONDS")
+    parser.add_argument("--expect-request-id", metavar="ID")
     parser.add_argument("--mirror-url")
     parser.add_argument("--mirror-path", type=Path)
     parser.add_argument("--mirror-index", type=Path, metavar="DIR")
@@ -1251,6 +1252,7 @@ _PROBE_ONLY_FLAGS = (
     "fanout_manifest",
     "require",
     "max_age",
+    "expect_request_id",
     "mirror_url",
     "mirror_path",
     "mirror_index",
@@ -1580,6 +1582,7 @@ class _ProbeSpec:
     fanout_manifests: tuple[Path, ...]
     required: tuple[str, ...]
     max_age_s: float
+    expect_request_id: str | None
     mirror: tuple[str, Path] | None
     mirror_index: tuple[Path, int] | None
     timeout: float
@@ -1704,6 +1707,10 @@ def _code_search_probe(
         "http_status": response.status,
         "count": count,
         "rate_limited": response.rate_limited,
+        # GitHub sets this when the search timed out: its total (often 0) is
+        # not an answer, so the workflow never reads it as absence.
+        "incomplete_results": isinstance(response.body, dict)
+        and response.body.get("incomplete_results") is True,
     }
 
 
@@ -1711,9 +1718,8 @@ def _repo_check_probe(
     repo: str, *, boundaries: _ProbeBoundaries, timeout: float
 ) -> dict[str, object]:
     response = _gh_include([f"repos/{repo}"], boundaries=boundaries, timeout=timeout)
-    full_name = (
-        response.body.get("full_name") if isinstance(response.body, dict) else None
-    )
+    body = response.body if isinstance(response.body, dict) else {}
+    full_name = body.get("full_name")
     return {
         "kind": "repo-check",
         "repo": repo,
@@ -1724,6 +1730,14 @@ def _repo_check_probe(
         if response.status == _HTTP_OK and isinstance(full_name, str)
         else "",
         "rate_limited": response.rate_limited,
+        # A DISABLED tracker is the world, not a failed search: a repo with
+        # Discussions off answers empty_unverified forever (cold review F1).
+        "has_issues": body.get("has_issues")
+        if isinstance(body.get("has_issues"), bool)
+        else None,
+        "has_discussions": body.get("has_discussions")
+        if isinstance(body.get("has_discussions"), bool)
+        else None,
     }
 
 
@@ -1738,7 +1752,12 @@ def _manifest_age(manifest: dict[str, object], clock: Clock) -> float | None:
 
 
 def _fanout_manifest_probe(
-    path: Path, required: tuple[str, ...], *, max_age_s: float, clock: Clock
+    path: Path,
+    required: tuple[str, ...],
+    *,
+    max_age_s: float,
+    clock: Clock,
+    expect_request_id: str | None,
 ) -> dict[str, object]:
     """Read one fan-out manifest: which query REALLY ran, and each source's status.
 
@@ -1767,7 +1786,13 @@ def _fanout_manifest_probe(
     row["query"] = manifest.get("query")
     row["age_s"] = None if age is None else round(age, 1)
     # An agent that skipped its run leaves the PREVIOUS sweep's manifest behind.
-    row["fresh"] = age is not None and -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s
+    # With a per-run request id, "fresh" means THIS run's, not merely recent.
+    row["request_id"] = manifest.get("request_id")
+    row["fresh"] = (
+        age is not None
+        and -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s
+        and (expect_request_id is None or row["request_id"] == expect_request_id)
+    )
     row["sources"] = {name: status for name, (status, _) in statuses.items()}
     successful = {Status.OK.value, Status.EMPTY_VERIFIED.value}
     failed = []
@@ -1789,9 +1814,20 @@ def _mirror_probe(
     full body for a 404 (measured 2026-10-02: a 328-byte "Error 404" page), so a
     size check alone saves an error page as a successful mirror.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # A failed scrape must not leave an EARLIER sweep's file to be measured.
-    path.unlink(missing_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # A failed scrape must not leave an EARLIER sweep's file to be measured.
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        return {
+            "kind": "mirror",
+            "url": url,
+            "path": str(path),
+            "rc": 1,
+            "http_status": 0,
+            "bytes": 0,
+            "reason": f"cannot prepare {path}: {type(exc).__name__}",
+        }
     env = child_env.clean_env(keep=frozenset({"FIRECRAWL_API_KEY"}))
     argv = [
         "firecrawl",
@@ -1811,7 +1847,8 @@ def _mirror_probe(
         reason = next((p.strip() for p in redacted.split(" | ") if p.strip()), "")
         if rc == 0:
             status, markdown, reason = _scrape_payload(completed.stdout or b"")
-            if markdown:
+            # An error page is never saved: later sweeps grep these mirrors.
+            if markdown and not reason:
                 path.write_text(markdown, encoding="utf-8")
     except subprocess.TimeoutExpired:
         rc, reason = _RC_TIMEOUT, "timed out"
@@ -1853,13 +1890,34 @@ def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
-def _mirror_index_probe(directory: Path, count: int) -> dict[str, object]:
-    """Write the mirror README from the mirror probes on disk, not from agent rows."""
+def _mirror_index_probe(
+    directory: Path, count: int, *, clock: Clock, max_age_s: float
+) -> dict[str, object]:
+    """Write the mirror README from the mirror probes on disk, not from agent rows.
+
+    A probe file older than ``max_age_s`` is an EARLIER sweep's (its mirror agent
+    did not run this time), so it is listed as missing, never as a mirror.
+    """
     rows = []
+    missing = 0
     for n in range(1, count + 1):
         try:
             data = json.loads((directory / f"{n}.probe.json").read_text("utf-8"))
             mirror = next(p for p in data["probes"] if p["kind"] == "mirror")
+            age = _manifest_age(data, clock)
+            if age is None or not -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s:
+                missing += 1
+                rows.append(
+                    (
+                        n,
+                        mirror["url"],
+                        f"{n}.md",
+                        "",
+                        0,
+                        "stale probe from an earlier run",
+                    )
+                )
+                continue
             rows.append(
                 (
                     n,
@@ -1871,6 +1929,7 @@ def _mirror_index_probe(directory: Path, count: int) -> dict[str, object]:
                 )
             )
         except OSError, ValueError, KeyError, TypeError, StopIteration:
+            missing += 1
             rows.append(
                 (n, "(unknown)", f"{n}.md", "", 0, "mirror probe missing or unreadable")
             )
@@ -1900,7 +1959,7 @@ def _mirror_index_probe(directory: Path, count: int) -> dict[str, object]:
         "kind": "mirror-index",
         "path": str(readme),
         "rows": count,
-        "missing": sum(1 for row in rows if row[1] == "(unknown)"),
+        "missing": missing,
         "written": written,
     }
 
@@ -1947,10 +2006,20 @@ def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
         path = Path(value)
         return path if path.is_absolute() else repo_root / path
 
-    if args.query or args.sources or args.strict_five or args.list_sources:
+    fanout_only = (args.query, args.sources, args.repo, args.out, args.request_id)
+    if any(fanout_only) or args.strict_five or args.list_sources:
         message = (
-            "--probe-out takes no QUERY, --sources, --strict-five or --list-sources"
+            "--probe-out takes no QUERY, --sources, --repo, --out, --request-id,"
+            " --strict-five or --list-sources"
         )
+        raise _UsageError(message)
+    if args.last30days_plan is not None:
+        message = "--probe-out takes no --last30days-plan"
+        raise _UsageError(message)
+    if (args.max_age is not None and args.max_age < 0) or (
+        args.timeout is not None and args.timeout <= 0
+    ):
+        message = "--max-age must be >= 0 and --timeout > 0"
         raise _UsageError(message)
     searches = _probe_code_searches(args)
     repos = tuple(args.repo_check or ())
@@ -1977,6 +2046,7 @@ def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
         fanout_manifests=fanouts,
         required=required,
         max_age_s=_DEFAULT_MANIFEST_MAX_AGE_S if args.max_age is None else args.max_age,
+        expect_request_id=args.expect_request_id,
         mirror=mirror,
         mirror_index=index,
         timeout=args.timeout or _DEFAULT_TIMEOUT,
@@ -1986,7 +2056,12 @@ def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
 def run_probes(
     spec: _ProbeSpec, boundaries: _ProbeBoundaries
 ) -> list[dict[str, object]]:
-    """Run every probe SEQUENTIALLY: concurrency would spend the search bucket."""
+    """Run this invocation's probes one after another (the search bucket is shared).
+
+    Only WITHIN one invocation: the workflow runs several probe invocations at
+    once, so the 10/min bucket is still shared across them; the one retry after
+    a short documented reset is the mitigation (cold review F11).
+    """
     probes: list[dict[str, object]] = [
         _code_search_probe(role, query, boundaries=boundaries, timeout=spec.timeout)
         for role, query in spec.code_searches
@@ -1997,7 +2072,11 @@ def run_probes(
     ]
     probes += [
         _fanout_manifest_probe(
-            path, spec.required, max_age_s=spec.max_age_s, clock=boundaries.clock
+            path,
+            spec.required,
+            max_age_s=spec.max_age_s,
+            clock=boundaries.clock,
+            expect_request_id=spec.expect_request_id,
         )
         for path in spec.fanout_manifests
     ]
@@ -2007,7 +2086,12 @@ def run_probes(
             _mirror_probe(url, path, runner=boundaries.runner, timeout=spec.timeout)
         )
     if spec.mirror_index is not None:
-        probes.append(_mirror_index_probe(*spec.mirror_index))
+        directory, count = spec.mirror_index
+        probes.append(
+            _mirror_index_probe(
+                directory, count, clock=boundaries.clock, max_age_s=spec.max_age_s
+            )
+        )
     return probes
 
 

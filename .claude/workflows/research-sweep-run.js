@@ -127,20 +127,32 @@ const SOURCES = ['github-issues', 'github-discussions', 'github-releases', 'exa'
 // The mandatory dependency-repo stage (12): every repo the question is about, searched on GitHub.
 // Every one of these must answer (ok / empty_verified) — the probe reads each from the manifest (#1473).
 const DEP_SOURCES = 'github-issues,github-discussions,github-releases'
-const DEP_REPOS = [...new Set([REPO, ...RELATED].filter(Boolean))]
+// Deduplicated case-insensitively: GitHub names and this Mac's filesystem both are, so `jdx/Mise` and
+// `jdx/mise` would share one deps directory and unlink each other's files.
+const DEP_REPOS = [REPO, ...RELATED].filter(Boolean)
+  .filter((r, i, all) => all.findIndex(o => o.toLowerCase() === r.toLowerCase()) === i)
+// Optional per-run id stamped into every dependency fan-out manifest and required by its probe, so a
+// manifest left by an EARLIER run of the same report is never this run's (cold review F3). Without it,
+// freshness falls back to the manifest's age.
+const RUN_ID = typeof A.runId === 'string' ? A.runId : ''
+if (RUN_ID && !/^[A-Za-z0-9_.-]+$/.test(RUN_ID)) throw new Error(`args.runId must be [A-Za-z0-9_.-]+, got ${JSON.stringify(RUN_ID)}`)
 // null = "short search terms from the QUESTION"; a name = the other side of a relationship.
 const depQueries = r => (r === REPO ? [null, ...RELATED.filter(o => o !== REPO).map(nameOf)] : [REPO ? nameOf(REPO) : null])
 // The repository root: explicit, else the part of reportPath before its /docs/.
 const docsAt = A.reportPath.lastIndexOf('/docs/')
-const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot.replace(/\/+$/, '')
+// Normalised like python's Path() (so an echoed probe path still matches), and refused a `.`/`..` segment
+// for the same reason reportPath is.
+const ROOT = typeof A.repoRoot === 'string' && A.repoRoot.startsWith('/') ? A.repoRoot.replace(/\/+/g, '/').replace(/\/+$/, '')
   : docsAt > 0 ? A.reportPath.slice(0, docsAt) : ''
+if (ROOT.split('/').some(s => s === '.' || s === '..')) throw new Error(`args.repoRoot must not contain a "." or ".." segment, got ${JSON.stringify(A.repoRoot)}`)
 if (LINKS.length && !ROOT) throw new Error('args.repoRoot (absolute) is required when links are given and reportPath is not under <repo>/docs/')
 // The report SLUG names this run's mirror and fan-out directories, so two reports must never share it
 // (#1513): every docs/research/runs/<run>/report.md had the slug `report`, and each sweep overwrote the
-// last one's mirrors. Under <ROOT>/docs/ it is the path below docs/research/ (or docs/), `/` -> `--`;
+// last one's mirrors. Under <ROOT>/docs/ it is the whole path below docs/, `/` -> `--` (so docs/foo.md and
+// docs/research/foo.md differ);
 // elsewhere it is the file name.
 const DOCS_PREFIX = ROOT ? `${ROOT}/docs/` : null
-const underDocs = DOCS_PREFIX && A.reportPath.startsWith(DOCS_PREFIX) ? A.reportPath.slice(DOCS_PREFIX.length).replace(/^research\//, '') : null
+const underDocs = DOCS_PREFIX && A.reportPath.startsWith(DOCS_PREFIX) ? A.reportPath.slice(DOCS_PREFIX.length) : null
 const REPORT_SLUG = (underDocs || A.reportPath.split('/').pop()).replace(/\.md$/, '').split('/').join('--')
 if (!/^[A-Za-z0-9_.-]+$/.test(REPORT_SLUG) || dotOnly(REPORT_SLUG)) throw new Error(`args.reportPath must be a path whose report slug is [A-Za-z0-9_.-]+ and not dot-only, got ${JSON.stringify(REPORT_SLUG)}`)
 const MIRROR_DIR = `${ROOT}/docs/research/kb/raw/${REPORT_SLUG}/links`
@@ -161,7 +173,6 @@ const README_CONTROL = r => `repo:${r} filename:README.md`
 // REPORT_SLUG, an integer) or a shq()-quoted one — ROOT included (round-4 L2).
 const shq = v => `'${v.replace(/'/g, "'\\''")}'`
 const FETCH = u => `mise exec -- firecrawl scrape ${shq(u)} --format markdown --only-main-content`
-const atRoot = cmd => (ROOT ? `cd ${shq(ROOT)} && ${cmd}` : cmd)
 
 // Probes (#1514): one workflow-built command, one verbatim line back.
 const PROBE = { type: 'object', required: ['line'], properties: { line: { type: 'string' } } }
@@ -179,7 +190,10 @@ const readProbe = (got, out) => {
 }
 const probesOf = (p, kind) => (p ? p.probes.filter(x => x && x.kind === kind) : [])
 // A code-search probe row in the shape every check below reads (count -1 = no count, never a 0).
-const codeRow = (x, source) => ({ query: x.query, role: x.role, source, count: x.count, rc: x.rc, rateLimited: x.rate_limited === true })
+// `incomplete` (GitHub's incomplete_results: the search timed out) is carried only when set; such a row is
+// never an answer, so its 0 is never evidence of absence (cold review F17).
+const codeRow = (x, source) => ({ query: x.query, role: x.role, source, count: x.count, rc: x.rc, rateLimited: x.rate_limited === true,
+  ...(x.incomplete_results === true ? { incomplete: true } : {}) })
 
 // One routing table, used for dispatch AND returned as provenance, so the two cannot drift.
 const ROUTE = {
@@ -291,8 +305,11 @@ const RETRO = {
   },
 }
 const RETRO_WRITE = { type: 'object', required: ['written', 'path'], properties: { written: { type: 'boolean' }, path: { type: 'string' } } }
-// The proposal travels with the report it is about, and is never one of the files it proposes changing.
-const RETRO_PATH = `${A.reportPath.replace(/\.md$/, '')}.retrospect.md`
+// The tracked findings tree (#1502, agent-artifact-conventions.md), named by the unique report slug, so
+// it is never one of the files it proposes changing. A report beside docs/research/runs/ would land in a
+// gitignored tree. With no known ROOT it sits beside the report.
+const RETRO_PATH = ROOT ? `${ROOT}/docs/research/kb/reports/agents/research-sweep-retrospect-${REPORT_SLUG}.md`
+  : `${A.reportPath.replace(/\.md$/, '')}.retrospect.md`
 
 // Retrospect (#1502): every exit — early or late — goes through finish(), so a run that stopped at
 // a null stage still records what was hard. It may only ever ADD to the result: it never changes
@@ -344,7 +361,9 @@ const finish = async result => {
   if (status !== 'written') log(`Retrospect: proposal not saved (${status})`)
   return { ...result, retrospect: { status, path: RETRO_PATH, findings: retro.findings.length, proposals: retro.proposals.length } }
 }
-const withStatuses = (status, extra) => ({ status, statuses: [status, ...(extra.mandatoryGaps && extra.mandatoryGaps.length ? ['mandatory-gap'] : [])], ...extra })
+const withStatuses = (status, extra) => ({ status, statuses: [status,
+  ...(extra.mandatoryGaps && extra.mandatoryGaps.length ? ['mandatory-gap'] : []),
+  ...(extra.stageGaps && extra.stageGaps.length ? [LINKS.length ? 'links-only' : 'stage-gap'] : [])], ...extra })
 
 phase('Plan')
 const PLAN_PROBE = `${FANOUT_DIR}/plan/code-search.json`
@@ -386,12 +405,13 @@ const depPrompt = (r, i) => [
   `MANDATORY DEPENDENCY-REPO STAGE for ${r}: it runs whatever any planner chose. QUESTION: ${A.question}`,
   'From the repository root, run each command below exactly, in order, never piped (queries are project NAMES or',
   'short search terms, never owner/repo slugs):',
-  ...depQueries(r).map((q, k) => `  mise run research-fanout -- "${q === null ? '<2-4 short search terms from the QUESTION>' : q}" --repo ${r} --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}`),
+  ...depQueries(r).map((q, k) => `  mise run research-fanout -- "${q === null ? '<2-4 short search terms from the QUESTION>' : q}" --repo ${r} --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}${RUN_ID ? ` --request-id ${RUN_ID}` : ''}`),
   'Then run this probe exactly, never piped — it re-reads those manifests (which query really ran, and whether',
   `${DEP_SOURCES} each answered) and runs the code-search and repository checks itself:`,
   '  ' + probeCmd(depProbeOut(r), [
     ...depQueries(r).map((_, k) => `--fanout-manifest ${shq(`${depOut(r, k)}/manifest.json`)}`),
     `--require ${DEP_SOURCES}`,
+    RUN_ID ? `--expect-request-id ${RUN_ID}` : '',
     `--code-search ${shq(`readme=${README_CONTROL(r)}`)}`,
     i === 0 ? `--code-search ${shq(`health=${SEARCH_HEALTH_CONTROL}`)}` : '',
     `--repo-check ${r}`,
@@ -403,7 +423,8 @@ const mirrorProbeOut = n => `${MIRROR_DIR}/${n}.probe.json`
 const mirrorPrompt = (url, n) => [
   'MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, never piped (the probe',
   'runs the pinned firecrawl itself and measures what landed):',
-  '  ' + atRoot(probeCmd(mirrorProbeOut(n), [`--mirror-url ${shq(url)}`, `--mirror-path ${shq(mirrorPath(n))}`])),
+  // No `cd ROOT`: research-fanout is a task of THIS repo, and every path below is absolute and quoted.
+  '  ' + probeCmd(mirrorProbeOut(n), [`--mirror-url ${shq(url)}`, `--mirror-path ${shq(mirrorPath(n))}`]),
   'Do not retry with another tool and do not edit any file.',
   COPY_LINE,
 ].join('\n')
@@ -422,6 +443,7 @@ if (!DEP_REPOS.length) mandatoryGaps.push('dependency-repo stage: no args.repo o
 const unquote = q => q.trim().replace(/^(["'])(.*)\1$/, '$2').trim()
 const asName = q => unquote(q).toLowerCase().split('/').pop()
 const REPO_NAMES = DEP_REPOS.map(r => nameOf(r).toLowerCase())
+const dependencyNotes = []
 const depProbes = DEP_REPOS.map((r, i) => readProbe(depResults[i], depProbeOut(r)))
 const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
   if (depResults[i] === null) {
@@ -434,22 +456,29 @@ const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
     return []
   }
   const rows = probesOf(p, 'fanout-manifest')
+  // A tracker the repo has DISABLED is the world, not a failed search: a repo with Discussions off returns
+  // empty_unverified forever (cold review F1, live: rhysd/actionlint). The repos API says which are off.
+  const check = probesOf(p, 'repo-check').find(x => x.repo === r) || {}
+  const disabled = [check.has_issues === false ? 'github-issues' : '', check.has_discussions === false ? 'github-discussions' : ''].filter(Boolean)
+  disabled.forEach(d => dependencyNotes.push(`${r} has ${d.replace('github-', '')} disabled (repos API) — ${d} not searchable there; not a gap`))
   return depQueries(r).map((q, k) => {
     const want = `${depOut(r, k)}/manifest.json`
     const m = rows.find(x => typeof x.path === 'string' && x.path.endsWith(want))
     if (!m || !m.exists) {
       mandatoryGaps.push(`dependency-repo stage for ${r}: run ${k + 1} wrote no manifest (${want})`)
-      return { repo: r, query: null, manifest: want, ok: false, requiredFailed: ['no manifest'] }
+      return { repo: r, query: null, manifest: want, fresh: false, ok: false, requiredFailed: ['no manifest'] }
     }
     const ran = typeof m.query === 'string' ? unquote(m.query) : ''
     if (!m.fresh) mandatoryGaps.push(`dependency-repo stage for ${r}: ${want} is ${m.age_s === null ? 'undated' : `${m.age_s}s old`} — not written by this run`)
     // WHICH query ran comes from the manifest, never from the agent (F6, S3, R8).
     if (q !== null && ran !== q) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${ran}")`)
-    if (q === null && REPO_NAMES.includes(asName(ran))) mandatoryGaps.push(`dependency-repo stage for ${r}: question-terms query "${ran}" is a repo name, so ${r} was not searched for the QUESTION`)
-    const failed = Array.isArray(m.required_failed) ? m.required_failed : ['required_failed missing']
+    if (q === null && ran.startsWith('<')) mandatoryGaps.push(`dependency-repo stage for ${r}: the question-terms placeholder "${ran}" ran verbatim, so ${r} was not searched for the QUESTION`)
+    else if (q === null && REPO_NAMES.includes(asName(ran))) mandatoryGaps.push(`dependency-repo stage for ${r}: question-terms query "${ran}" is a repo name, so ${r} was not searched for the QUESTION`)
+    const failed = (Array.isArray(m.required_failed) ? m.required_failed : ['required_failed missing'])
+      .filter(f => !disabled.some(d => f.startsWith(`${d}:`)))
     // #1473: releases answering must not hide an issues search that failed.
     if (failed.length) mandatoryGaps.push(`dependency-repo stage for ${r}: "${ran}" — ${failed.join('; ')}`)
-    return { repo: r, query: ran, manifest: m.path, ok: m.fresh === true && !failed.length, requiredFailed: failed }
+    return { repo: r, query: ran, manifest: m.path, fresh: m.fresh === true, ok: m.fresh === true && !failed.length, requiredFailed: failed }
   })
 })
 const mirrorProbes = LINKS.map((u, i) => readProbe(mirrorResults[i], mirrorProbeOut(i + 1)))
@@ -468,8 +497,9 @@ const mirrored = m => m.rc === 0 && m.bytes > 0 && !m.reason
 // A link firecrawl could not fetch is the WORLD, not the process: a named gap, not a mandatory one.
 const mirrorGaps = mirror.filter(m => m.rc !== null && m.reason).map(m => `${m.url}: not mirrored (${m.reason})`)
 // Code search = the planner's rows + the search-health control + one README control per searched repo.
-const answered = c => c.rc === 0 && !c.rateLimited && c.count >= 0
-const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403/429), not 0' : `returned count=${c.count} rc=${c.rc}`)
+const answered = c => c.rc === 0 && !c.rateLimited && !c.incomplete && c.count >= 0
+const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403/429), not 0'
+  : c.incomplete ? `returned INCOMPLETE results (count=${c.count}; the search timed out)` : `returned count=${c.count} rc=${c.rc}`)
 // Question 1, asked once (by the first dependency agent): does GitHub code search answer at all?
 const healthProbe = depProbes.length ? probesOf(depProbes[0], 'code-search').find(x => x.role === 'health') : undefined
 const healthRow = healthProbe ? codeRow(healthProbe, 'workflow') : null
@@ -503,12 +533,17 @@ const workflowControls = DEP_REPOS.flatMap((r, i) => {
   if (repoGap) return [c]
   if (!answered(c)) mandatoryGaps.push(`code search: README control "${c.query}" ${outcome(c)}${healthFailed ? ' — gh auth, rate-limit or search is broken' : ''}`)
   // Only a search shown to answer (health >0) can say anything about one repo's 0.
+  // Health never ran (its agent returned nothing): the 0 is uninterpretable, and is said to be.
+  else if (c.count === 0 && healthRow === null) readmeNotes.push(`"${c.query}" returned 0, but whether code search answers at all is unknown (no passing health control), so that 0 cannot be read either way`)
   else if (c.count === 0 && healthOk) readmeNotes.push(`"${c.query}" returned 0 although ${r} exists — either code search does not index it (e.g. a low-star fork) or it has no README.md (e.g. README.rst); not a gap`)
   return [c]
 })
 const planProbe = plan === null ? null : readProbe(plan.codeSearchProbe, PLAN_PROBE)
 // Qualifier set = the query's SHAPE (#1471): `repo:a/b language:rust foo` -> "language:rust repo:a/b".
-const shapeOf = q => q.split(/\s+/).filter(t => /^-?[A-Za-z_]+:\S/.test(t)).map(t => t.toLowerCase()).sort().join(' ')
+// Boolean operators and parentheses are part of the shape too: `foo OR bar language:toml` (the #1471
+// example) is only armed by a must-hit that also uses OR.
+const shapeOf = q => q.split(/\s+/).flatMap(t => (/^-?[A-Za-z_]+:\S/.test(t) ? [t.toLowerCase()]
+  : /^(OR|AND|NOT)$/.test(t) ? [t] : /[()]/.test(t) ? ['()'] : [])).sort().join(' ')
 const plannerRaw = probesOf(planProbe, 'code-search').map(x => {
   const row = codeRow(x, 'planner')
   // round-4 L1: an unknown planner role is INERT — recorded, never promoted to `query`.
@@ -525,7 +560,7 @@ const codeSearchGaps = plannerRows.filter(c => c.role === 'query' && answered(c)
 const codeSearchNotes = plannerRows.filter(c => c.role === 'must-hit' && !(answered(c) && c.count > 0))
   .map(c => `planner must-hit control "${c.query}" ${outcome(c)} — a guessed control, not a gap; any other must-hit >0 carries the requirement`)
   .concat(plannerRows.filter(c => c.role === 'inert').map(c => `planner row "${c.query}" declared role "${c.declaredRole}", which is workflow-only — recorded as inert, counted for nothing`))
-  .concat(readmeNotes)
+  .concat(readmeNotes, dependencyNotes)
 if (plan === null) mandatoryGaps.push('code search: planner agent reported nothing (null)')
 else if (planProbe === null) mandatoryGaps.push(`code search: no PROBE-JSON line for ${PLAN_PROBE} — the planner's code-search probe did not run or its line was not copied`)
 else {
@@ -537,7 +572,8 @@ else {
 
 // Planner and dependency manifests are counted SEPARATELY: dependency manifests must never mask a
 // planner fan-out that produced nothing (it alone carries exa/context7/firecrawl).
-const depManifests = dependencyRuns.filter(x => x.query !== null).map(x => x.manifest)
+// Only THIS run's manifests are evidence: a stale one (an agent skipped its run) is a gap, never a hit source.
+const depManifests = dependencyRuns.filter(x => x.query !== null && x.fresh).map(x => x.manifest)
 const planManifests = plan === null ? [] : plan.runs.filter(r => r.manifest).map(r => r.manifest)
 // A planner run that failed or wrote no manifest is a named Gap, even when its siblings succeeded.
 const fanoutGaps = plan === null ? [] : plan.runs.filter(r => r.rc !== 0 || !r.manifest)
@@ -563,7 +599,7 @@ const INDEX_OUT = `${MIRROR_DIR}/README.probe.json`
 const indexPrompt = [
   `Write the offline-mirror index for ${A.reportPath}. Run exactly, never piped (the probe renders the README from the`,
   'mirror probes on disk; do not fetch or write anything yourself):',
-  '  ' + atRoot(probeCmd(INDEX_OUT, [`--mirror-index ${shq(MIRROR_DIR)}`, `--mirror-count ${LINKS.length}`])),
+  '  ' + probeCmd(INDEX_OUT, [`--mirror-index ${shq(MIRROR_DIR)}`, `--mirror-count ${LINKS.length}`]),
   COPY_LINE,
 ].join('\n')
 const [triageOut, mirrorIndex] = await Promise.all([!manifests.length ? EMPTY_TRIAGE : run('triage', 'triage', 'Triage', [

@@ -124,6 +124,7 @@ def test_code_search_records_the_real_count_and_echoes_the_probe_out(
         "http_status": 200,
         "count": 9,
         "rate_limited": False,
+        "incomplete_results": False,
     }
     argv = runner.calls[0]
     assert argv[:6] == ["gh", "api", "-i", "-X", "GET", "search/code"]
@@ -390,7 +391,9 @@ def test_mirror_of_an_error_page_is_not_a_mirror(
     )
     row = _only(payload)
     assert row["rc"] == 0
-    assert row["bytes"] == len("# Error 404\n")
+    # the error page is NOT saved: later sweeps grep these mirrors
+    assert row["bytes"] == 0
+    assert not (tmp_path / "raw/links/2.md").exists()
     assert row["http_status"] == 404
     assert row["reason"] == "HTTP 404"
 
@@ -410,6 +413,7 @@ def test_mirror_index_is_written_from_the_probe_files(
     links = tmp_path / "raw/report-slug/links"
     links.mkdir(parents=True)
     probe = {
+        "generated_at": datetime.fromtimestamp(_NOW - 30, UTC).isoformat(),
         "probes": [
             {
                 "kind": "mirror",
@@ -419,7 +423,7 @@ def test_mirror_index_is_written_from_the_probe_files(
                 "bytes": 42,
                 "reason": "",
             }
-        ]
+        ],
     }
     (links / "1.probe.json").write_text(json.dumps(probe), encoding="utf-8")
 
@@ -458,6 +462,10 @@ def test_mirror_index_is_written_from_the_probe_files(
         ["--probe-out", "p.json", "--fanout-manifest", "m.json", "--require", "nope"],
         ["--probe-out", "p.json", "--mirror-url", "https://a.test"],
         ["--probe-out", "p.json", "--mirror-index", "d"],
+        ["--probe-out", "p.json", "--repo", "a/b", "--code-search", "query=x"],
+        ["--probe-out", "p.json", "--out", "o", "--code-search", "query=x"],
+        ["--probe-out", "p.json", "--max-age", "-1", "--fanout-manifest", "m.json"],
+        ["--probe-out", "p.json", "--timeout", "0", "--code-search", "query=x"],
         ["--probe-out", "p.json"],
         # a probe flag outside probe mode is a usage error, not silently ignored
         ["topic", "--code-search", "query=x"],
@@ -466,3 +474,83 @@ def test_mirror_index_is_written_from_the_probe_files(
 def test_probe_usage_errors_exit_two(tmp_path: Path, argv: list[str]) -> None:
     assert main(argv, tmp_path, runner=Runner([]), timing=Timing().timing()) == 2
     assert not (tmp_path / "p.json").exists()
+
+
+def test_mirror_index_never_lists_an_earlier_runs_probe_as_a_mirror(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A probe file left by an EARLIER sweep is missing, not a mirror (review a09aa247).
+
+    FAIL arm: drop the age check and the README states the old URL as mirrored.
+    """
+    links = tmp_path / "raw/s/links"
+    links.mkdir(parents=True)
+    old = {
+        "generated_at": datetime.fromtimestamp(_NOW - 7200, UTC).isoformat(),
+        "probes": [
+            {
+                "kind": "mirror",
+                "url": "https://old.test",
+                "path": str(links / "1.md"),
+                "rc": 0,
+                "bytes": 42,
+                "reason": "",
+            }
+        ],
+    }
+    (links / "1.probe.json").write_text(json.dumps(old), encoding="utf-8")
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-index", str(links), "--mirror-count", "1"],
+        Runner([]),
+        capsys,
+    )
+    readme = (links / "README.md").read_text(encoding="utf-8")
+    assert _only(payload)["missing"] == 1
+    assert (
+        "| 1 | https://old.test | 1.md |  | 0 | stale probe from an earlier run |"
+        in readme
+    )
+
+
+def test_repo_check_records_disabled_trackers_and_search_records_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Cold review F1/F17: the repos API flags and incomplete_results are recorded."""
+    body = {
+        "full_name": "rhysd/actionlint",
+        "has_issues": True,
+        "has_discussions": False,
+    }
+    runner = Runner([lambda a: _done(a, 0, _gh_out(200, body))])
+    _, payload = _probe(tmp_path, ["--repo-check", "rhysd/actionlint"], runner, capsys)
+    row = _only(payload)
+    assert row["has_issues"] is True
+    assert row["has_discussions"] is False
+
+    out = _gh_out(200, {"total_count": 0, "incomplete_results": True})
+    runner = Runner([lambda a: _done(a, 0, out)])
+    _, payload = _probe(tmp_path, ["--code-search", "query=x"], runner, capsys)
+    assert _only(payload)["incomplete_results"] is True
+
+
+def test_fanout_manifest_request_id_must_match_this_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Cold review F3: a RECENT manifest from another run is not fresh.
+
+    FAIL arm: check only the age and the other run's manifest reads fresh.
+    """
+    manifest = tmp_path / "deps/1/manifest.json"
+    _fanout_manifest(manifest, dict.fromkeys(_DEP.split(","), "ok"), age_s=10)
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    data["request_id"] = "run-1"
+    manifest.write_text(json.dumps(data), encoding="utf-8")
+    for expect, fresh in (("run-1", True), ("run-2", False)):
+        _, payload = _probe(
+            tmp_path,
+            ["--fanout-manifest", str(manifest), "--expect-request-id", expect],
+            Runner([]),
+            capsys,
+        )
+        assert _only(payload)["fresh"] is fresh, expect
