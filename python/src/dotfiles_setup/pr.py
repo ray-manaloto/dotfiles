@@ -506,6 +506,9 @@ def _working_tree_clean(workspace: Path) -> bool:
 #: host"); the pack write then dies on SIGPIPE. Keepalives hold it open.
 _PUSH_SSH_KEEPALIVE = "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
 _PUSH_RC_MEANING = {141: "push transport dropped (ssh idle during pre-push)"}
+#: #1481 (Ray's ruling 2026-10-02): its own exit code, so a caller can tell
+#: "ship from the main checkout" from every other preflight refusal (rc 1).
+_RC_LINKED_WORKTREE = 2
 
 
 def push_command(workspace: Path, branch: str) -> list[str]:
@@ -529,22 +532,22 @@ def push_command(workspace: Path, branch: str) -> list[str]:
     return ["git", "-c", f"core.sshCommand={_PUSH_SSH_KEEPALIVE}", *plain[1:]]
 
 
-def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
-    """Branch/tree/diff preconditions for ship; None (after printing) on fail."""
+def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | int:
+    """Branch/tree/diff preconditions for ship; on fail, print and return the rc."""
     branch = _current_branch(workspace)
     if branch in ("main", "HEAD"):
         sys.stdout.write("FAIL  ship: refusing to ship from main/detached HEAD\n")
-        return None
+        return 1
     if not _working_tree_clean(workspace):
         sys.stdout.write(
             "FAIL  ship: working tree not clean — commit (or stash) first so "
             "the gates validate exactly what ships\n"
         )
-        return None
+        return 1
     paths = changed_paths_vs_main(workspace)
     if not paths:
         sys.stdout.write("FAIL  ship: no changes vs origin/main\n")
-        return None
+        return 1
     if needs_full_sync(paths) and is_linked_worktree(workspace):
         # #1481: a linked worktree's `.git` is a FILE naming a host path
         # (`<main>/.git/worktrees/<name>`) the container does not mount, so the
@@ -560,7 +563,7 @@ def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
             f"`git switch --detach` here, then `git switch {branch}` and "
             "`mise run ship` in the main checkout\n"
         )
-        return None
+        return _RC_LINKED_WORKTREE
     return branch, paths
 
 
@@ -616,8 +619,8 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     Mac-validation step. See :func:`enable_auto_merge`.
     """
     preflight = _ship_preflight(workspace)
-    if preflight is None:
-        return 1
+    if isinstance(preflight, int):
+        return preflight
     branch, paths = preflight
     base_change = changes_base_image_inputs(paths)
     if base_change:

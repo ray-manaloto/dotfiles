@@ -353,13 +353,15 @@ def test_ship_refuses_a_linked_worktree_only_when_sync_full_would_run(
         return False  # stop before push: proceeding is all this test needs
 
     monkeypatch.setattr(pr, "run_gates", _gates)
-    assert pr.ship_main(checkouts[checkout]) == 1
+    rc = pr.ship_main(checkouts[checkout])
     out = capsys.readouterr().out
     if outcome == "refused":
+        assert rc == 2  # its own code (Ray's ruling): not a generic refusal
         assert gate_runs == []
         assert "FAIL  ship: linked worktree" in out
         assert "ship from the main checkout" in out
     else:
+        assert rc == 1  # the gate stub fails, so ship got past preflight
         assert len(gate_runs) == 1
         assert "linked worktree" not in out
 
@@ -381,7 +383,7 @@ def test_ship_refusal_survives_an_inherited_git_dir(
         pr, "changed_paths_vs_main", lambda _w: ["python/src/dotfiles_setup/sync.py"]
     )
     monkeypatch.setattr(pr, "run_gates", lambda *_a: pytest.fail("a gate ran"))
-    assert pr.ship_main(checkouts["linked"]) == 1
+    assert pr.ship_main(checkouts["linked"]) == 2
     out = capsys.readouterr().out
     assert "FAIL  ship: linked worktree" in out
     assert "git switch --detach" in out
