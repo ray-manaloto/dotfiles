@@ -1,0 +1,4 @@
+{
+  "description": "session.measure: hand a coordinator over at its context limit",
+  "modules": ["./register.ts"]
+}

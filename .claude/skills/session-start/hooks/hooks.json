@@ -1,0 +1,4 @@
+{
+  "description": "session.start: reload skills/plugins once per session and apply the naming convention",
+  "modules": ["./register.ts"]
+}
