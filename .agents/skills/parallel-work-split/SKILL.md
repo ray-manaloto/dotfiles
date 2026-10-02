@@ -82,7 +82,18 @@ Grouping rules:
 Ship order: in-flight branches first (isolated ones before hot-file ones),
 then lanes in the order that minimises rebases.
 
-## 5. Launch a lane
+## 5. Pick the mechanism, then launch
+
+Most coordinator context goes on results flowing back, so choose by what
+returns:
+
+| Mechanism | Use when |
+|---|---|
+| Subagent writing a report file, returning a pointer | default: research, review, gates |
+| Saved Workflow (`.claude/workflows/*.js`) | 5 or more homogeneous agents, or cross-checked findings |
+| `claude --bg` lane in a worktree | long implementation lanes from this plan |
+| `fork` / `/subtask` | read-only side task that needs the conversation; never nested |
+| Agent team | a lead must steer peers mid-task; the costliest per worker |
 
 ```bash
 git -C <repo> worktree add ../<repo>.worktrees/<lane>-<YYYYMMDD> -b <type>/<lane> origin/main
@@ -90,8 +101,22 @@ cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <lane> "<brief>"
 ```
 
 `claude --bg` runs in the current directory, so launch it from inside the
-worktree. Its positional prompt goes through slash-command expansion like
-`-p` does, so don't start the brief with `/`.
+worktree; inside a linked worktree it does not make its own. Its positional
+prompt goes through slash-command expansion like `-p`, so don't start the
+brief with `/`.
+
+**Permission class.** Cross-session messages are held whenever the two
+sessions' permission-mode classes differ (one bypasses prompts, the other
+does not), and a held message to a background session has no approval UI
+(#85888), reports `success:true` before the decision (#85503), or is dropped
+(#94624). Launch lanes in the coordinator's class, or add
+`--settings '{"crossSessionInbound":"accept"}'`. User settings set
+`crossSessionInbound: "accept"` since 2026-10-02; a project file can only
+make it stricter (`$CC/settings-reference.md` § crossSessionInbound).
+
+**A `--bg` session commits and pushes by default**, and may open a draft PR,
+unless its instructions say otherwise. The brief's STOP AT line is what
+prevents it.
 
 Brief template — every field is required, because a lane cannot ask:
 
@@ -101,8 +126,17 @@ OWN ONLY: <file list>. DO NOT EDIT: <hot files + other lanes' files>.
 NATIVE-FIRST: research the tool's built-in before custom code (use-tool-builtins.md).
 GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc.
 PERSIST: report to <path> incrementally; findings.md/progress.md append-only; never task_plan.md.
-STOP AT: commit on the branch. Do NOT push, ship or open a PR — the coordinator ships serially.
+STOP AT: commit on the branch. Do NOT push, ship or open a PR; report to the coordinator, who ships serially.
 ```
+
+## 6. Monitor and collect
+
+Read lane state with `claude agents --json --all` (`state`, `waitingFor`) —
+the supported read from outside a session — and wait on it with
+`mise run bounded-wait -- --deadline <s> --cmd '<state test>'`, never a bare
+sleep loop. Take results from each lane's report FILE. A `SendMessage` reply
+or `claude logs` output is a notification at best, and a message can be held
+or dropped; scraping logs also pays for every line in your context.
 
 ## Output
 
