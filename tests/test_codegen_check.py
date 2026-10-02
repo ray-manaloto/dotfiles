@@ -187,22 +187,35 @@ def test_a_stale_file_is_drift_even_without_the_generator(tmp_path: Path) -> Non
     assert check(root, _never, absent) is DriftVerdict.DRIFT
 
 
-def test_any_unanticipated_failure_is_an_error_not_drift(tmp_path: Path) -> None:
+def test_a_malformed_config_through_the_cli_entry_is_an_error(tmp_path: Path) -> None:
     root = _tree(tmp_path, '[[tool.datamodel-codegen.jobs]]\noutput = "x.py"\n')
     assert codegen_check.codegen_check_main(root) == DriftVerdict.ERROR
 
 
+def test_any_unanticipated_exception_is_an_error_not_drift(tmp_path: Path) -> None:
+    """Not a ValueError/OSError the gate expects: the catch-all must hold."""
+    root = _tree(tmp_path)
+
+    def boom(argv: list[str], cwd: Path) -> GeneratorRun:
+        raise RuntimeError((argv, cwd))
+
+    verdict = codegen_check.codegen_check_main(root, boom, _generator(tmp_path))
+    assert verdict == DriftVerdict.ERROR
+
+
+@pytest.mark.parametrize("error", [ImportError, SyntaxError, NameError, TypeError])
 def test_a_gate_that_cannot_import_is_an_error_not_drift(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: type[Exception]
 ) -> None:
-    """A deleted generated module must not read as drift (exit 1).
+    """A deleted or hand-broken generated module must not read as drift.
 
     `importlib.import_module` is the stdlib boundary the dispatcher crosses;
-    patching it is the only way to make our own module fail to import.
+    patching it is the only way to make our own module fail to import. A hand
+    edit can raise any of these at import time.
     """
 
     def fail(name: str) -> object:
-        raise ImportError(name)
+        raise error(name)
 
     monkeypatch.setattr(main.importlib, "import_module", fail)
     assert main.run_codegen_check(tmp_path) == DriftVerdict.ERROR
@@ -211,11 +224,28 @@ def test_a_gate_that_cannot_import_is_an_error_not_drift(
 # ── real generator, through the locked codegen group (real-integration) ──
 
 
+def _uv_codegen(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run the locked `datamodel-codegen` with `args` from `cwd`."""
+    argv = ["uv", "run", "--project", str(_REPO / "python"), "--locked"]
+    argv += ["--group", "codegen", "datamodel-codegen", *args]
+    return subprocess.run(argv, cwd=cwd, check=False, capture_output=True, text=True)
+
+
+@pytest.fixture
+def real_generator() -> Path:
+    """The locked generator binary, synced into this venv by `uv run`."""
+    assert _uv_codegen(["--version"], _REPO).returncode == 0
+    binary = codegen_check.generator_binary()
+    assert binary.exists()
+    return binary
+
+
 def _copy_codegen_inputs(dest: Path) -> Path:
-    """The schema, the pyproject and the generated package, nothing else."""
+    """The schemas (+ templates), the pyproject and the generated package."""
     for relative in ("schemas/drift-verdict.schema.json", "python/pyproject.toml"):
         (dest / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_REPO / relative, dest / relative)
+    shutil.copytree(_REPO / "schemas/templates", dest / "schemas/templates")
     shutil.copytree(
         _REPO / _GENERATED,
         dest / _GENERATED,
@@ -226,21 +256,7 @@ def _copy_codegen_inputs(dest: Path) -> Path:
 
 def _real_check(root: Path) -> int:
     """`datamodel-codegen --all-jobs --check` from the locked codegen group."""
-    argv = [
-        "uv",
-        "run",
-        "--project",
-        str(_REPO / "python"),
-        "--locked",
-        "--group",
-        "codegen",
-        "datamodel-codegen",
-        "--all-jobs",
-        "--check",
-    ]
-    return subprocess.run(
-        argv, cwd=root / "python", check=False, capture_output=True
-    ).returncode
+    return _uv_codegen(["--all-jobs", "--check"], root / "python").returncode
 
 
 def test_the_real_generator_passes_the_committed_tree_and_fails_a_hand_edit(
@@ -250,7 +266,8 @@ def test_the_real_generator_passes_the_committed_tree_and_fails_a_hand_edit(
     assert _real_check(root) == DriftVerdict.IN_SYNC
     module = root / _GENERATED / "drift_verdict.py"
     module.write_text(module.read_text() + "    EXTRA = 3\n")
-    assert _real_check(root) == DriftVerdict.DRIFT
+    hand_edit_verdict = _real_check(root)
+    assert hand_edit_verdict == DriftVerdict.DRIFT
 
 
 def test_the_real_generator_fails_a_schema_changed_without_regenerating(
@@ -263,7 +280,25 @@ def test_the_real_generator_fails_a_schema_changed_without_regenerating(
         .replace('"enum": [0, 1, 2]', '"enum": [0, 1, 2, 3]')
         .replace('"ERROR"]', '"ERROR", "UNKNOWN"]')
     )
-    assert _real_check(root) == DriftVerdict.DRIFT
+    schema_change_verdict = _real_check(root)
+    assert schema_change_verdict == DriftVerdict.DRIFT
+
+
+def test_a_real_formatter_failure_is_an_error_not_drift(
+    tmp_path: Path, real_generator: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Feed the REAL generator a broken ruff and require ERROR.
+
+    Rule 9 of probes-need-a-control-arm: an upstream rewording of the warning
+    the gate matches on then fails this test instead of reading as drift.
+    """
+    root = _copy_codegen_inputs(tmp_path)
+    assert check(root, binary=real_generator) is DriftVerdict.IN_SYNC
+    # A ruff.toml beside the output wins discovery; an invalid value breaks it.
+    (root / _GENERATED / "ruff.toml").write_text('line-length = "not-a-number"\n')
+    capsys.readouterr()
+    assert check(root, binary=real_generator) is DriftVerdict.ERROR
+    assert FORMATTER_FAILURE in capsys.readouterr().err
 
 
 _STRUCT_SCHEMA = """{
@@ -277,42 +312,40 @@ _STRUCT_SCHEMA = """{
 """
 
 
-def _generate_probe_struct(
-    root: Path, *, drop: str | None = None
-) -> type[msgspec.Struct]:
-    """Generate a Struct with OUR [tool.datamodel-codegen] table; import it.
+def _generate_probe(root: Path, *, drop: str | None = None) -> Path:
+    """Generate a Struct with OUR [tool.datamodel-codegen] table; return its path.
 
     `drop` removes one config line first — the control arm for the setting
     under test.
     """
     (root / "schemas").mkdir(parents=True, exist_ok=True)
     (root / "schemas/probe.schema.json").write_text(_STRUCT_SCHEMA)
+    shutil.copytree(_REPO / "schemas/templates", root / "schemas/templates")
     pyproject = (_REPO / "python/pyproject.toml").read_text()
     if drop is not None:
         assert pyproject.count(f"\n{drop}\n") == 1
         pyproject = pyproject.replace(f"\n{drop}\n", "\n")
-    (root / "python").mkdir(parents=True, exist_ok=True)
+    # The output package exists in the repo; the generator does not create it.
+    (root / _GENERATED).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_REPO / _GENERATED / "__init__.py", root / _GENERATED / "__init__.py")
+    # Shaped like a real job, header included, so ruff judges what it would
+    # judge in the repo (a missing header is CPY001/D100, not the arm here).
     (root / "python/pyproject.toml").write_text(
         pyproject
         + "\n[tool.datamodel-codegen.jobs.probe]\n"
         + 'input = "../schemas/probe.schema.json"\n'
         + 'output = "src/dotfiles_setup/generated/probe.py"\n'
+        + "custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto\n"
+        + '"""Generated probe model."""\'\'\'\n'
     )
-    argv = [
-        "uv",
-        "run",
-        "--project",
-        str(_REPO / "python"),
-        "--locked",
-        "--group",
-        "codegen",
-        "datamodel-codegen",
-        "--job",
-        "probe",
-    ]
-    subprocess.run(argv, cwd=root / "python", check=True, capture_output=True)
-    module_path = root / "python/src/dotfiles_setup/generated/probe.py"
-    spec = importlib.util.spec_from_file_location(f"probe_{id(root)}", module_path)
+    assert _uv_codegen(["--job", "probe"], root / "python").returncode == 0
+    return root / _GENERATED / "probe.py"
+
+
+def _import_probe(module_path: Path) -> type[msgspec.Struct]:
+    spec = importlib.util.spec_from_file_location(
+        f"probe_{id(module_path)}", module_path
+    )
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -321,7 +354,7 @@ def _generate_probe_struct(
 
 
 def test_generated_structs_reject_unknown_fields(tmp_path: Path) -> None:
-    probe = _generate_probe_struct(tmp_path)
+    probe = _import_probe(_generate_probe(tmp_path))
     assert codec.decode(b'{"name": "x"}', probe)
     with pytest.raises(msgspec.ValidationError):
         codec.decode(b'{"name": "x", "bogus": 1}', probe)
@@ -331,5 +364,46 @@ def test_without_the_generic_base_class_unknown_fields_decode_silently(
     tmp_path: Path,
 ) -> None:
     """Control arm: proves `use-generic-base-class` is what makes forbid work."""
-    probe = _generate_probe_struct(tmp_path, drop="use-generic-base-class = true")
-    assert codec.decode(b'{"name": "x", "bogus": 1}', probe)
+    path = _generate_probe(tmp_path, drop="use-generic-base-class = true")
+    assert codec.decode(b'{"name": "x", "bogus": 1}', _import_probe(path))
+
+
+def _repo_ruff(path: Path) -> subprocess.CompletedProcess[str]:
+    """The repo's own ruff (hk's binary), discovering the copied config."""
+    argv = ["uv", "run", "--project", str(_REPO / "python"), "ruff", "check", str(path)]
+    return subprocess.run(argv, check=False, capture_output=True, text=True)
+
+
+def test_a_generated_struct_passes_the_repo_ruff_gate(tmp_path: Path) -> None:
+    """The generic base class has no schema; the template docstrings it."""
+    assert _repo_ruff(_generate_probe(tmp_path)).returncode == 0
+
+
+def test_without_the_template_the_base_class_fails_d101(tmp_path: Path) -> None:
+    """Control arm: proves the custom template is what satisfies D101."""
+    path = _generate_probe(
+        tmp_path, drop='custom-template-dir = "../schemas/templates"'
+    )
+    result = _repo_ruff(path)
+    assert result.returncode == 1
+    assert "D101" in result.stdout
+
+
+def test_the_vendored_agent_skill_is_upstream_verbatim(tmp_path: Path) -> None:
+    """The skill is the pinned generator's own bytes; a bump must re-vendor it.
+
+    Installs the skill from the LOCKED generator into a scratch dir and
+    requires the committed copy to match file-for-file, byte-for-byte.
+    """
+    assert _uv_codegen(["--install-skill", "claude-code"], tmp_path).returncode == 0
+    fresh = tmp_path / ".claude/skills/datamodel-code-generator"
+    vendored = _REPO / ".claude/skills/datamodel-code-generator"
+
+    def files(base: Path) -> dict[str, bytes]:
+        return {
+            str(p.relative_to(base)): p.read_bytes()
+            for p in sorted(base.rglob("*"))
+            if p.is_file()
+        }
+
+    assert files(fresh) == files(vendored)

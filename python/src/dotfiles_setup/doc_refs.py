@@ -83,6 +83,11 @@ DOC_PATHSPECS = (
     # refs, so exclude the vendored skill — same rationale as the .agnix.toml
     # and md_budget exemptions for `.claude/skills/graphify/**` (#310-#318).
     ":!.claude/skills/graphify/SKILL.md",
+    # Same class (#1329): the vendored datamodel-code-generator SKILL.md is
+    # upstream's own bytes (`datamodel-codegen --install-skill`) and names a
+    # USER project's files (`poetry.lock`, `runtime.txt`) as examples. Scoped
+    # to that file rather than allowlisting those names for every doc.
+    ":!.claude/skills/datamodel-code-generator/SKILL.md",
 )
 
 # Refs that are intentionally absent from the working tree. Keep each entry
@@ -93,10 +98,6 @@ _ALLOWED_ABSENT = frozenset(
         "action.yml",
         "devcontainer-feature.json",
         "ruff check --fix",
-        # The vendored datamodel-code-generator SKILL.md (#1329) names these
-        # as examples of a USER project's files when picking a Python target.
-        "poetry.lock",
-        "runtime.txt",
         # Out-of-repo by name: auto-memory files live under
         # ~/.claude/projects/<slug>/memory/ and are cited by bare name.
         "MEMORY.md",

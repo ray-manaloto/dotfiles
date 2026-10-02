@@ -619,11 +619,14 @@ def run_codegen_check(project_root: Path) -> int:
     generated module fails at import time. A top-level import would turn that
     into Python's exit 1 — DRIFT — for a check that never ran, and would break
     every other subcommand with it. Imported here, it is ERROR (2) and scoped
-    to this subcommand.
+    to this subcommand. ANY exception during that import counts — a hand
+    edit can raise NameError or TypeError at import just as easily as
+    SyntaxError. (Out of reach here: a module main.py itself imports eagerly
+    failing, which breaks every subcommand before dispatch.)
     """
     try:
         gate = importlib.import_module("dotfiles_setup.codegen_check")
-    except ImportError, SyntaxError:
+    except Exception:
         logger.exception("codegen-check: the gate or a generated module won't import")
         return _CODEGEN_CHECK_IMPORT_ERROR
     return gate.codegen_check_main(project_root)

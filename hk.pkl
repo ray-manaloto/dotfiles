@@ -381,7 +381,7 @@ local allSteps = new Mapping<String, Config.Step> {
   // ruff passes per job is too costly for every unrelated commit. The ruff
   // config and version live in pyproject.toml/uv.lock, both in the glob.
   ["codegen_check"] {
-    glob = List("schemas/*.schema.json", "python/pyproject.toml", "python/uv.lock", "python/src/dotfiles_setup/generated/**")
+    glob = List("schemas/*.schema.json", "schemas/templates/**", "python/pyproject.toml", "python/uv.lock", "python/src/dotfiles_setup/generated/**")
     check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"
   }
 

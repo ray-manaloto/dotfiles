@@ -1,0 +1,59 @@
+{#- Upstream datamodel-code-generator 0.83.0 model/template/msgspec.jinja2 (#1329),
+    with two changes. (1) A class with no schema description gets a fallback
+    docstring instead of `pass`: the generic base class that
+    `use-generic-base-class` emits (needed for extra-fields=forbid) has no
+    description, and repo ruff rejects a docstring-less class (D101).
+    (2) The description is wrapped in triple quotes here, because on the
+    custom-template path the generator hands it over UNQUOTED (knowledge-base
+    hit the same; see its pyproject guard-policy job). Re-diff against the
+    installed template on every generator bump. -#}
+{% for decorator in decorators -%}
+{{ decorator }}
+{% endfor -%}
+{%- if base_class %}
+class {{ class_name }}({{ base_class }}{%- for key, value in (base_class_kwargs|default({})).items() -%}
+, {{ key }}={{ value }}
+{%- endfor -%}):
+{%- else %}
+class {{ class_name }}:
+{%- endif %}
+{%- if description %}
+    """{{ description }}"""
+{%- else %}
+    """Generated msgspec base type; see the schema it was generated from."""
+{%- endif %}
+{%- set ns = namespace(has_rendered_field=false) -%}
+{%- for field in fields -%}
+    {%- if field.extras.get('is_classvar') %}
+    {#- Skip fields with is_classvar=True - they are managed by msgspec tag_field -#}
+    {%- elif not field.annotated and field.field %}
+    {%- set ns.has_rendered_field = true %}
+    {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
+    {%- else %}
+    {%- set ns.has_rendered_field = true %}
+    {%- if field.annotated and not field.field %}
+    {{ field.name }}: {{ field.annotated }}
+    {%- elif field.annotated and field.field %}
+    {{ field.name }}: {{ field.annotated }} = {{ field.field }}
+    {%- else %}
+    {{ field.name }}: {{ field.type_hint }}
+    {%- endif %}
+    {%- if not field.field and (not field.required or field.use_default_with_required)
+            %} = {{ field.represented_default }}
+    {%- endif -%}
+    {%- endif %}
+
+
+
+    {%- if not field.extras.get('is_classvar') and field.docstring %}
+    {{ field.docstring }}
+{%- if field.use_inline_field_description and not loop.last %}
+
+{% endif %}
+    {%- elif not field.extras.get('is_classvar') and field.inline_field_docstring %}
+    {{ field.inline_field_docstring }}
+{%- if not loop.last %}
+
+{% endif %}
+    {%- endif %}
+{%- endfor -%}

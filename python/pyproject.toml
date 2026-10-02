@@ -207,11 +207,12 @@ codegen = ["datamodel-code-generator[all,httpx2,ryaml]==0.83.0"]
 
 # Every model/enum generated from a committed schema (R16/D23; #1329). This
 # table plus the `codegen`/`codegen-check` mise tasks IS the generator. Job
-# paths are relative to THIS file's directory, and both tasks run the
-# generator with cwd = python/: ruff gets no config flag and discovers it by
-# walking up from the caller's cwd, so this file's [tool.ruff] — the same one
-# hk lints with — formats the output. A run from anywhere else needs
-# `--settings-path`. Settings follow knowledge-base's table, each reason here:
+# paths are relative to THIS file's directory (both tasks run the generator
+# with cwd = python/). Ruff gets no config flag: upstream runs it from the
+# OUTPUT directory, and every output is under python/src/, so discovery walks
+# up to this file's [tool.ruff] — the same config hk lints with. That is why
+# codegen-check refuses an output outside generated/. Settings follow
+# knowledge-base's table, each reason here:
 [tool.datamodel-codegen]
 input-file-type = "jsonschema"
 schema-version = "2020-12"
@@ -230,6 +231,10 @@ disable-timestamp = true
 # tests/test_codegen_check.py).
 extra-fields = "forbid"
 use-generic-base-class = true
+# That generic base class has no schema, so no description; upstream's
+# template renders it docstring-less, which ruff's D101 rejects. The one
+# override is a fallback docstring (schemas/templates/msgspec.jinja2).
+custom-template-dir = "../schemas/templates"
 # Redundant on 0.83.0 for msgspec output (the sweep measured byte-identical
 # output without them), kept so a regression in that auto-enable cannot drop
 # every `Meta(...)` constraint silently.
@@ -237,7 +242,8 @@ use-annotated = true
 field-constraints = true
 use-specialized-enum = true
 use-standard-collections = true
-# The schema `description` becomes the class docstring (ruff's D101 needs one).
+# The schema `description` becomes the class docstring (ruff's D101 needs one;
+# a class without a description gets the template's fallback above).
 use-schema-description = true
 
 [tool.datamodel-codegen.jobs.drift-verdict]

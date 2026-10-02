@@ -27,6 +27,7 @@ verdict exists to end.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import sys
 import tomllib
@@ -115,7 +116,12 @@ def stale_files(root: Path) -> list[Path]:
 
 
 def _run_generator_check(argv: list[str], cwd: Path) -> GeneratorRun:
-    proc = subprocess.run(argv, cwd=cwd, check=False, capture_output=True, text=True)
+    # The formatter-failure signal is a UserWarning; an inherited
+    # PYTHONWARNINGS=ignore would hide it and let a broken ruff read as drift.
+    env = {**os.environ, "PYTHONWARNINGS": "always::UserWarning"}
+    proc = subprocess.run(
+        argv, cwd=cwd, env=env, check=False, capture_output=True, text=True
+    )
     sys.stdout.write(proc.stdout)
     sys.stderr.write(proc.stderr)
     return GeneratorRun(proc.returncode, proc.stderr)
@@ -171,13 +177,18 @@ def check(
     return DriftVerdict.IN_SYNC
 
 
-def codegen_check_main(root: Path) -> int:
+def codegen_check_main(
+    root: Path,
+    run: Runner = _run_generator_check,
+    binary: Path | None = None,
+) -> int:
     """CLI entry point: ``dotfiles-setup codegen-check``.
 
     Every failure the gate did not anticipate is ERROR (2), never DRIFT (1).
+    `run`/`binary` are the same seams :func:`check` takes.
     """
     try:
-        verdict = check(root)
+        verdict = check(root, run, binary)
     except Exception:
         logger.exception("codegen-check: could not decide")
         return DriftVerdict.ERROR
