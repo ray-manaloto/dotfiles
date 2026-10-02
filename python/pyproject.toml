@@ -55,6 +55,14 @@ build-backend = "setuptools.build_meta"
 # declarations stay loose and python/uv.lock is the single version pin.
 [tool.uv]
 override-dependencies = ["graphifyy[all]"]
+# `codegen` is a DEFAULT group so every sync keeps the generator installed.
+# As an opt-in group, any plain `uv run`/`uv sync --locked` (each hk step, the
+# mise `[deps.uv]` sync) uninstalled it again, racing the `codegen_check` step's
+# `uv run --group codegen`: CI saw "datamodel-codegen not found" right after
+# "Installed 29 packages" (dotfiles PR #1534, run 37011622846). Same cure as
+# knowledge-base#833. The `--group codegen` flags in mise.toml/hk.pkl stay,
+# explicit and now redundant, so the tasks still work if this list changes.
+default-groups = ["dev", "codegen"]
 
 [tool.ruff]
 line-length = 88
