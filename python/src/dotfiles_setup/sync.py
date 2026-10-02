@@ -77,6 +77,7 @@ from typing import TYPE_CHECKING, Literal
 from dotfiles_setup import child_env
 from dotfiles_setup.container import verify_latest
 from dotfiles_setup.devcontainer_names import resolve_names
+from dotfiles_setup.doctor import DockerUnavailableError, docker_container_rows
 from dotfiles_setup.platform_target import (
     platform_arch,
     published_targets,
@@ -527,21 +528,14 @@ def container_image_id(names: DevcontainerNames) -> str | None:
 
 
 def container_state(names: DevcontainerNames) -> ContainerState:
-    """Devcontainer state for this workspace+arch: running, stopped, absent."""
-    res = _run(
-        [
-            "docker",
-            "ps",
-            "-a",
-            "--filter",
-            f"label={names.workspace_label}",
-            "--filter",
-            f"label={names.arch_label}",
-            "--format",
-            "{{.State}}",
-        ]
-    )
-    states = res.stdout.strip().splitlines()
+    """Devcontainer state for this workspace+arch: running, stopped, absent.
+
+    #1478: the query is :func:`doctor.docker_container_rows`, which checks the
+    ``docker ps`` exit code, so a down daemon, a timeout or a missing CLI
+    raises :class:`doctor.DockerUnavailableError` instead of reading as
+    ``absent`` (which ``decide_action`` would turn into an ``up``).
+    """
+    states = [state for _cid, state, _name in docker_container_rows(names)]
     if not states:
         return "absent"
     return "running" if "running" in states else "stopped"
@@ -851,7 +845,13 @@ def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
     image_ref = opts.image_ref
     _report_inflight(opts.tag, wait=opts.wait)
 
-    status = observe(workspace, image_ref)
+    try:
+        status = observe(workspace, image_ref)
+    except DockerUnavailableError as exc:
+        # #1478: no container state can be concluded, so neither --check nor
+        # a converge may act — 2 is "could not verify", as for --check below.
+        sys.stdout.write(f"FAIL  sync: container state UNKNOWN — {exc}\n")
+        return 2
     # #800 F4: an unreachable registry makes container_current True
     # unconditionally (never take a destructive action on currency grounds
     # while offline) — so [CONTAINER OUTDATED] goes silent here too even

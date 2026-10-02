@@ -121,6 +121,7 @@ to look for, and the fix is the ruleset, not the verb.
 |---|---|---|
 | `ship: refusing to ship from main` | On main/detached HEAD | Create a feature branch first |
 | `ship: working tree not clean` | Uncommitted changes | Commit (or stash) so gates validate the shipped tree |
+| `ship: linked worktree: the full-sync smoke cannot see this worktree's git dir` (rc=2, before any gate) | A linked git worktree whose diff needs `sync-full`: its `.git` FILE names a host path the container does not mount (#1481). A worktree whose diff is non-surface, or changes base-image inputs, ships normally | Ship from the main checkout: fetch the branch there, check it out, re-run `mise run ship` |
 | `FAIL gate <name>` | A local gate failed | That failure IS the task (zero-skip); fix, rerun ship |
 | `ship: could not enable auto-merge` | The 422 regression outlasted the bounded retry, or "Allow auto-merge"/`ci-gate` isn't configured | Check the repo's auto-merge setting + branch protection; re-run `ship` (it reuses the PR) |
 | `land: PR #N is OPEN, not yet MERGED` | Auto-merge is still pending `ci-gate` (CI running). **Expected right after ship — not a failure**, though `land` does exit non-zero | Wait for the merge, then re-run `land` for the post-merge Mac validation. `land` has no `--wait` and `gh pr checks --watch` is guard-denied, so wait with a deadline: `mise run bounded-wait -- --deadline <s> --cmd 'test "$(gh pr view <N> --json state --jq .state)" = MERGED'` |

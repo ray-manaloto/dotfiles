@@ -1494,10 +1494,10 @@ def docker_container_rows(
 ) -> list[tuple[str, str, str]]:
     """``(id, state, name)`` of every container this clone owns for one arch.
 
-    Not ``sync.container_state``, which runs the same query but ignores the
-    return code, so a down daemon reads as ``absent`` — the conflation this
-    helper exists to refuse. Every failure raises :class:`DockerUnavailableError`
-    whose message names the cause.
+    The one implementation of this query: ``sync.container_state`` derives its
+    state from it too (#1478), so a down daemon can never read as ``absent``
+    — the conflation this helper exists to refuse. Every failure raises
+    :class:`DockerUnavailableError` whose message names the cause.
     """
     try:
         proc = subprocess.run(

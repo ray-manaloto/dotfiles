@@ -84,6 +84,7 @@ import time
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import child_env, process_env
+from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
 
 if TYPE_CHECKING:
@@ -279,6 +280,16 @@ def changes_base_image_inputs(paths: list[str]) -> bool:
     return any(_matches_any(p, BASE_INPUT_PATTERNS) for p in paths)
 
 
+def needs_full_sync(paths: list[str]) -> bool:
+    """True when ship must run the local ``sync-full`` gate for this diff.
+
+    Shared by :func:`gate_matrix` (adds the gate) and :func:`ship_main` (the
+    #1481 linked-worktree refusal), so the two cannot disagree on which diffs
+    reach the container smoke.
+    """
+    return touches_surface(paths) and not changes_base_image_inputs(paths)
+
+
 def changes_apt_pin_inputs(paths: list[str]) -> bool:
     """True when the diff changes an input to the apt-pin resolvability probe.
 
@@ -363,7 +374,7 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     # to fail in 60s instead of after a ~37min CI base build.
     if changes_apt_pin_inputs(paths):
         gates.append(Gate("verify-apt-pins", ("mise", "run", "verify-apt-pins")))
-    if touches_surface(paths) and not changes_base_image_inputs(paths):
+    if needs_full_sync(paths):
         gates.append(Gate("sync-full", ("mise", "run", "sync", "--", "--full")))
     return gates
 
@@ -504,6 +515,16 @@ def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
     paths = changed_paths_vs_main(workspace)
     if not paths:
         sys.stdout.write("FAIL  ship: no changes vs origin/main\n")
+        return None
+    if needs_full_sync(paths) and is_linked_worktree(workspace):
+        # #1481: a linked worktree's `.git` is a FILE naming a host path
+        # (`<main>/.git/worktrees/<name>`) the container does not mount, so the
+        # sync-full smoke dies with "not a git repository" — but only after the
+        # earlier gates and a container bring-up. Refuse before any of them.
+        sys.stdout.write(
+            "FAIL  ship: linked worktree: the full-sync smoke cannot see this "
+            "worktree's git dir; ship from the main checkout\n"
+        )
         return None
     return branch, paths
 

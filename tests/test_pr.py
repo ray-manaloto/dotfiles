@@ -290,6 +290,92 @@ def test_ship_gate_failure_stops_before_push(
     assert pr.ship_main(_WORKSPACE) == 1
 
 
+@pytest.fixture
+def checkouts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """A real main checkout and a real linked worktree of it (#1481).
+
+    Global and system git config are cut off so an operator's templates or
+    ``init.defaultBranch`` cannot change which one git reports as linked.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "no-global-config"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    main = tmp_path / "main"
+    main.mkdir()
+    linked = tmp_path / "linked"
+    for args in (
+        ("init", "-b", "main"),
+        ("commit", "--allow-empty", "-m", "init"),
+        ("worktree", "add", str(linked)),
+    ):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            cwd=main,
+            check=True,
+            capture_output=True,
+        )
+    return {"main": main, "linked": linked}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Surface, not a base input: sync-full would run → refuse early.
+        ("linked", "python/src/dotfiles_setup/sync.py", "refused"),
+        # Not surface: no sync-full gate, so nothing to refuse.
+        ("linked", "README.md", "proceeds"),
+        # Base-image input: container validation is deferred to CI.
+        ("linked", ".devcontainer/Dockerfile", "proceeds"),
+        # Main checkout: the container mounts a real `.git` directory.
+        ("main", "python/src/dotfiles_setup/sync.py", "proceeds"),
+    ],
+    ids=["linked-surface", "linked-nonsurface", "linked-base-input", "main-surface"],
+)
+def test_ship_refuses_a_linked_worktree_only_when_sync_full_would_run(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    checkouts: dict[str, Path],
+    case: tuple[str, str, str],
+) -> None:
+    """#1481: refused in preflight, before ANY gate, only for the sync-full case.
+
+    The workspace is a REAL main checkout or linked worktree, so the real
+    ``is_linked_worktree`` decides; only the branch/tree/diff probes are fixed.
+    """
+    checkout, path, outcome = case
+    gate_runs: list[list[str]] = []
+    monkeypatch.setattr(pr, "_current_branch", lambda _w: "feat/x")
+    monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
+    monkeypatch.setattr(pr, "changed_paths_vs_main", lambda _w: [path])
+
+    def _gates(_w: Path, gates: list[pr.Gate]) -> bool:
+        gate_runs.append([g.name for g in gates])
+        return False  # stop before push: proceeding is all this test needs
+
+    monkeypatch.setattr(pr, "run_gates", _gates)
+    assert pr.ship_main(checkouts[checkout]) == 1
+    out = capsys.readouterr().out
+    if outcome == "refused":
+        assert gate_runs == []
+        assert "FAIL  ship: linked worktree" in out
+        assert "ship from the main checkout" in out
+    else:
+        assert len(gate_runs) == 1
+        assert "linked worktree" not in out
+
+
+def test_gate_matrix_adds_sync_full_exactly_when_ship_would_refuse() -> None:
+    """The refusal and the gate share one predicate (#1481), both directions."""
+    for paths in (
+        ["python/src/dotfiles_setup/sync.py"],
+        ["README.md"],
+        [".devcontainer/Dockerfile"],
+    ):
+        has_gate = any(g.name == "sync-full" for g in pr.gate_matrix(paths))
+        assert has_gate is pr.needs_full_sync(paths)
+    assert pr.needs_full_sync(["python/src/dotfiles_setup/sync.py"])
+    assert not pr.needs_full_sync([".devcontainer/Dockerfile"])
+
+
 # ------------------------------------------------------------------- land
 
 
