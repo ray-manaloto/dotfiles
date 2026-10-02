@@ -62,6 +62,7 @@ docstring.
 
 Not reusing `sync.container_state` (`sync.py:529-547`, same query) on purpose: it ignores the return code, so a
 down daemon reads as `absent` — exactly the conflation the first row forbids. Write a helper that keeps rc.
+(Superseded by #1478: `sync.container_state` now derives its state from that helper, `docker_container_rows`.)
 
 `<restore>`: `mise run up` for the arch equal to
 `platform_arch(resolve_platform(None, env=dict(setup.environ)))` — compare ARCH words, never triples (the pinned

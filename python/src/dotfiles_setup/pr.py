@@ -78,12 +78,14 @@ from __future__ import annotations
 import dataclasses
 import fnmatch
 import json
+import os
 import subprocess
 import sys
 import time
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import child_env, process_env
+from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
 
 if TYPE_CHECKING:
@@ -279,6 +281,16 @@ def changes_base_image_inputs(paths: list[str]) -> bool:
     return any(_matches_any(p, BASE_INPUT_PATTERNS) for p in paths)
 
 
+def needs_full_sync(paths: list[str]) -> bool:
+    """True when ship must run the local ``sync-full`` gate for this diff.
+
+    Shared by :func:`gate_matrix` (adds the gate) and :func:`ship_main` (the
+    #1481 linked-worktree refusal), so the two cannot disagree on which diffs
+    reach the container smoke.
+    """
+    return touches_surface(paths) and not changes_base_image_inputs(paths)
+
+
 def changes_apt_pin_inputs(paths: list[str]) -> bool:
     """True when the diff changes an input to the apt-pin resolvability probe.
 
@@ -363,7 +375,7 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     # to fail in 60s instead of after a ~37min CI base build.
     if changes_apt_pin_inputs(paths):
         gates.append(Gate("verify-apt-pins", ("mise", "run", "verify-apt-pins")))
-    if touches_surface(paths) and not changes_base_image_inputs(paths):
+    if needs_full_sync(paths):
         gates.append(Gate("sync-full", ("mise", "run", "sync", "--", "--full")))
     return gates
 
@@ -489,22 +501,69 @@ def _working_tree_clean(workspace: Path) -> bool:
     ).stdout.strip()
 
 
-def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
-    """Branch/tree/diff preconditions for ship; None (after printing) on fail."""
+#: The pre-push hook runs the gate suite (6-11 min) AFTER git has opened the ssh
+#: transport, and GitHub closes a connection idle that long ("closed by remote
+#: host"); the pack write then dies on SIGPIPE. Keepalives hold it open.
+_PUSH_SSH_KEEPALIVE = "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
+_PUSH_RC_MEANING = {141: "push transport dropped (ssh idle during pre-push)"}
+#: #1481 (Ray's ruling 2026-10-02): its own exit code, so a caller can tell
+#: "ship from the main checkout" from every other preflight refusal (rc 1).
+_RC_LINKED_WORKTREE = 2
+
+
+def push_command(workspace: Path, branch: str) -> list[str]:
+    """``git push`` argv for ship, carrying an ssh keepalive unless the user chose ssh.
+
+    The keepalive rides on git's native ``core.sshCommand`` via ``-c``. Git
+    documents that a set ``GIT_SSH_COMMAND`` overrides it, so a user's env
+    command wins with no check here. ``-c`` WOULD shadow a configured
+    ``core.sshCommand`` and ``GIT_SSH`` (consulted only when neither is set),
+    so either of those leaves the push untouched.
+    """
+    plain = ["git", "push", "-u", "origin", branch]
+    configured = _run(
+        ["git", "-C", str(workspace), "config", "--get", "core.sshCommand"],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    if os.environ.get("GIT_SSH") or (
+        configured.returncode == 0 and configured.stdout.strip()
+    ):
+        return plain
+    return ["git", "-c", f"core.sshCommand={_PUSH_SSH_KEEPALIVE}", *plain[1:]]
+
+
+def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | int:
+    """Branch/tree/diff preconditions for ship; on fail, print and return the rc."""
     branch = _current_branch(workspace)
     if branch in ("main", "HEAD"):
         sys.stdout.write("FAIL  ship: refusing to ship from main/detached HEAD\n")
-        return None
+        return 1
     if not _working_tree_clean(workspace):
         sys.stdout.write(
             "FAIL  ship: working tree not clean — commit (or stash) first so "
             "the gates validate exactly what ships\n"
         )
-        return None
+        return 1
     paths = changed_paths_vs_main(workspace)
     if not paths:
         sys.stdout.write("FAIL  ship: no changes vs origin/main\n")
-        return None
+        return 1
+    if needs_full_sync(paths) and is_linked_worktree(workspace):
+        # #1481: a linked worktree's `.git` is a FILE naming a host path
+        # (`<main>/.git/worktrees/<name>`) the container does not mount, so the
+        # sync-full smoke dies with "not a git repository" — but only after the
+        # earlier gates and a container bring-up. Refuse before any of them.
+        # is_linked_worktree fails open (git error -> False): ship then proceeds
+        # and, at worst, fails late in sync-full exactly as before #1481.
+        # Git refuses to check out a branch another worktree holds, so the
+        # remedy must free it here first.
+        sys.stdout.write(
+            "FAIL  ship: linked worktree: the full-sync smoke cannot see this "
+            "worktree's git dir; ship from the main checkout: run "
+            f"`git switch --detach` here, then `git switch {branch}` and "
+            "`mise run ship` in the main checkout\n"
+        )
+        return _RC_LINKED_WORKTREE
     return branch, paths
 
 
@@ -560,8 +619,8 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     Mac-validation step. See :func:`enable_auto_merge`.
     """
     preflight = _ship_preflight(workspace)
-    if preflight is None:
-        return 1
+    if isinstance(preflight, int):
+        return preflight
     branch, paths = preflight
     base_change = changes_base_image_inputs(paths)
     if base_change:
@@ -582,11 +641,10 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     if not run_gates(workspace, gate_matrix(paths)):
         return 1
 
-    push_rc = process_env.run_with_fnox(
-        ["git", "push", "-u", "origin", branch], cwd=workspace
-    )
+    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
     if push_rc != 0:
-        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}\n")
+        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
+        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
         return 1
 
     number = _open_or_update_pr(workspace, title)

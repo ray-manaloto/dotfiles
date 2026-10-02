@@ -323,9 +323,10 @@ def test_credential_launcher_prevention_replays_historical_uncredentialed_push(
         )
     )
 
-    assert '_stream(["git", "push", "-u", "origin", branch], cwd=workspace)' in (
+    assert "push_rc = _stream(push_command(workspace, branch), cwd=workspace)" in (
         target.read_text()
     )
+    assert "run_with_fnox(push_command" not in target.read_text()
     assert session_gate.prevention_check(candidate) == 1
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,9 +13,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
-from dotfiles_setup import sync
+from dotfiles_setup import doctor, sync
 from dotfiles_setup.container import Check
 from dotfiles_setup.devcontainer_names import DevcontainerNames, resolve_names
+from dotfiles_setup.doctor import DockerUnavailableError
 from dotfiles_setup.platform_target import published_targets
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
@@ -428,19 +430,115 @@ def test_registry_digest_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sync.registry_digest(_REF) is None
 
 
-def test_container_state_running(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp("running\n"))
-    assert sync.container_state(_NAMES) == "running"
+def _fake_docker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str) -> Path:
+    """Put a fake ``docker`` first on PATH; its argv is logged to the result.
+
+    A real executable on a real PATH, so the probe exercises the subprocess
+    boundary the daemon failure actually crosses (#1478), not a stubbed seam.
+    """
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir(exist_ok=True)
+    log = tmp_path / "docker-argv.log"
+    script = bindir / "docker"
+    script.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{log}"\n{body}\n')
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    return log
 
 
-def test_container_state_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp("exited\n"))
-    assert sync.container_state(_NAMES) == "stopped"
+def _rows(*states: str) -> str:
+    """``docker ps`` output in the tab-separated id/state/name shape."""
+    lines = (f"id{i}\\t{state}\\tname{i}" for i, state in enumerate(states))
+    return "printf '" + "\\n".join(lines) + ("\\n'" if states else "'")
 
 
-def test_container_state_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sync, "_run", lambda *_a, **_k: _cp(""))
-    assert sync.container_state(_NAMES) == "absent"
+@pytest.mark.parametrize(
+    ("states", "expected"),
+    [
+        (("running",), "running"),
+        (("exited", "running"), "running"),
+        (("exited",), "stopped"),
+        ((), "absent"),
+    ],
+)
+def test_container_state_reads_a_healthy_daemon(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    states: tuple[str, ...],
+    expected: str,
+) -> None:
+    """Control arm for the #1478 refusals: rc=0 still maps stdout to a state."""
+    _fake_docker(monkeypatch, tmp_path, f"{_rows(*states)}; exit 0")
+    assert sync.container_state(_NAMES) == expected
+
+
+def test_container_state_refuses_a_down_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1478: rc!=0 with empty stdout is UNKNOWN, never ``absent``."""
+    _fake_docker(
+        monkeypatch,
+        tmp_path,
+        'echo "Cannot connect to the Docker daemon" >&2; exit 1',
+    )
+    with pytest.raises(DockerUnavailableError, match="Cannot connect"):
+        sync.container_state(_NAMES)
+
+
+def test_container_state_refuses_a_hung_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1478: a hung daemon is UNKNOWN (before, the query had NO timeout: it hung)."""
+    monkeypatch.setattr(sync, "_DOCKER_PS_TIMEOUT_S", 0.2)
+    _fake_docker(monkeypatch, tmp_path, "exec sleep 5")
+    with pytest.raises(DockerUnavailableError, match="did not answer"):
+        sync.container_state(_NAMES)
+
+
+def test_sync_waits_longer_than_the_session_doctor_for_docker() -> None:
+    """A busy-but-alive daemon must not fail sync/ship/land at doctor's bound.
+
+    The hung-daemon test above proves sync passes ITS bound (a 0.2 s patch on
+    sync's constant is what makes a 5 s sleep raise); this pins the ordering.
+    """
+    doctor_bound = vars(doctor)["_DOCKER_PS_TIMEOUT_S"]
+    assert vars(sync)["_DOCKER_PS_TIMEOUT_S"] >= 10 * doctor_bound
+
+
+def test_container_state_refuses_a_missing_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1478: no docker on PATH is UNKNOWN (``_run`` used to fold it into 127)."""
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    with pytest.raises(DockerUnavailableError, match="not found"):
+        sync.container_state(_NAMES)
+
+
+def test_sync_refuses_to_converge_when_docker_is_down(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1478 end to end: observe() → rc=2 UNKNOWN, and no lifecycle runs.
+
+    Before the fix the empty stdout read as ``absent`` and decide_action
+    chose ``up`` against a daemon that was not answering.
+    """
+    _fake_docker(monkeypatch, tmp_path, "echo 'daemon down' >&2; exit 1")
+    monkeypatch.setattr(sync, "resolve_names", lambda **_k: _NAMES)
+    monkeypatch.setattr(sync, "registry_digest", lambda _ref: _DIGEST_NEW)
+    monkeypatch.setattr(sync, "local_digests", lambda _ref: (_DIGEST_NEW,))
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+    monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
+
+    def _boom(*_a: object, **_k: object) -> int:
+        msg = "no lifecycle command may run when container state is unknown"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(sync, "_stream", _boom)
+    monkeypatch.setattr(sync, "refresh_local_tag", _boom)
+    assert sync.sync_main(_WORKSPACE) == 2
+    assert sync.sync_main(_WORKSPACE, sync.SyncOptions(check_only=True)) == 2
 
 
 def test_container_image_id_falls_back_to_a_stopped_container(
@@ -490,7 +588,7 @@ def test_container_image_id_prefers_running_without_stopped_fallback(
 
 
 def test_container_state_filters_on_both_id_labels_not_local_folder(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """#800: filter on the two id labels, not the old folder label.
 
@@ -506,9 +604,12 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
         return _cp("")
 
     monkeypatch.setattr(sync, "_run", _record)
-    sync.container_state(_NAMES)
     sync.container_image_id(_NAMES)
-    assert captured
+    log = _fake_docker(monkeypatch, tmp_path, "exit 0")
+    sync.container_state(_NAMES)
+    # The fake logs one argv word per line ("$@"), so boundaries survive.
+    captured.append(log.read_text().splitlines())
+    assert len(captured) == 3
     for cmd in captured:
         assert f"label={_NAMES.workspace_label}" in cmd
         assert f"label={_NAMES.arch_label}" in cmd
