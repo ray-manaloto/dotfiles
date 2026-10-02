@@ -97,13 +97,24 @@ returns:
 
 ```bash
 git -C <repo> worktree add ../<repo>.worktrees/<lane>-<YYYYMMDD> -b <type>/<lane> origin/main
-cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <lane> "<brief>"
+cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <lane> \
+  --settings '{"crossSessionInbound":"accept"}' "<brief>"
 ```
 
-`claude --bg` runs in the current directory, so launch it from inside the
-worktree; inside a linked worktree it does not make its own. Its positional
-prompt goes through slash-command expansion like `-p`, so don't start the
-brief with `/`.
+**The COORDINATOR creates the worktree and launches the lane INSIDE it.
+Never launch from the main checkout with a brief that says "create a
+worktree".** `claude --bg` runs in the current directory; inside a linked
+worktree it skips isolation, edits in place, and commits without a prompt
+(measured 2026-10-02 in auto mode). Launched from the main checkout, the lane
+reaches for `EnterWorktree`. Entering any path outside the MAIN checkout's
+`.claude/worktrees/` raises a permission-root-relocation prompt that
+permission rules, "don't ask again" and auto mode do not suppress. Only
+`bypassPermissions` skips it (`$CC/worktrees.md` "Ask Claude to create a
+worktree"). On 2026-10-02 that prompt parked seven lanes for ~11h within five
+minutes of launch. A nested `<worktree>/.claude/worktrees/` path prompts too.
+
+Its positional prompt goes through slash-command expansion like `-p`, so don't
+start the brief with `/`.
 
 **Permission class.** Cross-session messages are held whenever the two
 sessions' permission-mode classes differ (one bypasses prompts, the other
@@ -122,6 +133,7 @@ Brief template — every field is required, because a lane cannot ask:
 
 ```text
 LANE <lane> (<repo>, worktree <path>, branch <branch>). Items: <#issue …>.
+CWD: you were launched inside your worktree. Do NOT create a worktree, call EnterWorktree/ExitWorktree, or cd to the main checkout.
 OWN ONLY: <file list>. DO NOT EDIT: <hot files + other lanes' files>.
 NATIVE-FIRST: research the tool's built-in before custom code (use-tool-builtins.md).
 GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc.
@@ -134,7 +146,18 @@ STOP AT: commit on the branch. Do NOT push, ship or open a PR; report to the coo
 Read lane state with `claude agents --json --all` (`state`, `waitingFor`) —
 the supported read from outside a session — and wait on it with
 `mise run bounded-wait -- --deadline <s> --cmd '<state test>'`, never a bare
-sleep loop. Take results from each lane's report FILE. A `SendMessage` reply
+sleep loop. Rows without an `id` exist, so a predicate that indexes `["id"]`
+throws and can only fail. Use `.get`.
+
+**Check for `state == "blocked"` about five minutes after launch, and keep a
+watcher running.** A lane blocked on a permission prompt does not fail; it waits
+silently. Agent view's needs-input notification fires only while agent view is
+open (`$CC/agent-view.md` "Needs input"). For the life of the fan-out, run a
+`claude --bg -n <fanout>.watch "/loop 10m <check>"` session. Each tick, it
+reports every lane row with `state == "blocked"` (name, id, `waitingFor`, the
+prompt from `claude logs <id>`) to the coordinator and changes nothing. A
+permission prompt has no non-interactive answer: Ray clears it with
+`claude agents` → `→` on the row → `1`, or `claude attach <id>`. Take results from each lane's report FILE. A `SendMessage` reply
 or `claude logs` output is a notification at best, and a message can be held
 or dropped; scraping logs also pays for every line in your context.
 
