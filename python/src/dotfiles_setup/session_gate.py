@@ -70,11 +70,12 @@ PREVENTIONS = {
         "session-review-focused-gate",
         "ship-push-fnox-boundary-missing",
         "python/src/dotfiles_setup/pr.py",
-        "push_rc = process_env.run_with_fnox(\n"
-        '        ["git", "push", "-u", "origin", branch], cwd=workspace\n'
-        "    )",
+        # The push argv is built by pr.push_command (ssh keepalive); the
+        # boundary this binds is that the push runs under fnox, not its argv.
+        "push_rc = process_env.run_with_fnox(push_command(workspace, branch), "
+        "cwd=workspace)",
         1,
-        'push_rc = _stream(["git", "push", "-u", "origin", branch], cwd=workspace)',
+        "push_rc = _stream(push_command(workspace, branch), cwd=workspace)",
     ),
     "git-hook-contamination": PreventionRegistration(
         "python/src/dotfiles_setup/process_env.py",
