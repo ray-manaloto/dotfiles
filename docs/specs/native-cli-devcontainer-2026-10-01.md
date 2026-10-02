@@ -145,14 +145,21 @@ counts as native. The `mise ls` probe runs with the same minimal env as the inst
   - **Finding 13 is FIXED in rev 3, no longer a residual.** `mise run ship`'s sync-full smokes the
     main checkout's container on the current `:dev`, which still bakes the mise copies, so
     `native-clis check` would have failed every ship of this branch. `check` now SKIPs loudly with
-    rc 0 when the forbidden keys come from the base image itself (`install_path` outside `$HOME`).
-    That base predates the change, and asserting provenance there can only fail; tier 1's
-    merge-base identity handles an image-input branch the same way.
-    - A copy in the user's home overlay still fails.
+    rc 0 when EVERY forbidden key is declared by the image's own tool config: mise's `source.path`
+    is one of the three tier-1 identity inputs under `$MISE_SYSTEM_CONFIG_DIR`
+    (`IDENTITY_IMAGE_PATHS`). That base predates the change, and asserting provenance there can
+    only fail; tier 1's merge-base identity handles an image-input branch the same way.
+    - **Rev 4 (cold review of fb4c674b, DO NOT SHIP):** rev 3 classified "baked" as `install_path`
+      outside `$HOME`. At runtime `MISE_DATA_DIR` stays `/usr/local/share/mise` (Dockerfile ENV), so
+      overlay and user installs land there too and SKIPped with rc 0. Rev 4 classifies by
+      `source.path`; an entry with no source or install path, a key with no entries, and a missing
+      `MISE_SYSTEM_CONFIG_DIR` all fail closed.
+    - A copy from the user's overlay (`~/.config/mise/config.toml`) or a `mise use -g` still fails,
+      including beside image-declared copies; the tests use the real payload shape.
     - A new base with the natives missing still fails; the control-arm test covers this.
-    - A baked copy in a new image fails the CI no-mount smoke.
-    - Real arm on today's `:dev` overlay with a fresh volume: `SKIP … still bakes claude-code,
-      npm:@openai/codex`, rc 0. Removing the skip wiring fails 1 test.
+    - A baked copy in a new image fails the CI no-mount smoke. The overlay tier, which CI never
+      renders, is guarded by `test_the_overlay_template_declares_no_vendor_cli` (both arms).
+    - Real arm on today's `:dev` overlay: SKIP naming the image config files, rc 0.
   - **Finding 11 is FIXED in rev 2, no longer a residual.** The first regen used `lock-image`'s
     hard-coded `--bump` and dragged 8 unrelated `latest` tools forward. `lock-image` gained
     `--no-bump`, which keeps mise's native `mise lock` default of preserving existing locked versions

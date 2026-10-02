@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import stat
 import sys
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -121,56 +122,170 @@ def test_version_failure_fails(tmp_path: Path) -> None:
     assert "rc=3" in findings[0]
 
 
-def _entry(install_path: Path | str) -> list[dict[str, object]]:
-    """One `mise ls --json` entry, in the real shape (install_path + version)."""
-    return [{"version": "1.0.0", "install_path": str(install_path), "installed": True}]
+#: The image's mise config dir, as the Dockerfile ENV sets it at runtime.
+_SYS = "/usr/local/share/mise"
+
+#: Verbatim `mise ls --json` entries from today's `:dev` container (measured
+#: 2026-10-01, `devcontainer exec` into the amd64 overlay): BOTH copies install
+#: under the image's MISE_DATA_DIR, and only `source.path` says where they came
+#: from. The overlay's own tools (fzf, starship, conda:htop) install there too.
+_REAL_IMAGE_PAYLOAD: dict[str, list[dict[str, object]]] = {
+    "claude-code": [
+        {
+            "version": "2.1.283",
+            "requested_version": "latest",
+            "install_path": f"{_SYS}/installs/claude-code/2.1.283",
+            "source": {"type": "mise.toml", "path": f"{_SYS}/config.runtime.toml"},
+            "installed": True,
+            "active": True,
+        }
+    ],
+    "npm:@openai/codex": [
+        {
+            "version": "0.154.0",
+            "requested_version": "0.154.0",
+            "install_path": f"{_SYS}/installs/npm-openai-codex/0.154.0",
+            "source": {"type": "mise.toml", "path": f"{_SYS}/conf.d/shared.toml"},
+            "installed": True,
+            "active": True,
+        }
+    ],
+}
+
+
+def _entry(
+    install_path: Path | str | None, source: str | None = None
+) -> list[dict[str, object]]:
+    """One `mise ls --json` entry, in the real shape (install_path + source)."""
+    entry: dict[str, object] = {"version": "1.0.0", "installed": True}
+    if install_path is not None:
+        entry["install_path"] = str(install_path)
+    if source is not None:
+        entry["source"] = {"type": "mise.toml", "path": source}
+    return [entry]
+
+
+def _container_env(home: Path, *extra_path: Path) -> dict[str, str]:
+    """`_env` plus the image's ENV, so the image's config files are resolvable."""
+    return {**_env(home, *extra_path), "MISE_SYSTEM_CONFIG_DIR": _SYS}
+
+
+def test_image_config_files_are_the_three_identity_inputs() -> None:
+    assert ncc.image_config_files({"MISE_SYSTEM_CONFIG_DIR": _SYS}) == {
+        Path(f"{_SYS}/config.toml"),
+        Path(f"{_SYS}/conf.d/shared.toml"),
+        Path(f"{_SYS}/config.runtime.toml"),
+    }
+    assert ncc.image_config_files({}) == frozenset()
 
 
 @pytest.mark.parametrize(
-    "key",
+    ("key", "install_dir"),
     [
-        "npm:@openai/codex",
-        "claude-code",
-        "aqua:anthropics/claude-code",
-        "aqua:google-antigravity/antigravity-cli",
+        ("claude-code", "claude-code/2.1.283"),
+        ("npm:@openai/codex", "npm-openai-codex/0.154.0"),
+        ("aqua:google-antigravity/antigravity-cli", "antigravity-cli/1.2.14"),
     ],
 )
-def test_a_mise_copy_in_the_home_overlay_fails(tmp_path: Path, key: str) -> None:
-    """A copy the USER's overlay installed (under $HOME) is this change's defect."""
+def test_an_overlay_copy_in_the_real_install_shape_fails(
+    tmp_path: Path, key: str, install_dir: str
+) -> None:
+    """The real container installs overlay/user tools under MISE_DATA_DIR too.
+
+    Cold review of fb4c674b, finding 1: an install_path outside $HOME is NOT
+    proof of the base image. A copy from `~/.config/mise/config.toml` (the
+    overlay, or a user `mise use -g`) must fail even with the natives missing.
+    """
     home = tmp_path / "home"
-    _native_layout(home)
-    payload = {key: _entry(home / ".local/share/mise/installs/x/1.0.0")}
-    assert ncc.mise_findings(payload) == [
-        f"mise: `{key}` is a mise tool here; the native installer owns it"
-    ]
-    env = _env(home, _mise_bin(tmp_path, {**payload, "node": []}))
+    payload = {
+        key: _entry(
+            f"{_SYS}/installs/{install_dir}", f"{home}/.config/mise/config.toml"
+        )
+    }
+    assert (
+        ncc.baked_into_base(
+            payload, ncc.image_config_files({"MISE_SYSTEM_CONFIG_DIR": _SYS})
+        )
+        == []
+    )
+    env = _container_env(home, _mise_bin(tmp_path, payload))
     assert ncc.check(home=home, environ=env) == 1
 
 
 def test_a_base_image_that_predates_the_change_is_a_loud_skip(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Today's `:dev` bakes mise claude-code + npm codex outside $HOME.
+    """Today's `:dev` declares mise claude-code + npm codex in its own config.
 
-    The fixture mirrors that real image (measured 2026-10-01: install paths under
-    /usr/local/share/mise/installs) AND a container created from it, which never
-    ran `native-clis install` — so every native assertion would fail. Ship's
+    The payload is the real one, and the home is a fresh volume that never ran
+    `native-clis install`, so every native assertion would fail. Ship's
     sync-full smokes exactly that container, so this must not fail the gate;
     the CI no-mount smoke is what fails a baked copy in a NEW image.
     """
     home = tmp_path / "home"
-    payload = {
-        "claude-code": _entry("/usr/local/share/mise/installs/claude-code/2.1.283"),
-        "npm:@openai/codex": _entry(
-            "/usr/local/share/mise/installs/npm-openai-codex/0.154.0"
-        ),
-        "node": _entry("/usr/local/share/mise/installs/node/24"),
-    }
-    assert ncc.baked_into_base(payload, home) == ["claude-code", "npm:@openai/codex"]
-    env = _env(home, _mise_bin(tmp_path, payload))
+    payload = {**_REAL_IMAGE_PAYLOAD, "node": _entry(f"{_SYS}/installs/node/24")}
+    env = _container_env(home, _mise_bin(tmp_path, payload))
     with caplog.at_level("WARNING"):
         assert ncc.check(home=home, environ=env) == 0
-    assert "SKIP: this base image predates native claude/codex/agy" in caplog.text
+    assert (
+        "SKIP: every mise claude/codex/agy copy here (claude-code, "
+        "npm:@openai/codex) is declared by the image's own tool config "
+        f"({_SYS}/conf.d/shared.toml, {_SYS}/config.runtime.toml)"
+    ) in caplog.text
+
+
+def test_one_overlay_copy_beside_baked_ones_fails(tmp_path: Path) -> None:
+    """The SKIP needs EVERY forbidden key to be baked, not just one."""
+    home = tmp_path / "home"
+    payload = {
+        **_REAL_IMAGE_PAYLOAD,
+        "aqua:google-antigravity/antigravity-cli": _entry(
+            f"{_SYS}/installs/antigravity-cli/1.2.14",
+            f"{home}/.config/mise/config.toml",
+        ),
+    }
+    env = _container_env(home, _mise_bin(tmp_path, payload))
+    assert ncc.check(home=home, environ=env) == 1
+
+
+def test_a_key_with_one_overlay_entry_is_not_baked() -> None:
+    """Every entry of a key must come from the image (all, never any)."""
+    image = _REAL_IMAGE_PAYLOAD["claude-code"]
+    overlay = _entry(
+        f"{_SYS}/installs/claude-code/2.1.290", "/home/u/.config/mise/config.toml"
+    )
+    configs = ncc.image_config_files({"MISE_SYSTEM_CONFIG_DIR": _SYS})
+    assert ncc.baked_into_base({"claude-code": [*image, *overlay]}, configs) == []
+    assert ncc.baked_into_base({"claude-code": [*overlay, *image]}, configs) == []
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [
+        [],
+        _entry(None, f"{_SYS}/config.runtime.toml"),
+        _entry(f"{_SYS}/installs/claude-code/2.1.283", None),
+        _entry("", f"{_SYS}/config.runtime.toml"),
+    ],
+    ids=["no-entries", "no-install-path", "no-source", "empty-install-path"],
+)
+def test_an_unattributable_copy_fails_closed(
+    tmp_path: Path, entries: list[dict[str, object]]
+) -> None:
+    """Cold review finding 5: missing provenance is never read as "baked"."""
+    home = tmp_path / "home"
+    payload = {"claude-code": entries}
+    configs = ncc.image_config_files({"MISE_SYSTEM_CONFIG_DIR": _SYS})
+    assert ncc.baked_into_base(payload, configs) == []
+    env = _container_env(home, _mise_bin(tmp_path, payload))
+    assert ncc.check(home=home, environ=env) == 1
+
+
+def test_without_the_image_config_dir_nothing_is_baked(tmp_path: Path) -> None:
+    """No MISE_SYSTEM_CONFIG_DIR means no image to attribute to: fail closed."""
+    home = tmp_path / "home"
+    env = _env(home, _mise_bin(tmp_path, _REAL_IMAGE_PAYLOAD))
+    assert ncc.check(home=home, environ=env) == 1
 
 
 def test_a_base_without_copies_is_enforced_not_skipped(tmp_path: Path) -> None:
@@ -179,9 +294,10 @@ def test_a_base_without_copies_is_enforced_not_skipped(tmp_path: Path) -> None:
     The skip is scoped to an old base only.
     """
     home = tmp_path / "home"
-    payload = {"node": _entry("/usr/local/share/mise/installs/node/24")}
-    assert ncc.baked_into_base(payload, home) == []
-    env = _env(home, _mise_bin(tmp_path, payload))
+    payload = {"node": _entry(f"{_SYS}/installs/node/24", f"{_SYS}/config.toml")}
+    configs = ncc.image_config_files({"MISE_SYSTEM_CONFIG_DIR": _SYS})
+    assert ncc.baked_into_base(payload, configs) == []
+    env = _container_env(home, _mise_bin(tmp_path, payload))
     assert ncc.check(home=home, environ=env) == 1
 
 
@@ -412,3 +528,47 @@ def test_path_spelled_differently_still_counts_as_native(tmp_path: Path) -> None
     alias.symlink_to(home / ".local/bin")
     env = {"HOME": str(home), "PATH": f"{alias}:/usr/bin:/bin"}
     assert ncc.check_one(_BY_NAME["claude"], home=home, environ=env) == []
+
+
+_OVERLAY_TEMPLATE = (
+    Path(__file__).resolve().parent.parent / "home/dot_config/mise/config.toml.tmpl"
+)
+
+
+def _overlay_vendor_keys(text: str) -> list[str]:
+    """Findings for every overlay `[tools]` key that would provide a vendor CLI.
+
+    Uses the module's own classifier (`mise_findings`), so the overlay guard and
+    the in-container check can never disagree about what counts as a copy.
+    """
+    tools = tomllib.loads(text).get("tools", {})
+    return ncc.mise_findings({key: [] for key in tools})
+
+
+def test_the_overlay_template_declares_no_vendor_cli() -> None:
+    """Cold review of fb4c674b, finding 3: the overlay tier had NO guard.
+
+    on-create.sh runs `mise install -y` against this chezmoi template on every
+    container create, CI never renders it (`HOME=/root`, no chezmoi), and the
+    tier-3 check SKIPs only image-declared copies — so a claude/codex/agy key
+    re-added here would reach every container with nothing else to catch it.
+    """
+    assert _overlay_vendor_keys(_OVERLAY_TEMPLATE.read_text()) == []
+
+
+@pytest.mark.parametrize(
+    ("line", "flagged"),
+    [
+        ('claude-code = "latest"', True),
+        ('"npm:@openai/codex" = "latest"', True),
+        ('"aqua:google-antigravity/antigravity-cli" = "latest"', True),
+        ('"npm:claude-code-lint" = "latest"', False),
+    ],
+)
+def test_the_overlay_guard_discriminates(line: str, *, flagged: bool) -> None:
+    """Both arms: a vendor key added to the REAL template is caught.
+
+    A lookalike (`npm:claude-code-lint`) is not.
+    """
+    text = _OVERLAY_TEMPLATE.read_text().replace("[tools]\n", f"[tools]\n{line}\n", 1)
+    assert bool(_overlay_vendor_keys(text)) is flagged

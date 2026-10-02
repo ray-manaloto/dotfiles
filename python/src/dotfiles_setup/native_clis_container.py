@@ -40,6 +40,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dotfiles_setup.image import IDENTITY_IMAGE_PATHS
+
 logger = logging.getLogger(__name__)
 
 #: A runner takes ``(argv, env)`` and returns ``(rc, combined output)``.
@@ -358,26 +360,57 @@ def _forbidden(payload: MiseTools) -> list[str]:
     return sorted(key for key in payload if _mise_name(key) in _FORBIDDEN_MISE_NAMES)
 
 
-def baked_into_base(payload: MiseTools, home: Path) -> list[str]:
-    """Forbidden keys the BASE IMAGE itself carries (installed outside ``$HOME``).
+def image_config_files(environ: Mapping[str, str]) -> frozenset[Path]:
+    """The image's own mise tool configs, resolved in THIS container.
+
+    The three image build inputs (``IDENTITY_IMAGE_PATHS``, the same map tier 1
+    hashes) are COPYed under ``$MISE_SYSTEM_CONFIG_DIR``. Anything a key's
+    ``source.path`` names outside this set came from the user's overlay
+    (``~/.config/mise/config.toml``) or a ``mise use -g``, not from the base.
+    Without ``MISE_SYSTEM_CONFIG_DIR`` nothing counts as baked: fail closed.
+    """
+    config_dir = environ.get("MISE_SYSTEM_CONFIG_DIR")
+    if not config_dir:
+        return frozenset()
+    root = Path(config_dir)
+    system_file = Path(environ.get("MISE_SYSTEM_CONFIG_FILE") or root / "config.toml")
+    return frozenset(
+        system_file if rel == "@SYS@" else root / rel
+        for rel in IDENTITY_IMAGE_PATHS.values()
+    )
+
+
+def _image_source(
+    entry: Mapping[str, object], image_configs: frozenset[Path]
+) -> str | None:
+    """The image config an entry came from, or None when it is not attributable."""
+    source = entry.get("source")
+    path = source.get("path") if isinstance(source, Mapping) else None
+    if not entry.get("install_path") or not isinstance(path, str):
+        return None
+    return path if Path(path) in image_configs else None
+
+
+def baked_into_base(payload: MiseTools, image_configs: frozenset[Path]) -> list[str]:
+    """Forbidden keys the BASE IMAGE's own config declares (by ``source.path``).
 
     Such a base predates the native-CLI change: it was built from a config that
     still declared a mise/npm copy, and a container created from it never ran
     `native-clis install`. Asserting provenance there can only fail, and says
     nothing about this change — the same reason tier 1 compares a branch that
-    changes an image input against the MERGE-BASE identity. Whether the image
-    config re-adds a copy is guarded by the CI no-mount smoke instead, which
-    fails on any baked claude/codex/agy (``image.py``).
+    changes an image input against the MERGE-BASE identity.
+
+    Provenance is the ``source.path`` mise reports, NOT ``install_path``: at
+    runtime ``MISE_DATA_DIR`` stays ``/usr/local/share/mise`` (Dockerfile ENV),
+    so overlay and user installs land outside ``$HOME`` too (cold review of
+    fb4c674b, finding 1). An entry with no source or no install path is not
+    attributable to the image and is not baked.
     """
-    home_root = home.resolve()
     return [
         key
         for key in _forbidden(payload)
         if payload[key]
-        and all(
-            not Path(str(entry.get("install_path", ""))).is_relative_to(home_root)
-            for entry in payload[key]
-        )
+        and all(_image_source(entry, image_configs) for entry in payload[key])
     ]
 
 
@@ -399,16 +432,29 @@ def check(
     """Log every provenance finding; rc 0 only when there are none.
 
     A base image that predates the change is a loud SKIP, not a pass and not a
-    failure: see :func:`baked_into_base`.
+    failure — but only when EVERY forbidden key comes from the image's own
+    config; one overlay or user copy alongside them still fails. See
+    :func:`baked_into_base`.
     """
     payload, findings = mise_tools(environ=environ, run=run)
-    baked = baked_into_base(payload, home)
-    if baked:
+    forbidden = _forbidden(payload)
+    image_configs = image_config_files(environ)
+    baked = baked_into_base(payload, image_configs)
+    if forbidden and baked == forbidden:
+        sources = sorted(
+            {
+                str(_image_source(entry, image_configs))
+                for key in baked
+                for entry in payload[key]
+            }
+        )
         logger.warning(
-            "SKIP: this base image predates native claude/codex/agy — it still "
-            "bakes %s, so provenance cannot be asserted here. Sync the image "
+            "SKIP: every mise claude/codex/agy copy here (%s) is declared by the "
+            "image's own tool config (%s), so this base image predates native "
+            "claude/codex/agy and provenance cannot be asserted. Sync the image "
             "built from this change (`mise run sync`, or `-- --tag pr-<N>`).",
             ", ".join(baked),
+            ", ".join(sources),
         )
         return 0
     findings.extend(
