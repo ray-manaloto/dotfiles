@@ -117,6 +117,15 @@
     "--platform=${localEnv:DOTFILES_PLATFORM}",
   ],
   "remoteUser": "${localEnv:USER}",
+  // NEVER the default probe. @devcontainers/cli reads the container's whole
+  // environment through a login shell — every Doppler secret `--env-file`
+  // injected above — and re-sends each variable as `docker exec -e
+  // NAME=VALUE` on every lifecycle hook and `devcontainer exec`, so the
+  // values sit on the HOST argv where any `ps` reads them (2026-10-02,
+  // DB_PASSWORD). `docker exec` already inherits the container env, so the
+  // probe added nothing but the leak; callers needing the login shell's PATH
+  // run `bash -lc` (smoke, persistence) or resolve through mise shims.
+  "userEnvProbe": "none",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localWorkspaceFolderBasename},type=bind,consistency=cached",
   "mounts": [
