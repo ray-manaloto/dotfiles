@@ -85,6 +85,21 @@ were already in the dispatch).
 with a 200 final response. `mcp2cli` handles the redirect
 transparently — the 307 column is informational, not a defect.
 
+## Non-mintlify llms.txt sites
+
+Sites that are NOT on Mintlify but publish the same `llms.txt` /
+`llms-full.txt` pair at their own domain. Cached under the same
+`mintlify-cache/<owner>/<repo>/` path so one `grep -rHi` covers both; there is
+no `mcp` column because there is no Mintlify descriptor.
+
+| owner/repo | site | llms.txt | llms-full.txt | verified | sha256 (llms-full.txt) |
+|---|---|---|---|---|---|
+| datamodel-code-generator/datamodel-code-generator | <https://datamodel-code-generator.koxudaxi.dev/> | 200 (12,988 B) | 200 (1,405,335 B) | 2026-10-01 | `645766b3…9b67400a` |
+
+Control arm for the probe: a bogus path on the same host returned 404.
+Refresh with `curl -sfL -o <path> https://datamodel-code-generator.koxudaxi.dev/llms-full.txt`
+(this is the generator pinned in `python/pyproject.toml`'s `codegen` group, #1329).
+
 ## Full validation evidence
 
 Per-site nanosecond-precision probe log (llms.txt HTTP status + content
@@ -199,3 +214,4 @@ for the canonical script) whenever:
 - [knowsuchagency/mcp2cli](https://github.com/knowsuchagency/mcp2cli) — probed for mintlify endpoint status; upstream project for the mcp2cli reference skill.
 - [yeachan-heo/oh-my-claudecode](https://github.com/yeachan-heo/oh-my-claudecode) — probed for mintlify endpoint status; upstream project for the OMC plugin powering this repo's workflow.
 - [openai/codex](https://github.com/openai/codex) — queued after the task-orchestration research consulted pinned source.
+- [datamodel-code-generator/datamodel-code-generator](https://github.com/datamodel-code-generator/datamodel-code-generator) — non-mintlify llms.txt site cached for the #1329 codegen toolchain.

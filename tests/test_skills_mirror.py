@@ -223,17 +223,25 @@ def test_real_tree_is_drift_free() -> None:
     assert drift == [], f"run `mise run skills-mirror` to fix: {drift}"
 
 
-def test_context7_cli_references_are_covered_verbatim() -> None:
-    """The three real `context7-cli/references/*.md` files stay byte-identical.
+def test_vendored_skill_references_are_covered_verbatim() -> None:
+    """Every real `references/*.md` file is mirrored byte-identical.
 
     `--claude` at `.claude/skills/context7-cli/references/setup.md` is an
-    argument to a real command; the generator must never rewrite it.
+    argument to a real command; the generator must never rewrite it. The
+    datamodel-code-generator references are upstream's own bytes, vendored by
+    `datamodel-codegen --install-skill claude-code` (#1329).
     """
     pairs = skills_mirror.reference_paths(REPO_ROOT)
-    names = {source.name for source, _ in pairs}
-    assert names == {"docs.md", "setup.md", "skills.md"}
+    found = {(source.parent.parent.name, source.name) for source, _ in pairs}
+    assert found == {
+        ("context7-cli", "docs.md"),
+        ("context7-cli", "setup.md"),
+        ("context7-cli", "skills.md"),
+        ("datamodel-code-generator", "cli-options.md"),
+        ("datamodel-code-generator", "troubleshooting.md"),
+        ("datamodel-code-generator", "workflows.md"),
+    }
     for source, destination in pairs:
-        assert "context7-cli" in str(source)
         assert destination.read_bytes() == source.read_bytes()
 
 

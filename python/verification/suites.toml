@@ -2981,3 +2981,54 @@ check_type = "static"
 handler = "regex_forbid"
 paths = ["python/src/dotfiles_setup/sdlc_team.py"]
 pattern = 'PLANNING_DISABLED|LANE_ENV_OVERRIDES'
+
+[[suite]]
+name = "workflow.codegen-toolchain-wired"
+description = "#1329 (R16/D23): new models and enums are code-generated, and the gate must stay wired end-to-end. Bound with `require_lines` (WHOLE lines), not substrings, because a commented-out pkl step still contains its command as a substring — the #1329 cold review's surviving mutant M1. The generator's version pin is deliberately NOT bound here (a Renovate bump would fail this suite; pin_parity/uv.lock own versions). Bound: the [tool.datamodel-codegen] table's load-bearing settings (msgspec output, ruff formatters, extra-fields forbid AND the generic base class it needs, the pilot job's output); the `codegen`/`codegen-check` mise tasks, both `--locked --group codegen` (never a PATH copy); hk's `codegen_check` step; main.py's lazy dispatcher (ANY exception importing the gate or the generated module it imports is rc 2, never 1; a module main.py imports eagerly is out of its reach); the gate's stale scan, native check call, formatter-failure and fail-closed branches; and the tests' call sites that arm each — the verdict matrix, the reject arm, the real-generator drift arm and the forbid arm."
+category = "workflow"
+check_type = "static"
+handler = "require_lines"
+paths = [
+    "python/pyproject.toml",
+    "mise.toml",
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/codegen_check.py",
+    "tests/test_codegen_check.py",
+]
+per_path_lines = { "python/pyproject.toml" = [
+    '[tool.datamodel-codegen]',
+    'output-model-type = "msgspec.Struct"',
+    'formatters = ["ruff-check", "ruff-format"]',
+    'extra-fields = "forbid"',
+    'use-generic-base-class = true',
+    'custom-template-dir = "../schemas/templates"',
+    'output = "src/dotfiles_setup/generated/drift_verdict.py"',
+], "mise.toml" = [
+    'dir = "{{config_root}}/python"',
+    'run = "uv run --project . --locked --group codegen datamodel-codegen --all-jobs"',
+    'run = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
+], "hk.pkl" = [
+    'check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
+    'glob = List("schemas/*.schema.json", "schemas/templates/**", "python/pyproject.toml", "python/uv.lock", "python/src/dotfiles_setup/generated/**")',
+], "python/src/dotfiles_setup/main.py" = [
+    '"codegen-check": lambda: sys.exit(run_codegen_check(project_root)),',
+    'gate = importlib.import_module("dotfiles_setup.codegen_check")',
+], "python/src/dotfiles_setup/codegen_check.py" = [
+    'from dotfiles_setup.generated.drift_verdict import DriftVerdict',
+    'stale = stale_files(root)',
+    'result = run([str(generator), "--all-jobs", "--check"], (root / PYPROJECT).parent)',
+    'if FORMATTER_FAILURE in result.stderr:',
+    'if result.returncode not in {DriftVerdict.IN_SYNC, DriftVerdict.DRIFT}:',
+    'if stale or result.returncode == DriftVerdict.DRIFT:',
+], "tests/test_codegen_check.py" = [
+    'assert check(root, run, _generator(tmp_path)) is expected',
+    'codec.decode(b"3", DriftVerdict)',
+    'hand_edit_verdict = _real_check(root)',
+    'schema_change_verdict = _real_check(root)',
+    'assert FORMATTER_FAILURE in capsys.readouterr().err',
+    'assert main.run_codegen_check(tmp_path) == DriftVerdict.ERROR',
+    "codec.decode(b'{\"name\": \"x\", \"bogus\": 1}', probe)",
+    'assert "D101" in result.stdout',
+    'assert files(fresh) == files(vendored)',
+] }

@@ -106,6 +106,16 @@ read time in another process. Never add a branch to the hook itself.
 models — e.g. githubkit's pydantic response models — are allowed at that
 library's boundary; the `codec` rule governs the types and encodings we define.
 
+## Generated models and enums (#1329)
+
+Models and enums are **generated, never hand-written** (R16/D23):
+`schemas/<name>.schema.json` → a `[tool.datamodel-codegen]` job in
+`pyproject.toml` → `src/dotfiles_setup/generated/<name>.py`. Edit the schema,
+run `mise run codegen`, commit both. `mise run codegen-check` (hk
+`codegen_check`) fails on a hand edit, an unregenerated schema change, or a
+module in `generated/` that no job writes. The generator is the exact pin in
+the `codegen` dependency group, run `--locked`, never a PATH copy.
+
 ## Dependencies
 
 Key packages: `msgspec` (models + serialization — via `codec` only, above),
