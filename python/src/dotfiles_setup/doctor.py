@@ -69,6 +69,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import (
+    child_env,
     codex_schema,
     devcontainer_names,
     hk_hooks,
@@ -1491,13 +1492,17 @@ def host_system() -> str:
 
 def docker_container_rows(
     names: devcontainer_names.DevcontainerNames,
+    *,
+    timeout_s: float = _DOCKER_PS_TIMEOUT_S,
 ) -> list[tuple[str, str, str]]:
     """``(id, state, name)`` of every container this clone owns for one arch.
 
-    The one implementation of this query: ``sync.container_state`` derives its
-    state from it too (#1478), so a down daemon can never read as ``absent``
-    — the conflation this helper exists to refuse. Every failure raises
+    ``sync.container_state`` derives its state from it too (#1478), so a down
+    daemon can never read as ``absent`` there either — the conflation this
+    helper exists to refuse. Every failure raises
     :class:`DockerUnavailableError` whose message names the cause.
+    ``timeout_s`` is the caller's bound: the session doctor wants a fast
+    answer, while sync must tolerate a daemon that is busy but alive.
     """
     try:
         proc = subprocess.run(
@@ -1515,10 +1520,11 @@ def docker_container_rows(
             capture_output=True,
             text=True,
             check=False,
-            timeout=_DOCKER_PS_TIMEOUT_S,
+            timeout=timeout_s,
+            env=child_env.without_git_context(),
         )
     except subprocess.TimeoutExpired as exc:
-        msg = f"docker ps did not answer within {_DOCKER_PS_TIMEOUT_S:g} s"
+        msg = f"docker ps did not answer within {timeout_s:g} s"
         raise DockerUnavailableError(msg) from exc
     except FileNotFoundError as exc:
         msg = "docker CLI not found on PATH"
@@ -1645,6 +1651,9 @@ def is_linked_worktree(repo_root: Path) -> bool:
             text=True,
             check=False,
             timeout=_GIT_TIMEOUT_S,
+            # An inherited GIT_DIR overrides `-C` and makes a linked worktree
+            # read as the main checkout, silencing ship's #1481 refusal.
+            env=child_env.without_git_context(),
         )
     except OSError, subprocess.TimeoutExpired:
         return False

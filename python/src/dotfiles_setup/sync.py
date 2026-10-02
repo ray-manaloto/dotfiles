@@ -13,7 +13,8 @@ and prove everything works". It handles every starting state:
   running, verified container. A STOPPED container whose overlay id no
   longer matches the last converge's record for this architecture is
   rebuilt rather than reused (#800 F1) — ``container_image_id`` now answers
-  for a stopped container too, not just a running one.
+  for a stopped container too, not just a running one. A ``docker ps`` that
+  fails is a fourth outcome, UNKNOWN, never ``absent``: sync exits 2 (#1478).
 - **local tag stale vs registry** — the registry manifest digest
   (``docker buildx imagetools inspect``, no pull) is compared against the
   digest the *local tag* points at. Comparing the local **tag** matters:
@@ -101,6 +102,10 @@ ContainerState = Literal["running", "stopped", "absent"]
 Action = Literal["rebuild", "up", "verify-only"]
 
 _PR_TAG_RE = re.compile(r"^pr-(\d+)$")
+#: #1478: the container-state query had no bound before it became checked; a
+#: daemon busy loading a large image is slow but alive, so sync waits far longer
+#: than the session doctor's 10 s before calling the state UNKNOWN.
+_DOCKER_PS_TIMEOUT_S = 120.0
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -535,7 +540,8 @@ def container_state(names: DevcontainerNames) -> ContainerState:
     raises :class:`doctor.DockerUnavailableError` instead of reading as
     ``absent`` (which ``decide_action`` would turn into an ``up``).
     """
-    states = [state for _cid, state, _name in docker_container_rows(names)]
+    rows = docker_container_rows(names, timeout_s=_DOCKER_PS_TIMEOUT_S)
+    states = [state for _cid, state, _name in rows]
     if not states:
         return "absent"
     return "running" if "running" in states else "stopped"

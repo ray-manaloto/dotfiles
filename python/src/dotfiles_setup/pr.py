@@ -521,9 +521,15 @@ def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
         # (`<main>/.git/worktrees/<name>`) the container does not mount, so the
         # sync-full smoke dies with "not a git repository" — but only after the
         # earlier gates and a container bring-up. Refuse before any of them.
+        # is_linked_worktree fails open (git error -> False): ship then proceeds
+        # and, at worst, fails late in sync-full exactly as before #1481.
+        # Git refuses to check out a branch another worktree holds, so the
+        # remedy must free it here first.
         sys.stdout.write(
             "FAIL  ship: linked worktree: the full-sync smoke cannot see this "
-            "worktree's git dir; ship from the main checkout\n"
+            "worktree's git dir; ship from the main checkout: run "
+            f"`git switch --detach` here, then `git switch {branch}` and "
+            "`mise run ship` in the main checkout\n"
         )
         return None
     return branch, paths

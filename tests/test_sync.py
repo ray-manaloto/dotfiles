@@ -440,7 +440,7 @@ def _fake_docker(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, body: str) -> 
     bindir.mkdir(exist_ok=True)
     log = tmp_path / "docker-argv.log"
     script = bindir / "docker"
-    script.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n{body}\n')
+    script.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" >> "{log}"\n{body}\n')
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
     return log
@@ -488,11 +488,21 @@ def test_container_state_refuses_a_down_daemon(
 def test_container_state_refuses_a_hung_daemon(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """#1478: a timeout is UNKNOWN too (``_run`` used to fold it into rc=124)."""
-    monkeypatch.setattr(doctor, "_DOCKER_PS_TIMEOUT_S", 0.2)
+    """#1478: a hung daemon is UNKNOWN (before, the query had NO timeout: it hung)."""
+    monkeypatch.setattr(sync, "_DOCKER_PS_TIMEOUT_S", 0.2)
     _fake_docker(monkeypatch, tmp_path, "exec sleep 5")
     with pytest.raises(DockerUnavailableError, match="did not answer"):
         sync.container_state(_NAMES)
+
+
+def test_sync_waits_longer_than_the_session_doctor_for_docker() -> None:
+    """A busy-but-alive daemon must not fail sync/ship/land at doctor's bound.
+
+    The hung-daemon test above proves sync passes ITS bound (a 0.2 s patch on
+    sync's constant is what makes a 5 s sleep raise); this pins the ordering.
+    """
+    doctor_bound = vars(doctor)["_DOCKER_PS_TIMEOUT_S"]
+    assert vars(sync)["_DOCKER_PS_TIMEOUT_S"] >= 10 * doctor_bound
 
 
 def test_container_state_refuses_a_missing_cli(
@@ -597,8 +607,8 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
     sync.container_image_id(_NAMES)
     log = _fake_docker(monkeypatch, tmp_path, "exit 0")
     sync.container_state(_NAMES)
-    # The fake logs "$*", so split back into argv words for the same checks.
-    captured.append(log.read_text().split())
+    # The fake logs one argv word per line ("$@"), so boundaries survive.
+    captured.append(log.read_text().splitlines())
     assert len(captured) == 3
     for cmd in captured:
         assert f"label={_NAMES.workspace_label}" in cmd

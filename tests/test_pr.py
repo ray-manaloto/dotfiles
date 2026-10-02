@@ -363,17 +363,51 @@ def test_ship_refuses_a_linked_worktree_only_when_sync_full_would_run(
         assert "linked worktree" not in out
 
 
-def test_gate_matrix_adds_sync_full_exactly_when_ship_would_refuse() -> None:
-    """The refusal and the gate share one predicate (#1481), both directions."""
-    for paths in (
-        ["python/src/dotfiles_setup/sync.py"],
-        ["README.md"],
-        [".devcontainer/Dockerfile"],
-    ):
-        has_gate = any(g.name == "sync-full" for g in pr.gate_matrix(paths))
-        assert has_gate is pr.needs_full_sync(paths)
-    assert pr.needs_full_sync(["python/src/dotfiles_setup/sync.py"])
-    assert not pr.needs_full_sync([".devcontainer/Dockerfile"])
+def test_ship_refusal_survives_an_inherited_git_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    checkouts: dict[str, Path],
+) -> None:
+    """An ambient GIT_DIR (a git hook, an editor) must not hide the worktree.
+
+    GIT_DIR overrides ``git -C``, so an unscrubbed probe reads the linked
+    worktree as the main checkout and the #1481 refusal goes silent.
+    """
+    monkeypatch.setenv("GIT_DIR", str(checkouts["main"] / ".git"))
+    monkeypatch.setattr(pr, "_current_branch", lambda _w: "feat/x")
+    monkeypatch.setattr(pr, "_working_tree_clean", lambda _w: True)
+    monkeypatch.setattr(
+        pr, "changed_paths_vs_main", lambda _w: ["python/src/dotfiles_setup/sync.py"]
+    )
+    monkeypatch.setattr(pr, "run_gates", lambda *_a: pytest.fail("a gate ran"))
+    assert pr.ship_main(checkouts["linked"]) == 1
+    out = capsys.readouterr().out
+    assert "FAIL  ship: linked worktree" in out
+    assert "git switch --detach" in out
+    assert "git switch feat/x" in out
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("python/src/dotfiles_setup/sync.py", True),
+        ("README.md", False),
+        (".devcontainer/Dockerfile", False),
+    ],
+    ids=["surface", "non-surface", "base-input"],
+)
+def test_needs_full_sync_and_gate_matrix_agree_on_literal_expectations(
+    case: tuple[str, bool],
+) -> None:
+    """The refusal's predicate and the sync-full gate, each pinned to a literal.
+
+    Both sides are compared to an independent expectation rather than to each
+    other, so a drift in either one fails (#1481).
+    """
+    path, expected = case
+    has_gate = any(g.name == "sync-full" for g in pr.gate_matrix([path]))
+    assert pr.needs_full_sync([path]) is expected
+    assert has_gate is expected
 
 
 # ------------------------------------------------------------------- land

@@ -39,7 +39,8 @@ while the local `:dev` tag silently kept the pre-merge digest.
 Since #1429 the local tag is also stale when THIS arch's platform is absent under it. `--check` prints
 `check: current` (rc 0), `check: STALE — sync would rebuild` or
 `check: OUTDATED — sync would rebuild this architecture's container` (rc 1), or
-`check: UNKNOWN — registry unreachable` (rc 2).
+`check: UNKNOWN — registry unreachable` (rc 2). Any mode also returns rc 2 with
+`FAIL  sync: container state UNKNOWN — <docker error>` when `docker ps` fails (#1478).
 
 | stale? | container | action |
 |---|---|---|
@@ -67,6 +68,7 @@ Sync record: `~/.local/state/dotfiles/sync-<image ref, every char outside [A-Za-
 | `WARN rebuilding: in-container sessions will be killed` | Expected on stale+running | Workspace bind-mount and home volume persist; running shells die by design |
 | rc 1 from `--check` | Stale, or this architecture's container is outdated — a real sync would rebuild | Run `mise run sync` when ready for the rebuild |
 | rc 2 from `--check` | UNKNOWN — registry unreachable, currency could not be verified | Fix ghcr auth/DNS; never treat as current |
+| `FAIL  sync: container state UNKNOWN — …` (rc 2, any mode) | `docker ps` failed, timed out (120 s) or is not on PATH, so no container state can be concluded (#1478) | Fix Docker, not ghcr: is Docker Desktop running and `docker context` `desktop-linux`? Inside the devcontainer there is no docker CLI — run sync from the Mac |
 
 Evidence discipline: trust the printed `PASS`/`FAIL` lines and the task's
 exit code read from a file/API — never a piped tail
