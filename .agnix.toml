@@ -38,6 +38,12 @@ exclude = [
     ".claude/skills.bak/**",
     # Third-party skill reference docs (upstream-controlled, hard-coded paths expected)
     ".claude/skills/context7-cli/references/**",
+    # Same class (Ray, 2026-10-01, AskUserQuestion): vendored verbatim by
+    # `datamodel-codegen --install-skill claude-code` (#1329). Upstream prose
+    # such as {'<schema_field>': '<python_name>'} reads as unclosed XML tags;
+    # fixing it in place would diverge from upstream and be reverted by the
+    # next reinstall. Its SKILL.md stays validated.
+    ".claude/skills/datamodel-code-generator/references/**",
     # graphify: vendored third-party skill installed by `graphify install --project`
     # (#310-#318 adoption). Its SKILL.md is 699 lines (over agnix's 500 cap) and its
     # reference docs carry hard-coded `~/.graphify/` paths — both upstream-controlled,

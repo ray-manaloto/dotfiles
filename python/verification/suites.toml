@@ -2984,10 +2984,10 @@ pattern = 'PLANNING_DISABLED|LANE_ENV_OVERRIDES'
 
 [[suite]]
 name = "workflow.codegen-toolchain-wired"
-description = "#1329 (R16/D23): datamodel-codegen is the ONLY way models and enums are produced, and its gate must stay wired end-to-end. The generator is an exact pin in pyproject's isolated `codegen` group; the `codegen`/`codegen-check` mise tasks resolve it with `--locked --group codegen` (never a PATH copy); hk's `codegen_check` step runs the python gate, which wraps the native `--all-jobs --check` AND scans generated/ for a module no job writes (the gap knowledge-base measured in the native check); main.py dispatches the subcommand; the gate's verdict is the generated DriftVerdict itself, and its tests bind the stale arm and the decode/reject arms of the pilot model. Bound at CALL SITES, not definitions, so deleting a wiring line fails."
+description = "#1329 (R16/D23): new models and enums are code-generated, and the gate must stay wired end-to-end. Bound with `require_lines` (WHOLE lines), not substrings, because a commented-out pkl step still contains its command as a substring — the #1329 cold review's surviving mutant M1. The generator's version pin is deliberately NOT bound here (a Renovate bump would fail this suite; pin_parity/uv.lock own versions). Bound: the [tool.datamodel-codegen] table's load-bearing settings (msgspec output, ruff formatters, extra-fields forbid AND the generic base class it needs, the pilot job's output); the `codegen`/`codegen-check` mise tasks, both `--locked --group codegen` (never a PATH copy); hk's `codegen_check` step; main.py's lazy dispatcher (a broken generated module is rc 2, never 1); the gate's stale scan, native check call, formatter-failure and fail-closed branches; and the tests' call sites that arm each — the verdict matrix, the reject arm, the real-generator drift arm and the forbid arm."
 category = "workflow"
 check_type = "static"
-handler = "require_tokens"
+handler = "require_lines"
 paths = [
     "python/pyproject.toml",
     "mise.toml",
@@ -2996,23 +2996,32 @@ paths = [
     "python/src/dotfiles_setup/codegen_check.py",
     "tests/test_codegen_check.py",
 ]
-per_path_tokens = { "python/pyproject.toml" = [
-    'codegen = ["datamodel-code-generator==0.83.0"]',
+per_path_lines = { "python/pyproject.toml" = [
+    '[tool.datamodel-codegen]',
     'output-model-type = "msgspec.Struct"',
+    'formatters = ["ruff-check", "ruff-format"]',
+    'extra-fields = "forbid"',
+    'use-generic-base-class = true',
     'output = "src/dotfiles_setup/generated/drift_verdict.py"',
 ], "mise.toml" = [
+    'dir = "{{config_root}}/python"',
     'run = "uv run --project . --locked --group codegen datamodel-codegen --all-jobs"',
     'run = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
 ], "hk.pkl" = [
     'check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
 ], "python/src/dotfiles_setup/main.py" = [
-    '"codegen-check": lambda: sys.exit(codegen_check_main(project_root)),',
+    '"codegen-check": lambda: sys.exit(run_codegen_check(project_root)),',
+    'gate = importlib.import_module("dotfiles_setup.codegen_check")',
 ], "python/src/dotfiles_setup/codegen_check.py" = [
     'from dotfiles_setup.generated.drift_verdict import DriftVerdict',
-    'stale = stale_modules(root)',
-    'rc = run([str(binary), "--all-jobs", "--check"], (root / PYPROJECT).parent)',
-    'if stale or rc == DriftVerdict.DRIFT:',
+    'stale = stale_files(root)',
+    'result = run([str(generator), "--all-jobs", "--check"], (root / PYPROJECT).parent)',
+    'if FORMATTER_FAILURE in result.stderr:',
+    'if result.returncode not in {DriftVerdict.IN_SYNC, DriftVerdict.DRIFT}:',
+    'if stale or result.returncode == DriftVerdict.DRIFT:',
 ], "tests/test_codegen_check.py" = [
-    'def test_a_module_no_job_writes_is_stale(',
-    'def test_the_generated_verdict_rejects_an_exit_code_outside_the_set(',
+    'assert check(root, run, _generator(tmp_path)) is expected',
+    'codec.decode(b"3", DriftVerdict)',
+    'assert _real_check(root) == DriftVerdict.DRIFT',
+    "codec.decode(b'{\"name\": \"x\", \"bogus\": 1}', probe)",
 ] }

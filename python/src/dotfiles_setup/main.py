@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import logging
 import os
@@ -27,7 +28,6 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.bounded_wait import DEFAULT_INTERVAL_S, WaitRequest
 from dotfiles_setup.bounded_wait import main as bounded_wait_main
 from dotfiles_setup.classifier_tables import classifier_axes_main
-from dotfiles_setup.codegen_check import codegen_check_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_agent_validate import (
     validate_main as codex_agent_validate_main,
@@ -605,6 +605,28 @@ def _add_hk_builtins_audit_subcommand(subparsers: _SubParsers) -> None:
         "generated/ has no [tool.datamodel-codegen] job (#1329); run it via "
         "`mise run codegen-check`",
     )
+
+
+#: DriftVerdict.ERROR, written as its value because this is the one path where
+#: the generated enum's own module failed to import.
+_CODEGEN_CHECK_IMPORT_ERROR = 2
+
+
+def run_codegen_check(project_root: Path) -> int:
+    """Dispatch `codegen-check`, importing the gate only when it runs (#1329).
+
+    The gate imports the GENERATED DriftVerdict, so a deleted or hand-broken
+    generated module fails at import time. A top-level import would turn that
+    into Python's exit 1 — DRIFT — for a check that never ran, and would break
+    every other subcommand with it. Imported here, it is ERROR (2) and scoped
+    to this subcommand.
+    """
+    try:
+        gate = importlib.import_module("dotfiles_setup.codegen_check")
+    except ImportError, SyntaxError:
+        logger.exception("codegen-check: the gate or a generated module won't import")
+        return _CODEGEN_CHECK_IMPORT_ERROR
+    return gate.codegen_check_main(project_root)
 
 
 def _add_audit_aggregate_subcommand(subparsers: _SubParsers) -> None:
@@ -3081,7 +3103,7 @@ def _build_command_handlers(
         "hk-builtins-audit": lambda: sys.exit(
             hk_builtins_audit_main(project_root, check=args.check)
         ),
-        "codegen-check": lambda: sys.exit(codegen_check_main(project_root)),
+        "codegen-check": lambda: sys.exit(run_codegen_check(project_root)),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
         "workflow-claude-code": lambda: sys.exit(
             workflow_claude_code_main(project_root)

@@ -193,19 +193,25 @@ dev = [
     "ruff",
     "ty",
 ]
-# Code generation is the ONLY way models and enums are produced (R16/D23;
-# #1329). Exact pin, isolated group: the `codegen`/`codegen-check` mise tasks
-# run it with `--locked --group codegen`, so the binary comes from uv.lock,
-# never a PATH copy. Mirrors knowledge-base's setup (pyproject.toml there).
-codegen = ["datamodel-code-generator==0.83.0"]
+# New models and enums are produced by code generation (R16/D23; #1329).
+# Exact pin, isolated group: the `codegen`/`codegen-check` mise tasks run it
+# with `--locked --group codegen`, so the binary comes from uv.lock, never a
+# PATH copy. EVERY extra (Ray 2026-10-01): `all` plus the two experimental
+# ones `all` deliberately omits (httpx2, ryaml). `ruff` is among them, and is
+# the one the ruff-check/ruff-format formatters below shell out to — without it
+# the formatter's ruff would arrive only by accident via the `dev` group. Cost
+# recorded: `validation` pulls jsonschema-path 0.3.4, which caps referencing
+# <0.37 for the whole lock (0.37.0 -> 0.36.2). Research:
+# docs/research/kb/reports/agents/datamodel-codegen-extras-features-2026-10-01.md
+codegen = ["datamodel-code-generator[all,httpx2,ryaml]==0.83.0"]
 
 # Every model/enum generated from a committed schema (R16/D23; #1329). This
-# table plus the `codegen`/`codegen-check` mise tasks IS the generator. Paths
-# are relative to THIS file's directory (the tasks run with cwd = python/), so
-# every output stays under python/ and the formatter pass picks up this
-# file's ruff config. Settings mirror knowledge-base's proven table; see the
-# comments there for why `use-annotated`/`field-constraints` and
-# `disable-timestamp` are non-optional.
+# table plus the `codegen`/`codegen-check` mise tasks IS the generator. Job
+# paths are relative to THIS file's directory, and both tasks run the
+# generator with cwd = python/: ruff gets no config flag and discovers it by
+# walking up from the caller's cwd, so this file's [tool.ruff] — the same one
+# hk lints with — formats the output. A run from anywhere else needs
+# `--settings-path`. Settings follow knowledge-base's table, each reason here:
 [tool.datamodel-codegen]
 input-file-type = "jsonschema"
 schema-version = "2020-12"
@@ -213,13 +219,25 @@ schema-version-mode = "strict"
 strict-refs = true
 output-model-type = "msgspec.Struct"
 target-python-version = "3.14"
+# Explicit ruff formatters: the default (black+isort) is deprecated upstream,
+# and these run the venv's ruff with hk's own config.
 formatters = ["ruff-check", "ruff-format"]
+# Without it every run stamps a timestamp, so `--check` can never pass.
 disable-timestamp = true
+# `extra-fields = "forbid"` reaches msgspec output ONLY through the generic
+# base class (`forbid_unknown_fields`); without `use-generic-base-class` an
+# unknown field decodes silently (#1329 cold review F1, armed by
+# tests/test_codegen_check.py).
 extra-fields = "forbid"
+use-generic-base-class = true
+# Redundant on 0.83.0 for msgspec output (the sweep measured byte-identical
+# output without them), kept so a regression in that auto-enable cannot drop
+# every `Meta(...)` constraint silently.
 use-annotated = true
 field-constraints = true
 use-specialized-enum = true
 use-standard-collections = true
+# The schema `description` becomes the class docstring (ruff's D101 needs one).
 use-schema-description = true
 
 [tool.datamodel-codegen.jobs.drift-verdict]

@@ -93,6 +93,10 @@ _ALLOWED_ABSENT = frozenset(
         "action.yml",
         "devcontainer-feature.json",
         "ruff check --fix",
+        # The vendored datamodel-code-generator SKILL.md (#1329) names these
+        # as examples of a USER project's files when picking a Python target.
+        "poetry.lock",
+        "runtime.txt",
         # Out-of-repo by name: auto-memory files live under
         # ~/.claude/projects/<slug>/memory/ and are cited by bare name.
         "MEMORY.md",

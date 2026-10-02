@@ -377,8 +377,11 @@ local allSteps = new Mapping<String, Config.Step> {
   // #1329: every generated model matches its schema and no generated module is
   // orphaned. A hand edit to a generated file, or a schema edit without
   // `mise run codegen`, fails here. The generator comes from the locked
-  // `codegen` group, never PATH.
+  // `codegen` group, never PATH. Globbed to its inputs: the generator plus two
+  // ruff passes per job is too costly for every unrelated commit. The ruff
+  // config and version live in pyproject.toml/uv.lock, both in the glob.
   ["codegen_check"] {
+    glob = List("schemas/*.schema.json", "python/pyproject.toml", "python/uv.lock", "python/src/dotfiles_setup/generated/**")
     check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"
   }
 
