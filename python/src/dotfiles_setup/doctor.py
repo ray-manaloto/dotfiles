@@ -89,6 +89,7 @@ from dotfiles_setup.listing_budget import (
 from dotfiles_setup.path_drift import (
     BLIND_ADVICE,
     DEFAULT_GATE_TOOLS,
+    NATIVE_ONLY_BLIND_ADVICE,
     Provenance,
     drift_advice,
 )
@@ -97,6 +98,7 @@ from dotfiles_setup.path_drift import (
 # actually_registered`` enumerates this module's ``check_*`` names and requires
 # each to be in CHECKS, so an imported one would be an unregistrable false
 # positive — the guard caught this import on its first run.
+from dotfiles_setup.path_drift import check_native_only as shell_native_only
 from dotfiles_setup.path_drift import check_path_drift as shell_path_drift
 from dotfiles_setup.platform_target import (
     PLATFORM_ENV_VAR,
@@ -1253,6 +1255,25 @@ def check_path_drift(setup: Setup) -> list[str]:
     return [drift_advice(report.drifts, gate=report.gate_drifts(gate_tools))]
 
 
+def check_native_only(setup: Setup) -> list[str]:
+    """Do ``agy``, ``codex`` and ``claude`` come ONLY from their native installers?
+
+    Ray's ruling (2026-10-01): on the Mac host these three come from the vendor
+    installer, never mise. A mise copy that resolves FIRST fails, as does no
+    native copy at all; a mise copy later on ``PATH`` or a re-created mise
+    install directory warns, because each is one ``PATH`` reorder from failing.
+
+    Same ambient ``PATH`` as :func:`check_path_drift`, and BLIND for the same
+    reason unless the SessionStart hook captured it — reported, never passed.
+    """
+    baseline = _str_keys(_str_keys(setup.baseline.get("path_drift")).get("native_only"))
+    declared = {binary: tuple(_str_list(specs)) for binary, specs in baseline.items()}
+    report = shell_native_only(declared or None, environ=setup.environ, home=setup.home)
+    if report.provenance is Provenance.BLIND:
+        return [NATIVE_ONLY_BLIND_ADVICE]
+    return [*report.failures, *report.warnings]
+
+
 def check_install_doctor(setup: Setup) -> list[str]:
     """Is the `claude` this shell runs the newest one, and does it report clean?
 
@@ -1768,6 +1789,7 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("pin-currency-wired", check_pin_currency_wired),
     ("listing-budget", check_listing_budget),
     ("path-drift", check_path_drift),
+    ("native-only", check_native_only),
     ("graphify-skill-surface", check_graphify_skill_surface),
     ("install-doctor", check_install_doctor),
     ("codex-schema", check_codex_schema),

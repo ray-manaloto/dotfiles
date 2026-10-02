@@ -28,6 +28,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import doctor
+from dotfiles_setup import path_drift as doctor_path_drift
 from dotfiles_setup.graphify_currency import Drift
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -1204,7 +1205,11 @@ def test_every_check_function_is_actually_registered() -> None:
     # [devcontainers].arches has a RUNNING workspace container. Docker Desktop
     # quit on 2026-09-29, `land`/`sync` brought back only amd64, and the arm64
     # container sat exited ~24 h with nothing saying so.
-    assert len(doctor.CHECKS) == 16, "every specified check must be wired"
+    # + `native-only` (2026-10-01): agy/codex/claude resolve ONLY to their native
+    # installs on the host (Ray's ruling); a mise copy first on PATH, or none
+    # native at all, fails. Blind without the captured ambient PATH, like
+    # `path-drift`, whose ambient-PATH seam it reuses.
+    assert len(doctor.CHECKS) == 17, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
@@ -2038,3 +2043,37 @@ def test_a_profile_resolving_a_level_less_triple_is_named(
     )
     findings = doctor.check_devcontainers_running(_arches_setup())
     assert any(f"not the published {_ARM64_PLATFORM}" in f for f in findings)
+
+
+# --------------------------------------------------------------------------- #
+# native-only — the doctor adapter over path_drift.check_native_only
+# --------------------------------------------------------------------------- #
+
+
+def test_native_only_reports_blindness_rather_than_passing() -> None:
+    setup = _setup(environ={"PATH": "/x", "MISE_TASK_NAME": "doctor"})
+    assert doctor.check_native_only(setup) == [doctor.NATIVE_ONLY_BLIND_ADVICE]
+
+
+def test_native_only_reads_the_baseline_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The adapter must hand ``[path_drift.native_only]`` through, not the default.
+
+    The baseline names a binary no default covers; a FAIL for it proves the
+    declared table, not ``DEFAULT_NATIVE_ONLY``, decided what was checked.
+    """
+    monkeypatch.setattr(doctor_path_drift, "_SYSTEM_MISE_DATA", tmp_path / "sys")
+    shims = tmp_path / "home" / ".local" / "share" / "mise" / "shims"
+    shims.mkdir(parents=True)
+    (shims / "zzfake").write_text("#!/bin/sh\n")
+    (shims / "zzfake").chmod(0o755)
+    monkeypatch.setattr(doctor_path_drift, "run_mise_ls", lambda: ({}, None))
+    setup = _setup(
+        baseline={"path_drift": {"native_only": {"zzfake": ["zzfake-tool"]}}},
+        environ={"DOTFILES_AMBIENT_PATH": str(shims)},
+        home=tmp_path / "home",
+    )
+    findings = doctor.check_native_only(setup)
+    assert any("`zzfake` resolves to mise's copy" in f for f in findings)
+    assert not any("agy" in f for f in findings)

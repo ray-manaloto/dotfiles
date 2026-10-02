@@ -380,3 +380,222 @@ def path_drift_main(
             report.provenance.value,
         )
     return 0
+
+
+# --------------------------------------------------------------------------- #
+# Native-only binaries — the same ambient PATH, a different question
+# --------------------------------------------------------------------------- #
+
+#: Binaries that come ONLY from their vendor's native installer on the Mac host
+#: (Ray, 2026-10-01), mapped to every mise tool spec that has put — or, through
+#: the registry, could put — a competing copy on ``PATH``. Overridable through
+#: ``doctor.toml``'s ``[path_drift.native_only]``.
+#:
+#: Specs rather than install-directory slugs, so a finding can name the exact
+#: ``mise uninstall`` argument; :func:`mise_slug` derives the directory. Exact
+#: matches only: this host also carries ``npm:oh-my-codex``, which is not codex.
+#:
+#: The devcontainer has its own native-CLI check (``native_clis_container``, on a
+#: sibling branch); once both land, a shared per-tool table can replace this one.
+DEFAULT_NATIVE_ONLY: dict[str, tuple[str, ...]] = {
+    "agy": ("antigravity-cli",),
+    "codex": (
+        "codex",
+        "npm:@openai/codex",
+        "aqua:openai/codex",
+        "github:openai/codex",
+    ),
+    "claude": (
+        "claude",
+        "claude-code",
+        "npm:@anthropic-ai/claude-code",
+        "github:anthropics/claude-code",
+        "aqua:anthropics/claude-code",
+    ),
+}
+
+#: Where mise keeps data when nothing moves it: the per-user default and the
+#: system-wide one this host also has. ``MISE_DATA_DIR`` and the installs root
+#: ``mise ls`` reports are added on top, never instead.
+_USER_MISE_DATA = (".local", "share", "mise")
+_SYSTEM_MISE_DATA = Path("/usr/local/share/mise")
+_MISE_SUBDIRS = ("installs", "shims")
+
+NATIVE_ONLY_FIX = (
+    "Fix: `mise uninstall --all {spec} && mise reshim`. The usual trigger is a "
+    "stale pin in an old worktree's mise config; the global "
+    "`auto_install_disable_tools` already blocks auto-install, so a copy that "
+    "came back was installed explicitly."
+)
+
+
+def mise_slug(spec: str) -> str:
+    """The install-directory name mise gives a tool spec.
+
+    ``npm:@openai/codex`` -> ``npm-openai-codex``; a registry short name is its
+    own slug. Matches every directory measured on this host
+    (``npm:@devcontainers/cli`` -> ``npm-devcontainers-cli``).
+    """
+    return spec.replace("@", "").replace(":", "-").replace("/", "-")
+
+
+def mise_data_dirs(
+    environ: Mapping[str, str],
+    *,
+    home: Path,
+    installs_root: Path | None = None,
+) -> tuple[Path, ...]:
+    """Every mise data directory a competing binary could live under."""
+    candidates: list[Path] = []
+    if installs_root is not None:
+        candidates.append(installs_root.parent)
+    if environ.get("MISE_DATA_DIR"):
+        candidates.append(Path(environ["MISE_DATA_DIR"]))
+    xdg = environ.get("XDG_DATA_HOME")
+    candidates.append(Path(xdg) / "mise" if xdg else home.joinpath(*_USER_MISE_DATA))
+    candidates.append(_SYSTEM_MISE_DATA)
+    return tuple(dict.fromkeys(candidates))
+
+
+def is_mise_path(path: Path, data_dirs: tuple[Path, ...]) -> bool:
+    """True when ``path`` sits under a mise installs or shims directory.
+
+    The known data directories first, then the SHAPE ``…/mise/installs/…`` or
+    ``…/mise/shims/…`` — a data directory nobody declared (another config's
+    ``MISE_DATA_DIR``) still produces that shape, and missing it would pass a
+    mise copy as native.
+    """
+    for data in data_dirs:
+        for sub in _MISE_SUBDIRS:
+            if path.is_relative_to(data / sub):
+                return True
+    parts = path.parts
+    return any(
+        parts[i] == "mise" and parts[i + 1] in _MISE_SUBDIRS
+        for i in range(len(parts) - 1)
+    )
+
+
+def which_all(binary: str, path_value: str) -> tuple[Path, ...]:
+    """``which -a``: every executable ``binary`` on ``path_value``, in order."""
+    hits: list[Path] = []
+    for raw in dict.fromkeys(path_value.split(os.pathsep)):
+        if not raw:
+            continue
+        candidate = Path(raw) / binary
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            hits.append(candidate)
+    return tuple(hits)
+
+
+def _from_mise(hit: Path, data_dirs: tuple[Path, ...]) -> bool:
+    """A hit is mise's when its directory OR its resolved target is mise's.
+
+    The target matters because a symlink in ``~/.local/bin`` pointing into an
+    installs directory would otherwise pass as native.
+    """
+    return is_mise_path(hit.parent, data_dirs) or is_mise_path(hit.resolve(), data_dirs)
+
+
+@dataclass(frozen=True)
+class NativeOnlyReport:
+    """Native-only verdicts: failures break the ruling, warnings foreshadow it."""
+
+    provenance: Provenance
+    failures: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
+def native_only_findings(
+    binary: str,
+    specs: tuple[str, ...],
+    path_value: str,
+    data_dirs: tuple[Path, ...],
+) -> tuple[list[str], list[str]]:
+    """``(failures, warnings)`` for one native-only binary."""
+    failures: list[str] = []
+    warnings: list[str] = []
+    fix = NATIVE_ONLY_FIX.format(spec=specs[0] if specs else binary)
+    hits = which_all(binary, path_value)
+    native = [hit for hit in hits if not _from_mise(hit, data_dirs)]
+    if hits and _from_mise(hits[0], data_dirs):
+        failures.append(
+            f"FAIL: `{binary}` resolves to mise's copy {hits[0]} first — it must "
+            f"come only from its native installer. {fix}"
+        )
+    if not native:
+        seen = (
+            f"only mise copies: {', '.join(map(str, hits))}"
+            if hits
+            else "not found at all"
+        )
+        failures.append(
+            f"FAIL: no native `{binary}` on PATH ({seen}). Reinstall it with "
+            f"the vendor's native installer."
+        )
+    elif hits and not _from_mise(hits[0], data_dirs):
+        later = [hit for hit in hits[1:] if _from_mise(hit, data_dirs)]
+        if later:
+            warnings.append(
+                f"WARN: `{binary}` resolves natively, but mise's copy is also on "
+                f"PATH ({', '.join(map(str, later))}) — one PATH reorder from "
+                f"winning. {fix}"
+            )
+    for data in data_dirs:
+        for spec in specs:
+            leftover = data / "installs" / mise_slug(spec)
+            if leftover.is_dir():
+                warnings.append(
+                    f"WARN: mise install directory {leftover} exists for "
+                    f"`{binary}` — it was re-created. "
+                    f"{NATIVE_ONLY_FIX.format(spec=spec)}"
+                )
+    return failures, warnings
+
+
+def check_native_only(
+    native_only: Mapping[str, tuple[str, ...]] | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    ambient_path: str | None = None,
+    listing: Mapping[str, object] | None = None,
+    home: Path | None = None,
+) -> NativeOnlyReport:
+    """Do ``agy``/``codex``/``claude`` resolve to their native installs only?
+
+    Reads the same ambient ``PATH`` as :func:`check_path_drift` and is BLIND
+    under the same condition: inside a mise task, ``PATH`` is mise's answer.
+    """
+    environ = os.environ if environ is None else environ
+    native_only = DEFAULT_NATIVE_ONLY if native_only is None else native_only
+    path_value, provenance = resolve_ambient_path(environ, ambient_path=ambient_path)
+    if provenance is Provenance.BLIND:
+        return NativeOnlyReport(provenance=provenance)
+    warnings: list[str] = []
+    error: str | None = None
+    if listing is None:
+        listing, error = run_mise_ls()
+    if error is not None:
+        warnings.append(
+            f"WARN: could not ask mise for its installs root ({error}); only the "
+            f"default mise data directories were checked."
+        )
+    _, installs_root = active_tools(listing)
+    data_dirs = mise_data_dirs(
+        environ, home=home or Path.home(), installs_root=installs_root
+    )
+    failures: list[str] = []
+    for binary, specs in native_only.items():
+        fails, warns = native_only_findings(binary, specs, path_value, data_dirs)
+        failures.extend(fails)
+        warnings.extend(warns)
+    return NativeOnlyReport(
+        provenance=provenance, failures=tuple(failures), warnings=tuple(warnings)
+    )
+
+
+NATIVE_ONLY_BLIND_ADVICE = (
+    f"native-only check is BLIND: {MISE_TASK_MARKER} is set and no ambient PATH "
+    f"was captured, so mise's PATH is all this process can see. This is NOT a "
+    f'pass. Capture it: {AMBIENT_PATH_ENV}="$PATH" mise run doctor'
+)

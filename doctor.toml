@@ -240,6 +240,25 @@ forbidden_agents_md_marker = "use the installed graphify skill"
 # pass; if you see it, the hook prefix was dropped.
 gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
 
+[path_drift.native_only]
+# Ray's ruling (2026-10-01): on the Mac host these binaries come ONLY from their
+# vendor's native installer. Each maps to every mise tool spec that has put — or,
+# through the registry, could put — a competing copy on PATH (install dirs seen
+# here: antigravity-cli, npm-openai-codex, github-anthropics-claude-code,
+# npm-anthropic-ai-claude-code). The `native-only` check FAILS when a mise copy
+# resolves first or no native copy exists, and WARNS when a mise copy sits later
+# on PATH or its install directory was re-created. Same ambient-PATH capture as
+# `gate_tools` above, so it is BLIND — reported, never passed — without the hook.
+agy = ["antigravity-cli"]
+codex = ["codex", "npm:@openai/codex", "aqua:openai/codex", "github:openai/codex"]
+claude = [
+  "claude",
+  "claude-code",
+  "npm:@anthropic-ai/claude-code",
+  "github:anthropics/claude-code",
+  "aqua:anthropics/claude-code",
+]
+
 [claude]
 # The `claude` binary this host runs, checked against the newest published
 # release and against `claude doctor`'s own summary line. The check is

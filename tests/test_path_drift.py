@@ -300,3 +300,176 @@ def test_the_shipped_baseline_declares_the_gate_tools() -> None:
     # add to that set but dropping one un-ranks a tool whose staleness has
     # already produced a red gate.
     assert set(path_drift.DEFAULT_GATE_TOOLS) <= set(declared)
+
+
+# --------------------------------------------------------------------------- #
+# Native-only binaries (Ray, 2026-10-01) — real executables in a fake world
+# --------------------------------------------------------------------------- #
+#
+# ``which_all`` checks the filesystem, so these build real executables under
+# ``tmp_path``: a fake HOME with a native ``~/.local/bin`` and a fake mise data
+# directory. The system-wide mise data directory is redirected into ``tmp_path``
+# too, so the host's own ``/usr/local/share/mise`` can never decide a result.
+
+
+@pytest.fixture
+def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    monkeypatch.setattr(path_drift, "_SYSTEM_MISE_DATA", tmp_path / "sysmise")
+    home = tmp_path / "home"
+    data = home / ".local" / "share" / "mise"
+    return {
+        "home": home,
+        "native": home / ".local" / "bin",
+        "installs": data / "installs",
+        "shims": data / "shims",
+    }
+
+
+def _exe(directory: Path, name: str = "agy") -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    binary = directory / name
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    return directory
+
+
+def _native_only(
+    world: dict[str, Path], *entries: Path, **overrides: tuple[str, ...]
+) -> path_drift.NativeOnlyReport:
+    return path_drift.check_native_only(
+        overrides or {"agy": ("antigravity-cli",)},
+        environ={},
+        ambient_path=":".join(map(str, entries)),
+        listing={
+            "hk": [{"install_path": str(world["installs"] / "hk" / "1.0.0")}],
+        },
+        home=world["home"],
+    )
+
+
+def test_native_first_passes(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["native"]), Path("/usr/bin"))
+    assert (report.failures, report.warnings) == ((), ())
+
+
+def test_a_mise_shim_first_fails(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["shims"]), _exe(world["native"]))
+    assert len(report.failures) == 1
+    assert "resolves to mise's copy" in report.failures[0]
+    assert "mise uninstall --all antigravity-cli && mise reshim" in report.failures[0]
+
+
+def test_an_installs_dir_first_fails(world: dict[str, Path]) -> None:
+    """The exact 2026-10-01 shape: ``installs/antigravity-cli/1.2.14/agy``."""
+    mise_dir = _exe(world["installs"] / "antigravity-cli" / "1.2.14")
+    report = _native_only(world, mise_dir, _exe(world["native"]))
+    assert any("resolves to mise's copy" in f for f in report.failures)
+    # The directory itself is also the "re-created" signal.
+    assert any("was re-created" in w for w in report.warnings)
+
+
+def test_a_symlink_into_an_installs_dir_is_not_native(world: dict[str, Path]) -> None:
+    target = _exe(world["installs"] / "antigravity-cli" / "1.2.14") / "agy"
+    world["native"].mkdir(parents=True)
+    (world["native"] / "agy").symlink_to(target)
+    report = _native_only(world, world["native"])
+    assert any("resolves to mise's copy" in f for f in report.failures)
+
+
+def test_no_native_copy_at_all_fails(world: dict[str, Path]) -> None:
+    report = _native_only(world, Path("/nonexistent-dir"))
+    assert len(report.failures) == 1
+    assert "not found at all" in report.failures[0]
+
+
+def test_only_mise_copies_fail_twice(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["shims"]))
+    assert len(report.failures) == 2
+    assert "only mise copies" in report.failures[1]
+
+
+def test_a_later_mise_hit_warns_but_does_not_fail(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["native"]), _exe(world["shims"]))
+    assert report.failures == ()
+    assert len(report.warnings) == 1
+    assert "one PATH reorder from winning" in report.warnings[0]
+
+
+def test_a_leftover_install_dir_warns(world: dict[str, Path]) -> None:
+    (world["installs"] / "npm-openai-codex").mkdir(parents=True)
+    report = _native_only(
+        world, _exe(world["native"], "codex"), codex=("codex", "npm:@openai/codex")
+    )
+    assert report.failures == ()
+    assert len(report.warnings) == 1
+    assert "npm-openai-codex exists" in report.warnings[0]
+    assert "mise uninstall --all npm:@openai/codex" in report.warnings[0]
+
+
+def test_a_similarly_named_install_dir_is_not_flagged(world: dict[str, Path]) -> None:
+    """``npm-oh-my-codex`` really exists on this host and is not codex."""
+    (world["installs"] / "npm-oh-my-codex").mkdir(parents=True)
+    report = _native_only(
+        world, _exe(world["native"], "codex"), codex=("codex", "npm:@openai/codex")
+    )
+    assert (report.failures, report.warnings) == ((), ())
+
+
+def test_native_only_is_blind_under_a_mise_task() -> None:
+    report = path_drift.check_native_only(
+        environ={"PATH": "/whatever", path_drift.MISE_TASK_MARKER: "doctor"},
+    )
+    assert report.provenance is path_drift.Provenance.BLIND
+    assert (report.failures, report.warnings) == ((), ())
+
+
+def test_a_failed_mise_ls_still_checks_the_default_dirs(
+    world: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(path_drift, "run_mise_ls", lambda: ({}, "mise exited 1"))
+    report = path_drift.check_native_only(
+        {"agy": ("antigravity-cli",)},
+        environ={},
+        ambient_path=f"{_exe(world['shims'])}:{_exe(world['native'])}",
+        home=world["home"],
+    )
+    assert any("resolves to mise's copy" in f for f in report.failures)
+    assert any("could not ask mise" in w for w in report.warnings)
+
+
+@pytest.mark.parametrize(
+    ("spec", "slug"),
+    [
+        ("antigravity-cli", "antigravity-cli"),
+        ("npm:@openai/codex", "npm-openai-codex"),
+        ("github:anthropics/claude-code", "github-anthropics-claude-code"),
+        ("npm:@anthropic-ai/claude-code", "npm-anthropic-ai-claude-code"),
+        ("npm:@devcontainers/cli", "npm-devcontainers-cli"),
+    ],
+)
+def test_mise_slug_matches_measured_install_dirs(spec: str, slug: str) -> None:
+    assert path_drift.mise_slug(spec) == slug
+
+
+def test_the_shipped_baseline_declares_native_only_at_least_the_defaults() -> None:
+    baseline = tomllib.loads((REPO_ROOT / "doctor.toml").read_text())
+    declared = baseline["path_drift"]["native_only"]
+    for binary, specs in path_drift.DEFAULT_NATIVE_ONLY.items():
+        assert set(specs) <= set(declared[binary]), binary
+
+
+def test_an_undeclared_mise_data_dir_is_still_recognised_by_shape(
+    world: dict[str, Path], tmp_path: Path
+) -> None:
+    """A data dir no config names (``…/mise/installs/<slug>/<ver>``) is mise's."""
+    stray = _exe(tmp_path / "elsewhere" / "mise" / "installs" / "antigravity-cli" / "9")
+    report = _native_only(world, stray, _exe(world["native"]))
+    assert any("resolves to mise's copy" in f for f in report.failures)
+
+
+def test_a_dir_merely_named_mise_is_not_mise(
+    world: dict[str, Path], tmp_path: Path
+) -> None:
+    """Control arm for the shape match: ``mise`` alone is not ``mise/installs``."""
+    report = _native_only(world, _exe(tmp_path / "mise" / "bin"))
+    assert (report.failures, report.warnings) == ((), ())
