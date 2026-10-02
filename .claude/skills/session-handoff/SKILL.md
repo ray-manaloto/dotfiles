@@ -254,6 +254,9 @@ uv run --project python pytest tests/ -x -q     # if python/ or tests/ touched
 dotfiles-setup verify run                       # if .devcontainer/ or contracts touched
 ```
 
+Write repo names in full — `typos` rejects coined abbreviations (a three-letter one for
+harness-evolution-ledger failed two handoff commits on 2026-10-02) — and run the lint above BEFORE `git commit`; don't let the pre-commit hook find it.
+
 Stage specific paths (never `git add .` — phantom `.agent/state/**` files;
 `.claude/rules/do-not.md`). Commit doc updates with the standard trailers.
 The handoff (`.agent/plans/`) is gitignored and memory lives outside the repo —
