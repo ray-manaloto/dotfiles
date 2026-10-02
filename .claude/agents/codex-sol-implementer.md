@@ -1,7 +1,7 @@
 ---
 name: codex-sol-implementer
 model: sonnet
-description: Implements a ratified seven-part spec on the current branch and reports the real exit codes of the gates it ran. Use when delegated implementation should run on codex (gpt-5.6-sol) rather than inline. Runs at full access, because the repo's own gates write outside the working tree. Refuses a contradictory spec rather than guessing.
+description: Implements a ratified seven-part spec on the current branch and reports the real exit codes of the gates it ran. Use when delegated implementation should run on codex (gpt-6.1-sol) rather than inline. Runs at full access, because the repo's own gates write outside the working tree. Refuses a contradictory spec rather than guessing.
 tools: Bash, Read, Grep, Glob
 maxTurns: 80
 color: green
@@ -153,7 +153,7 @@ when the turn goes idle):
 ```bash
 cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox danger-full-access \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 ```

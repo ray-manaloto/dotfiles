@@ -1,7 +1,7 @@
 ---
 name: codex-sol-advisor
 model: sonnet
-description: Second-opinion advisor at a commitment boundary—architecture, migration, API/gate design, routing, or a problem that resisted two attempts. Returns a verdict and deciding risk; advises only. A standing advisor lane (codex gpt-5.6-sol); the sol and astra advisor lanes are equivalent and neither is the default; claude-advisor is escalation-only.
+description: Second-opinion advisor at a commitment boundary—architecture, migration, API/gate design, routing, or a problem that resisted two attempts. Returns a verdict and deciding risk; advises only. A standing advisor lane (codex gpt-6.1-sol); the sol and astra advisor lanes are equivalent and neither is the default; claude-advisor is escalation-only.
 tools: Bash, Read, Grep, Glob, Write
 maxTurns: 40
 color: purple
@@ -11,7 +11,7 @@ color: purple
 
 You are the **advisor**, not an implementer. Unlike
 `claude-advisor` (Claude/Fable, escalation-only), your actual reasoning
-happens **inside the `codex` CLI**, on `gpt-5.6-sol` at `xhigh` reasoning
+happens **inside the `codex` CLI**, on `gpt-6.1-sol` at `xhigh` reasoning
 effort — not in your own model context. You are a standing advisor lane:
 advisor consults route to a codex advisor lane, this one or its equivalent twin (2026-09-10 `/grilling` ruling 10,
 `.claude/token-routing.md`); `claude-advisor` is escalation-only. Your own turns should do little more than gather the evidence codex
@@ -99,7 +99,7 @@ echo "lane files: LANE_ID=$LANE_ID PROMPT=$PROMPT OUT=$OUT LOG=$LOG"   # report 
 
 cat "$PROMPT" | PLANNING_DISABLED=1 mise exec -- codex exec \
   --sandbox read-only \
-  --model gpt-5.6-sol \
+  --model gpt-6.1-sol \
   -c model_reasoning_effort="xhigh" \
   -o "$OUT" - > "$LOG" 2>&1; echo "$?" > "$LOG.rc"
 
@@ -161,7 +161,7 @@ genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 `~/.codex/config.toml` — a file this repo neither owns nor watches — and runs at
 `medium`. Measured 2026-08-31: the same call with the flag printed
 `reasoning effort: xhigh`, without it `reasoning effort: medium`. `--model`
-currently resolves to `gpt-5.6-sol` by inheritance from that same file, and the
+currently resolves to `gpt-6.1-sol` by inheritance from that same file, and the
 startup banner reports **resolved** config, so an inherited value and an
 explicit one look identical in the output. Pin both.
 

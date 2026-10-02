@@ -17,6 +17,10 @@
           "type": "string",
           "default": "xhigh"
         },
+        "model": {
+          "type": "string",
+          "default": "gpt-6.1-sol"
+        },
         "timeout_s": {
           "anyOf": [
             {

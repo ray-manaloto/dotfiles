@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 SOL_PREFIX = "codex-sol-"
 ASTRA_PREFIX = "codex-astra-"
 
-SOL_MODEL = "gpt-5.6-sol"
+SOL_MODEL = "gpt-6.1-sol"
 ASTRA_MODEL = "gpt-6-astra"
 
 CLAUDE_AGENT_DIR = ".claude/agents"

@@ -2125,8 +2125,8 @@ def _add_codex_lane_subcommand(subparsers: _SubParsers) -> None:
     parser.add_argument(
         "--model",
         default=None,
-        help="Optional `codex exec --model` override (default: codex's own "
-        "configured default)",
+        help="Optional `codex exec --model` override (default: the pinned "
+        "sol model, codex_lane_mirror.SOL_MODEL, at xhigh)",
     )
     parser.add_argument(
         "--jobs-dir",

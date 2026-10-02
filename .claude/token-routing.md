@@ -24,7 +24,7 @@ fell back. No agent silently becomes a different model. Agent files and the
 
 ## Two model families, and the name carries the choice (2026-09-11)
 
-Every codex role exists twice: **`codex-sol-<role>`** pinned to `gpt-5.6-sol`
+Every codex role exists twice: **`codex-sol-<role>`** pinned to `gpt-6.1-sol`
 and **`codex-astra-<role>`** pinned to `gpt-6-astra`. **Neither is a default** —
 the lane you name is the model you get, which is the whole point of the split.
 `codex_agent_parity` fails any lane that pins a model its name does not

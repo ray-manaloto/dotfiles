@@ -24,6 +24,7 @@ from typing import Final
 from urllib.parse import quote
 
 from dotfiles_setup import codec, lane_result
+from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -67,6 +68,7 @@ class SdlcTeamRequest(codec.Struct, frozen=True):
     spec_file: str
     mode: SdlcMode = SdlcMode.REVIEW
     effort: str = "xhigh"
+    model: str = SOL_MODEL
     timeout_s: float | None = None
     allowlist: tuple[str, ...] = ()
     run_id: str = ""
@@ -804,6 +806,10 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         *launcher,
         "-c",
         f'model_reasoning_effort="{request.effort}"',
+        # D15 (Ray 2026-10-02): pin the model as well as the effort. Without
+        # it a lane ran whatever ~/.codex/config.toml named.
+        "--model",
+        request.model,
         "-C",
         paths.workdir,
         "-o",

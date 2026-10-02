@@ -120,7 +120,7 @@ CORRUPTION_MARKERS: tuple[str, ...] = (
 #: this map per-family (2026-09-11). Neither family is a default.
 MODEL_BY_PREFIX: tuple[tuple[str, str], ...] = (
     ("codex-astra-", "gpt-6-astra"),
-    ("codex-sol-", "gpt-5.6-sol"),
+    ("codex-sol-", "gpt-6.1-sol"),
 )
 
 #: The prefixes that make a file one of OUR paired lanes, derived from the family

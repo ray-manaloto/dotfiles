@@ -78,6 +78,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import codex_verdict
+from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 from dotfiles_setup.dag_tick import CODEX_LANE_DIRNAME, JOBS_DIR, read_rework_count
 
 if TYPE_CHECKING:
@@ -110,6 +111,10 @@ LANE_DIRNAME = CODEX_LANE_DIRNAME
 SCHEMA_FILENAME = "verdict.schema.json"
 
 CODEX_BIN = "codex"
+
+# The reasoning effort every review lane pins (D15, Ray 2026-10-02). Without it
+# codex resolves the effort from ~/.codex/config.toml, which is `low` there.
+LANE_EFFORT = "xhigh"
 # A review lane reads code and returns a judgement; it must not write. One of
 # the three values `codex exec --sandbox` accepts on 0.146.0, and the one
 # `.claude/rules/ai-cli-invocation.md` prescribes for the research/debate shape.
@@ -370,8 +375,11 @@ def build_codex_argv(run_dir: Path, *, model: str | None = None) -> list[str]:
 
     Args:
         run_dir: The prepared lane directory, whose paths the flags point at.
-        model: Optional ``--model`` override; omitted so codex's own configured
-            default applies.
+        model: Optional ``--model`` override. When omitted the lane pins
+            :data:`~dotfiles_setup.codex_lane_mirror.SOL_MODEL` rather than
+            inheriting the user-global ``~/.codex/config.toml`` default (which
+            resolved to effort ``low``, D15). Effort is always
+            :data:`LANE_EFFORT`.
 
     Returns:
         The argv list, prompt-from-stdin.
@@ -387,8 +395,12 @@ def build_codex_argv(run_dir: Path, *, model: str | None = None) -> list[str]:
         "-o",
         str(run_dir / codex_verdict.VERDICT_FILENAME),
     ]
-    if model is not None:
-        argv += ["--model", model]
+    argv += [
+        "--model",
+        model if model is not None else SOL_MODEL,
+        "-c",
+        f'model_reasoning_effort="{LANE_EFFORT}"',
+    ]
     argv.append("-")
     return argv
 

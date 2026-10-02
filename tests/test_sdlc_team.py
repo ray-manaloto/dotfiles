@@ -18,6 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import codec, lane_result, main, sdlc_team
+from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 from dotfiles_setup.config import ContainerConfig, DotfilesConfig, MiseConfig
 
 if TYPE_CHECKING:
@@ -408,6 +409,30 @@ def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
     assert prefix == (str(mise), "exec", "--", "codex", "exec"), (
         "without `--`, mise parses codex's flags as its own"
     )
+
+
+def test_dispatch_pins_model_and_effort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """D15: a lane names its model and effort instead of inheriting user config."""
+    bin_dir = tmp_path / "bin"
+    shims = tmp_path / "shims"
+    bin_dir.mkdir()
+    shims.mkdir()
+    mise = bin_dir / "mise"
+    mise.write_text("#!/bin/sh\nexit 0\n")
+    mise.chmod(0o755)
+    (shims / "codex").symlink_to(mise)
+    found = {"mise": str(mise), "codex": str(shims / "codex")}
+    monkeypatch.setattr(sdlc_team.shutil, "which", found.get)
+    monkeypatch.setattr(
+        sdlc_team.subprocess, "Popen", lambda *_a, **_k: _DetachedProcess()
+    )
+    result = sdlc_team.dispatch(_request(tmp_path), tmp_path)
+
+    argv = list(result.argv)
+    assert argv[argv.index("--model") + 1] == SOL_MODEL == "gpt-6.1-sol"
+    assert argv[argv.index("-c") + 1] == 'model_reasoning_effort="xhigh"'
 
 
 def test_relative_path_entry_is_anchored_before_the_supervisor_changes_dir(
