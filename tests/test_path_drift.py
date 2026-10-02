@@ -306,10 +306,20 @@ def test_the_shipped_baseline_declares_the_gate_tools() -> None:
 # Native-only binaries (Ray, 2026-10-01) — real executables in a fake world
 # --------------------------------------------------------------------------- #
 #
-# ``which_all`` checks the filesystem, so these build real executables under
-# ``tmp_path``: a fake HOME with a native ``~/.local/bin`` and a fake mise data
-# directory. The system-wide mise data directory is redirected into ``tmp_path``
-# too, so the host's own ``/usr/local/share/mise`` can never decide a result.
+# ``which_all`` and ``is_native`` read the filesystem, so these build real
+# executables under ``tmp_path``: a fake HOME with a native ``~/.local/bin`` and
+# a fake mise data directory. The system-wide mise data directory is redirected
+# into ``tmp_path`` too, so the host's own ``/usr/local/share/mise`` can never
+# decide a result.
+
+_AGY = path_drift.NativeTool(
+    native=("~/.local/bin/agy",),
+    specs=("antigravity-cli", "aqua:google-antigravity/antigravity-cli"),
+)
+_CODEX = path_drift.NativeTool(
+    native=("~/.codex/packages/standalone",),
+    specs=("codex", "npm:@openai/codex"),
+)
 
 
 @pytest.fixture
@@ -318,6 +328,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     home = tmp_path / "home"
     data = home / ".local" / "share" / "mise"
     return {
+        "tmp": tmp_path,
         "home": home,
         "native": home / ".local" / "bin",
         "installs": data / "installs",
@@ -325,24 +336,26 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     }
 
 
-def _exe(directory: Path, name: str = "agy") -> Path:
+def _exe(directory: Path, name: str = "agy", *, mode: int = 0o755) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     binary = directory / name
     binary.write_text("#!/bin/sh\n")
-    binary.chmod(0o755)
+    binary.chmod(mode)
     return directory
 
 
 def _native_only(
-    world: dict[str, Path], *entries: Path, **overrides: tuple[str, ...]
+    world: dict[str, Path],
+    *entries: Path,
+    tools: dict[str, path_drift.NativeTool] | None = None,
+    environ: dict[str, str] | None = None,
+    listing: dict[str, object] | None = None,
 ) -> path_drift.NativeOnlyReport:
     return path_drift.check_native_only(
-        overrides or {"agy": ("antigravity-cli",)},
-        environ={},
+        tools or {"agy": _AGY},
+        environ=environ or {},
         ambient_path=":".join(map(str, entries)),
-        listing={
-            "hk": [{"install_path": str(world["installs"] / "hk" / "1.0.0")}],
-        },
+        listing=listing if listing is not None else {},
         home=world["home"],
     )
 
@@ -352,20 +365,79 @@ def test_native_first_passes(world: dict[str, Path]) -> None:
     assert (report.failures, report.warnings) == ((), ())
 
 
-def test_a_mise_shim_first_fails(world: dict[str, Path]) -> None:
+def test_a_symlink_into_the_native_root_passes(world: dict[str, Path]) -> None:
+    """The codex shape: ``~/.local/bin/codex`` -> ``~/.codex/packages/standalone/…``."""
+    release = world["home"] / ".codex/packages/standalone/releases/0.1/bin"
+    target = _exe(release, "codex") / "codex"
+    world["native"].mkdir(parents=True)
+    (world["native"] / "codex").symlink_to(target)
+    report = _native_only(world, world["native"], tools={"codex": _CODEX})
+    assert (report.failures, report.warnings) == ((), ())
+
+
+def test_a_copy_outside_the_native_root_fails_even_in_local_bin(
+    world: dict[str, Path],
+) -> None:
+    """POSITIVE native: a regular ``~/.local/bin/codex`` is not the standalone."""
+    report = _native_only(
+        world, _exe(world["native"], "codex"), tools={"codex": _CODEX}
+    )
+    assert any("not the native install" in f for f in report.failures)
+
+
+def test_a_homebrew_first_hit_fails_and_names_homebrew(world: dict[str, Path]) -> None:
+    brew = _exe(world["tmp"] / "homebrew" / "bin")
+    report = _native_only(world, brew, _exe(world["native"]))
+    assert len(report.failures) == 1
+    assert "from Homebrew" in report.failures[0]
+
+
+def test_a_homebrew_only_host_fails_twice(world: dict[str, Path]) -> None:
+    """The cold review's E2 probe: zero native installs used to report nothing."""
+    report = _native_only(world, _exe(world["tmp"] / "homebrew" / "bin"))
+    assert len(report.failures) == 2
+    assert "no native `agy` anywhere on PATH" in report.failures[1]
+
+
+def test_a_bun_global_first_hit_names_bun(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["home"] / ".bun" / "bin"))
+    assert "from a bun global install" in report.failures[0]
+
+
+def test_an_unknown_first_hit_says_so(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["tmp"] / "opt" / "bin"))
+    assert "from an unrecognised source" in report.failures[0]
+
+
+def test_a_mise_shim_first_fails_and_defers_to_mise_which(
+    world: dict[str, Path],
+) -> None:
     report = _native_only(world, _exe(world["shims"]), _exe(world["native"]))
     assert len(report.failures) == 1
     assert "resolves to mise's copy" in report.failures[0]
-    assert "mise uninstall --all antigravity-cli && mise reshim" in report.failures[0]
+    assert "`mise which agy` names the install behind the shim" in report.failures[0]
 
 
-def test_an_installs_dir_first_fails(world: dict[str, Path]) -> None:
-    """The exact 2026-10-01 shape: ``installs/antigravity-cli/1.2.14/agy``."""
-    mise_dir = _exe(world["installs"] / "antigravity-cli" / "1.2.14")
-    report = _native_only(world, mise_dir, _exe(world["native"]))
-    assert any("resolves to mise's copy" in f for f in report.failures)
-    # The directory itself is also the "re-created" signal.
-    assert any("was re-created" in w for w in report.warnings)
+def test_an_installs_dir_first_names_the_spec_of_its_own_slug(
+    world: dict[str, Path],
+) -> None:
+    """F2: the advice comes from the hit's slug, not the table's first spec."""
+    slug_dir = world["installs"] / "aqua-google-antigravity-antigravity-cli" / "1.2.14"
+    report = _native_only(world, _exe(slug_dir), _exe(world["native"]))
+    assert len(report.failures) == 1
+    assert (
+        "mise uninstall --all aqua:google-antigravity/antigravity-cli && mise reshim"
+        in report.failures[0]
+    )
+    assert any(
+        "installs/aqua-google-antigravity-antigravity-cli exists" in w
+        for w in report.warnings
+    )
+
+
+def test_an_undeclared_slug_is_named_as_itself(world: dict[str, Path]) -> None:
+    report = _native_only(world, _exe(world["installs"] / "npm-agy-fork" / "1"))
+    assert "mise uninstall --all npm-agy-fork" in report.failures[0]
 
 
 def test_a_symlink_into_an_installs_dir_is_not_native(world: dict[str, Path]) -> None:
@@ -374,18 +446,26 @@ def test_a_symlink_into_an_installs_dir_is_not_native(world: dict[str, Path]) ->
     (world["native"] / "agy").symlink_to(target)
     report = _native_only(world, world["native"])
     assert any("resolves to mise's copy" in f for f in report.failures)
+    assert any("mise uninstall --all antigravity-cli" in f for f in report.failures)
 
 
-def test_no_native_copy_at_all_fails(world: dict[str, Path]) -> None:
+def test_not_on_path_at_all_fails(world: dict[str, Path]) -> None:
     report = _native_only(world, Path("/nonexistent-dir"))
     assert len(report.failures) == 1
-    assert "not found at all" in report.failures[0]
+    assert "not on PATH at all" in report.failures[0]
+
+
+def test_a_non_executable_native_file_does_not_count(world: dict[str, Path]) -> None:
+    """``which -a`` semantics: a 0644 file is not a command."""
+    report = _native_only(world, _exe(world["native"], mode=0o644))
+    assert len(report.failures) == 1
+    assert "not on PATH at all" in report.failures[0]
 
 
 def test_only_mise_copies_fail_twice(world: dict[str, Path]) -> None:
     report = _native_only(world, _exe(world["shims"]))
     assert len(report.failures) == 2
-    assert "only mise copies" in report.failures[1]
+    assert "no native `agy` anywhere on PATH" in report.failures[1]
 
 
 def test_a_later_mise_hit_warns_but_does_not_fail(world: dict[str, Path]) -> None:
@@ -395,23 +475,52 @@ def test_a_later_mise_hit_warns_but_does_not_fail(world: dict[str, Path]) -> Non
     assert "one PATH reorder from winning" in report.warnings[0]
 
 
-def test_a_leftover_install_dir_warns(world: dict[str, Path]) -> None:
-    (world["installs"] / "npm-openai-codex").mkdir(parents=True)
+@pytest.mark.parametrize(
+    "source", ["home-default", "MISE_DATA_DIR", "XDG_DATA_HOME", "system", "mise-ls"]
+)
+def test_a_leftover_install_dir_warns_from_every_data_dir_source(
+    world: dict[str, Path], source: str
+) -> None:
+    """Each mise data-dir source is consulted; a dir in none of them is not."""
+    tmp = world["tmp"]
+    environ: dict[str, str] = {}
+    listing: dict[str, object] = {}
+    data = {
+        "home-default": world["home"] / ".local" / "share" / "mise",
+        "MISE_DATA_DIR": tmp / "mdd",
+        "XDG_DATA_HOME": tmp / "xdg" / "mise",
+        "system": tmp / "sysmise",
+        "mise-ls": tmp / "lsroot",
+    }[source]
+    if source == "MISE_DATA_DIR":
+        environ["MISE_DATA_DIR"] = str(data)
+    if source == "XDG_DATA_HOME":
+        environ["XDG_DATA_HOME"] = str(data.parent)
+    if source == "mise-ls":
+        listing = {"hk": [{"install_path": str(data / "installs" / "hk" / "1.0.0")}]}
+    (data / "installs" / "antigravity-cli").mkdir(parents=True)
     report = _native_only(
-        world, _exe(world["native"], "codex"), codex=("codex", "npm:@openai/codex")
+        world, _exe(world["native"]), environ=environ, listing=listing
     )
     assert report.failures == ()
     assert len(report.warnings) == 1
-    assert "npm-openai-codex exists" in report.warnings[0]
-    assert "mise uninstall --all npm:@openai/codex" in report.warnings[0]
+    assert f"{data / 'installs' / 'antigravity-cli'} exists" in report.warnings[0]
+
+
+def test_a_leftover_dir_outside_every_data_dir_source_is_not_seen(
+    world: dict[str, Path],
+) -> None:
+    """Control arm for the parametrized test above."""
+    (world["tmp"] / "unlisted" / "installs" / "antigravity-cli").mkdir(parents=True)
+    report = _native_only(world, _exe(world["native"]))
+    assert (report.failures, report.warnings) == ((), ())
 
 
 def test_a_similarly_named_install_dir_is_not_flagged(world: dict[str, Path]) -> None:
     """``npm-oh-my-codex`` really exists on this host and is not codex."""
     (world["installs"] / "npm-oh-my-codex").mkdir(parents=True)
-    report = _native_only(
-        world, _exe(world["native"], "codex"), codex=("codex", "npm:@openai/codex")
-    )
+    release = world["home"] / ".codex/packages/standalone/releases/0.1/bin"
+    report = _native_only(world, _exe(release, "codex"), tools={"codex": _CODEX})
     assert (report.failures, report.warnings) == ((), ())
 
 
@@ -428,13 +537,31 @@ def test_a_failed_mise_ls_still_checks_the_default_dirs(
 ) -> None:
     monkeypatch.setattr(path_drift, "run_mise_ls", lambda: ({}, "mise exited 1"))
     report = path_drift.check_native_only(
-        {"agy": ("antigravity-cli",)},
+        {"agy": _AGY},
         environ={},
         ambient_path=f"{_exe(world['shims'])}:{_exe(world['native'])}",
         home=world["home"],
     )
     assert any("resolves to mise's copy" in f for f in report.failures)
     assert any("could not ask mise" in w for w in report.warnings)
+
+
+def test_an_undeclared_mise_data_dir_is_still_recognised_by_shape(
+    world: dict[str, Path],
+) -> None:
+    """A data dir no config names (``…/mise/installs/<slug>/<ver>``) is mise's."""
+    stray = _exe(
+        world["tmp"] / "elsewhere" / "mise" / "installs" / "antigravity-cli" / "9"
+    )
+    report = _native_only(world, stray, _exe(world["native"]))
+    assert any("resolves to mise's copy" in f for f in report.failures)
+
+
+def test_a_dir_merely_named_mise_is_not_mise(world: dict[str, Path]) -> None:
+    """Control arm for the shape match: ``mise`` alone is not ``mise/installs``."""
+    report = _native_only(world, _exe(world["tmp"] / "mise" / "bin"))
+    assert not any("resolves to mise's copy" in f for f in report.failures)
+    assert "from an unrecognised source" in report.failures[0]
 
 
 @pytest.mark.parametrize(
@@ -445,31 +572,17 @@ def test_a_failed_mise_ls_still_checks_the_default_dirs(
         ("github:anthropics/claude-code", "github-anthropics-claude-code"),
         ("npm:@anthropic-ai/claude-code", "npm-anthropic-ai-claude-code"),
         ("npm:@devcontainers/cli", "npm-devcontainers-cli"),
+        ("aqua:astral-sh/uv", "aqua-astral-sh-uv"),
     ],
 )
 def test_mise_slug_matches_measured_install_dirs(spec: str, slug: str) -> None:
     assert path_drift.mise_slug(spec) == slug
 
 
-def test_the_shipped_baseline_declares_native_only_at_least_the_defaults() -> None:
+def test_the_shipped_baseline_matches_the_native_only_defaults() -> None:
     baseline = tomllib.loads((REPO_ROOT / "doctor.toml").read_text())
     declared = baseline["path_drift"]["native_only"]
-    for binary, specs in path_drift.DEFAULT_NATIVE_ONLY.items():
-        assert set(specs) <= set(declared[binary]), binary
-
-
-def test_an_undeclared_mise_data_dir_is_still_recognised_by_shape(
-    world: dict[str, Path], tmp_path: Path
-) -> None:
-    """A data dir no config names (``…/mise/installs/<slug>/<ver>``) is mise's."""
-    stray = _exe(tmp_path / "elsewhere" / "mise" / "installs" / "antigravity-cli" / "9")
-    report = _native_only(world, stray, _exe(world["native"]))
-    assert any("resolves to mise's copy" in f for f in report.failures)
-
-
-def test_a_dir_merely_named_mise_is_not_mise(
-    world: dict[str, Path], tmp_path: Path
-) -> None:
-    """Control arm for the shape match: ``mise`` alone is not ``mise/installs``."""
-    report = _native_only(world, _exe(tmp_path / "mise" / "bin"))
-    assert (report.failures, report.warnings) == ((), ())
+    assert set(declared) == set(path_drift.DEFAULT_NATIVE_ONLY)
+    for binary, tool in path_drift.DEFAULT_NATIVE_ONLY.items():
+        assert declared[binary]["native"] == list(tool.native), binary
+        assert set(tool.specs) <= set(declared[binary]["specs"]), binary

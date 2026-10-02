@@ -240,23 +240,37 @@ forbidden_agents_md_marker = "use the installed graphify skill"
 # pass; if you see it, the hook prefix was dropped.
 gate_tools = ["hk", "uv", "python", "ruff", "npm:renovate"]
 
-[path_drift.native_only]
-# Ray's ruling (2026-10-01): on the Mac host these binaries come ONLY from their
-# vendor's native installer. Each maps to every mise tool spec that has put — or,
-# through the registry, could put — a competing copy on PATH (install dirs seen
-# here: antigravity-cli, npm-openai-codex, github-anthropics-claude-code,
-# npm-anthropic-ai-claude-code). The `native-only` check FAILS when a mise copy
-# resolves first or no native copy exists, and WARNS when a mise copy sits later
-# on PATH or its install directory was re-created. Same ambient-PATH capture as
-# `gate_tools` above, so it is BLIND — reported, never passed — without the hook.
-agy = ["antigravity-cli"]
-codex = ["codex", "npm:@openai/codex", "aqua:openai/codex", "github:openai/codex"]
-claude = [
+[path_drift.native_only.agy]
+# Ray's ruling (2026-10-01): on the Mac host agy, codex and claude come ONLY
+# from their vendor's native installer. `native` is POSITIVE: the first PATH
+# hit's real path must equal or sit under one of these (`~` expanded), so a
+# Homebrew, npm-global or bun-global copy fails just as a mise copy does.
+# Measured on the authoring host 2026-10-01: ~/.local/bin/agy is a regular
+# Mach-O file; ~/.local/bin/codex -> ~/.codex/packages/standalone/releases/
+# <ver>/bin/codex; ~/.local/bin/claude -> ~/.local/share/claude/versions/<ver>.
+#
+# `specs` lists every mise tool spec that has put — or, through the registry
+# (`mise registry`), could put — a competing copy on PATH. An existing
+# installs/<slug> for any of them WARNS, and a mise hit's fix names the spec
+# matching ITS slug. `http:claude` -> `http-claude` is inferred from the slug
+# rule, not observed (nothing installs it here). Silent off macOS; BLIND —
+# reported, never passed — without the SessionStart PATH capture.
+native = ["~/.local/bin/agy"]
+specs = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli"]
+
+[path_drift.native_only.codex]
+native = ["~/.codex/packages/standalone"]
+specs = ["codex", "npm:@openai/codex", "aqua:openai/codex", "github:openai/codex"]
+
+[path_drift.native_only.claude]
+native = ["~/.local/share/claude/versions"]
+specs = [
   "claude",
   "claude-code",
   "npm:@anthropic-ai/claude-code",
   "github:anthropics/claude-code",
   "aqua:anthropics/claude-code",
+  "http:claude",
 ]
 
 [claude]

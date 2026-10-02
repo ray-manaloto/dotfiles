@@ -2050,30 +2050,85 @@ def test_a_profile_resolving_a_level_less_triple_is_named(
 # --------------------------------------------------------------------------- #
 
 
+@pytest.fixture
+def darwin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "host_system", lambda: "Darwin")
+
+
+def _native_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **table: object
+) -> doctor.Setup:
+    """A Setup whose ambient PATH holds one fake ``~/.local/bin/zzfake``."""
+    monkeypatch.setattr(doctor_path_drift, "_SYSTEM_MISE_DATA", tmp_path / "sys")
+    monkeypatch.setattr(doctor_path_drift, "run_mise_ls", lambda: ({}, None))
+    home = tmp_path / "home"
+    local_bin = home / ".local" / "bin"
+    local_bin.mkdir(parents=True)
+    (local_bin / "zzfake").write_text("#!/bin/sh\n")
+    (local_bin / "zzfake").chmod(0o755)
+    return _setup(
+        baseline={"path_drift": {"native_only": {"zzfake": table}}},
+        environ={"DOTFILES_AMBIENT_PATH": str(local_bin)},
+        home=home,
+    )
+
+
+@pytest.mark.usefixtures("darwin")
 def test_native_only_reports_blindness_rather_than_passing() -> None:
     setup = _setup(environ={"PATH": "/x", "MISE_TASK_NAME": "doctor"})
     assert doctor.check_native_only(setup) == [doctor.NATIVE_ONLY_BLIND_ADVICE]
 
 
+def test_native_only_is_silent_off_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The devcontainer runs these CLIs from mise by design; it has its own check."""
+    monkeypatch.setattr(doctor, "host_system", lambda: "Linux")
+    setup = _setup(environ={"PATH": "/x", "MISE_TASK_NAME": "doctor"})
+    assert doctor.check_native_only(setup) == []
+
+
+@pytest.mark.usefixtures("darwin")
 def test_native_only_reads_the_baseline_table(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The adapter must hand ``[path_drift.native_only]`` through, not the default.
 
-    The baseline names a binary no default covers; a FAIL for it proves the
-    declared table, not ``DEFAULT_NATIVE_ONLY``, decided what was checked.
+    The baseline names a binary no default covers, and its ``native`` root
+    decides the verdict both ways: the same file passes under one root and fails
+    under another.
     """
-    monkeypatch.setattr(doctor_path_drift, "_SYSTEM_MISE_DATA", tmp_path / "sys")
-    shims = tmp_path / "home" / ".local" / "share" / "mise" / "shims"
-    shims.mkdir(parents=True)
-    (shims / "zzfake").write_text("#!/bin/sh\n")
-    (shims / "zzfake").chmod(0o755)
-    monkeypatch.setattr(doctor_path_drift, "run_mise_ls", lambda: ({}, None))
-    setup = _setup(
-        baseline={"path_drift": {"native_only": {"zzfake": ["zzfake-tool"]}}},
-        environ={"DOTFILES_AMBIENT_PATH": str(shims)},
-        home=tmp_path / "home",
+    passing = _native_setup(tmp_path, monkeypatch, native=["~/.local/bin/zzfake"])
+    assert doctor.check_native_only(passing) == []
+    failing = dataclasses.replace(
+        passing,
+        baseline={
+            "path_drift": {"native_only": {"zzfake": {"native": ["~/elsewhere"]}}}
+        },
     )
-    findings = doctor.check_native_only(setup)
-    assert any("`zzfake` resolves to mise's copy" in f for f in findings)
+    findings = doctor.check_native_only(failing)
+    assert any("`zzfake` resolves first to" in f for f in findings)
     assert not any("agy" in f for f in findings)
+
+
+@pytest.mark.usefixtures("darwin")
+def test_native_only_warnings_reach_the_doctor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A WARN is a finding too — dropping warnings would hide re-installs."""
+    setup = _native_setup(
+        tmp_path, monkeypatch, native=["~/.local/bin/zzfake"], specs=["zzfake-tool"]
+    )
+    assert setup.home is not None
+    (setup.home / ".local/share/mise/installs/zzfake-tool").mkdir(parents=True)
+    findings = doctor.check_native_only(setup)
+    assert len(findings) == 1
+    assert findings[0].startswith("WARN: mise install directory")
+
+
+@pytest.mark.usefixtures("darwin")
+def test_native_only_rejects_an_entry_with_no_native_location(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    setup = _native_setup(tmp_path, monkeypatch, specs=["zzfake-tool"])
+    findings = doctor.check_native_only(setup)
+    assert len(findings) == 1
+    assert "[path_drift.native_only.zzfake] has no `native` locations" in findings[0]
