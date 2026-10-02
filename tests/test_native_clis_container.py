@@ -121,6 +121,11 @@ def test_version_failure_fails(tmp_path: Path) -> None:
     assert "rc=3" in findings[0]
 
 
+def _entry(install_path: Path | str) -> list[dict[str, object]]:
+    """One `mise ls --json` entry, in the real shape (install_path + version)."""
+    return [{"version": "1.0.0", "install_path": str(install_path), "installed": True}]
+
+
 @pytest.mark.parametrize(
     "key",
     [
@@ -130,30 +135,73 @@ def test_version_failure_fails(tmp_path: Path) -> None:
         "aqua:google-antigravity/antigravity-cli",
     ],
 )
-def test_active_mise_copy_fails(tmp_path: Path, key: str) -> None:
+def test_a_mise_copy_in_the_home_overlay_fails(tmp_path: Path, key: str) -> None:
+    """A copy the USER's overlay installed (under $HOME) is this change's defect."""
     home = tmp_path / "home"
     _native_layout(home)
-    env = _env(home, _mise_bin(tmp_path, {key: [], "node": []}))
-    assert ncc.mise_findings(environ=env) == [
+    payload = {key: _entry(home / ".local/share/mise/installs/x/1.0.0")}
+    assert ncc.mise_findings(payload) == [
         f"mise: `{key}` is a mise tool here; the native installer owns it"
     ]
+    env = _env(home, _mise_bin(tmp_path, {**payload, "node": []}))
+    assert ncc.check(home=home, environ=env) == 1
+
+
+def test_a_base_image_that_predates_the_change_is_a_loud_skip(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Today's `:dev` bakes mise claude-code + npm codex outside $HOME.
+
+    The fixture mirrors that real image (measured 2026-10-01: install paths under
+    /usr/local/share/mise/installs) AND a container created from it, which never
+    ran `native-clis install` — so every native assertion would fail. Ship's
+    sync-full smokes exactly that container, so this must not fail the gate;
+    the CI no-mount smoke is what fails a baked copy in a NEW image.
+    """
+    home = tmp_path / "home"
+    payload = {
+        "claude-code": _entry("/usr/local/share/mise/installs/claude-code/2.1.283"),
+        "npm:@openai/codex": _entry(
+            "/usr/local/share/mise/installs/npm-openai-codex/0.154.0"
+        ),
+        "node": _entry("/usr/local/share/mise/installs/node/24"),
+    }
+    assert ncc.baked_into_base(payload, home) == ["claude-code", "npm:@openai/codex"]
+    env = _env(home, _mise_bin(tmp_path, payload))
+    with caplog.at_level("WARNING"):
+        assert ncc.check(home=home, environ=env) == 0
+    assert "SKIP: this base image predates native claude/codex/agy" in caplog.text
+
+
+def test_a_base_without_copies_is_enforced_not_skipped(tmp_path: Path) -> None:
+    """Control arm: a NEW base with the natives missing must still FAIL.
+
+    The skip is scoped to an old base only.
+    """
+    home = tmp_path / "home"
+    payload = {"node": _entry("/usr/local/share/mise/installs/node/24")}
+    assert ncc.baked_into_base(payload, home) == []
+    env = _env(home, _mise_bin(tmp_path, payload))
     assert ncc.check(home=home, environ=env) == 1
 
 
 @pytest.mark.parametrize(
     "key", ["npm:claude-code-lint", "npm:oh-my-codex", "npm:@google/gemini-cli"]
 )
-def test_lookalike_mise_keys_pass(tmp_path: Path, key: str) -> None:
-    env = _env(tmp_path, _mise_bin(tmp_path, {key: []}))
-    assert ncc.mise_findings(environ=env) == []
+def test_lookalike_mise_keys_pass(key: str) -> None:
+    assert ncc.mise_findings({key: _entry("/x")}) == []
 
 
 def test_unreadable_mise_is_a_finding_not_a_pass(tmp_path: Path) -> None:
     tool_dir = tmp_path / "mise-bin"
     _exe(tool_dir / "mise", "echo not-json")
-    findings = ncc.mise_findings(environ=_env(tmp_path, tool_dir))
+    payload, findings = ncc.mise_tools(environ=_env(tmp_path, tool_dir))
+    assert payload == {}
     assert findings
     assert "was not JSON" in findings[0]
+    home = tmp_path / "home"
+    _native_layout(home)
+    assert ncc.check(home=home, environ=_env(home, tool_dir)) == 1
 
 
 class _FakeInstall:

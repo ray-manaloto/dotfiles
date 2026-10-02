@@ -3068,7 +3068,8 @@ per_path_tokens = { ".devcontainer/scripts/on-create.sh" = [
 ], "python/src/dotfiles_setup/main.py" = [
     'return native_clis_container.main(args.native_clis_command)',
 ], "python/src/dotfiles_setup/native_clis_container.py" = [
-    'findings.extend(mise_findings(environ=environ, run=run))',
+    'findings.extend(mise_findings(payload))',
+    'baked = baked_into_base(payload, home)',
     'and not _CREDENTIAL_NAME.search(k)',
 ], "python/src/dotfiles_setup/image.py" = [
     'echo "FAIL: $tool baked into the image',

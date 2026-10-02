@@ -329,26 +329,63 @@ def check_one(
     return []
 
 
-def mise_findings(
+MiseTools = Mapping[str, Sequence[Mapping[str, object]]]
+
+
+def mise_tools(
     *, environ: Mapping[str, str], run: Runner = _default_run
-) -> list[str]:
-    """Return a finding per active mise tool that would provide a vendor CLI."""
+) -> tuple[MiseTools, list[str]]:
+    """``mise ls --json`` (installed OR active), or the finding why it failed.
+
+    No ``--current``: an inactive copy in the overlay's installs dir is still a
+    second, non-updating install. Runs under the same minimal env as the
+    installers.
+    """
     mise = shutil.which("mise", path=environ.get("PATH"))
     if mise is None:
-        return ["mise: not on PATH, so `mise ls` could not be asked"]
-    # INSTALLED as well as active (no `--current`): an inactive copy in the
-    # overlay's installs dir is still a second, non-updating install.
+        return {}, ["mise: not on PATH, so `mise ls` could not be asked"]
     rc, out = run([mise, "ls", "--json"], _minimal_env(environ, {}))
     if rc != 0:
-        return [f"mise ls --json exited rc={rc}: {out.strip()[:200]}"]
+        return {}, [f"mise ls --json exited rc={rc}: {out.strip()[:200]}"]
     try:
         payload = json.loads(out)
     except json.JSONDecodeError as exc:
-        return [f"mise ls --json was not JSON ({exc}): {out.strip()[:200]}"]
+        return {}, [f"mise ls --json was not JSON ({exc}): {out.strip()[:200]}"]
+    return payload, []
+
+
+def _forbidden(payload: MiseTools) -> list[str]:
+    return sorted(key for key in payload if _mise_name(key) in _FORBIDDEN_MISE_NAMES)
+
+
+def baked_into_base(payload: MiseTools, home: Path) -> list[str]:
+    """Forbidden keys the BASE IMAGE itself carries (installed outside ``$HOME``).
+
+    Such a base predates the native-CLI change: it was built from a config that
+    still declared a mise/npm copy, and a container created from it never ran
+    `native-clis install`. Asserting provenance there can only fail, and says
+    nothing about this change — the same reason tier 1 compares a branch that
+    changes an image input against the MERGE-BASE identity. Whether the image
+    config re-adds a copy is guarded by the CI no-mount smoke instead, which
+    fails on any baked claude/codex/agy (``image.py``).
+    """
+    home_root = home.resolve()
+    return [
+        key
+        for key in _forbidden(payload)
+        if payload[key]
+        and all(
+            not Path(str(entry.get("install_path", ""))).is_relative_to(home_root)
+            for entry in payload[key]
+        )
+    ]
+
+
+def mise_findings(payload: MiseTools) -> list[str]:
+    """Return a finding per mise tool that would provide a vendor CLI."""
     return [
         f"mise: `{key}` is a mise tool here; the native installer owns it"
-        for key in sorted(payload)
-        if _mise_name(key) in _FORBIDDEN_MISE_NAMES
+        for key in _forbidden(payload)
     ]
 
 
@@ -359,13 +396,27 @@ def check(
     tools: Sequence[NativeCli] = TOOLS,
     run: Runner = _default_run,
 ) -> int:
-    """Log every provenance finding; rc 0 only when there are none."""
-    findings = [
+    """Log every provenance finding; rc 0 only when there are none.
+
+    A base image that predates the change is a loud SKIP, not a pass and not a
+    failure: see :func:`baked_into_base`.
+    """
+    payload, findings = mise_tools(environ=environ, run=run)
+    baked = baked_into_base(payload, home)
+    if baked:
+        logger.warning(
+            "SKIP: this base image predates native claude/codex/agy — it still "
+            "bakes %s, so provenance cannot be asserted here. Sync the image "
+            "built from this change (`mise run sync`, or `-- --tag pr-<N>`).",
+            ", ".join(baked),
+        )
+        return 0
+    findings.extend(
         finding
         for tool in tools
         for finding in check_one(tool, home=home, environ=environ, run=run)
-    ]
-    findings.extend(mise_findings(environ=environ, run=run))
+    )
+    findings.extend(mise_findings(payload))
     for finding in findings:
         logger.error("FAIL: %s", finding)
     if findings:

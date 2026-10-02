@@ -142,8 +142,17 @@ counts as native. The `mise ls` probe runs with the same minimal env as the inst
 - **Accepted residuals from cold review:**
   - Installer output is buffered until the installer exits, up to 600 s, and a timeout kills only the
     direct child (finding 10).
-  - `verify-container-latest` fails on this branch until the `pr-NNN` image is synced, because the
-    current `:dev` image still carries the mise copies (finding 13).
+  - **Finding 13 is FIXED in rev 3, no longer a residual.** `mise run ship`'s sync-full smokes the
+    main checkout's container on the current `:dev`, which still bakes the mise copies, so
+    `native-clis check` would have failed every ship of this branch. `check` now SKIPs loudly with
+    rc 0 when the forbidden keys come from the base image itself (`install_path` outside `$HOME`).
+    That base predates the change, and asserting provenance there can only fail; tier 1's
+    merge-base identity handles an image-input branch the same way.
+    - A copy in the user's home overlay still fails.
+    - A new base with the natives missing still fails; the control-arm test covers this.
+    - A baked copy in a new image fails the CI no-mount smoke.
+    - Real arm on today's `:dev` overlay with a fresh volume: `SKIP … still bakes claude-code,
+      npm:@openai/codex`, rc 0. Removing the skip wiring fails 1 test.
   - **Finding 11 is FIXED in rev 2, no longer a residual.** The first regen used `lock-image`'s
     hard-coded `--bump` and dragged 8 unrelated `latest` tools forward. `lock-image` gained
     `--no-bump`, which keeps mise's native `mise lock` default of preserving existing locked versions
