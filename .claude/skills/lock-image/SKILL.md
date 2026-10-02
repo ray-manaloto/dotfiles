@@ -17,7 +17,14 @@ mise run lock-image                            # derive platforms, auto-route
 mise run lock-image -- --platform linux-x64    # narrow it deliberately
 mise run lock-image -- --no-container          # refuse rather than route
 mise run lock-image -- --stage /path/to/stage  # resume a rate-limited run
+mise run lock-image -- --no-bump               # keep locked versions (mise's native default)
 ```
+
+**Removing or editing one tool? Use `--no-bump`.** The default `--bump` re-resolves
+every `latest` pin, which is what the daily refresh exists to do. On a change that only
+drops a tool, it also drags unrelated tools forward: measured 2026-10-01, removing
+claude/codex bumped 8 other tools. Without `--bump`, `mise lock` keeps every existing
+locked version and prunes removed tools, so the diff is that tool alone.
 
 This file carries only the judgement: which artifact you are touching, and the
 three ways a regen goes wrong while looking fine.

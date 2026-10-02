@@ -246,6 +246,38 @@ def test_the_lock_command_re_resolves_fuzzy_pins() -> None:
     assert "--bump" in argv
 
 
+def test_no_bump_keeps_mise_native_preserve_semantics() -> None:
+    """`bump=False` drops ONLY `--bump`: mise then preserves every locked version.
+
+    A removal-only change (claude/codex leaving the image, 2026-10-01) otherwise
+    dragged 8 unrelated `latest` tools forward in the same lock diff.
+    """
+    bumped = image_lock.lock_command(Path("/m"), Path("/s"), ("linux-x64",))
+    kept = image_lock.lock_command(Path("/m"), Path("/s"), ("linux-x64",), bump=False)
+    assert "--bump" not in kept
+    assert [a for a in bumped if a != "--bump"] == kept
+
+
+def test_no_bump_survives_the_route_into_the_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host routes into the devcontainer; the flag must cross that hop."""
+    seen: list[list[str]] = []
+    monkeypatch.setattr(image_lock, "host_can_lock", lambda: (False, "macOS"))
+
+    def fake_run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(image_lock.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        image_lock, "container_command", lambda _root, extra=(): ["dc", *extra]
+    )
+    settings = image_lock.LockRun(bump=False)
+    assert image_lock.image_lock_main(Path("/repo"), settings=settings) == 0
+    assert seen == [["dc", "--no-bump"]]
+
+
 def test_the_composite_delegates_instead_of_re_inlining_the_recipe(
     lock_refresh_commands: str,
 ) -> None:
@@ -283,7 +315,11 @@ def test_a_later_pass_may_rescue_an_earlier_failure() -> None:
     """
     recorder = _Recorder([1, 1, 0])
     image_lock.run_lock_passes(
-        Path("/s/mise-pinned"), Path("/s"), ("linux-x64",), passes=5, run=recorder
+        Path("/s/mise-pinned"),
+        Path("/s"),
+        ("linux-x64",),
+        settings=image_lock.LockRun(passes=5),
+        run=recorder,
     )
     assert len(recorder.argvs) == 3
 
@@ -294,7 +330,7 @@ def test_exhausting_every_pass_raises_rather_than_collecting() -> None:
             Path("/s/mise-pinned"),
             Path("/s"),
             ("linux-x64",),
-            passes=2,
+            settings=image_lock.LockRun(passes=2),
             run=lambda *_a, **_k: _completed(1),
         )
 

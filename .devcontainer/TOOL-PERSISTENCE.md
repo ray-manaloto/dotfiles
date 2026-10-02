@@ -97,7 +97,9 @@ codex lane and imported by no root `CLAUDE.md`, so nothing else bounds it),
 and it stood at 218. This is persistence detail, which is this file's subject.
 
 The volume covers the whole user home, so `~/.cache/mise`, `~/.cache/uv`,
-`~/.bash_history`, `~/.ssh/known_hosts` and TMPDIR
+`~/.bash_history`, `~/.ssh/known_hosts`, the native self-updating claude/codex/agy
+(`~/.local/bin`, `~/.local/share/claude`, `~/.codex/packages`; installed once by
+`on-create.sh` → `devcontainer native-clis install`, then owned by their updaters) and TMPDIR
 (`ENV TMPDIR=/home/${USER}/.local/tmp`, swept >30d by `on-create.sh`) persist
 across `stop/up`. The v5 per-directory volumes it replaced are orphans;
 `mise run prune` cleans them.

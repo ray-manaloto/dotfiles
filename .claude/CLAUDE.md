@@ -78,8 +78,8 @@ degraded one.
 ⚠️ Permanent advisor-consult routing and escalation: see @token-routing.md.
 
 Adopted plugin (enabled in `.claude/settings.json`): `antigravity@antigravity-for-claude-code`
-(Google Antigravity/Gemini 3.x via `agy`). `agy` comes only from its native installer (no mise pin); codex runs
-the native install on the host (`disable_tools`) and the shared npm pin in the image/CI; auth is per-user. The Claude architect plans and **verifies evidence**
+(Google Antigravity/Gemini 3.x via `agy`). `agy`, codex and claude come only from their native, self-updating
+installers on the Mac AND in the devcontainer (`on-create.sh`; no mise/npm pin anywhere); auth is per-user. The Claude architect plans and **verifies evidence**
 before "done" — only execution is delegated; terminal fallback is Claude Opus. knowledge-base
 carries the same doctrine in its `orchestrator-routing` skill.
 

@@ -7,6 +7,9 @@
 # it rewrite this file alongside the vendored JSON. `claude-code` has no
 # resolver, so its `version` IS its pin: hand-edit `version` + the `source` tag,
 # then run the refresh, which re-downloads at that tag and rewrites `sha256`.
+# codex's `source` is UNVERSIONED (learn.chatgpt.com serves the current schema),
+# so its `version` is only a label for the codex the bytes were reviewed against:
+# bump it by hand when a refresh changes the bytes; `sha256` is what verifies them.
 #
 # `pin_source` names where `schema_vendor.current_pin()` reads the tool's
 # CURRENT version from — informational here, the resolver itself is code.
@@ -44,7 +47,7 @@ tool = "codex"
 file = "schemas/codex-config.json"
 version = "0.154.0"
 source = "https://learn.chatgpt.com/docs/config-schema.json"
-pin_source = ".config/mise/conf.d/shared.toml"
+pin_source = "schemas/sources.toml (vendored; no mise [tools] pin)"
 sha256 = "2cd0555c231ef69f0990497157ada8436c45964a5146eef730f0fee48603c7bf"
 
 [[schema]]

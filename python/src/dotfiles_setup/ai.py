@@ -20,11 +20,12 @@ class AIOrchestrator:
     def ensure_ai_clis(self) -> None:
         """Verify the managed AI CLIs are available.
 
-        These CLIs are installed declaratively through mise and share host auth
-        state via mounted config directories inside the devcontainer.
+        gemini is installed declaratively through mise; claude and codex come
+        only from their vendors' native, self-updating installers (in the
+        devcontainer, `devcontainer native-clis install` at container create).
         """
         logger.info("Verifying AI CLIs are available...")
-        for tool in ("claude", "codex", "gemini"):
+        for tool in ("claude", "codex", "agy", "gemini"):
             self.tool_manager.run_command(
                 ["bash", "-lc", f"command -v {tool}"], capture=False
             )

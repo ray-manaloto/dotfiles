@@ -197,21 +197,19 @@ def test_the_dispatch_still_reaches_the_branch_guard(
     assert calls == ["branch"]
 
 
-def test_an_existing_file_is_never_denied() -> None:
+def test_an_existing_file_is_never_denied(repo: Path) -> None:
     """The contract is to stop NEW bash, not to freeze what exists.
 
-    `home/dot_local/bin/executable_claude` is a tracked bash wrapper that cannot
-    enter the allowlist — the commit gate would call the entry stale — so
-    denying it would be an outage with no escape hatch.
+    The shape that motivated it was a tracked extensionless bash wrapper under
+    `home/dot_local/bin/` (the retired `executable_claude`), which cannot enter
+    the allowlist — the commit gate would call the entry stale — so denying it
+    would be an outage with no escape hatch. The control arm is the same write
+    to the same path BEFORE the file exists, which must be denied.
     """
-    root = script_guard.repo_root()
-    existing = root / "home" / "dot_local" / "bin" / "executable_claude"
-    if not existing.exists():  # pragma: no cover - control arm
-        pytest.skip("fixture file absent; this probe would prove nothing")
-    payload: dict[str, object] = {
-        "file_path": str(existing),
-        "content": "#!/usr/bin/env bash\n",
-    }
+    rel = "home/dot_local/bin/executable_wrapper"
+    payload = _write(repo, rel, "#!/usr/bin/env bash\n")
+    assert script_guard.decide(payload) is not None, "control: a NEW file is denied"
+    (repo / rel).write_text("#!/usr/bin/env bash\n")
     assert script_guard.decide(payload) is None
 
 

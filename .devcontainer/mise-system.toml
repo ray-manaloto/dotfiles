@@ -161,14 +161,14 @@ cargo-binstall = "latest"
 # NOT via apt (Ubuntu ships 14.1.2). See the graphviz RUN in
 # .devcontainer/Dockerfile (#222 PR-A / folds #22).
 "apt:pkg-config" = "2.5.1-4"
-"apt:sudo" = "1.9.17p2-1ubuntu3"
+"apt:sudo" = "1.9.17p2-1ubuntu3.1"
 "apt:unzip" = "6.0-29ubuntu1"
 "apt:zsh" = "5.9-8ubuntu3"
 "apt:libatomic1" = "16-20260322-1ubuntu1"
 "apt:libbz2-dev" = "1.0.8-6ubuntu0.1"
 "apt:libreadline-dev" = "8.3-4"
 "apt:libsqlite3-dev" = "3.46.1-9ubuntu0.3"
-"apt:libssl-dev" = "3.5.5-1ubuntu3.5"
+"apt:libssl-dev" = "3.5.5-1ubuntu3.7"
 "apt:zlib1g-dev" = "1:1.3.dfsg+really1.3.1-1ubuntu3.1"
 # LLVM-22 C++ toolchain (#222 PR-C) — Ubuntu 26.04's version-suffixed apt packages
 # all depend on ONE shared libLLVM-22 runtime, replacing the 8 conda LLVM tools that
@@ -409,5 +409,5 @@ for keyfile in ~/.config/git/*.asc; do
 done
 """
 
-# [hooks] postinstall removed — Claude Code now installed via mise http:claude backend
-# For per-user native binary in overlay: run `claude install` in Dockerfile.host-user
+# [hooks] postinstall removed. claude/codex/agy come from their vendors' native
+# installers at container create (on-create.sh -> `devcontainer native-clis install`).

@@ -45,6 +45,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -260,7 +261,11 @@ def install_pinned_mise(
 
 
 def lock_command(
-    mise_bin: Path, stage_dir: Path, platforms: tuple[str, ...]
+    mise_bin: Path,
+    stage_dir: Path,
+    platforms: tuple[str, ...],
+    *,
+    bump: bool = True,
 ) -> list[str]:
     """The ``mise lock`` argv for one convergence pass.
 
@@ -274,11 +279,33 @@ def lock_command(
     refresh.yml's header claimed the job "owns re-RESOLUTION of `latest` pins".
     Kept identical to the composite's own argv (action.yml) so a local
     regeneration and CI cannot disagree about which versions they resolve.
+
+    ``bump=False`` is mise's own NATIVE default ("Existing matching locked
+    versions are preserved unless `--bump`", `mise lock --help`): a change that
+    only REMOVES or edits a tool's config gets a lock diff of exactly that tool
+    — removed entries are pruned — instead of dragging every `latest` pin
+    forward with it. The daily refresh keeps the default, `bump=True`.
     """
-    argv = [str(mise_bin), "lock", "--bump"]
+    argv = [str(mise_bin), "lock", *(["--bump"] if bump else [])]
     for name in platforms:
         argv += ["--platform", name]
     return [*argv, "-C", str(stage_dir)]
+
+
+@dataclass(frozen=True)
+class LockRun:
+    """How one regeneration runs: convergence passes, and whether to `--bump`.
+
+    ``bump=False`` keeps mise's native preserve-locked-versions default for a
+    removal/edit-only change; see :func:`lock_command`.
+    """
+
+    passes: int = DEFAULT_PASSES
+    bump: bool = True
+
+
+#: The daily-refresh behaviour: every pass bumps `latest` pins.
+DEFAULT_LOCK_RUN = LockRun()
 
 
 def run_lock_passes(
@@ -286,7 +313,7 @@ def run_lock_passes(
     stage_dir: Path,
     platforms: tuple[str, ...],
     *,
-    passes: int = DEFAULT_PASSES,
+    settings: LockRun = DEFAULT_LOCK_RUN,
     run: Callable[..., subprocess.CompletedProcess[bytes]] = subprocess.run,
 ) -> None:
     """Run the convergence loop; the LAST pass must succeed.
@@ -305,7 +332,8 @@ def run_lock_passes(
     ``.claude/rules/probes-need-a-control-arm.md`` rule 9 forbids. Read the
     error mise printed. Design discussion: #964.
     """
-    argv = lock_command(mise_bin, stage_dir, platforms)
+    argv = lock_command(mise_bin, stage_dir, platforms, bump=settings.bump)
+    passes = settings.passes
     child_env = {
         **os.environ,
         # Both tiers in one pass: mise writes mise.lock (base) and
@@ -398,7 +426,7 @@ def image_lock_main(
     platforms: tuple[str, ...] = (),
     stage: Path | None = None,
     container: bool | None = None,
-    passes: int = DEFAULT_PASSES,
+    settings: LockRun = DEFAULT_LOCK_RUN,
 ) -> int:
     """Stage, install pinned mise, converge, then collect with coverage verified.
 
@@ -410,6 +438,8 @@ def image_lock_main(
     if container is True or (container is None and not capable):
         logger.info("routing into the devcontainer: %s", reason)
         extra = tuple(arg for name in platforms for arg in ("--platform", name))
+        if not settings.bump:
+            extra = (*extra, "--no-bump")
         result = subprocess.run(container_command(repo_root, extra), check=False)
         return result.returncode
     if not capable:
@@ -450,7 +480,7 @@ def image_lock_main(
     try:
         version = stage_system_lock_dir(repo_root, stage_dir)
         mise_bin = install_pinned_mise(stage_dir, version)
-        run_lock_passes(mise_bin, stage_dir, platforms, passes=passes)
+        run_lock_passes(mise_bin, stage_dir, platforms, settings=settings)
         collect_system_lock(repo_root, stage_dir)
     except ImageLockError, ValueError, OSError:
         logger.exception("image-lock failed")

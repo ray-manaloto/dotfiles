@@ -66,10 +66,6 @@ env:
   # KEY/VALUE directly, so this needs no `git config` step and applies to every
   # git invocation in the workflow. It MUST be repeated per workflow file: env
   # does NOT cross workflow_call, and it must be set before checkout runs.
-  # Root mise.toml disables npm codex so the Mac runs the native install (2026-09-23);
-  # CI has no native codex, and pytest shells out to `codex`, so re-enable the npm pin
-  # here. An empty value overrides the config setting (probed: empty -> 0.154.0).
-  MISE_DISABLE_TOOLS: ""
   GIT_CONFIG_COUNT: "1"
   GIT_CONFIG_KEY_0: init.defaultBranch
   GIT_CONFIG_VALUE_0: main
@@ -214,9 +210,11 @@ jobs:
           persist-credentials: false
       - name: Install mise
         # FULL install, not the former `python uv` subset (#808). pytest now
-        # runs here, and 7 of its tests shell out to host-merged tools —
-        # `hk`, `chezmoi`, `pixi`, `codex`. Under the subset they failed as
-        # "not on PATH", which reads identically to "host-hostile" and is how
+        # runs here, and its tests shell out to host-merged tools — `hk`,
+        # `chezmoi`, `pixi` (`codex` is native-installer-only since
+        # 2026-10-01, so its login-shell tests are host_only). Under the
+        # subset they failed as "not on PATH", which reads identically to
+        # "host-hostile" and is how
         # over-marking silently deletes CI coverage. `graphify` is
         # `os = ["macos"]` in mise.toml so linux skips it either way.
         uses: $/.github/actions/setup-mise

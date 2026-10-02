@@ -122,7 +122,7 @@ Push-to-main path (after a PR merge):
   (`cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`) so its
   `promote` retag is never interrupted mid-flight.
 - **`setup-mise` composite**: a FULL install for contract-preflight (#808 —
-  pytest shells out to `hk`, `chezmoi`, `pixi`, `codex`), `install_args: python
+  pytest shells out to `hk`, `chezmoi`, `pixi`), `install_args: python
   uv` for smoke-test. lint caches mise data on `mise.lock`.
 - **build job** passes the GitHub token via a BuildKit **secret mount**
   (`uid=1000`), never `ARG`/env.

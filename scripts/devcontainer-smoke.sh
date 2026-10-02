@@ -90,6 +90,9 @@ echo "[tier3] sanitizers + reflection compilers (python-generated shared core)"
 tier3_core="$(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup image smoke-script --tier 3)"
 bash -lc "$tier3_core"
 
+echo "[tier3] native claude/codex/agy provenance (home volume; no active mise copy)"
+(cd "${WORKSPACE_FOLDER}" && uv run --project python dotfiles-setup devcontainer native-clis check)
+
 echo "[tier3] home volume ownership + seed survivors"
 # v6 single-home-volume contract: the whole /home/${USER} dir is a
 # persistent named volume. Assert (a) mise install dir is user-owned

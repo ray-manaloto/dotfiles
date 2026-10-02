@@ -114,12 +114,16 @@ _PIN_RESOLVERS: dict[str, Any] = {
     "typos": lambda root: _read_shared_toml_pin("typos", root),
     "ruff": lambda root: _read_uv_lock_pin("ruff", root),
     "mise": _read_setup_mise_pin,
-    # codex is pinned in the shared host<->image fragment under its FULL backend
-    # key, `npm:@openai/codex`, as a dict (`{ version = "...", allow_builds = ... }`)
-    # — not as a bare `codex` entry in root mise.toml, which has no codex key at
-    # all. `_read_shared_toml_pin` already unwraps the dict shape, same as typos.
-    "codex": lambda root: _read_shared_toml_pin("npm:@openai/codex", root),
 }
+
+#: Tools with NO mise [tools] pin anywhere: the vendor's native, self-updating
+#: installer owns them on the host, in the devcontainer and (claude) on CI, so
+#: the vendored ``version`` in ``sources.toml`` stands in for a pin. For
+#: claude-code it is a real pin (its ``source`` URL carries the tag); codex's
+#: ``source`` is unversioned, so its ``version`` is only a review label and
+#: ``sha256`` is what verifies the bytes. codex joined claude-code here when its
+#: shared.toml npm pin was removed (docs/specs/native-cli-devcontainer-2026-10-01.md).
+_VENDORED_PIN_TOOLS = frozenset({"claude-code", "codex"})
 
 
 def current_pin(tool: str, root: Path | None = None) -> str | None:
@@ -190,9 +194,9 @@ def check_drift(root: Path | None = None) -> list[str]:
     for entry in load_sources(project_root):
         pin = current_pin(entry.tool, project_root)
         if pin is None:
-            # claude-code has no mise [tools] pin; the vendored version in
-            # sources.toml IS the pin. Use it for drift detection.
-            if entry.tool == "claude-code":
+            # A native-installer tool has no mise [tools] pin; the vendored
+            # version in sources.toml IS the pin. Use it for drift detection.
+            if entry.tool in _VENDORED_PIN_TOOLS:
                 pin = entry.version
             else:
                 findings.append(
@@ -278,6 +282,12 @@ def _render_sources_toml(entries: list[SchemaEntry]) -> str:
         "`source` tag,\n"
         "# then run the refresh, which re-downloads at that tag and rewrites "
         "`sha256`.\n"
+        "# codex's `source` is UNVERSIONED (learn.chatgpt.com serves the current "
+        "schema),\n"
+        "# so its `version` is only a label for the codex the bytes were reviewed "
+        "against:\n"
+        "# bump it by hand when a refresh changes the bytes; `sha256` is what "
+        "verifies them.\n"
         "#\n"
         "# `pin_source` names where `schema_vendor.current_pin()` reads the tool's\n"
         "# CURRENT version from — informational here, the resolver itself is code.\n"
@@ -411,10 +421,10 @@ def refresh(
     for entry in entries:
         pin = current_pin(entry.tool, project_root)
         if pin is None:
-            # claude-code has no mise [tools] pin — the native installer owns PATH
-            # (currency.toml:29-39). For this tool, the vendored `version` in
-            # sources.toml IS the pin. Use it to build the source URL.
-            if entry.tool == "claude-code":
+            # A native-installer tool has no mise [tools] pin (currency.toml:29-39);
+            # the vendored `version` stands in. For claude-code it builds the
+            # source URL; codex's source is unversioned, so it is only a label.
+            if entry.tool in _VENDORED_PIN_TOOLS:
                 pin = entry.version
             else:
                 logger.error(

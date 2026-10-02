@@ -175,9 +175,10 @@ def _exempt(rel: str, target: Path) -> bool:
     try:
         # Only NEW files are refused: the contract is to stop new bash, not to
         # freeze what exists. A cold review found the earlier version denying
-        # `home/dot_local/bin/executable_claude`, a tracked wrapper that cannot
-        # enter the allowlist because the commit gate would call the entry
-        # stale — a guard whose escape hatch cannot be used is an outage.
+        # a tracked extensionless wrapper (the since-retired
+        # `home/dot_local/bin/executable_claude`) that cannot enter the
+        # allowlist because the commit gate would call the entry stale — a
+        # guard whose escape hatch cannot be used is an outage.
         if target.exists():
             return True
     except OSError:
