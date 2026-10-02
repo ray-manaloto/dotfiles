@@ -2981,3 +2981,38 @@ check_type = "static"
 handler = "regex_forbid"
 paths = ["python/src/dotfiles_setup/sdlc_team.py"]
 pattern = 'PLANNING_DISABLED|LANE_ENV_OVERRIDES'
+
+[[suite]]
+name = "workflow.codegen-toolchain-wired"
+description = "#1329 (R16/D23): datamodel-codegen is the ONLY way models and enums are produced, and its gate must stay wired end-to-end. The generator is an exact pin in pyproject's isolated `codegen` group; the `codegen`/`codegen-check` mise tasks resolve it with `--locked --group codegen` (never a PATH copy); hk's `codegen_check` step runs the python gate, which wraps the native `--all-jobs --check` AND scans generated/ for a module no job writes (the gap knowledge-base measured in the native check); main.py dispatches the subcommand; the gate's verdict is the generated DriftVerdict itself, and its tests bind the stale arm and the decode/reject arms of the pilot model. Bound at CALL SITES, not definitions, so deleting a wiring line fails."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths = [
+    "python/pyproject.toml",
+    "mise.toml",
+    "hk.pkl",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/codegen_check.py",
+    "tests/test_codegen_check.py",
+]
+per_path_tokens = { "python/pyproject.toml" = [
+    'codegen = ["datamodel-code-generator==0.83.0"]',
+    'output-model-type = "msgspec.Struct"',
+    'output = "src/dotfiles_setup/generated/drift_verdict.py"',
+], "mise.toml" = [
+    'run = "uv run --project . --locked --group codegen datamodel-codegen --all-jobs"',
+    'run = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
+], "hk.pkl" = [
+    'check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"',
+], "python/src/dotfiles_setup/main.py" = [
+    '"codegen-check": lambda: sys.exit(codegen_check_main(project_root)),',
+], "python/src/dotfiles_setup/codegen_check.py" = [
+    'from dotfiles_setup.generated.drift_verdict import DriftVerdict',
+    'stale = stale_modules(root)',
+    'rc = run([str(binary), "--all-jobs", "--check"], (root / PYPROJECT).parent)',
+    'if stale or rc == DriftVerdict.DRIFT:',
+], "tests/test_codegen_check.py" = [
+    'def test_a_module_no_job_writes_is_stale(',
+    'def test_the_generated_verdict_rejects_an_exit_code_outside_the_set(',
+] }

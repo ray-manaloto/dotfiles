@@ -1347,6 +1347,19 @@ run = "uv run --project python dotfiles-setup eval"
 description = "Regenerate docs/hk-builtins-audit.md from `hk builtins` + the hk configs"
 run = "uv run --project python dotfiles-setup hk-builtins-audit"
 
+# Code generation is the ONLY way models and enums are produced (R16/D23;
+# #1329). `--locked --group codegen` resolves the generator from uv.lock, never
+# a PATH copy; `dir` is python/ because datamodel-codegen discovers its
+# [tool.datamodel-codegen] table from the cwd's pyproject.toml.
+[tasks.codegen]
+description = "Regenerate every model/enum from its committed schema (datamodel-codegen --all-jobs)"
+dir = "{{config_root}}/python"
+run = "uv run --project . --locked --group codegen datamodel-codegen --all-jobs"
+
+[tasks.codegen-check]
+description = "Fail if a generated model differs from its schema, or a generated module has no job (rc: 0 in sync, 1 drift, 2 error)"
+run = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"
+
 [tasks.audit-aggregate]
 description = "Regenerate the deterministic modernization-audit TOML and side outputs. Bare run: --toml defaults from the stamp in <audit-dir>/args.json; with no usable stamp, pass --toml explicitly (rc=1 otherwise)."
 # Thin caller; aggregation logic lives in dotfiles_setup.modernization_audit.

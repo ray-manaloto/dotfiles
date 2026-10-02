@@ -374,6 +374,14 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup hk-builtins-audit --check"
   }
 
+  // #1329: every generated model matches its schema and no generated module is
+  // orphaned. A hand edit to a generated file, or a schema edit without
+  // `mise run codegen`, fails here. The generator comes from the locked
+  // `codegen` group, never PATH.
+  ["codegen_check"] {
+    check = "uv run --project python --locked --group codegen dotfiles-setup codegen-check"
+  }
+
   // #394 step 4, as the audit recommended it. A `per_path_tokens` entry should
   // match its target file exactly once: the three holes that were live in #394
   // all survived their anchor because the token matched somewhere OTHER than

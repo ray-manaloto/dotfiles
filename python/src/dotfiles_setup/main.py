@@ -27,6 +27,7 @@ from dotfiles_setup.bootstrap_packages import gap_report_failures
 from dotfiles_setup.bounded_wait import DEFAULT_INTERVAL_S, WaitRequest
 from dotfiles_setup.bounded_wait import main as bounded_wait_main
 from dotfiles_setup.classifier_tables import classifier_axes_main
+from dotfiles_setup.codegen_check import codegen_check_main
 from dotfiles_setup.codex_agent_parity import codex_agent_parity_main
 from dotfiles_setup.codex_agent_validate import (
     validate_main as codex_agent_validate_main,
@@ -597,6 +598,12 @@ def _add_hk_builtins_audit_subcommand(subparsers: _SubParsers) -> None:
         "--check",
         action="store_true",
         help="Fail instead of writing when the committed doc is out of date",
+    )
+    subparsers.add_parser(
+        "codegen-check",
+        help="Fail if a generated model differs from its schema or a module in "
+        "generated/ has no [tool.datamodel-codegen] job (#1329); run it via "
+        "`mise run codegen-check`",
     )
 
 
@@ -3074,6 +3081,7 @@ def _build_command_handlers(
         "hk-builtins-audit": lambda: sys.exit(
             hk_builtins_audit_main(project_root, check=args.check)
         ),
+        "codegen-check": lambda: sys.exit(codegen_check_main(project_root)),
         "workflow-hooks": lambda: sys.exit(workflow_hooks_main(project_root)),
         "workflow-claude-code": lambda: sys.exit(
             workflow_claude_code_main(project_root)

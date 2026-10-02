@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ray-manaloto/dotfiles/schemas/drift-verdict.schema.json",
+  "title": "DriftVerdict",
+  "description": "Exit code of an OFFLINE drift check: in sync, drift, or error.",
+  "type": "integer",
+  "enum": [0, 1, 2],
+  "x-enum-varnames": ["IN_SYNC", "DRIFT", "ERROR"],
+  "$comment": "A check exits 0 when the tree is in sync, 1 when it found drift its producer can regenerate, and 2 when the check itself could not decide (an exception, a missing tool, an unresolvable pin). The three must never collapse: before this enum every uncaught Python exception also exited 1, so a broken check read as drift and unlocked a producer on a drift-free tree (S29-00b cold-review F4, rejected as an accepted limitation by Ray 2026-10-01). The description stays one line because it becomes the generated class docstring and ruff's E501 applies to generated code too."
+}

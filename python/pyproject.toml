@@ -193,3 +193,37 @@ dev = [
     "ruff",
     "ty",
 ]
+# Code generation is the ONLY way models and enums are produced (R16/D23;
+# #1329). Exact pin, isolated group: the `codegen`/`codegen-check` mise tasks
+# run it with `--locked --group codegen`, so the binary comes from uv.lock,
+# never a PATH copy. Mirrors knowledge-base's setup (pyproject.toml there).
+codegen = ["datamodel-code-generator==0.83.0"]
+
+# Every model/enum generated from a committed schema (R16/D23; #1329). This
+# table plus the `codegen`/`codegen-check` mise tasks IS the generator. Paths
+# are relative to THIS file's directory (the tasks run with cwd = python/), so
+# every output stays under python/ and the formatter pass picks up this
+# file's ruff config. Settings mirror knowledge-base's proven table; see the
+# comments there for why `use-annotated`/`field-constraints` and
+# `disable-timestamp` are non-optional.
+[tool.datamodel-codegen]
+input-file-type = "jsonschema"
+schema-version = "2020-12"
+schema-version-mode = "strict"
+strict-refs = true
+output-model-type = "msgspec.Struct"
+target-python-version = "3.14"
+formatters = ["ruff-check", "ruff-format"]
+disable-timestamp = true
+extra-fields = "forbid"
+use-annotated = true
+field-constraints = true
+use-specialized-enum = true
+use-standard-collections = true
+use-schema-description = true
+
+[tool.datamodel-codegen.jobs.drift-verdict]
+input = "../schemas/drift-verdict.schema.json"
+output = "src/dotfiles_setup/generated/drift_verdict.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated drift-verdict enum; edit the schema and rerun `mise run codegen`."""'''

@@ -9,7 +9,7 @@
 - **hk version:** hk 2.3.0
 - **Builtins available:** 160
 - **Wired as builtins:** 28
-- **Steps defined in total:** 74 (46 custom, with their own check/fix commands)
+- **Steps defined in total:** 75 (47 custom, with their own check/fix commands)
 
 A *wired builtin* is referenced as `Builtins.<name>`. A *custom step* is a
 `["name"] { … }` block carrying its own commands — it may share a
@@ -50,7 +50,7 @@ as builtins in use.
 | `yamllint` | hk.pkl |
 | `zizmor` | hk.pkl |
 
-## Custom steps (46)
+## Custom steps (47)
 
 Not builtins. Each carries its own `check`/`fix`, so `hk builtins` has no
 opinion about them, and neither does this table beyond recording them.
@@ -65,6 +65,7 @@ opinion about them, and neither does this table beyond recording them.
 | `classifier_axes` | hk.pkl |
 | `claude_agents_md_pairs` | hk.pkl |
 | `claude_md_import_stub` | hk.pkl |
+| `codegen_check` | hk.pkl |
 | `codex_agent_parity` | hk.pkl |
 | `codex_agent_validate` | hk.pkl |
 | `codex_lane_mirror` | hk.pkl |
