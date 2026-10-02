@@ -887,72 +887,72 @@ url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-x86_64-unknown
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [[tools."github:cli/cli"]]
-version = "2.101.0"
+version = "2.102.0"
 backend = "github:cli/cli"
 
 [tools."github:cli/cli"."platforms.linux-arm64"]
-checksum = "sha256:b57e8063f18862647c9d22727c32e9da1b963f8bf9db648fe123a6975695640f"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857147"
+checksum = "sha256:7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854680"
 
 [tools."github:cli/cli"."platforms.linux-arm64-musl"]
-checksum = "sha256:b57e8063f18862647c9d22727c32e9da1b963f8bf9db648fe123a6975695640f"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857147"
+checksum = "sha256:7862c86c72f43df3a2d93ddde6f473285b4e2af61b494849846827e513ef6484"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854680"
 
 [tools."github:cli/cli"."platforms.linux-x64"]
-checksum = "sha256:9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
+checksum = "sha256:bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854672"
 
 [tools."github:cli/cli"."platforms.linux-x64-baseline"]
-checksum = "sha256:9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
+checksum = "sha256:bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854672"
 
 [tools."github:cli/cli"."platforms.linux-x64-musl"]
-checksum = "sha256:9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
+checksum = "sha256:bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854672"
 
 [tools."github:cli/cli"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
-url = "https://github.com/cli/cli/releases/download/v2.101.0/gh_2.101.0_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cli/cli/releases/assets/565857134"
+checksum = "sha256:bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386"
+url = "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cli/cli/releases/assets/599854672"
 
 [[tools."github:go-task/task"]]
-version = "3.53.1"
+version = "3.54.0"
 backend = "github:go-task/task"
 
 [tools."github:go-task/task"."platforms.linux-arm64"]
-checksum = "sha256:e3ad19101493a0112e1f22ae8ccc54bf03e533b1076a0ca1e6c782a09ad2e588"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645523"
+checksum = "sha256:d7189d439d4a6058e39e1b2acd7c8b27acd4856691b408f23b242e4294e1df5b"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090041"
 
 [tools."github:go-task/task"."platforms.linux-arm64-musl"]
-checksum = "sha256:e3ad19101493a0112e1f22ae8ccc54bf03e533b1076a0ca1e6c782a09ad2e588"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645523"
+checksum = "sha256:d7189d439d4a6058e39e1b2acd7c8b27acd4856691b408f23b242e4294e1df5b"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090041"
 
 [tools."github:go-task/task"."platforms.linux-x64"]
-checksum = "sha256:a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645449"
+checksum = "sha256:680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090073"
 
 [tools."github:go-task/task"."platforms.linux-x64-baseline"]
-checksum = "sha256:a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645449"
+checksum = "sha256:680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090073"
 
 [tools."github:go-task/task"."platforms.linux-x64-musl"]
-checksum = "sha256:a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645449"
+checksum = "sha256:680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090073"
 
 [tools."github:go-task/task"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:a54a408f6861ff921f6e87774180db31bacd8c1e7c944ca696db9fea49a82fc7"
-url = "https://github.com/go-task/task/releases/download/v3.53.1/task_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/go-task/task/releases/assets/519645449"
+checksum = "sha256:680859dbb4d881a9c72d4d9a8f510825450849af8567deacd7302c01124416fb"
+url = "https://github.com/go-task/task/releases/download/v3.54.0/task_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/go-task/task/releases/assets/604090073"
 
 [[tools."github:mozilla/sccache"]]
 version = "0.18.0"
@@ -989,38 +989,38 @@ url = "https://github.com/mozilla/sccache/releases/download/v0.18.0/sccache-v0.1
 url_api = "https://api.github.com/repos/mozilla/sccache/releases/assets/563130201"
 
 [[tools."github:tursodatabase/turso"]]
-version = "0.7.2"
+version = "0.8.1"
 backend = "github:tursodatabase/turso"
 
 [tools."github:tursodatabase/turso"."platforms.linux-arm64"]
-checksum = "sha256:e13b2017961173a3280dfed64d5e76d6a17e5b30960540da991df20fd0455f10"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426452"
+checksum = "sha256:a1dfe53b18e273beb97e91f32e57148692e0529450d0db85234a524b5dfafd37"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147494"
 
 [tools."github:tursodatabase/turso"."platforms.linux-arm64-musl"]
-checksum = "sha256:e13b2017961173a3280dfed64d5e76d6a17e5b30960540da991df20fd0455f10"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426452"
+checksum = "sha256:a1dfe53b18e273beb97e91f32e57148692e0529450d0db85234a524b5dfafd37"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147494"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64"]
-checksum = "sha256:321e401e44f7ee8ea656caff0f85304025f7e905acafe7bedf6a9304f1af1783"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426478"
+checksum = "sha256:b4b94f334cc8ccbf6a7cde1aa7c2949acbc51c83dc41680192a47bd619c021eb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147561"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-baseline"]
-checksum = "sha256:321e401e44f7ee8ea656caff0f85304025f7e905acafe7bedf6a9304f1af1783"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426478"
+checksum = "sha256:b4b94f334cc8ccbf6a7cde1aa7c2949acbc51c83dc41680192a47bd619c021eb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147561"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-musl"]
-checksum = "sha256:321e401e44f7ee8ea656caff0f85304025f7e905acafe7bedf6a9304f1af1783"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426478"
+checksum = "sha256:b4b94f334cc8ccbf6a7cde1aa7c2949acbc51c83dc41680192a47bd619c021eb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147561"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:321e401e44f7ee8ea656caff0f85304025f7e905acafe7bedf6a9304f1af1783"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.7.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/495426478"
+checksum = "sha256:b4b94f334cc8ccbf6a7cde1aa7c2949acbc51c83dc41680192a47bd619c021eb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.1/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/598147561"
 
 [[tools.libsql-server]]
 version = "0.24.32"
@@ -1070,7 +1070,7 @@ url = "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v
 url_api = "https://api.github.com/repos/tursodatabase/libsql/releases/assets/229138342"
 
 [[tools."npm:@google/gemini-cli"]]
-version = "0.61.0"
+version = "0.62.0"
 backend = "npm:@google/gemini-cli"
 
 [[tools."npm:ajv-cli"]]
@@ -1086,7 +1086,7 @@ version = "6.29.1"
 backend = "pipx:codechecker"
 
 [[tools."pipx:conan"]]
-version = "2.32.0"
+version = "2.33.0"
 backend = "pipx:conan"
 
 [[tools."pipx:cpplint"]]
@@ -1110,35 +1110,35 @@ version = "1.12.1"
 backend = "pipx:meson"
 
 [[tools.usage]]
-version = "6.11.1"
+version = "6.12.0"
 backend = "packslip:github.com/jdx/usage"
 
 [tools.usage."platforms.linux-arm64"]
-checksum = "sha256:90622145566409da24d282190ad17cc786c85d498d751543824ab62931705018"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-aarch64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:6e9be5caa7dc8a484fc488cf5ed6fcde5d2b3271943ccc039e0c08041a8f8bf8"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-aarch64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-arm64-musl"]
-checksum = "sha256:b8903edb0accb76576a9a454900388d629dff9a35186e653c4e5b48e622e62c0"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-aarch64-unknown-linux-musl.tar.gz"
+checksum = "sha256:28729924e46bfad1112a7ec35003cdf074d2686346ddaa2d0f4206c1f66a2827"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-aarch64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64"]
-checksum = "sha256:afa6cb0e76f88cc6392aeecf21bbcd869747d4eeb60ab84c98d6e6178edc359a"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:c82b39ca9c64e3256284667ca8ddd4c27b7141d842ba054a645ee73d6ab99b17"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-x86_64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64-baseline"]
-checksum = "sha256:afa6cb0e76f88cc6392aeecf21bbcd869747d4eeb60ab84c98d6e6178edc359a"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:c82b39ca9c64e3256284667ca8ddd4c27b7141d842ba054a645ee73d6ab99b17"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-x86_64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64-musl"]
-checksum = "sha256:7b37d1d36b310857908e508802db6c6b670555cf25cd0b990f09ee40cb11247b"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-musl.tar.gz"
+checksum = "sha256:5cab69ffacde3f700bd74095f89a4879cea591a8c0656f3104786ed1d0df218a"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-x86_64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
 
 [tools.usage."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7b37d1d36b310857908e508802db6c6b670555cf25cd0b990f09ee40cb11247b"
-url = "https://github.com/jdx/usage/releases/download/v6.11.1/usage-x86_64-unknown-linux-musl.tar.gz"
+checksum = "sha256:5cab69ffacde3f700bd74095f89a4879cea591a8c0656f3104786ed1d0df218a"
+url = "https://github.com/jdx/usage/releases/download/v6.12.0/usage-x86_64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/usage/.github/workflows/publish-cli.yml"
