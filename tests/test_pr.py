@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -507,12 +508,130 @@ def test_ship_bounds_fnox_to_git_push_and_keeps_local_gates_uncredentialed(
     monkeypatch.setattr(process_env, "run_with_fnox", fnox_child)
     monkeypatch.setattr(pr, "_open_or_update_pr", lambda *_args, **_kwargs: 42)
     monkeypatch.setattr(pr, "_await_checks_registered", lambda _number: True)
-    monkeypatch.setattr(pr, "_run", lambda *_args, **_kwargs: _cp("abc123\n"))
+
+    def probe(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        # No configured core.sshCommand (git config --get exits 1); HEAD sha.
+        return _cp("", returncode=1) if "config" in cmd else _cp("abc123\n")
+
+    monkeypatch.setattr(pr, "_run", probe)
+    monkeypatch.delenv("GIT_SSH", raising=False)
     monkeypatch.setattr(pr, "enable_auto_merge", lambda *_args: True)
 
     assert pr.ship_main(_WORKSPACE) == 0
     assert local_children == [["mise", "run", "test"]]
-    assert fnox_children == [("git", "push", "-u", "origin", "feat/x")]
+    assert fnox_children == [
+        (
+            "git",
+            "-c",
+            "core.sshCommand=ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20",
+            "push",
+            "-u",
+            "origin",
+            "feat/x",
+        )
+    ]
+
+
+@pytest.fixture
+def ssh_remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """A real repo whose origin is ssh://, with fake ``ssh``/``user-ssh`` on PATH.
+
+    Each fake logs its own name and argv, then exits 1 (the push fails, which
+    is fine): the log shows which ssh command REAL git chose and with what.
+    """
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "no-global-config"))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    for name in ("GIT_SSH", "GIT_SSH_COMMAND", "GIT_DIR", "GIT_WORK_TREE"):
+        monkeypatch.delenv(name, raising=False)
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    log = tmp_path / "ssh.log"
+    for name in ("ssh", "user-ssh"):
+        fake = bindir / name
+        fake.write_text(f'#!/bin/sh\necho "{name} $*" >> "{log}"\nexit 1\n')
+        fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (
+        ("init", "-b", "feat/x"),
+        ("commit", "--allow-empty", "-m", "init"),
+        ("remote", "add", "origin", "ssh://example.invalid/x.git"),
+    ):
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+    return {"repo": repo, "log": log, "bin": bindir}
+
+
+def _ssh_used(ssh_remote: dict[str, Path]) -> str:
+    """Run ship's real push argv through real git; return what the fake logged."""
+    argv = pr.push_command(ssh_remote["repo"], "feat/x")
+    subprocess.run(argv, cwd=ssh_remote["repo"], check=False, capture_output=True)
+    return ssh_remote["log"].read_text()
+
+
+def test_push_carries_an_ssh_keepalive_by_default(
+    ssh_remote: dict[str, Path],
+) -> None:
+    """Without it the pre-push hook idles the transport and push dies rc=141."""
+    used = _ssh_used(ssh_remote)
+    assert used.startswith("ssh ")
+    assert "ServerAliveInterval=30" in used
+    assert "ServerAliveCountMax=20" in used
+
+
+def test_push_keepalive_yields_to_a_user_git_ssh_command(
+    ssh_remote: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Git's own precedence: GIT_SSH_COMMAND overrides ``-c core.sshCommand``."""
+    monkeypatch.setenv("GIT_SSH_COMMAND", str(ssh_remote["bin"] / "user-ssh"))
+    used = _ssh_used(ssh_remote)
+    assert used.startswith("user-ssh ")
+    assert "ServerAlive" not in used
+
+
+def test_push_keepalive_yields_to_a_configured_core_ssh_command(
+    ssh_remote: dict[str, Path],
+) -> None:
+    """``-c`` would shadow the repo's own setting, so ship must not pass it."""
+    subprocess.run(
+        ["git", "config", "core.sshCommand", str(ssh_remote["bin"] / "user-ssh")],
+        cwd=ssh_remote["repo"],
+        check=True,
+    )
+    used = _ssh_used(ssh_remote)
+    assert used.startswith("user-ssh ")
+    assert "ServerAlive" not in used
+
+
+def test_push_keepalive_yields_to_git_ssh(
+    ssh_remote: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GIT_SSH is consulted only when no sshCommand is set, so ``-c`` would hide it."""
+    monkeypatch.setenv("GIT_SSH", str(ssh_remote["bin"] / "user-ssh"))
+    used = _ssh_used(ssh_remote)
+    assert used.startswith("user-ssh ")
+    assert "ServerAlive" not in used
+
+
+def test_ship_labels_a_sigpipe_push_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """rc=141 names its cause; any other rc stays a bare number."""
+    monkeypatch.setattr(pr, "_ship_preflight", lambda _w: ("feat/x", ["README.md"]))
+    monkeypatch.setattr(pr, "run_gates", lambda *_a: True)
+    monkeypatch.setattr(pr, "push_command", lambda _w, b: ["git", "push", b])
+    for rc, label in (
+        (141, " (push transport dropped (ssh idle during pre-push))"),
+        (1, ""),
+    ):
+        monkeypatch.setattr(process_env, "run_with_fnox", lambda *_a, rc=rc, **_k: rc)
+        assert pr.ship_main(_WORKSPACE) == 1
+        assert f"FAIL  ship: git push rc={rc}{label}\n" in capsys.readouterr().out
 
 
 def test_ship_fails_if_auto_merge_enable_fails(

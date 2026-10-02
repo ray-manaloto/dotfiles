@@ -78,6 +78,7 @@ from __future__ import annotations
 import dataclasses
 import fnmatch
 import json
+import os
 import subprocess
 import sys
 import time
@@ -500,6 +501,34 @@ def _working_tree_clean(workspace: Path) -> bool:
     ).stdout.strip()
 
 
+#: The pre-push hook runs the gate suite (6-11 min) AFTER git has opened the ssh
+#: transport, and GitHub closes a connection idle that long ("closed by remote
+#: host"); the pack write then dies on SIGPIPE. Keepalives hold it open.
+_PUSH_SSH_KEEPALIVE = "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20"
+_PUSH_RC_MEANING = {141: "push transport dropped (ssh idle during pre-push)"}
+
+
+def push_command(workspace: Path, branch: str) -> list[str]:
+    """``git push`` argv for ship, carrying an ssh keepalive unless the user chose ssh.
+
+    The keepalive rides on git's native ``core.sshCommand`` via ``-c``. Git
+    documents that a set ``GIT_SSH_COMMAND`` overrides it, so a user's env
+    command wins with no check here. ``-c`` WOULD shadow a configured
+    ``core.sshCommand`` and ``GIT_SSH`` (consulted only when neither is set),
+    so either of those leaves the push untouched.
+    """
+    plain = ["git", "push", "-u", "origin", branch]
+    configured = _run(
+        ["git", "-C", str(workspace), "config", "--get", "core.sshCommand"],
+        timeout=_PROBE_TIMEOUT_S,
+    )
+    if os.environ.get("GIT_SSH") or (
+        configured.returncode == 0 and configured.stdout.strip()
+    ):
+        return plain
+    return ["git", "-c", f"core.sshCommand={_PUSH_SSH_KEEPALIVE}", *plain[1:]]
+
+
 def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | None:
     """Branch/tree/diff preconditions for ship; None (after printing) on fail."""
     branch = _current_branch(workspace)
@@ -609,11 +638,10 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     if not run_gates(workspace, gate_matrix(paths)):
         return 1
 
-    push_rc = process_env.run_with_fnox(
-        ["git", "push", "-u", "origin", branch], cwd=workspace
-    )
+    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
     if push_rc != 0:
-        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}\n")
+        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
+        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
         return 1
 
     number = _open_or_update_pr(workspace, title)
