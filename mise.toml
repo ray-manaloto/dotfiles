@@ -67,7 +67,7 @@ lefthook = "2.1.16"
 "aqua:rtk-ai/rtk" = "0.50.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.7.0"
 "npm:agent-browser" = "0.38.2"
-"npm:portless" = "0.15.6"
+"npm:portless" = "0.15.7"
 "pipx:deepagents-cli" = "0.3.0"
 # ffmpeg: system binary the graphify `video` extra (faster-whisper) needs to
 # extract audio before transcription — it is NOT a pip dep, so `graphifyy[all]`
