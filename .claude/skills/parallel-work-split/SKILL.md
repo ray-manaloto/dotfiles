@@ -146,7 +146,8 @@ LANE <lane> (<repo>, worktree <path>, branch <branch>). Items: <#issue …>.
 CWD: you were launched inside your worktree. Do NOT create a worktree, call EnterWorktree/ExitWorktree, or cd to the main checkout.
 OWN ONLY: <file list>. DO NOT EDIT: <hot files + other lanes' files>.
 NATIVE-FIRST: research the tool's built-in before custom code (use-tool-builtins.md).
-GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc.
+GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc. Grep python/ tests/ for a fragment of each line you rewrite: registries pin source text (session_gate PREVENTIONS).
+REVIEW: cold-reviewer and mattpocock code-review take the BASE; /code-review takes the TARGET (`/code-review <level> <HEAD sha>`) — a base sha there reviews someone else's commit. Check findings name files in your diff.
 PERSIST: report to <path> incrementally; findings.md/progress.md append-only; never task_plan.md.
 REPORT TO: the coordinator by name; if it handed off, the newest coordinator by ListAgents recency; fallback .agent/plans/handoff-inbox/<lane>.md.
 STOP AT: commit on the branch. Do NOT push, ship or open a PR; report to the coordinator, who ships serially.
