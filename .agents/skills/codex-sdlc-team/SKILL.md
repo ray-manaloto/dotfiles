@@ -184,9 +184,12 @@ between the code and the spec stops the lane and comes back as a finding.
   caller states the author's family in the review brief:
   - codex-authored → `cold-reviewer` (an Opus subagent, diff-only).
   - Anthropic-authored → a codex lens:
-    `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"' -m gpt-6-astra -c 'model_reasoning_effort="xhigh"'`
+    `mise exec -- codex exec -s read-only --ignore-rules review --commit <SHA> -c 'sandbox_mode="read-only"' -m gpt-6-astra -c 'review_model="gpt-6-astra"' -c 'model_reasoning_effort="xhigh"'`
     (model + effort pinned, D15 2026-10-02 — unpinned, the lens inherited
-    `~/.codex/config.toml` at effort `low`)
+    `~/.codex/config.toml` at effort `low`. `review_model` is pinned too: a
+    configured `review_model` outranks `-m` for the review conversation. Every
+    `-c` goes AFTER `review` — one placed before it is silently ignored:
+    2026-10-02, before → banner `reasoning effort: low`, after → `xhigh`)
     (`--base <branch>` for a range; pending #1297's write-canary). Do not
     promise `--output-schema`: `exec review` ignores it (#1296). `<SHA>` is the
     literal SHA your `git commit` printed after its own rc=0 — never
