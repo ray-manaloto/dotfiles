@@ -6518,7 +6518,7 @@ version = "0.89.0"
 backend = "npm:@devcontainers/cli"
 
 [[tools."npm:agent-browser"]]
-version = "0.38.1"
+version = "0.38.2"
 backend = "npm:agent-browser"
 
 [[tools."npm:agents-lint"]]
@@ -6550,7 +6550,7 @@ version = "0.15.6"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.131.0"
+version = "44.131.1"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
