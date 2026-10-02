@@ -3047,7 +3047,7 @@ per_path_lines = { "python/pyproject.toml" = [
 
 [[suite]]
 name = "workflow.native-clis-container-wiring"
-description = "Native, self-updating claude/codex/agy in the devcontainer (docs/specs/native-cli-devcontainer-2026-10-01.md) must stay wired end-to-end: on-create.sh calls `devcontainer native-clis install` BEFORE chezmoi and returns its held rc at the end; the tier-3 smoke calls `native-clis check`; main.py dispatches the verb; the module keeps its mise-copy finding wired and its credential filter on the MISE_* passthrough (cold review of 93d70c96: a bare prefix rule handed MISE_GITHUB_TOKEN to three vendor scripts); and the CI no-mount smoke still fails on a baked copy. Deleting any one call site left every other gate green before this suite existed (cold review finding 4)."
+description = "Native, self-updating claude/codex/agy in the devcontainer (docs/specs/native-cli-devcontainer-2026-10-01.md) must stay wired end-to-end: on-create.sh calls `devcontainer native-clis install` and WARNS (never fails onCreate, which would skip postCreate's R1 keys and postStart's R2 chown) — the before-chezmoi ORDER is pinned by tests/test_native_clis_container.py, since require_tokens cannot see order; the tier-3 smoke calls `native-clis check`; main.py dispatches the verb; the module keeps its mise-copy finding wired and its credential filter on the MISE_* passthrough (cold review of 93d70c96: a bare prefix rule handed MISE_GITHUB_TOKEN to three vendor scripts); and the CI no-mount smoke still fails on a baked copy. Deleting any one call site left every other gate green before this suite existed (cold review finding 4)."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -3061,8 +3061,8 @@ paths = [
     "tests/test_native_clis_container.py",
 ]
 per_path_tokens = { ".devcontainer/scripts/on-create.sh" = [
-    'dotfiles-setup devcontainer native-clis install) || native_rc=$?',
-    'exit "${native_rc}"',
+    'dotfiles-setup devcontainer native-clis install) ||',
+    'echo "[on-create] WARN: native claude/codex/agy install failed (rc=$?); smoke tier 3 will FAIL" >&2',
 ], "scripts/devcontainer-smoke.sh" = [
     'dotfiles-setup devcontainer native-clis check)',
 ], "python/src/dotfiles_setup/main.py" = [

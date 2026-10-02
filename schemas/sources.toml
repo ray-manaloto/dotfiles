@@ -4,8 +4,8 @@
 # that `refresh.yml`'s `schema-refresh` job runs in CI. Never hand-edit the
 # `source`/`sha256` fields, nor `version` for a tool with a resolver in
 # `schema_vendor._PIN_RESOLVERS`; run `mise run schema-vendor-refresh` and let
-# it rewrite this file alongside the vendored JSON. `claude-code` and `codex` have
-# no resolver, so `version` IS the pin: hand-edit `version` (+ the `source` tag),
+# it rewrite this file alongside the vendored JSON. `claude-code` has no
+# resolver, so its `version` IS its pin: hand-edit `version` + the `source` tag,
 # then run the refresh, which re-downloads at that tag and rewrites `sha256`.
 # codex's `source` is UNVERSIONED (learn.chatgpt.com serves the current schema),
 # so its `version` is only a label for the codex the bytes were reviewed against:

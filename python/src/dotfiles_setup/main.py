@@ -372,7 +372,7 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         "native_clis_command",
         choices=("install", "check"),
         help="install: run each missing tool's vendor installer; check: "
-        "assert each resolves to its native install and no mise copy exists",
+        "assert each resolves to its native install and `mise ls` lists no copy",
     )
     migrate_parser = devcontainer_sub.add_parser(
         "migrate-home",
@@ -670,6 +670,71 @@ def _add_audit_aggregate_subcommand(subparsers: _SubParsers) -> None:
     )
 
 
+def _add_image_lock_subcommand(subparsers: _SubParsers) -> None:
+    """Register `image-lock` (#650).
+
+    Extracted when `--no-bump` pushed `_add_honesty_subcommands` past ruff's
+    PLR0915 statement ceiling, the same reason its siblings were split out.
+
+    Args:
+        subparsers: The parent subparsers action to attach it to.
+    """
+    image_lock_parser = subparsers.add_parser(
+        "image-lock",
+        help="Regenerate .devcontainer/mise-system.lock + mise-runtime.lock "
+        "locally, with CI's recipe as a callable (#650): stage the merged "
+        "config, install the image's PINNED mise, converge, then collect with "
+        "platform coverage verified against HEAD. Routes into the amd64 "
+        "devcontainer on a host that cannot write linux conda checksums",
+    )
+    image_lock_parser.add_argument(
+        "--platform",
+        action="append",
+        default=[],
+        dest="platforms",
+        help="Platform to lock; repeatable. Defaults to every platform the "
+        "committed lock already carries — a linux-x64-only pass drops a "
+        "bumped tool's macos-x64 entry",
+    )
+    image_lock_parser.add_argument(
+        "--stage",
+        type=Path,
+        help="Stage directory to reuse (default: a fresh temp dir, removed "
+        "afterwards). Reuse one to resume a rate-limited run",
+    )
+    image_lock_parser.add_argument(
+        "--passes",
+        type=int,
+        default=image_lock.DEFAULT_PASSES,
+        help="Convergence passes; each fills what the previous could not "
+        "resolve under GitHub rate limits",
+    )
+    image_lock_parser.add_argument(
+        "--no-bump",
+        dest="bump",
+        action="store_false",
+        help="Keep every existing locked version (mise's native `mise lock` "
+        "default) instead of re-resolving `latest` pins: for a change that only "
+        "removes or edits a tool, so the lock diff is that tool alone. The daily "
+        "refresh keeps the default --bump",
+    )
+    container = image_lock_parser.add_mutually_exclusive_group()
+    container.add_argument(
+        "--container",
+        dest="container",
+        action="store_true",
+        default=None,
+        help="Always route into the devcontainer (default: only when this "
+        "host cannot write a faithful lock)",
+    )
+    container.add_argument(
+        "--no-container",
+        dest="container",
+        action="store_false",
+        help="Never route; fail loudly on a host that cannot do the job",
+    )
+
+
 def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
     """Register the gates that keep a claim and its reality in step.
 
@@ -887,51 +952,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Print a PASS line per clean check instead of staying silent",
     )
-    image_lock_parser = subparsers.add_parser(
-        "image-lock",
-        help="Regenerate .devcontainer/mise-system.lock + mise-runtime.lock "
-        "locally, with CI's recipe as a callable (#650): stage the merged "
-        "config, install the image's PINNED mise, converge, then collect with "
-        "platform coverage verified against HEAD. Routes into the amd64 "
-        "devcontainer on a host that cannot write linux conda checksums",
-    )
-    image_lock_parser.add_argument(
-        "--platform",
-        action="append",
-        default=[],
-        dest="platforms",
-        help="Platform to lock; repeatable. Defaults to every platform the "
-        "committed lock already carries — a linux-x64-only pass drops a "
-        "bumped tool's macos-x64 entry",
-    )
-    image_lock_parser.add_argument(
-        "--stage",
-        type=Path,
-        help="Stage directory to reuse (default: a fresh temp dir, removed "
-        "afterwards). Reuse one to resume a rate-limited run",
-    )
-    image_lock_parser.add_argument(
-        "--passes",
-        type=int,
-        default=image_lock.DEFAULT_PASSES,
-        help="Convergence passes; each fills what the previous could not "
-        "resolve under GitHub rate limits",
-    )
-    container = image_lock_parser.add_mutually_exclusive_group()
-    container.add_argument(
-        "--container",
-        dest="container",
-        action="store_true",
-        default=None,
-        help="Always route into the devcontainer (default: only when this "
-        "host cannot write a faithful lock)",
-    )
-    container.add_argument(
-        "--no-container",
-        dest="container",
-        action="store_false",
-        help="Never route; fail loudly on a host that cannot do the job",
-    )
+    _add_image_lock_subcommand(subparsers)
     drift_parser = subparsers.add_parser(
         "path-drift",
         help="Does THIS shell resolve the tools mise currently pins? A cached "
@@ -3037,7 +3058,7 @@ def _build_command_handlers(
                 platforms=tuple(args.platforms),
                 stage=args.stage,
                 container=args.container,
-                passes=args.passes,
+                settings=image_lock.LockRun(passes=args.passes, bump=args.bump),
             )
         ),
         "path-drift": lambda: sys.exit(

@@ -112,3 +112,103 @@ loop and should promote to one bounded round over the 14 rows above.
 
 _None._ Only this repository's files at `93d70c96` / `origin/main`, the user-global mise config,
 and host-side Doppler env-file key counts were read; no external repository source or docs.
+
+---
+
+# Round 2 — bounded re-review of `ccfc7b85` (fix for round 1)
+
+- Subject: `ccfc7b8538eb45f49508d6a960e1e9abb49639c6`; delta reviewed `git diff 93d70c96 ccfc7b85`
+  (14 files, +408 / -37). Every read via `git show ccfc7b85:<path>`.
+- Domain (cardinality 14 + 1): the 14 round-1 findings, each judged FIXED / ACCEPTED-RESIDUAL
+  (documented in spec §4) / NOT FIXED; plus new defects introduced by `ccfc7b85` itself only.
+- Status: COMPLETE (bounded round: all 14 rows judged + the new-defect question answered)
+
+## Round-2 disposition of the 14 round-1 findings
+
+| # | R1 sev | Verdict | Where (at `ccfc7b85`) | Evidence |
+|---|---|---|---|---|
+| 1 | HIGH | **FIXED** | `python/src/dotfiles_setup/native_clis_container.py:78-82`, `:139-147` | `_CREDENTIAL_NAME` drops credential-shaped `MISE_*`; mutation removing it fails 2 tests (E1); the only real `MISE_*` secret (`MISE_GITHUB_TOKEN`) is the only container `MISE_*` name the regex drops (E2) |
+| 2 | MEDIUM | **FIXED** | `tests/test_native_clis_container.py:189-192`, `:212-214`, `:305-325` | `MISE_GITHUB_TOKEN` canary seeded for both install and `--version` paths; armed by E1 |
+| 3 | MEDIUM | **FIXED as scoped**; residual undocumented | `.devcontainer/scripts/on-create.sh:43-44`, `:81` | rc held via `\|\| native_rc=$?`, returned last, so chezmoi / ownership repair / overlay install now run. Residual (round 1 left it UNVERIFIED, now verified from spec text, E3): `onCreateCommand` still exits non-zero, so `postCreateCommand` (`devcontainer.json:237`: authorized_keys = R1, known_hosts, smoke) and `postStartCommand` (`:244`, R2 chown) are skipped on a vendor outage at first create. Spec §4 `:114-116` accepts "fails `onCreateCommand`" but does not name the R1/R2 consequence |
+| 4 | MEDIUM | **FIXED** | `python/verification/suites.toml:2985-3014` | suite passes on the commit, fails with the on-create call deleted (E6); all 8 tokens unique. Ordering not bound (new defect N1) |
+| 5 | MEDIUM | **FIXED** | `tests/test_image_smoke.py:2016-2065` | pass arm + 3 baked arms + missing-gemini arm; all 5 fail against main's pre-change block (E5) |
+| 6 | MEDIUM | **ACCEPTED-RESIDUAL** | spec `docs/specs/native-cli-devcontainer-2026-10-01.md:119-121`; `schemas/sources.toml:10-12` | codex `version` reframed as a label, `sha256` verifies; rendered header == file and `check_drift` = [] on the commit tree. Leftover contradiction: `sources.toml:7-9` still says codex's `version` "IS the pin… re-downloads at that tag", and `schema_vendor.py:120-123` still says "the vendored `version` … IS the pin" for codex |
+| 7 | LOW | **FIXED** | `mise.toml:157` | false clause replaced by "No repo config pins codex/claude at all"; control-armed `git grep` (control `hk = "2.3.0"` hit) finds codex only in a vendored research raw file |
+| 8 | LOW | **FIXED** | `native_clis_container.py:194-210`; test `tests/test_native_clis_container.py:329-340` | aside name is UTC-second-stamped; test fails against the old fixed name. A same-second collision would still overwrite (`rename` is POSIX-replacing) — theoretical, not raised |
+| 9 | LOW | **FIXED** | test `tests/test_native_clis_container.py:305-325` | asserts both switches reach the probe. Names now probed: `AGY_CLI_DISABLE_AUTO_UPDATE` in the host native agy binary = 1 line, `DISABLE_AUTOUPDATER` in claude 2.1.287 = 8 (fresh absent names = 0). Value semantics (`"true"`) UNVERIFIED; host binaries are darwin builds |
+| 10 | LOW | **ACCEPTED-RESIDUAL** | spec `:133-134`; code unchanged `native_clis_container.py:150-166` | documented |
+| 11 | LOW | **ACCEPTED-RESIDUAL** | spec `:137-138`; `ccfc7b85` commit body | 8 tools named in the commit body; "and the PR" is pending (`gh pr list --head feat/native-cli-devcontainer --state all` = `[]`, control query returned #1507). Conda libpng/perl/tbb build bumps not named |
+| 12 | LOW | **NOT FIXED** (partly) | `python/src/dotfiles_setup/main.py:374` | smoke banner fixed (`scripts/devcontainer-smoke.sh:93`, now "no active mise copy", enforced by `mise ls --current` at `native_clis_container.py:333`); CLI help still claims "no mise copy exists" (E4); not listed in §4 |
+| 13 | LOW | **ACCEPTED-RESIDUAL** | spec `:135-136` | documented |
+| 14 | LOW | **FIXED** | `native_clis_container.py:204-208`, `:271-274` | `OSError` from the move is caught, logged, tool returns 1, the other tools continue; ownership repair still runs after (held rc). No test drives the OSError arm (read only) |
+
+Tally: FIXED 9 (1, 2, 3, 4, 5, 7, 8, 9, 14) · ACCEPTED-RESIDUAL 4 (6, 10, 11, 13) · NOT FIXED 1 (12).
+
+## New defects introduced by `ccfc7b85` itself
+
+| # | Severity | Claim | file:line | Evidence |
+|---|---|---|---|---|
+| N1 | LOW | The new suite's description claims on-create "calls `devcontainer native-clis install` BEFORE chezmoi", but nothing enforces the ordering: `require_tokens` checks presence only | `python/verification/suites.toml:2987`, `:3000-3003` | E7: call moved after `chezmoi init --apply` → suite still 1 passed, rc=0 |
+| N2 | LOW | `on-create.sh` prints "[on-create] Done" and then exits with the held non-zero rc, with no line naming the held native-install failure; the cause sits in python log lines above the chezmoi/mise output | `.devcontainer/scripts/on-create.sh:80-81` | read from the commit; no echo references `native_rc` except the exit |
+| N3 | LOW | The proxy passthrough is labelled "not credentials" unconditionally, but proxy URLs can carry `user:password@` userinfo, which would then reach the three unpinned vendor scripts. No current source injects these names (E2: count 0 in every Doppler env file), so impact today is the overstated clause | `native_clis_container.py:60-70`; spec `:117-118` | E2; Docker Desktop proxy injection into containers not probed (UNVERIFIED) |
+
+Checked and NOT raised: the credential regex drops no container `MISE_*` config name (E2); every
+contract token counts exactly 1; `bash_budget` 81 equals the file's 81 lines; the
+`_render_sources_toml` header renders byte-equal to `schemas/sources.toml`; the `install_one`
+split keeps the old control flow (present-skip, move-aside, fetch, post-install `vendor_finding`).
+Whether a mise-shimmed `curl` inside an installer needs `MISE_GITHUB_TOKEN` (now stripped) to resolve is
+UNVERIFIED; the image tools are locked, so no remote resolution is expected.
+
+## Round-2 verdict
+
+**SHIP**, from this lens. The HIGH (finding 1) is fixed, and the fix is armed (E1); every MEDIUM is
+either fixed with an armed gate or a documented residual. Before or at ship, disposition the
+LOW leftovers: finding 12 (`main.py:374`), N1 (bind the ordering or drop "BEFORE chezmoi" from the
+description), N2, N3, the finding-6 contradictory text, and naming the finding-3 R1/R2 lifecycle
+consequence in spec §4. Each is a text or one-line change, so dispositioning them does not change the
+enumeration. Per the bounded-round stop condition, this round ends the loop.
+
+Gates: lint/pytest/`verify` were not run in the shared worktree. The probes above ran against
+`git archive ccfc7b85` in `/tmp/cr2`, using the worktree venv's interpreter with `PYTHONPATH` pinned to
+the archive (control: `__file__` resolved under `/tmp/cr2`). `git diff ccfc7b85 --stat` at the end
+showed only this report changed, and HEAD was still `ccfc7b85`.
+
+## Round-2 evidence log (written as found)
+
+- E1 Mutation probe on the COMMIT's tree (`git archive ccfc7b85` → `/tmp/cr2`, imported via
+  `PYTHONPATH=/tmp/cr2/python/src`; control: `ncc.__file__` printed `/tmp/cr2/...`). Unmutated:
+  33 passed, rc=0. Filter removed (`:144` reverted to the bare `k.startswith(...)` rule): **2 failed**
+  (`test_install_fetches_https_only_and_strips_credentials`,
+  `test_version_probe_switches_updaters_off_and_drops_credentials`), rc=1 — the spec's
+  "Removing the filter fails 2 tests" reproduces.
+- E2 Doppler env files (6 on host, names only): the ONLY `MISE_*` name in each amd64 file is
+  `MISE_GITHUB_TOKEN`; proxy/cert names = 0 (control `OPENROUTER_API_KEY` = 1). Of the 21 `MISE_*`
+  names the container config uses (`git grep` over `.devcontainer/` + `docker-bake.hcl`, control
+  `MISE_SYSTEM_CONFIG_DIR` = 1), the credential regex matches only `MISE_GITHUB_TOKEN`, so no shim
+  config name is dropped (first probe returned 0 names with a `\b` ERE; control caught it, re-run).
+- E3 devcontainers spec (`docs/research/mintlify-cache/devcontainers/spec/llms-full.txt:4431`): "If any
+  lifecycle script fails, subsequent scripts will not execute." `onCreateCommand` still exits non-zero
+  on a vendor failure (`on-create.sh:81`), so `postCreateCommand` (`devcontainer.json:237`: ssh-auth.sock
+  chown, authorized_keys = R1, known_hosts, smoke) and `postStartCommand` (`:244`, R2 chown) are skipped.
+  This was UNVERIFIED in round 1; now verified from the spec text (not run live).
+- E4 `main.py:374` (CLI help) at `ccfc7b85` still reads "no mise copy exists"; `main.py` is not in the
+  fix diff.
+- E5 CI AI-CLI block mutation (same `/tmp/cr2` tree): with `image.py`'s block replaced by main's
+  pre-change loop (`for tool in claude codex gemini … FAIL: missing $tool`), `-k ai_cli` → **5 failed**,
+  rc=1; unmutated they pass (E1 run). The commit message's "the pre-change loop fails all 5" reproduces.
+- E6 `workflow.native-clis-container-wiring` run via the commit's own CLI on `/tmp/cr2`
+  (`verify run --suite …`): unmutated 1 passed rc=0; on-create call line deleted → FAILED
+  "missing 'dotfiles-setup devcontainer native-clis install) || native_rc=$?'", rc=1. All 8 tokens
+  count exactly 1 in their files (`grep -F -c`; fresh invented absent token = 0).
+- E7 Same suite with the install call MOVED after `chezmoi init --apply` (not deleted) → 1 passed, rc=0.
+  The suite description's "calls … BEFORE chezmoi" has no enforcing token (require_tokens is presence-only).
+- E8 Host native binaries (byte grep, counts only): agy `AGY_CLI_DISABLE_AUTO_UPDATE` = 1 (control
+  `output-format` = 12, fresh absent = 0); claude 2.1.287 `DISABLE_AUTOUPDATER` = 8 (fresh absent = 0).
+- E9 `git diff ccfc7b85 --stat` at the end: only this report modified; two other lanes' untracked reports
+  appeared (`…-spec-review-…`, `…-standards-review-…`), and were not read.
+
+## Round-2 GitHub repos touched
+
+_None._ This repository at `ccfc7b85` / `93d70c96` / `846f2006` (main's pre-change AI-CLI block), the
+local devcontainers mintlify cache (`docs/research/mintlify-cache/devcontainers/spec/llms-full.txt`),
+host Doppler env-file NAME counts, and host native binary string counts. No external fetches.

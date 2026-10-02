@@ -118,9 +118,11 @@ _PIN_RESOLVERS: dict[str, Any] = {
 
 #: Tools with NO mise [tools] pin anywhere: the vendor's native, self-updating
 #: installer owns them on the host, in the devcontainer and (claude) on CI, so
-#: the vendored ``version`` in ``sources.toml`` IS the pin. codex joined
-#: claude-code here when its shared.toml npm pin was removed
-#: (docs/specs/native-cli-devcontainer-2026-10-01.md).
+#: the vendored ``version`` in ``sources.toml`` stands in for a pin. For
+#: claude-code it is a real pin (its ``source`` URL carries the tag); codex's
+#: ``source`` is unversioned, so its ``version`` is only a review label and
+#: ``sha256`` is what verifies the bytes. codex joined claude-code here when its
+#: shared.toml npm pin was removed (docs/specs/native-cli-devcontainer-2026-10-01.md).
 _VENDORED_PIN_TOOLS = frozenset({"claude-code", "codex"})
 
 
@@ -275,10 +277,9 @@ def _render_sources_toml(entries: list[SchemaEntry]) -> str:
         "# `source`/`sha256` fields, nor `version` for a tool with a resolver in\n"
         "# `schema_vendor._PIN_RESOLVERS`; run `mise run schema-vendor-refresh` "
         "and let\n"
-        "# it rewrite this file alongside the vendored JSON. `claude-code` and "
-        "`codex` have\n"
-        "# no resolver, so `version` IS the pin: hand-edit `version` (+ the "
-        "`source` tag),\n"
+        "# it rewrite this file alongside the vendored JSON. `claude-code` has no\n"
+        "# resolver, so its `version` IS its pin: hand-edit `version` + the "
+        "`source` tag,\n"
         "# then run the refresh, which re-downloads at that tag and rewrites "
         "`sha256`.\n"
         "# codex's `source` is UNVERSIONED (learn.chatgpt.com serves the current "
@@ -420,9 +421,9 @@ def refresh(
     for entry in entries:
         pin = current_pin(entry.tool, project_root)
         if pin is None:
-            # claude-code has no mise [tools] pin — the native installer owns PATH
-            # (currency.toml:29-39). For this tool, the vendored `version` in
-            # sources.toml IS the pin. Use it to build the source URL.
+            # A native-installer tool has no mise [tools] pin (currency.toml:29-39);
+            # the vendored `version` stands in. For claude-code it builds the
+            # source URL; codex's source is unversioned, so it is only a label.
             if entry.tool in _VENDORED_PIN_TOOLS:
                 pin = entry.version
             else:

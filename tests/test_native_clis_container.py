@@ -135,7 +135,7 @@ def test_active_mise_copy_fails(tmp_path: Path, key: str) -> None:
     _native_layout(home)
     env = _env(home, _mise_bin(tmp_path, {key: [], "node": []}))
     assert ncc.mise_findings(environ=env) == [
-        f"mise: `{key}` is an active mise tool; the native installer owns it"
+        f"mise: `{key}` is a mise tool here; the native installer owns it"
     ]
     assert ncc.check(home=home, environ=env) == 1
 
@@ -338,3 +338,29 @@ def test_a_second_move_aside_keeps_the_first_backup(tmp_path: Path) -> None:
     assert rc == 0
     assert first.read_text() == "#!/bin/sh\necho first\n"
     assert len(list((home / ".local/bin").glob(".claude.pre-native-*"))) == 2
+
+
+def test_on_create_installs_before_chezmoi_and_never_fails_on_create() -> None:
+    """ORDER, which no require_tokens contract can see (round-2 cold review N1).
+
+    The agy installer appends PATH lines to the chezmoi-managed rc files, so the
+    install must precede `chezmoi init --apply --force`. And it must not fail
+    onCreate: that would skip postCreate (R1 keys) and postStart (R2 chown).
+    """
+    root = Path(__file__).resolve().parent.parent
+    script = (root / ".devcontainer/scripts/on-create.sh").read_text()
+    install = script.index("devcontainer native-clis install")
+    chezmoi = script.index("chezmoi init --apply")
+    assert install < chezmoi
+    install_line = script[install : script.index("\n", install)]
+    assert install_line.rstrip().endswith("||"), "a failed install must not abort"
+
+
+def test_path_spelled_differently_still_counts_as_native(tmp_path: Path) -> None:
+    """A PATH entry naming ~/.local/bin through a symlink is still the native dir."""
+    home = tmp_path / "home"
+    _native_layout(home)
+    alias = tmp_path / "alias-bin"
+    alias.symlink_to(home / ".local/bin")
+    env = {"HOME": str(home), "PATH": f"{alias}:/usr/bin:/bin"}
+    assert ncc.check_one(_BY_NAME["claude"], home=home, environ=env) == []

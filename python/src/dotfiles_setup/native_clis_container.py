@@ -57,8 +57,10 @@ _ENV_PASSTHROUGH = (
     "LANG",
     "SHELL",
     "TMPDIR",
-    # Network plumbing, not credentials: without these a proxied or
-    # TLS-intercepted network fails the fetch the container's own curl passes.
+    # Network plumbing: without these a proxied or TLS-intercepted network
+    # fails the fetch the container's own curl passes. A proxy URL CAN carry
+    # `user:pass@`; it is the operator's own network config (Doppler injects
+    # none of these names today), passed as deliberately as curl itself gets it.
     "HTTPS_PROXY",
     "https_proxy",
     "HTTP_PROXY",
@@ -309,7 +311,11 @@ def check_one(
     found = shutil.which(tool.name, path=environ.get("PATH"))
     if found is None:
         return [f"{tool.name}: not on PATH (expected {expected})"]
-    if Path(found) != expected:
+    found_path = Path(found)
+    if (found_path.name, found_path.parent.resolve()) != (
+        expected.name,
+        expected.parent.resolve(),
+    ):
         return [f"{tool.name}: PATH resolves {found}, expected the native {expected}"]
     if (finding := vendor_finding(tool, home)) is not None:
         return [finding]
@@ -330,15 +336,17 @@ def mise_findings(
     mise = shutil.which("mise", path=environ.get("PATH"))
     if mise is None:
         return ["mise: not on PATH, so `mise ls` could not be asked"]
-    rc, out = run([mise, "ls", "--current", "--json"], dict(environ))
+    # INSTALLED as well as active (no `--current`): an inactive copy in the
+    # overlay's installs dir is still a second, non-updating install.
+    rc, out = run([mise, "ls", "--json"], _minimal_env(environ, {}))
     if rc != 0:
-        return [f"mise ls --current --json exited rc={rc}: {out.strip()[:200]}"]
+        return [f"mise ls --json exited rc={rc}: {out.strip()[:200]}"]
     try:
         payload = json.loads(out)
     except json.JSONDecodeError as exc:
-        return [f"mise ls --current --json was not JSON ({exc}): {out.strip()[:200]}"]
+        return [f"mise ls --json was not JSON ({exc}): {out.strip()[:200]}"]
     return [
-        f"mise: `{key}` is an active mise tool; the native installer owns it"
+        f"mise: `{key}` is a mise tool here; the native installer owns it"
         for key in sorted(payload)
         if _mise_name(key) in _FORBIDDEN_MISE_NAMES
     ]

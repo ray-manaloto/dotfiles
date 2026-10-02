@@ -33,8 +33,9 @@ The report is at `docs/research/kb/reports/agents/2026-10-01-premise-verifier-na
 
 - **MISSING-1 (blocker).** The chezmoi-managed `home/dot_local/bin/executable_claude` wrapper
   (`exec mise exec claude-code -- claude`) sat at the native path. It is **deleted**. `install` now treats
-  any non-vendor file at `~/.local/bin/<tool>` as stale: it **moves it aside** to `.<tool>.pre-native`
-  (never deletes) and runs the vendor installer, which migrates every existing home volume. `.chezmoiremove`
+  any non-vendor file at `~/.local/bin/<tool>` as stale: it **moves it aside** to
+  `.<tool>.pre-native-<UTC stamp>` (never deletes, never overwrites an earlier backup) and runs the vendor
+  installer, which migrates every existing home volume. `.chezmoiremove`
   was rejected because it would delete the native symlink on every apply.
 - **MISSING-2 (blocker).** `schema_vendor` gains `_VENDORED_PIN_TOOLS = {claude-code, codex}`, used by both
   `check_drift` and `refresh`; the header text in `sources.toml` is regenerated.
@@ -89,6 +90,9 @@ The report is at `docs/research/kb/reports/agents/2026-10-01-premise-verifier-na
   single-site parity row asserts nothing.
 - No `setup-codex` composite (§5 P-CI).
 - No host doctor check: session `dotfiles-20261001.000` owns the host side.
+- **harness-evolution-ledger (rev 1 §2f / R4) is out of scope.** The brief scopes this change to the
+  dotfiles image and CI half, and HEL's pin can only go in the same change as its own CI native codex
+  install, which is a separate HEL PR.
 
 ## 3. Interfaces
 
@@ -104,16 +108,22 @@ dotfiles-setup devcontainer native-clis check     # rc 0 native; 1 any finding (
   `~/.local/bin/agy`);
 - `<tool> --version` rc ≠ 0. This probe runs with a minimal env plus `DISABLE_AUTOUPDATER=1` and
   `AGY_CLI_DISABLE_AUTO_UPDATE=true`, scoped to the probe;
-- a `mise ls --current --json` key normalises to `claude`, `claude-code`, `codex`, `agy`, `antigravity` or
-  `antigravity-cli`.
+- a `mise ls --json` key (installed **or** active, rev 2: the brief says "`mise ls` shows none")
+  normalises to `claude`, `claude-code`, `codex`, `agy`, `antigravity` or `antigravity-cli`.
+
+The PATH comparison resolves the directory (rev 2), so a symlinked spelling of `~/.local/bin` still
+counts as native. The `mise ls` probe runs with the same minimal env as the installers.
 
 ## 4. Constraints
 
 - **Self-update stays ON in the image.** The probe-only switches never reach the tools' normal runs.
 - **An existing tool is never reinstalled.** On an existing volume the self-updater owns it, which is ruling 2.
-- **Fail loud, but last.** A failed install fails `onCreateCommand`, the same as the overlay
-  `mise install` does. `on-create.sh` holds the rc and returns it at the end, so a vendor outage still runs
-  chezmoi, the ownership repair and the overlay install (rev 1, `/code-review` finding 2).
+- **Fail loud in the smoke, never in onCreate** (rev 2). A failed install only WARNS in `on-create.sh`.
+  A non-zero `onCreateCommand` makes the devcontainer CLI skip `postCreateCommand` (R1 `authorized_keys`,
+  `known_hosts`) and `postStartCommand` (R2 socket chown); round-2 cold review cites
+  `mintlify-cache/devcontainers/spec/llms-full.txt:4431`. The tier-3 smoke `native-clis check`, which
+  runs at the end of postCreate, is what fails loudly. A test pins the order, install before chezmoi,
+  which no `require_tokens` contract can see.
 - **Proxy and CA variables pass through** to the installers (`*_PROXY`, `SSL_CERT_*`, `CURL_CA_BUNDLE`).
   They are network plumbing, not credentials (rev 1, `/code-review` finding 3).
 - **codex's vendored `version` is a label.** Its schema `source` is unversioned, so `version` only names
@@ -134,8 +144,11 @@ dotfiles-setup devcontainer native-clis check     # rc 0 native; 1 any finding (
     direct child (finding 10).
   - `verify-container-latest` fails on this branch until the `pr-NNN` image is synced, because the
     current `:dev` image still carries the mise copies (finding 13).
-  - The `lock-image` regen also bumped 8 `latest`-pinned tools (finding 11). They are named in the
-    commit and the PR.
+  - **Finding 11 is FIXED in rev 2, no longer a residual.** The first regen used `lock-image`'s
+    hard-coded `--bump` and dragged 8 unrelated `latest` tools forward. `lock-image` gained
+    `--no-bump`, which keeps mise's native `mise lock` default of preserving existing locked versions
+    and pruning removed tools. The image locks were restored to `origin/main` and regenerated with it,
+    so their diff is the claude/codex removal alone.
 - **What each installer verifies**, read from the installer sources fetched 2026-10-01:
 
   | Installer | Verification it performs | Replaced mechanism |

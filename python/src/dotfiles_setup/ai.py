@@ -25,7 +25,7 @@ class AIOrchestrator:
         devcontainer, `devcontainer native-clis install` at container create).
         """
         logger.info("Verifying AI CLIs are available...")
-        for tool in ("claude", "codex", "gemini"):
+        for tool in ("claude", "codex", "agy", "gemini"):
             self.tool_manager.run_command(
                 ["bash", "-lc", f"command -v {tool}"], capture=False
             )
