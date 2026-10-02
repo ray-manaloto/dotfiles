@@ -652,10 +652,16 @@ def _request_error(request: SdlcTeamRequest, repo_root: Path) -> str | None:
     spec_file = Path(request.spec_file).expanduser()
     if not spec_file.is_absolute():
         return "spec_file must be an absolute path"
-    if not request.effort or not all(
-        character.isalnum() or character in "-_" for character in request.effort
+    for value, allowed, message in (
+        (request.effort, "-_", "effort must be a non-empty identifier"),
+        (request.model, "-_.", "model must be a non-empty model slug"),
     ):
-        return "effort must be a non-empty identifier"
+        if (
+            not value
+            or value.startswith("-")
+            or not all(char.isalnum() or char in allowed for char in value)
+        ):
+            return message
     if request.timeout_s is not None and (
         not math.isfinite(request.timeout_s) or request.timeout_s <= 0
     ):

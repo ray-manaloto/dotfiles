@@ -51,7 +51,8 @@ request is:
 `spec_file` must be absolute and exist at dispatch. `mode` defaults to `review`;
 the mode shapes the prompt only: no `-s` is passed, so every lane runs under the
 machine's `danger-full-access` and `review` is asked (not prevented) not to write.
-`effort` defaults to `xhigh`, `timeout_s: null` means no timeout, and an empty
+`effort` defaults to `xhigh` and `model` to the sol pin (`codex_lane_mirror.SOL_MODEL`,
+`gpt-6.1-sol`; Ray 2026-10-02), `timeout_s: null` means no timeout, and an empty
 `run_id` is generated. Prompt, output, log, and receipt path fields are optional;
 omit them to use deterministic defaults.
 

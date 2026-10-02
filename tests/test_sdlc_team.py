@@ -434,6 +434,20 @@ def test_dispatch_pins_model_and_effort(
     assert argv[argv.index("--model") + 1] == SOL_MODEL == "gpt-6.1-sol"
     assert argv[argv.index("-c") + 1] == 'model_reasoning_effort="xhigh"'
 
+    override = sdlc_team.dispatch(_request(tmp_path, model="gpt-6-astra"), tmp_path)
+    assert list(override.argv)[list(override.argv).index("--model") + 1] == (
+        "gpt-6-astra"
+    )
+
+
+@pytest.mark.parametrize("model", ["", " ", "--sandbox", "gpt 6"])
+def test_a_malformed_model_is_refused_before_dispatch(
+    tmp_path: Path, model: str
+) -> None:
+    """A bad model must fail validation, not surface after the lane detaches."""
+    result = sdlc_team.dispatch(_request(tmp_path, model=model), tmp_path)
+    assert result.status is sdlc_team.SdlcStatus.INVALID_REQUEST
+
 
 def test_relative_path_entry_is_anchored_before_the_supervisor_changes_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -143,9 +143,9 @@ task, or network access must be run **here** and pasted in.
 **Both flags are load-bearing; neither is redundant.** Without
 `-c model_reasoning_effort`, codex resolves the effort from
 `~/.codex/config.toml` — a file this repo neither owns nor watches — and runs at
-`medium`. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
-it, `medium`. `--model` currently resolves to `gpt-6.1-sol` by inheritance from
-that same file, and the banner reports **resolved** config, so an inherited value
+whatever effort that file names. Measured 2026-08-31: with the flag, `reasoning effort: xhigh`; without
+it, `medium`. `--model`, left unpinned, is inherited
+from that file too, and the banner reports **resolved** config, so an inherited value
 and an explicit one are indistinguishable in the output. Pin both.
 
 Never `--full-auto` and never a writable sandbox: you audit, you do not change

@@ -159,9 +159,9 @@ genuinely needs plan context gets its OWN slug and `PLAN_ID`, never this one's.
 **Both flags are load-bearing; neither is redundant.** Without
 `-c model_reasoning_effort`, codex resolves the effort from
 `~/.codex/config.toml` — a file this repo neither owns nor watches — and runs at
-`medium`. Measured 2026-08-31: the same call with the flag printed
-`reasoning effort: xhigh`, without it `reasoning effort: medium`. `--model`
-currently resolves to `gpt-6.1-sol` by inheritance from that same file, and the
+whatever effort that file names. Measured 2026-08-31: the same call with the flag printed
+`reasoning effort: xhigh`, without it `reasoning effort: medium`. `--model`, left unpinned, is inherited
+from that file too, and the
 startup banner reports **resolved** config, so an inherited value and an
 explicit one look identical in the output. Pin both.
 

@@ -176,7 +176,7 @@ and can write it back — and a lane has already truncated those shared files on
 
 **Both pins are load-bearing.** Without `-c model_reasoning_effort` codex
 resolves effort from `~/.codex/config.toml` — a file this repo neither owns nor
-watches — and runs at `medium`. The startup banner reports *resolved* config, so
+watches — and runs at whatever effort that file names. The startup banner reports *resolved* config, so
 an inherited value and an explicit one look identical in the log. Pin both.
 
 ⚠️ `--approve-for-me` is **mutually exclusive** with `--sandbox`. Do not reach
