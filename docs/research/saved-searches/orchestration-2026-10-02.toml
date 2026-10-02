@@ -1,0 +1,630 @@
+# Saved GitHub searches — orchestration research (2026-10-02)
+#
+# Re-runnable record of every GitHub search behind
+# docs/research/kb/reports/agents/orchestration-parallel-coordination-2026-10-02.md.
+#
+# FORMAT: no `watches.toml` exists yet (N1 `github-watch` is unbuilt; issue #1502's
+# Saved-searches phase depends on it). The [[watch]] tables below follow the DRAFT
+# schema in docs/specs/research-watch-2026-09-30.md §3.1 (rev 2, on branch
+# feat/native-cli-installers-workflow) so they can be moved into watches.toml
+# unchanged when N1 lands. That draft loader REJECTS unknown keys, so the measured
+# results live in a separate [[result]] array-of-tables keyed by `watch_id` — strip
+# or relocate [[result]] when merging.
+#
+# Controls (shared by every code watch, Q1): control_hit must return >=1 confirmed hit;
+# control_absent must contain {nonce}, rendered FRESH per run and never written back.
+# Code-search tokenizer drops punctuation, so total_count is NOT a hit count: each
+# result records how many of the top hits were re-fetched and matched `grep`.
+# A 403 is a rate limit, never zero.
+
+schema_version = 1
+
+[[watch]]
+id       = "orch-code-claude-bg"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"claude --bg"']
+grep      = 'claude --bg'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-claude-attach-claude-logs"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"claude attach" "claude logs"']
+grep      = 'claude (attach|logs)'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-subagent-type-fork"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"subagent_type" "fork"']
+grep      = "subagent_type[\"\\']?\\s*[:=]\\s*[\"\\']fork"
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-notify-when-idle"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['notify_when_idle']
+grep      = 'notify_when_idle'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-crosssessioninbound"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['crossSessionInbound']
+grep      = 'crossSessionInbound'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-path-claude-workflows-extension-js"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['path:.claude/workflows extension:js']
+grep      = '.'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-isolation-worktree-path-claude-agents"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"isolation: worktree" path:.claude/agents']
+grep      = 'isolation:\s*worktree'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-claude-code-fork-subagent"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['CLAUDE_CODE_FORK_SUBAGENT']
+grep      = 'CLAUDE_CODE_FORK_SUBAGENT'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-herdr-agent-start"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code", "herdr"]
+limit    = 10
+queries  = ['"herdr agent start"']
+grep      = 'herdr agent start'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-herdr-agent-prompt"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code", "herdr"]
+limit    = 10
+queries  = ['"herdr agent prompt"']
+grep      = 'herdr agent prompt'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-claude-agents-json"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"claude agents --json"']
+grep      = 'claude agents --json'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-claude-code-experimental-agent-teams"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS']
+grep      = 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-subagent-type-fork-path-claude"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['subagent_type fork path:.claude']
+grep      = "subagent_type[\"\\']?\\s*[:=]\\s*[\"\\']fork"
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-subagent-type-fork-language-markdown"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['"subagent_type" "fork" language:Markdown']
+grep      = "subagent_type[\"\\']?\\s*[:=]\\s*[\"\\']fork"
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-issues-claude-code-background-session"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code background session']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-cross-session-message"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code cross-session message']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-fork-subagent"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code fork subagent']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-subtask"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code subtask']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-agent-teams-tokens"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code agent teams tokens']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-crosssessioninbound"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code crossSessionInbound']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-cross-session-held-approval"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code cross-session held approval']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-sendmessage-approve-bypass"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code SendMessage approve bypass']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-claude-bg"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code "claude --bg"']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-claude-code-agent-view-worktree-push"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code agent view worktree push']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-herdr-claude-code"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "herdrdev/herdr"]
+queries  = ['repo:herdrdev/herdr claude code']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "orch-issues-herdr-orchestrate-agents"
+kind     = "issues"
+origin   = "topic:parallel-orchestration"
+question = "What is open/fixed upstream for this orchestration surface?"
+cadence  = "weekly"
+tags     = ["orchestration", "herdrdev/herdr"]
+queries  = ['repo:herdrdev/herdr orchestrate agents']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+# ---- measured results (not part of the draft watch schema) ----
+
+[[result]]
+watch_id = "_controls-code"
+date_run = "2026-10-02T04:14:33Z"
+endpoint = "GET search/code"
+health_repo_cli_cli_readme = 9
+must_hit_tools_mise_toml   = 26624
+known_absent_fresh_nonce   = 0
+verdict = "discriminates (health>0, must-hit>0, absent=0)"
+
+[[result]]
+watch_id    = "orch-code-claude-bg"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 6864
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["zebbern/claude-code-guide/README.md", "stormzhang/ai-coding-guide/claude-code/41-parallel-tasks.md", "Cranot/claude-code-guide/README.md", "devcxl/mattpocock-skills-zh/skills/in-progress/claude-handoff/SKILL.md"]
+
+[[result]]
+watch_id    = "orch-code-claude-attach-claude-logs"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 922
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["Snailclimb/JavaGuide/docs/ai-coding/practices/claudecode-agentview.md", "zebbern/claude-code-guide/README.md", "stormzhang/ai-coding-guide/claude-code/41-parallel-tasks.md", "stormzhang/ai-coding-guide/claude-code/34-cli-reference.md"]
+
+[[result]]
+watch_id    = "orch-code-subagent-type-fork"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 41664
+verified    = "0/5 top hits re-fetched and matched grep"
+examples    = []
+
+[[result]]
+watch_id    = "orch-code-notify-when-idle"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 1800
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["luongnv89/claude-howto/INDEX.md", "luongnv89/claude-howto/CATALOG.md", "Yestercafe/CoffeeOJ-judge/src/thread_pool/mod.rs", "luongnv89/claude-howto/CHANGELOG.md"]
+
+[[result]]
+watch_id    = "orch-code-crosssessioninbound"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 2696
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["dyoshikawa/rulesync/src/features/permissions/claudecode-permissions.ts", "WebisityStudio/claude-codex-mcp-bridge/src/diagnostics.ts", "luongnv89/claude-howto/CATALOG.md", "shanraisshan/claude-code-best-practice/best-practice/claude-settings.md"]
+
+[[result]]
+watch_id    = "orch-code-path-claude-workflows-extension-js"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 3564
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["Atmosphere/atmosphere/.claude/workflows/doc-drift-audit.js", "forcedotcom/salesforcedx-vscode/.claude/workflows/review-plan.js", "forcedotcom/salesforcedx-vscode/.claude/workflows/flakiness-review.js", "aidenlx/zotlit/.claude/workflows/docs-issue.js"]
+
+[[result]]
+watch_id    = "orch-code-isolation-worktree-path-claude-agents"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 1298
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["coleam00/Archon/.claude/agents/rulecheck-agent.md", "Donchitos/Claude-Code-Game-Studios/.claude/agents/prototyper.md", "openaddresses/openaddresses/.claude/agents/oa-source-agent.md", "jinja2cpp/Jinja2Cpp/.claude/agents/verifier.md"]
+
+[[result]]
+watch_id    = "orch-code-claude-code-fork-subagent"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 2112
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["danielmiessler/LifeOS/LifeOS/install/hooks/lib/subagent.ts", "luongnv89/claude-howto/10-cli/README.md", "luongnv89/claude-howto/ja/10-cli/README.md", "luongnv89/claude-howto/04-subagents/README.md"]
+
+[[result]]
+watch_id    = "orch-code-herdr-agent-start"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 4480
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["ohmyzsh/ohmyzsh/plugins/herdr/README.md", "herdrdev/herdr/CHANGELOG.md", "herdrdev/herdr/src/cli/agent.rs", "herdrdev/herdr/src/cli/spec.rs"]
+
+[[result]]
+watch_id    = "orch-code-herdr-agent-prompt"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 4312
+verified    = "5/5 top hits re-fetched and matched grep"
+examples    = ["ohmyzsh/ohmyzsh/plugins/herdr/README.md", "herdrdev/herdr/skills/herdr/SKILL.md", "herdrdev/herdr/src/cli/spec.rs", "herdrdev/herdr/src/cli/agent.rs"]
+
+[[result]]
+watch_id    = "orch-code-claude-agents-json"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 5456
+verified    = "10/10 top hits re-fetched and matched grep"
+examples    = ["zebbern/claude-code-guide/README.md", "Chachamaru127/claude-code-harness/docs/agent-view-policy.md", "Cranot/claude-code-guide/README.md", "Chachamaru127/claude-code-harness/docs/CLAUDE-feature-table.md"]
+
+[[result]]
+watch_id    = "orch-code-claude-code-experimental-agent-teams"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 23616
+verified    = "10/10 top hits re-fetched and matched grep"
+examples    = ["zebbern/claude-code-guide/README.md", "trailofbits/claude-code-config/README.md", "Cranot/claude-code-guide/README.md", "kousen/claude-code-training/glossary.md"]
+
+[[result]]
+watch_id    = "orch-code-subagent-type-fork-path-claude"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 1652
+verified    = "3/10 top hits re-fetched and matched grep"
+examples    = ["edobry/minsky/.claude/hooks/block-nested-fork-dispatch.ts", "oxsecurity/megalinter/.claude/skills/pr-watch-fix-renovate/SKILL.md", "jcdendrite/claude-config/.claude/plans/detect-noop-fork-dispatch.md"]
+
+[[result]]
+watch_id    = "orch-code-subagent-type-fork-language-markdown"
+date_run    = "2026-10-02T04:14:33Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 23264
+verified    = "0/10 top hits re-fetched and matched grep"
+examples    = []
+
+[[result]]
+watch_id    = "orch-issues-claude-code-background-session"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'background session'
+total_count = 6087
+
+[[result]]
+watch_id    = "orch-issues-claude-code-cross-session-message"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'cross-session message'
+total_count = 1443
+
+[[result]]
+watch_id    = "orch-issues-claude-code-fork-subagent"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'fork subagent'
+total_count = 519
+
+[[result]]
+watch_id    = "orch-issues-claude-code-subtask"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'subtask'
+total_count = 141
+
+[[result]]
+watch_id    = "orch-issues-claude-code-agent-teams-tokens"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'agent teams tokens'
+total_count = 357
+
+[[result]]
+watch_id    = "orch-issues-claude-code-crosssessioninbound"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'crossSessionInbound'
+total_count = 60
+
+[[result]]
+watch_id    = "orch-issues-claude-code-cross-session-held-approval"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'cross-session held approval'
+total_count = 53
+
+[[result]]
+watch_id    = "orch-issues-claude-code-sendmessage-approve-bypass"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'SendMessage approve bypass'
+total_count = 25
+
+[[result]]
+watch_id    = "orch-issues-claude-code-claude-bg"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = '"claude --bg"'
+total_count = 506
+
+[[result]]
+watch_id    = "orch-issues-claude-code-agent-view-worktree-push"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'agent view worktree push'
+total_count = 93
+
+[[result]]
+watch_id    = "orch-issues-herdr-claude-code"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "herdrdev/herdr"
+query       = 'claude code'
+total_count = 607
+
+[[result]]
+watch_id    = "orch-issues-herdr-orchestrate-agents"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "herdrdev/herdr"
+query       = 'orchestrate agents'
+total_count = 62
+
+[[result]]
+watch_id    = "_controls-issues"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = 'hooks'
+total_count = 8872
+
+[[result]]
+watch_id    = "_controls-issues"
+date_run    = "2026-10-02"
+endpoint    = "GET search/issues (issues AND pull requests)"
+repo_filter = "anthropics/claude-code"
+query       = '"<fresh-nonce>"'
+total_count = 0
+
+# Also run (mandatory dependency stage): `mise run research-fanout -- "<terms>" --repo <r>
+#   --sources github-issues,github-discussions,github-releases --limit 15`, 7 runs, all rc=0.
+#   anthropics/claude-code discussions = empty_unverified because the repo has
+#   has_discussions=false (control: herdrdev/herdr has_discussions=true returned 15).
