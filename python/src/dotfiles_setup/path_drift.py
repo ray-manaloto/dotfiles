@@ -380,3 +380,327 @@ def path_drift_main(
             report.provenance.value,
         )
     return 0
+
+
+# --------------------------------------------------------------------------- #
+# Native-only binaries — the same ambient PATH, a different question
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class NativeTool:
+    """Where one native-only binary must resolve, and what may compete with it.
+
+    ``native`` is POSITIVE: the first ``PATH`` hit's real path must equal or sit
+    under one of these (``~`` expanded). "Not under mise" is not enough — a
+    Homebrew cask or an npm-global copy is just as much not the native install.
+    ``specs`` are the mise tool specs that have put, or through the registry
+    could put, a competing copy on ``PATH``; they drive the leftover-directory
+    warning and map an install-directory slug back to an uninstall argument.
+    """
+
+    native: tuple[str, ...]
+    specs: tuple[str, ...] = ()
+
+
+#: Ray's ruling (2026-10-01): on the Mac host these come ONLY from the vendor's
+#: native installer. Locations measured on the authoring host:
+#: ``~/.local/bin/agy`` is a regular Mach-O file; ``~/.local/bin/codex`` links
+#: into ``~/.codex/packages/standalone/releases/<ver>/bin/codex``;
+#: ``~/.local/bin/claude`` links to ``~/.local/share/claude/versions/<ver>``.
+#: Overridable through ``doctor.toml``'s ``[path_drift.native_only.<binary>]``.
+#:
+#: The devcontainer has its own native-CLI check (``native_clis_container``, on a
+#: sibling branch); once both land, a shared per-tool table can replace this one.
+DEFAULT_NATIVE_ONLY: dict[str, NativeTool] = {
+    "agy": NativeTool(
+        native=("~/.local/bin/agy",),
+        specs=("antigravity-cli", "aqua:google-antigravity/antigravity-cli"),
+    ),
+    "codex": NativeTool(
+        native=("~/.codex/packages/standalone",),
+        specs=(
+            "codex",
+            "npm:@openai/codex",
+            "aqua:openai/codex",
+            "github:openai/codex",
+        ),
+    ),
+    "claude": NativeTool(
+        native=("~/.local/share/claude/versions",),
+        specs=(
+            "claude",
+            "claude-code",
+            "npm:@anthropic-ai/claude-code",
+            "github:anthropics/claude-code",
+            "aqua:anthropics/claude-code",
+            "http:claude",
+        ),
+    ),
+}
+
+#: Where mise keeps data when nothing moves it: the per-user default and the
+#: system-wide one this host also has. ``MISE_DATA_DIR`` and the installs root
+#: ``mise ls`` reports are added on top, never instead.
+_USER_MISE_DATA = (".local", "share", "mise")
+_SYSTEM_MISE_DATA = Path("/usr/local/share/mise")
+_MISE_SUBDIRS = ("installs", "shims")
+
+#: Path components that name a non-native package manager, checked against both
+#: the ``PATH`` entry and the resolved target so a finding can name the source.
+_FOREIGN_SOURCES: tuple[tuple[str, str], ...] = (
+    ("Caskroom", "a Homebrew cask"),
+    ("Cellar", "Homebrew"),
+    ("homebrew", "Homebrew"),
+    ("node_modules", "an npm global install"),
+    (".bun", "a bun global install"),
+    (".volta", "Volta"),
+    (".yarn", "a yarn global install"),
+)
+
+
+def mise_slug(spec: str) -> str:
+    """The install-directory name mise gives a tool spec.
+
+    ``npm:@openai/codex`` -> ``npm-openai-codex``; a registry short name is its
+    own slug. Matches every directory measured on this host
+    (``npm:@devcontainers/cli`` -> ``npm-devcontainers-cli``,
+    ``aqua:astral-sh/uv`` -> ``aqua-astral-sh-uv``).
+    """
+    return spec.replace("@", "").replace(":", "-").replace("/", "-")
+
+
+def mise_data_dirs(
+    environ: Mapping[str, str],
+    *,
+    home: Path,
+    installs_root: Path | None = None,
+) -> tuple[Path, ...]:
+    """Every mise data directory a competing binary could live under."""
+    candidates: list[Path] = []
+    if installs_root is not None:
+        candidates.append(installs_root.parent)
+    if environ.get("MISE_DATA_DIR"):
+        candidates.append(Path(environ["MISE_DATA_DIR"]))
+    xdg = environ.get("XDG_DATA_HOME")
+    candidates.append(Path(xdg) / "mise" if xdg else home.joinpath(*_USER_MISE_DATA))
+    candidates.append(_SYSTEM_MISE_DATA)
+    return tuple(dict.fromkeys(candidates))
+
+
+def _mise_subdir_index(path: Path, data_dirs: tuple[Path, ...]) -> int | None:
+    """Index of the ``installs``/``shims`` component that makes ``path`` mise's.
+
+    The known data directories first, then the SHAPE ``…/mise/installs/…`` or
+    ``…/mise/shims/…`` — a data directory nobody declared (another config's
+    ``MISE_DATA_DIR``) still produces that shape, and missing it would pass a
+    mise copy as something else.
+    """
+    parts = path.parts
+    for data in data_dirs:
+        for sub in _MISE_SUBDIRS:
+            if path.is_relative_to(data / sub):
+                return len((data / sub).parts) - 1
+    for i in range(len(parts) - 1):
+        if parts[i] == "mise" and parts[i + 1] in _MISE_SUBDIRS:
+            return i + 1
+    return None
+
+
+def is_mise_path(path: Path, data_dirs: tuple[Path, ...]) -> bool:
+    """True when ``path`` sits under a mise installs or shims directory."""
+    return _mise_subdir_index(path, data_dirs) is not None
+
+
+def which_all(binary: str, path_value: str) -> tuple[Path, ...]:
+    """``which -a``: every executable ``binary`` on ``path_value``, in order."""
+    hits: list[Path] = []
+    for raw in dict.fromkeys(path_value.split(os.pathsep)):
+        if not raw:
+            continue
+        candidate = Path(raw) / binary
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            hits.append(candidate)
+    return tuple(hits)
+
+
+def _from_mise(hit: Path, data_dirs: tuple[Path, ...]) -> bool:
+    """A hit is mise's when its directory OR its resolved target is mise's.
+
+    The target matters because a symlink in ``~/.local/bin`` pointing into an
+    installs directory would otherwise pass as something else.
+    """
+    return is_mise_path(hit.parent, data_dirs) or is_mise_path(hit.resolve(), data_dirs)
+
+
+def native_roots(tool: NativeTool, home: Path) -> tuple[Path, ...]:
+    """``tool.native`` with ``~`` expanded against ``home`` and resolved."""
+    return tuple(
+        (home / raw[2:] if raw.startswith("~/") else Path(raw)).resolve()
+        for raw in tool.native
+    )
+
+
+def is_native(hit: Path, roots: tuple[Path, ...]) -> bool:
+    """True when ``hit``'s real path equals or sits under a native root."""
+    real = hit.resolve()
+    return any(real.is_relative_to(root) for root in roots)
+
+
+def uninstall_spec(
+    hit: Path, specs: tuple[str, ...], data_dirs: tuple[Path, ...]
+) -> str | None:
+    """The ``mise uninstall`` argument for a mise hit, from ITS install slug.
+
+    A shim names no install, so ``None``: ``mise which`` has to say which one.
+    """
+    by_slug = {mise_slug(spec): spec for spec in specs}
+    for path in (hit.parent, hit.resolve()):
+        index = _mise_subdir_index(path, data_dirs)
+        if index is None or path.parts[index] != "installs":
+            continue
+        if len(path.parts) > index + 1:
+            slug = path.parts[index + 1]
+            return by_slug.get(slug, slug)
+    return None
+
+
+def foreign_source(hit: Path) -> str:
+    """Which package manager a non-native, non-mise hit most likely came from."""
+    parts = {*hit.parts, *hit.resolve().parts}
+    for marker, label in _FOREIGN_SOURCES:
+        if marker in parts:
+            return label
+    return "an unrecognised source"
+
+
+def _uninstall_advice(binary: str, spec: str | None) -> str:
+    if spec is None:
+        return (
+            f"Fix: `mise which {binary}` names the install behind the shim; "
+            f"then `mise uninstall --all <that tool> && mise reshim`."
+        )
+    return f"Fix: `mise uninstall --all {spec} && mise reshim`."
+
+
+@dataclass(frozen=True)
+class NativeOnlyReport:
+    """Native-only verdicts, split by how close each is to breaking the ruling."""
+
+    provenance: Provenance
+    failures: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
+def native_only_findings(
+    binary: str,
+    tool: NativeTool,
+    path_value: str,
+    data_dirs: tuple[Path, ...],
+    *,
+    home: Path,
+) -> tuple[list[str], list[str]]:
+    """``(failures, warnings)`` for one native-only binary."""
+    failures: list[str] = []
+    warnings: list[str] = []
+    roots = native_roots(tool, home)
+    expected = ", ".join(tool.native)
+    hits = which_all(binary, path_value)
+    native = [hit for hit in hits if is_native(hit, roots)]
+    if not hits:
+        failures.append(
+            f"FAIL: `{binary}` is not on PATH at all; expected the native "
+            f"install at {expected}. Reinstall it with the vendor's installer."
+        )
+    elif _from_mise(hits[0], data_dirs):
+        spec = uninstall_spec(hits[0], tool.specs, data_dirs)
+        failures.append(
+            f"FAIL: `{binary}` resolves to mise's copy {hits[0]} first — it must "
+            f"come only from its native installer ({expected}). "
+            f"{_uninstall_advice(binary, spec)}"
+        )
+    elif not is_native(hits[0], roots):
+        failures.append(
+            f"FAIL: `{binary}` resolves first to {hits[0]} (-> "
+            f"{hits[0].resolve()}), from {foreign_source(hits[0])} — not the "
+            f"native install at {expected}. Remove that copy or put the native "
+            f"one ahead of it on PATH."
+        )
+    if hits and not native:
+        failures.append(
+            f"FAIL: no native `{binary}` anywhere on PATH (expected under "
+            f"{expected}; found {', '.join(map(str, hits))}). Reinstall it with "
+            f"the vendor's installer."
+        )
+    if hits and is_native(hits[0], roots):
+        later = [hit for hit in hits[1:] if _from_mise(hit, data_dirs)]
+        if later:
+            advice = _uninstall_advice(
+                binary, uninstall_spec(later[0], tool.specs, data_dirs)
+            )
+            warnings.append(
+                f"WARN: `{binary}` resolves natively, but mise's copy is also on "
+                f"PATH ({', '.join(map(str, later))}) — one PATH reorder from "
+                f"winning. {advice}"
+            )
+    for data in data_dirs:
+        for spec in tool.specs:
+            leftover = data / "installs" / mise_slug(spec)
+            if leftover.is_dir():
+                warnings.append(
+                    f"WARN: mise install directory {leftover} exists for "
+                    f"`{binary}` — a mise install of a native-only tool, on "
+                    f"PATH or not. {_uninstall_advice(binary, spec)} If it "
+                    f"comes back, look for a `{spec}` pin in an old worktree's "
+                    f"mise config."
+                )
+    return failures, warnings
+
+
+def check_native_only(
+    native_only: Mapping[str, NativeTool] | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    ambient_path: str | None = None,
+    listing: Mapping[str, object] | None = None,
+    home: Path | None = None,
+) -> NativeOnlyReport:
+    """Do ``agy``/``codex``/``claude`` resolve to their native installs only?
+
+    Reads the same ambient ``PATH`` as :func:`check_path_drift` and is BLIND
+    under the same condition: inside a mise task, ``PATH`` is mise's answer.
+    """
+    environ = os.environ if environ is None else environ
+    native_only = DEFAULT_NATIVE_ONLY if native_only is None else native_only
+    home = home or Path.home()
+    path_value, provenance = resolve_ambient_path(environ, ambient_path=ambient_path)
+    if provenance is Provenance.BLIND:
+        return NativeOnlyReport(provenance=provenance)
+    warnings: list[str] = []
+    error: str | None = None
+    if listing is None:
+        listing, error = run_mise_ls()
+    if error is not None:
+        warnings.append(
+            f"WARN: could not ask mise for its installs root ({error}); only the "
+            f"default mise data directories were checked."
+        )
+    _, installs_root = active_tools(listing)
+    data_dirs = mise_data_dirs(environ, home=home, installs_root=installs_root)
+    failures: list[str] = []
+    for binary, tool in native_only.items():
+        fails, warns = native_only_findings(
+            binary, tool, path_value, data_dirs, home=home
+        )
+        failures.extend(fails)
+        warnings.extend(warns)
+    return NativeOnlyReport(
+        provenance=provenance, failures=tuple(failures), warnings=tuple(warnings)
+    )
+
+
+NATIVE_ONLY_BLIND_ADVICE = (
+    f"native-only check is BLIND: {MISE_TASK_MARKER} is set and no ambient PATH "
+    f"was captured, so mise's PATH is all this process can see. This is NOT a "
+    f'pass. Capture it: {AMBIENT_PATH_ENV}="$PATH" mise run doctor'
+)
