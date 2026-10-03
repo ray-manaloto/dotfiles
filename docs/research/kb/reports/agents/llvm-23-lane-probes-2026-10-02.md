@@ -27,3 +27,10 @@ snapshot major − 1, releases/latest) agree on 23. apt.llvm.org's own label
 ## GitHub repos touched
 
 - [llvm/llvm-project](https://github.com/llvm/llvm-project) — releases/latest redirect
+
+## Ray's ruling (2026-10-02, relayed by coordinator dotfiles-20261002b, recorded in its attested task_plan)
+
+1. The detection rule in `llvm-major-detection-sweep-2026-10-02.md` § Recommendation is APPROVED as written.
+2. Fork F1 is resolved as "highest served major below M", not hold-at-P, and reconciled with the "never below the
+   current pin" invariant: if GATE(M) is false, TARGET = the highest N in [P, M−1] with GATE(N) true; if none exists,
+   FAIL LOUD. The assert-only cross-checks stay.
