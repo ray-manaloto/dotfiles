@@ -23,7 +23,7 @@ this repo use this skill and do not import `kb_setup.research`
 
 - **The Workflow tool is available AND the user asked for a sweep (or approved
   one you proposed)** → run the saved workflow and stop here. It fans out to
-  about 9-15 agents (one Opus/high synthesis, plus an Opus/high adjudicator
+  about 11-17 agents (one Opus/high synthesis, plus an Opus/high adjudicator
   only when a claim is flagged), so a single-source
   question belongs on the in-lane steps instead. The workflow owns the per-node
   model and effort routing (the reasoning is commented at the top of
@@ -50,17 +50,37 @@ this repo use this skill and do not import `kb_setup.research`
 
   **Three mandatory stages** (Ray, 2026-09-30) run whatever the planner chooses:
   **dependencies** (`github-issues,github-discussions,github-releases` for
-  `repo` and every `relatedRepos` entry, both directions, one agent per repo),
-  **mirror** (every link via
-  `mise exec -- firecrawl scrape <url> --format markdown --only-main-content`
-  into `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
-  readers read the mirror) and **code search** (at least one planner query, a
-  fresh known-absent control, and a must-hit >0 from the planner or a README
-  control). The workflow adds its own controls for two separate questions:
+  `repo` and every `relatedRepos` entry, both directions, one agent per repo;
+  EACH of the three must answer `ok`/`empty_verified`, read from the run's
+  manifest — the fan-out's own rc is 0 when any one source answered, #1473 —
+  except a tracker the repos API reports DISABLED (`has_discussions` false, or
+  `has_issues` AND `has_pull_requests` false — the issues search also returns
+  PRs), which is a note, not a gap (Ray, 2026-10-02);
+  pass `runId` to stamp each fan-out with `--request-id` so only THIS run's
+  manifests count, else freshness is a 1-hour age window),
+  **mirror** (every link saved by the pinned firecrawl into
+  `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
+  readers read the mirror) and **code search** (at least one planner query that
+  is evidence, a fresh known-absent control, and a must-hit >0 from the planner
+  or a README control). **Every mandatory number is computed by a probe, not
+  interpreted by an agent** (#1514): each stage runs one workflow-built
+  `mise run research-fanout -- --probe-out <path> ...` command (`--code-search
+  ROLE=Q`, `--repo-check R`, `--fanout-manifest M --require ...`, `--mirror-url
+  U --mirror-path F`, `--mirror-index DIR --mirror-count N`), which runs gh and
+  firecrawl itself and writes real exit codes and HTTP statuses to that
+  manifest (a page answering HTTP >= 400 is a failure and is not saved:
+  firecrawl exits 0 with a full 404 body; a stale manifest or mirror probe from
+  an earlier sweep is a gap, never evidence); the agent copies the final
+  `PROBE-JSON` line, and the workflow accepts it only when it names the exact
+  path it asked for. That echo catches a miscopied line, not a fabricated one:
+  the workflow has no filesystem, so the manifests on disk are the evidence a
+  reader re-checks. A planner query
+  that returns 0 is evidence only beside a planner must-hit >0 with the SAME
+  qualifier set; otherwise it is an unarmed gap (`codeSearchGaps`, #1471). The workflow adds its own controls for two separate questions:
   *does code search answer at all?* — one search-health control
   (`repo:cli/cli filename:README.md`, role `health` — workflow-only: the
   planner's roles are `query`/`must-hit`/`known-absent`, and a planner row tagged
-  `health` is read as `query` — which never counts as the must-hit), whose 0 or
+  `health` is INERT — recorded, counted for nothing), whose 0 or
   failure is a gap — and, per dependency repo, *does it
   exist under this name?* (`gh api -i repos/<r>`: a 404 is "not found", a
   403/429/other is "could not check", and a rename such as `jdx/rtx` →
@@ -74,12 +94,26 @@ this repo use this skill and do not import `kb_setup.research`
   must-hit of 0 is a note; a 403 is recorded as rate-limited, never as 0. A
   dependency agent must run the cross-direction NAME in its slot and question
   terms (never a repo name) in the other. A mandatory stage that did not run or
-  did not succeed adds to `mandatoryGaps`; status is `mandatory-gap` unless a
-  higher-precedence degraded status applies. A planner fan-out run that failed
+  did not succeed adds to `mandatoryGaps`; `statuses` lists every degraded
+  state that applies and `status` is its head, so a mandatory gap is never
+  hidden (#1513). A planner fan-out run that failed
   is listed in `fanoutGaps`; a link that will not fetch is a named gap
   (`mirrorGaps`) and is read live. Omitting both `repo` and `relatedRepos` is a
   mandatory gap. `repoRoot` (absolute) is required with `links` when
-  `reportPath` is not under `<repo>/docs/`.
+  `reportPath` is not under `<repo>/docs/`. The report slug is the path below
+  `docs/` with `/` → `--` (so two `runs/<run>/report.md` never share a mirror
+  directory; outside `docs/` it is the file name); a `.`/`..` path segment or a
+  dot-only slug is refused.
+
+  **Retrospect** (#1502) ends every run, early exits included: a READ-ONLY
+  Explore agent records what was hard and proposes tuning, and a haiku writer
+  saves it to `docs/research/kb/reports/agents/research-sweep-retrospect-<slug>.md`
+  (beside the report when no repo root is known) — a proposal file only,
+  never applied (tuning happens through a spec + PR). It never changes
+  `status`; `retrospect.status` is `written`, `retrospect-null`, `write-null`,
+  `write-failed`, `write-mismatch` (the writer REPORTED another path: the phase
+  failed; a writer that writes elsewhere but reports the right path cannot be
+  detected from the workflow) or `skipped` (`retrospect: false`).
 
 - **No Workflow tool** (a codex lane, a headless run), or no sweep was asked
   for → run the in-lane steps below yourself. The fetch step needs network and `mise`;
@@ -150,20 +184,23 @@ this repo use this skill and do not import `kb_setup.research`
   workflow marks these `absence` and briefs their refuter to confirm them by a
   second route of a different kind; every refuter also judges
   misleading-by-omission, and a flagged claim is adjudicated one tier up.
-  Status values: `complete`, `mandatory-gap` (a mandatory stage did not run or
-  did not succeed), `partial-verify` (some refuters null),
-  `links-only` (planner/fan-out/triage failed; `stageGaps` names which, and the
-  report states what the evidence actually rests on — caller links, hits
-  triaged from the planner or dependency-repo manifests, code search),
-  `verify-null`, `reconcile-null`, `plan-null`, `no-manifests`,
-  `triage-null`, `synth-null`. Anything but `complete` is degraded; even
+  Status precedence: `verify-null`, `reconcile-null`, `mandatory-gap` (a
+  mandatory stage did not run or did not succeed), `partial-verify` (some
+  refuters null), then `links-only` / `stage-gap` (planner/fan-out/triage
+  failed, with / without caller links; `stageGaps` names which, and the report
+  states what was actually READ — caller links read, hits triaged from the
+  planner or dependency-repo manifests, deep-read URLs, answered code-search
+  rows); early exits `plan-null`, `no-manifests`, `triage-null`, `synth-null`.
+  `statuses` carries every one that applies. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and
   says so in the report's Verification section.
-- **GitHub code search** (mandatory on every sweep): `gh api -X GET search/code
-  -f q='QUERY'` — no `OR`/parentheses/`**` (HTTP 422), 10 requests/min (a 403 is
-  a rate limit, not zero), and the tokenizer drops punctuation, so re-fetch and
-  grep each hit. One query per alternative, then union; arm with a query that
-  must hit (recipe: the 2026-09-29b lane G GitHub-examples report).
+- **GitHub code search** (mandatory on every sweep): in-lane, `gh api -X GET
+  search/code -f q='QUERY'` — no parentheses/`**`, 10 requests/min (a 403/429
+  is a rate limit, not zero; the probe waits out a reset under 60 s once), and
+  the tokenizer drops punctuation, so re-fetch and grep each hit. `foo OR bar`
+  answered HTTP 200 with hits on 2026-10-02, so do not rely on the old "OR is a
+  422" rule either way. Arm every zero with a same-shape query that must hit
+  (recipe: the 2026-09-29b lane G GitHub-examples report).
 
 - `gh search issues --repo` returns issues only; the fan-out uses
   `gh api /search/issues`, which returns issues AND pull requests.
