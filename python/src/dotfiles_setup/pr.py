@@ -680,31 +680,29 @@ def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
     """
     try:
         with host_lock.held(host_lock.HEAVY_GATE, f"ship {branch} ({workspace})"):
-            # Decided AFTER the (possibly long) lock wait, so it describes the
-            # hook state at push time.
-            suite_at_push = pre_push_runs_suite(workspace)
-            if suite_at_push:
-                sys.stdout.write(
-                    "==> pytest runs ONCE, in the hk pre-push hook during "
-                    "`git push` (a failure there fails the push, and ship "
-                    "stops before the PR)\n"
-                )
-            if not run_gates(
-                workspace, gate_matrix(paths, suite_at_push=suite_at_push)
-            ):
-                return False
-            push_rc = process_env.run_with_fnox(
-                push_command(workspace, branch), cwd=workspace
-            )
+            return _gates_then_push(workspace, branch, paths)
     except host_lock.HostLockTimeoutError as exc:
         sys.stdout.write(f"FAIL  ship: {exc}\n")
         return False
+
+
+def _gates_then_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+    """The body :func:`_gate_and_push` runs while holding the heavy-gate lock."""
+    # Decided AFTER the (possibly long) lock wait, so it describes the hook
+    # state at push time.
+    suite_at_push = pre_push_runs_suite(workspace)
+    if suite_at_push:
+        sys.stdout.write(
+            "==> pytest runs ONCE, in the hk pre-push hook during `git push` "
+            "(a failure there fails the push, and ship stops before the PR)\n"
+        )
+    if not run_gates(workspace, gate_matrix(paths, suite_at_push=suite_at_push)):
+        return False
+    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
     if push_rc != 0:
         why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
-        sys.stdout.write(
-            f"FAIL  ship: git push rc={push_rc}{why} (the pre-push hook runs the "
-            "test suite; a failing test lands here)\n"
-        )
+        # The pre-push hook runs the test suite, so a failing test lands here.
+        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
         return False
     return True
 

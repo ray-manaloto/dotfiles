@@ -63,9 +63,8 @@ possibly partial answer that must be interpreted before work continues.
 
 `.claude/settings.json` wires `PreToolUse` matcher
 **`Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob`** to
-`scripts/pretooluse-guard.sh` (the last three only get graphify's nudge).
-`dotfiles_setup.ask_quality` denies tool-based questions missing the
-recommendation, `PRO:`/`CON:`, or citation. The deny
+`scripts/pretooluse-guard.sh`. `dotfiles_setup.ask_quality` denies tool-based
+questions missing the recommendation, `PRO:`/`CON:`, or citation. The deny
 prevents the call and returns its reason to the model; selfcheck exercises both
 allow and deny arms through the registered wrapper.
 
