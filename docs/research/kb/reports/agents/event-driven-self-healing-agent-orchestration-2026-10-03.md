@@ -443,3 +443,14 @@ strings in the mise binary.
 - [Podiom/Podiom](https://github.com/Podiom/Podiom) — named via discussion #316 (not read)
 - [parasxos/postbag](https://github.com/parasxos/postbag) — named via discussion #44109 (not read)
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — issue #1502, `research-sweep-run.js`, `docs/research/saved-searches/orchestration-2026-10-02.toml`, `mise.toml` launchd agents
+
+## Addendum (watcher, 2026-10-03): the workflow-audit claims are stale
+
+This sweep ran `.claude/workflows/research-sweep-run.js` from the `docs/lane-completion-protocol` worktree. That worktree branched from `main` at aeeb9164, **before #1581** (lane C, `fix/research-sweep-1471-1514`) merged. So the sweep ran the old workflow:
+
+- **"Retrospect is absent" is wrong.** The Retrospect phase (proposal file only, never applied) is on `main` via #1581.
+- **Stage evidence is lower-trust in this run.** In the old workflow, mandatory-stage evidence was agent-reported rather than probe-recorded (#1514), and any must-hit armed code search (#1471, F4). Treat this report's `mandatory-gap` list and its `empty_unverified` rows as lower-trust than a run on current `main`.
+- **Still true:** saved, re-runnable GitHub searches are not on `main` (lane `saved-searches-1502` is building a Save phase), and the Dependencies phase covers issues, PRs and discussions.
+- **Re-run needed** on current `main`, with OpenHands as `OpenHands/OpenHands` and claude-flow as `ruvnet/ruflo`. Both redirected and were skipped.
+
+The orchestration and restart recommendations above don't depend on the workflow version and stand as written.
