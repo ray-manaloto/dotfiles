@@ -43,7 +43,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from dotfiles_setup import hook_guard
+from dotfiles_setup import hook_guard, process_env
 
 _PROBE_TIMEOUT_S = 60.0
 
@@ -477,15 +477,21 @@ def _worktree_fixture(tmp: Path, env: dict[str, str]) -> tuple[Path, Path, Path]
     The sibling is the a8d7baf5 shape (``<tmp>/repo.worktrees/lane``): it
     EXISTS and is REGISTERED, so a guard can only deny it for its location.
     Raises :class:`subprocess.CalledProcessError` when git cannot build it.
+
+    The fixture's git ignores global/system config and hooks: a host-wide hook
+    (hk's ``hook.hk-*`` in ``~/.gitconfig``) must not be able to reject the
+    fixture commit and turn both arms red for a reason unrelated to the guard.
     """
+    env = {**env, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     main = tmp / "repo"
     managed = main / ".claude" / "worktrees" / "lane"
     sibling = tmp / "repo.worktrees" / "lane"
     main.mkdir()
-    ident = ["-c", "user.name=selfcheck", "-c", "user.email=selfcheck@invalid"]
+    cfg = ["-c", "user.name=selfcheck", "-c", "user.email=selfcheck@invalid"]
+    cfg += ["-c", "commit.gpgsign=false", "-c", f"core.hooksPath={os.devnull}"]
     for args in (
         ["init", "-b", "main"],
-        [*ident, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "x"],
+        [*cfg, "commit", "--allow-empty", "-m", "x"],
         ["worktree", "add", "-b", "managed", str(managed)],
         ["worktree", "add", "-b", "sibling", str(sibling)],
     ):
@@ -511,37 +517,12 @@ def _enterworktree(path: Path, cwd: Path) -> str:
     )
 
 
-def check_worktree_guard_endtoend(project_root: Path, wrapper: str) -> list[str]:
-    """Drive EnterWorktree through the REAL wrapper: deny, path allow, name allow.
-
-    Matcher membership alone cannot detect a dispatcher that ignores the tool.
-    The deny arm targets an existing REGISTERED sibling worktree and the path
-    arm an existing registered managed one, on a real temp repo, so a guard
-    that denies every ``path=`` fails the allow arm and one that allows every
-    ``path=`` fails the deny arm. The payload ``cwd`` anchors the guard to that
-    repo; ``CLAUDE_PROJECT_DIR`` stays explicit for a linked-worktree selfcheck.
-    """
+def _worktree_path_arm_failures(
+    denied: subprocess.CompletedProcess[str],
+    path_allowed: subprocess.CompletedProcess[str],
+) -> list[str]:
+    """Judge the sibling-deny and managed-allow ``path=`` arms."""
     failures: list[str] = []
-    # Inherited Git-local state (a hook's GIT_DIR) would aim git at another repo.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["CLAUDE_PROJECT_DIR"] = str(project_root)
-    with tempfile.TemporaryDirectory(prefix="dotfiles-worktree-guard-") as tmp:
-        try:
-            main, managed, sibling = _worktree_fixture(Path(tmp).resolve(), env)
-        except (OSError, subprocess.SubprocessError) as exc:
-            return [f"EnterWorktree selfcheck could not build its git fixture: {exc}"]
-        denied = _run(
-            [_SYSTEM_BASH, wrapper],
-            stdin=_enterworktree(sibling, main),
-            cwd=project_root,
-            env=env,
-        )
-        path_allowed = _run(
-            [_SYSTEM_BASH, wrapper],
-            stdin=_enterworktree(managed, main),
-            cwd=project_root,
-            env=env,
-        )
     if denied.returncode != 0:
         failures.append(
             f"pretooluse wrapper exited {denied.returncode} on a sibling "
@@ -572,7 +553,47 @@ def check_worktree_guard_endtoend(project_root: Path, wrapper: str) -> list[str]
             ".claude/worktrees — the #1606 guard denies every path. "
             f"stdout={path_allowed.stdout.strip()!r}"
         )
+    return failures
 
+
+def check_worktree_guard_endtoend(project_root: Path, wrapper: str) -> list[str]:
+    """Drive EnterWorktree through the REAL wrapper: deny, path allow, name allow.
+
+    Matcher membership alone cannot detect a dispatcher that ignores the tool.
+    The deny arm targets an existing REGISTERED sibling worktree and the path
+    arm an existing registered managed one, on a real temp repo, so a guard
+    that denies every ``path=`` fails the allow arm and one that allows every
+    ``path=`` fails the deny arm. The payload ``cwd`` anchors the guard to that
+    repo; ``CLAUDE_PROJECT_DIR`` stays explicit for a linked-worktree selfcheck.
+    """
+    failures: list[str] = []
+    # Inherited Git-LOCAL state (a hook's GIT_DIR) would aim git at another
+    # repo; strip exactly the set git names, keeping config isolation such as
+    # GIT_CONFIG_GLOBAL (the fixture pins its own config isolation).
+    try:
+        local = process_env.git_local_env_names()
+    except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+        return [f"EnterWorktree selfcheck could not list git-local env vars: {exc}"]
+    env = {k: v for k, v in os.environ.items() if k not in local}
+    env["CLAUDE_PROJECT_DIR"] = str(project_root)
+    with tempfile.TemporaryDirectory(prefix="dotfiles-worktree-guard-") as tmp:
+        try:
+            main, managed, sibling = _worktree_fixture(Path(tmp).resolve(), env)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return [f"EnterWorktree selfcheck could not build its git fixture: {exc}"]
+        denied = _run(
+            [_SYSTEM_BASH, wrapper],
+            stdin=_enterworktree(sibling, main),
+            cwd=project_root,
+            env=env,
+        )
+        path_allowed = _run(
+            [_SYSTEM_BASH, wrapper],
+            stdin=_enterworktree(managed, main),
+            cwd=project_root,
+            env=env,
+        )
+    failures.extend(_worktree_path_arm_failures(denied, path_allowed))
     allowed = _run(
         [_SYSTEM_BASH, wrapper],
         stdin=json.dumps(

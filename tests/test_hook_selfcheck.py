@@ -512,6 +512,49 @@ def test_worktree_guard_endtoend_passes_on_real_repo() -> None:
     assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
 
 
+def test_worktree_guard_endtoend_ignores_host_git_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host-wide REJECTING pre-commit must not reach the selfcheck's fixture.
+
+    The hostile config is both ``GIT_CONFIG_GLOBAL`` and ``$HOME/.gitconfig``,
+    so stripping every ``GIT_*`` variable (falling back to HOME) and keeping
+    the inherited global config both let it run. Control arm: the same config
+    really does reject a commit in an ordinary repo.
+    """
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    pre_commit = hooks / "pre-commit"
+    pre_commit.write_text("#!/bin/sh\necho host-hook-rejected >&2\nexit 1\n")
+    pre_commit.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    hostile = home / ".gitconfig"
+    hostile.write_text(
+        "[user]\n\tname = T\n\temail = t@example.com\n"
+        f"[core]\n\thooksPath = {hooks}\n"
+        '[hook "reject"]\n\tcommand = exit 1\n\tevent = pre-commit\n'
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(hostile))
+
+    control = tmp_path / "control"
+    control.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=control, check=True, timeout=10)
+    rejected = subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "x"],
+        cwd=control,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+
+    wrapper = str(_REPO / hook_selfcheck.PRETOOLUSE_WRAPPER)
+    assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
+
+
 def test_missing_instructions_loaded_fails(tmp_path: Path) -> None:
     """#917: the InstructionsLoaded observer hook must stay wired.
 
