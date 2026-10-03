@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEM = ".devcontainer/mise-system.toml"
 DOCKER = ".devcontainer/Dockerfile"
-VERSION = "1:22.1.8~++snapshot"
+VERSION = "1:22.1.8~++20260804082631+ca7933e47d3a-1~exp1~20260804082728.35"
+NEXT_VERSION = VERSION.replace("22.1.8", "23.1.0")
 PIN_TEXT = f"""[bootstrap.packages]
 "apt:clang-22" = "{VERSION}"
 "apt:libclang-cpp22" = "{VERSION}"
@@ -222,14 +223,15 @@ def test_release_network_error() -> None:
     ["missing", "multiple", "anchor-version", "mixed-major", "mixed-version"],
 )
 def test_pin_errors(mutation: str) -> None:
-    """The anchor and the complete LLVM family cannot contradict each other."""
+    """The anchor and apt.llvm.org snapshot pins cannot contradict each other."""
     variants = {
         "missing": PIN_TEXT.replace('"apt:clang-22"', '"apt:not-clang"'),
         "multiple": PIN_TEXT.replace("[env]", f'"apt:clang-23" = "{VERSION}"\n[env]'),
         "anchor-version": PIN_TEXT.replace(VERSION, "1:23.1.0"),
         "mixed-major": PIN_TEXT.replace('"apt:libllvm22"', '"apt:libllvm23"'),
         "mixed-version": PIN_TEXT.replace(
-            f'"apt:libllvm22" = "{VERSION}"', '"apt:libllvm22" = "1:22.1.7"'
+            f'"apt:libllvm22" = "{VERSION}"',
+            f'"apt:libllvm22" = "{VERSION.replace("22.1.8", "22.1.7")}"',
         ),
     }
     with pytest.raises((TypeError, ValueError)):
@@ -237,13 +239,48 @@ def test_pin_errors(mutation: str) -> None:
 
 
 def test_pin_inventory() -> None:
-    """Shared version captures four major-less names and the commented pin."""
+    """Snapshot signatures capture major-less names and the commented pin."""
     assert llvm_major.pinned_major(PIN_TEXT) == 22
     pins = llvm_major.llvm_pins(PIN_TEXT)
     assert len(pins) == 8
     assert pins["clang-22-doc"] == (VERSION, False)
     assert pins["libomp5"] == (VERSION, True)
     assert "curl" not in pins
+
+
+@pytest.mark.parametrize("name_major", [22, 23])
+@pytest.mark.parametrize("version", [VERSION, NEXT_VERSION])
+@pytest.mark.parametrize("prefix", ["", "# "])
+def test_libbolt_pin_signature(name_major: int, version: str, prefix: str) -> None:
+    """Active and commented libbolt names and versions must match the anchor."""
+    name = f"libbolt-{name_major}-dev"
+    text = PIN_TEXT.replace("[env]", f'{prefix}"apt:{name}" = "{version}"\n[env]')
+    if name_major != 22 or version != VERSION:
+        with pytest.raises(ValueError, match="mixed"):
+            llvm_major.pinned_major(text)
+        with pytest.raises(ValueError, match="mixed"):
+            llvm_major.llvm_pins(text)
+    else:
+        assert llvm_major.pinned_major(text) == 22
+        assert llvm_major.llvm_pins(text)[name] == (VERSION, not bool(prefix))
+
+
+@pytest.mark.parametrize("version", ["1.8.1-0.1ubuntu1", VERSION])
+def test_libunwind_signature_membership(repo: Path, version: str) -> None:
+    """A package name alone never classifies an Ubuntu pin as LLVM."""
+    text = PIN_TEXT.replace("[env]", f'"apt:libunwind-dev" = "{version}"\n[env]')
+    (repo / SYSTEM).write_text(text)
+    assert llvm_major.pinned_major(text) == 22
+    assert llvm_major.parity_violations(repo) == []
+    assert ("libunwind-dev" in llvm_major.llvm_pins(text)) is (version == VERSION)
+
+
+@pytest.mark.parametrize("preceding", ["#\n", "# \t\n", "\n"])
+@pytest.mark.parametrize("prefix", ["", " \t", "# ", "\t#\t"])
+def test_pin_marker_stays_on_its_line(preceding: str, prefix: str) -> None:
+    """A bare comment or blank line cannot change the next pin's active state."""
+    text = PIN_TEXT.replace('"apt:libllvm22"', f'{preceding}{prefix}"apt:libllvm22"')
+    assert llvm_major.llvm_pins(text)["libllvm22"] == (VERSION, "#" not in prefix)
 
 
 @pytest.mark.parametrize("major", [22, 23])
@@ -279,6 +316,28 @@ def test_iwyu_numeric_version_and_build() -> None:
     ]
     assert llvm_major.iwyu_ready(23, lambda _: (200, json.dumps(files).encode()))
     assert not llvm_major.iwyu_ready(22, lambda _: (200, json.dumps(files).encode()))
+
+
+@pytest.mark.parametrize("subdir", ["linux-64", "linux-aarch64"])
+@pytest.mark.parametrize("other", [22, 23])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_iwyu_tied_newest_builds(subdir: str, other: int, *, reverse: bool) -> None:
+    """Tied newest majors must agree regardless of architecture or API order."""
+    files = [iwyu_file(arch, 23) for arch in ("linux-64", "linux-aarch64")]
+    files.append(iwyu_file(subdir, other))
+    files.append(iwyu_file(subdir, 22, build=0))
+    if reverse:
+        files.reverse()
+
+    def fetch(_: str) -> tuple[int, bytes]:
+        return 200, json.dumps(files).encode()
+
+    if other != 23:
+        with pytest.raises(ValueError, match=f"ambiguous newest IWYU {subdir}"):
+            llvm_major.iwyu_ready(23, fetch)
+    else:
+        assert llvm_major.iwyu_ready(23, fetch)
+        assert not llvm_major.iwyu_ready(22, fetch)
 
 
 @pytest.mark.parametrize(
@@ -381,7 +440,9 @@ def test_commented_pin_parity(repo: Path) -> None:
     assert "mixed majors" in llvm_major.parity_violations(repo)[0]
 
 
-def plan_network(names: set[str], *, fault: str = "") -> llvm_major.Fetcher:
+def plan_network(
+    names: set[str], *, fault: str = "", version: str = "1:23.1.0"
+) -> llvm_major.Fetcher:
     """Serve complete indexes or one intentional inventory/version defect."""
 
     def fetch(url: str) -> tuple[int, bytes]:
@@ -395,9 +456,10 @@ def plan_network(names: set[str], *, fault: str = "") -> llvm_major.Fetcher:
             selected.pop()
         if fault == "extra":
             selected.append("unexpected-tool-23")
+        alternate_version = version.replace("23.1.0", "23.1.1")
         index = "\n\n".join(
             f"Package: {name}\nVersion: "
-            f"{'1:23.1.1' if fault == 'version' and i == 0 else '1:23.1.0'}"
+            f"{alternate_version if fault == 'version' and i == 0 else version}"
             for i, name in enumerate(selected)
         )
         return 200, gzip.compress((index + "\n\n").encode())
@@ -429,6 +491,101 @@ def test_plan_preserves_status_and_majorless_names(repo: Path) -> None:
     plan.write(repo)
     assert llvm_major.parity_violations(repo) == []
     assert '"apt:curl" = "8.0"' in (repo / SYSTEM).read_text()
+
+
+def tree_bytes(repo: Path) -> dict[Path, bytes]:
+    """Snapshot every fixture file to verify refusal leaves the whole tree intact."""
+    return {path: path.read_bytes() for path in repo.rglob("*") if path.is_file()}
+
+
+def test_plan_rejects_existing_parity_violation(repo: Path) -> None:
+    """The public planner rejects parity before consulting indexes or writing."""
+    file = repo / DOCKER
+    file.write_text(file.read_text().replace("LLVM_MAJOR=22", "LLVM_MAJOR=23"))
+    before = tree_bytes(repo)
+    detection = llvm_major.Detection(
+        "resolute", 22, 23, 23, {}, 24, {}, None, "control"
+    )
+
+    def unexpected_fetch(_: str) -> tuple[int, bytes]:
+        msg = "parity must run before fetching indexes"
+        raise AssertionError(msg)
+
+    with pytest.raises(ValueError, match=r"inconsistent tree:.*ARG LLVM_MAJOR"):
+        llvm_major.plan_bump(repo, detection, unexpected_fetch)
+    assert tree_bytes(repo) == before
+
+
+@pytest.mark.parametrize("site", ["_.path", "pin", "registryUrl", "suite"])
+def test_plan_rejects_duplicate_rewrite_targets(repo: Path, site: str) -> None:
+    """Parity-clean duplicate textual targets cannot produce a writable plan."""
+    if site == "_.path":
+        file = repo / SYSTEM
+        file.write_text(file.read_text() + '# "/usr/lib/llvm-22/bin"\n')
+    elif site == "pin":
+        file = repo / SYSTEM
+        file.write_text(
+            file.read_text().replace(
+                "[env]", f'  # "apt:clang-22-doc" = "{VERSION}"\n[env]'
+            )
+        )
+    else:
+        file = repo / "renovate.json"
+        config = json.loads(file.read_text())
+        urls = config["customManagers"][0]["registryUrls"]
+        if site == "registryUrl":
+            config["note"] = urls[0]
+        else:
+            urls[0] += "&note=llvm-toolchain-resolute-22"
+        file.write_text(json.dumps(config))
+    assert llvm_major.parity_violations(repo) == []
+    before = tree_bytes(repo)
+    detection = llvm_major.Detection(
+        "resolute", 22, 23, 23, {}, 24, {}, None, "control"
+    )
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    with pytest.raises(ValueError, match="expected exactly one rewrite, got 2"):
+        llvm_major.plan_bump(repo, detection, plan_network(names, version=NEXT_VERSION))
+    assert tree_bytes(repo) == before
+
+
+def test_plan_rejects_missing_textual_path_target(repo: Path) -> None:
+    """Valid TOML using single quotes must fail before an unrewritten path lands."""
+    file = repo / SYSTEM
+    file.write_text(
+        file.read_text().replace('"/usr/lib/llvm-22/bin"', "'/usr/lib/llvm-22/bin'")
+    )
+    assert llvm_major.parity_violations(repo) == []
+    before = tree_bytes(repo)
+    detection = llvm_major.Detection(
+        "resolute", 22, 23, 23, {}, 24, {}, None, "control"
+    )
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    with pytest.raises(
+        ValueError, match=r"_.path: expected exactly one rewrite, got 0"
+    ):
+        llvm_major.plan_bump(repo, detection, plan_network(names, version=NEXT_VERSION))
+    assert tree_bytes(repo) == before
+
+
+@pytest.mark.parametrize("space", ["", "  ", "\t", " \t\n\n"])
+def test_plan_arg_accepts_parity_whitespace(repo: Path, space: str) -> None:
+    """Every ARG trailing whitespace accepted by parity is preserved by the plan."""
+    file = repo / DOCKER
+    file.write_text(file.read_text().replace("LLVM_MAJOR=22", f"LLVM_MAJOR=22{space}"))
+    assert llvm_major.parity_violations(repo) == []
+    detection = llvm_major.Detection(
+        "resolute", 22, 23, 23, {}, 24, {}, None, "control"
+    )
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    plan = llvm_major.plan_bump(
+        repo, detection, plan_network(names, version=NEXT_VERSION)
+    )
+    assert plan.after[DOCKER] == file.read_text().replace(
+        "LLVM_MAJOR=22", "LLVM_MAJOR=23"
+    )
+    plan.write(repo)
+    assert llvm_major.parity_violations(repo) == []
 
 
 @pytest.mark.parametrize("fault", ["missing", "extra", "version"])
@@ -515,6 +672,36 @@ def test_cli_held_bump_changes_nothing(
     assert before == {
         str(path): path.read_bytes() for path in repo.rglob("*") if path.is_file()
     }
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_cli_apt_repo_uses_dispatched_root(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    explicit: bool,
+) -> None:
+    """The real dispatch defaults to its alternate root while honoring overrides."""
+    (repo / SYSTEM).write_text(PIN_TEXT.replace("22", "23"))
+    selected = 22 if explicit else 23
+
+    def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        assert argv[0] == "curl"
+        assert f"/llvm-toolchain-resolute-{selected}/" in argv[-1]
+        index = gzip.compress(
+            f"Package: clang-{selected}\nVersion: {selected}.1.0\n\n".encode()
+        )
+        return subprocess.CompletedProcess(argv, 0, index, b"")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    argv = ["apt-repo", "--toml", "--pin"]
+    if explicit:
+        argv.extend(["--llvm-version", str(selected)])
+    with pytest.raises(SystemExit) as result:
+        main.run_command(main.setup_parser().parse_args(argv), repo)
+    assert result.value.code == 0
+    assert f'"apt:clang-{selected}"' in capsys.readouterr().out
 
 
 def test_explicit_dry_run_skips_gates(

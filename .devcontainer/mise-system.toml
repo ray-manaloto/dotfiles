@@ -171,14 +171,15 @@ cargo-binstall = "latest"
 # added to PATH through _.path. libclang-rt supplies sanitizer runtimes.
 #
 # This is the COMPLETE numbered apt.llvm.org suite, active and commented,
-# derived from the live Packages indexes on BOTH image architectures.
-# Regenerate with:
+# checked by llvm-bump against BOTH image architectures at bump time.
+# Regenerate the current major (defaults to the pinned major) with:
 #
-#     mise run llvm-bump
+#     mise run apt-repo -- --toml --pin
 #
-# The task selects the newest GA major served for the base image and gates
-# it on dual-arch IWYU readiness. It preserves each package's active/commented
-# status, updates consumers, and prints the required lock-image next step.
+# Change majors with mise run llvm-bump: it selects the newest GA major served
+# for the base image and gates it on dual-arch IWYU readiness. It preserves
+# each package's active/commented status, updates consumers, and prints the
+# required lock-image next step.
 # python-debian parses the indexes via apt_repo; no hand-typed package list.
 #
 # WHY apt.llvm.org (#251, historical probe 2026-07-15): Ubuntu resolute/universe
@@ -338,7 +339,7 @@ missing_tools = "always"
 show_env = true
 
 [env]
-# Expose the apt LLVM-22 toolchain (#222 PR-C) on PATH via mise's native path
+# Expose the apt LLVM toolchain (#222 PR-C) on PATH via mise's native path
 # directive — NOT /etc/profile.d. mise manages PATH through activation (this is
 # how every base tool is exposed), and the chezmoi-rendered ~/.profile runs
 # `mise activate`, which resets PATH and would discard a profile.d addition. The

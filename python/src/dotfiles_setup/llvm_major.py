@@ -35,15 +35,11 @@ _DOCKER = ".devcontainer/Dockerfile"
 _IWYU_URL = "https://api.anaconda.org/package/conda-forge/include-what-you-use/files"
 _ANCHOR = re.compile(r"^clang-(\d+)$")
 _PIN = re.compile(
-    r'^(?P<prefix>\s*(?P<comment>#\s*)?)"apt:(?P<name>[^"]+)"'
-    r'(?P<space>\s*=\s*)"(?P<version>[^"]+)"(?P<suffix>[^\n]*)$',
+    r'^(?P<prefix>[ \t]*(?P<comment>#[ \t]*)?)"apt:(?P<name>[^"]+)"'
+    r'(?P<space>[ \t]*=[ \t]*)"(?P<version>[^"]+)"(?P<suffix>[^\n]*)$',
     re.MULTILINE,
 )
-_FAMILY = re.compile(
-    r"^(?:bolt|clang|flang|libc\+\+|libclang|libclc|libflang|libfuzzer|"
-    r"liblld|libllvm|libmlir|liboffload|libomp|libpolly|libunwind|lld|llvm|"
-    r"mlir|python3-(?:clang|lldb))"
-)
+_APT_LLVM_VERSION = re.compile(r"^\d+:\d+(?:\.\d+)*~\+\+\d{14}\+[0-9a-f]+-1~exp1~")
 _LITERAL = re.compile(
     r"/usr/lib/llvm-\d+\b|llvm-toolchain-[\w%{}.-]+-\d+\b|"
     r"(?:apt:)?clang-\d+\b"
@@ -179,20 +175,20 @@ def _anchor(text: str) -> tuple[int, str]:
 
 
 def llvm_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]:
-    """Return every active/commented apt pin sharing the anchor's exact value."""
-    _, value = _anchor(mise_system_text)
+    """Validate parity, then return active/commented apt.llvm.org snapshot pins."""
+    pinned_major(mise_system_text)
     return {
-        match["name"]: (value, not bool(match["comment"]))
+        match["name"]: (match["version"], not bool(match["comment"]))
         for match in _PIN.finditer(_package_section(mise_system_text))
-        if match["version"] == value
+        if _APT_LLVM_VERSION.match(match["version"])
     }
 
 
 def pinned_major(mise_system_text: str) -> int:
-    """Derive the major and reject mixed LLVM package names or version strings."""
+    """Derive the anchor major and reject mixed apt.llvm.org snapshot pins."""
     major, value = _anchor(mise_system_text)
     for pin in _PIN.finditer(_package_section(mise_system_text)):
-        if _FAMILY.match(pin["name"]):
+        if _APT_LLVM_VERSION.match(pin["version"]):
             if pin["version"] != value:
                 msg = f"LLVM pin {pin['name']} has mixed version strings"
                 raise ValueError(msg)
@@ -278,7 +274,7 @@ def _iwyu_build_key(file: dict) -> tuple[tuple[int, ...], int]:
 
 
 def iwyu_ready(major: int, fetch: Fetcher) -> bool:
-    """Require newest main-label IWYU builds on both image arches to use major."""
+    """Require newest builds on both arches to agree on one libllvm major."""
     files = json.loads(_body(_IWYU_URL, fetch))
     if not isinstance(files, list):
         msg = "IWYU files response must be a JSON list"
@@ -294,17 +290,30 @@ def iwyu_ready(major: int, fetch: Fetcher) -> bool:
         if not builds:
             msg = f"IWYU has no main-label files for {subdir}"
             raise ValueError(msg)
-        newest = max(builds, key=_iwyu_build_key)
-        deps = newest["attrs"].get("depends", [])
-        llvm = {
-            int(match.group(1))
-            for dep in deps
-            if (match := re.match(r"^libllvm(\d+)\b", dep))
-        }
-        if len(llvm) != 1:
-            msg = f"newest IWYU {subdir} build needs exactly one libllvm<N> dependency"
+        newest_key = max(map(_iwyu_build_key, builds))
+        majors = set()
+        for build in builds:
+            if _iwyu_build_key(build) != newest_key:
+                continue
+            llvm = {
+                int(match.group(1))
+                for dep in build["attrs"].get("depends", [])
+                if (match := re.match(r"^libllvm(\d+)\b", dep))
+            }
+            if len(llvm) != 1:
+                msg = (
+                    f"newest IWYU {subdir} build needs exactly one "
+                    "libllvm<N> dependency"
+                )
+                raise ValueError(msg)
+            majors.update(llvm)
+        if len(majors) != 1:
+            msg = (
+                f"ambiguous newest IWYU {subdir} builds have "
+                f"libllvm majors {sorted(majors)}"
+            )
             raise ValueError(msg)
-        targets.append(llvm == {major})
+        targets.append(majors == {major})
     return all(targets)
 
 
@@ -535,8 +544,25 @@ def _index_version(codename: str, target: int, names: set[str], fetch: Fetcher) 
     return version
 
 
+def _rewrite_once(
+    pattern: str,
+    replacement: str | Callable[[re.Match[str]], str],
+    text: str,
+    site: str,
+) -> str:
+    """Require exactly one textual target before returning its rewritten text."""
+    rewritten, count = re.subn(pattern, replacement, text)
+    if count != 1:
+        msg = f"{site}: expected exactly one rewrite, got {count}"
+        raise ValueError(msg)
+    return rewritten
+
+
 def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
-    """Validate both apt inventories and rewrite only the four approved sites."""
+    """Require parity, validate both inventories, and count every planned rewrite."""
+    if violations := parity_violations(root):
+        msg = "cannot plan from an inconsistent tree: " + "; ".join(violations)
+        raise ValueError(msg)
     before = {
         name: (root / name).read_text() for name in (_SYSTEM, _DOCKER, "renovate.json")
     }
@@ -548,21 +574,41 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
     version = _index_version(detection.codename, target, set(pins), fetch)
     pins = {name: (version, active) for name, (_, active) in pins.items()}
     old = llvm_pins(before[_SYSTEM])
+    counts = dict.fromkeys(old, 0)
 
     def replace_pin(match: re.Match[str]) -> str:
         if match["name"] not in old:
             return match.group(0)
+        counts[match["name"]] += 1
         name = re.sub(rf"(?<!\d){pinned}(?!\d)", str(target), match["name"])
         return (
             f'{match["prefix"]}"apt:{name}"{match["space"]}"{version}"{match["suffix"]}'
         )
 
     section = _package_section(before[_SYSTEM])
-    system = before[_SYSTEM].replace(section, _PIN.sub(replace_pin, section), 1)
-    system = system.replace(
-        f'"/usr/lib/llvm-{pinned}/bin"', f'"/usr/lib/llvm-{target}/bin"'
+    rewritten_section = _PIN.sub(replace_pin, section)
+    for name, count in counts.items():
+        if count != 1:
+            msg = f"LLVM pin {name}: expected exactly one rewrite, got {count}"
+            raise ValueError(msg)
+    system = _rewrite_once(
+        re.escape(section),
+        lambda _: rewritten_section,
+        before[_SYSTEM],
+        "package table",
     )
-    docker = re.sub(r"(?m)^(ARG LLVM_MAJOR=)\d+$", rf"\g<1>{target}", before[_DOCKER])
+    system = _rewrite_once(
+        re.escape(f'"/usr/lib/llvm-{pinned}/bin"'),
+        f'"/usr/lib/llvm-{target}/bin"',
+        system,
+        "_.path",
+    )
+    docker = _rewrite_once(
+        r"(?m)^(ARG LLVM_MAJOR=)\d+(\s*)$",
+        rf"\g<1>{target}\g<2>",
+        before[_DOCKER],
+        "ARG LLVM_MAJOR",
+    )
     urls = _registry_urls(before["renovate.json"])
     if len(urls) != 1:
         msg = "cannot plan without exactly one apt.llvm.org registryUrl"
@@ -572,8 +618,14 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
     if parse_qs(urlsplit(url).query).get("suite") != [suite]:
         msg = f"registry suite contradicts plan codename/pins: expected {suite}"
         raise ValueError(msg)
-    renovate = before["renovate.json"].replace(
-        url, url.replace(suite, f"llvm-toolchain-{detection.codename}-{target}")
+    next_url = _rewrite_once(
+        re.escape(suite),
+        f"llvm-toolchain-{detection.codename}-{target}",
+        url,
+        "renovate suite",
+    )
+    renovate = _rewrite_once(
+        re.escape(url), next_url, before["renovate.json"], "renovate registryUrl"
     )
     return BumpPlan(
         detection,

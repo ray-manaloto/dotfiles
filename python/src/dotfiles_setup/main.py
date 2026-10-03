@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from kb_setup import evals
 
-from dotfiles_setup import _project_root, image_lock, llvm_major, native_clis_container
+from dotfiles_setup import image_lock, llvm_major, native_clis_container
 from dotfiles_setup.agentsview_pass import PassRequest
 from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
@@ -2724,7 +2724,7 @@ def handle_bootstrap_gap_report(args: argparse.Namespace, project_root: Path) ->
     logger.info("gap-report OK: declared [bootstrap.packages] set fully installed")
 
 
-def handle_apt_repo(args: argparse.Namespace) -> int:
+def handle_apt_repo(args: argparse.Namespace, project_root: Path) -> int:
     """Handle apt-repo: list what an apt repository publishes.
 
     `--repo`/`--suite` address any apt repo; without them the query is built
@@ -2739,7 +2739,7 @@ def handle_apt_repo(args: argparse.Namespace) -> int:
         selected = args.llvm_version
         if selected is None:
             selected = llvm_major.pinned_major(
-                (_project_root() / ".devcontainer/mise-system.toml").read_text()
+                (project_root / ".devcontainer/mise-system.toml").read_text()
             )
         version: int | str = LLVM_DEV if selected == LLVM_DEV else int(selected)
         query = RepoQuery.for_llvm(version, dist=args.dist, arch=args.arch)
@@ -3084,7 +3084,7 @@ def _build_command_handlers(
         "rule-sync": lambda: handle_rule_sync(args, project_root),
         "eval": lambda: handle_eval(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
-        "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
+        "apt-repo": lambda: sys.exit(handle_apt_repo(args, project_root)),
         "llvm-detect": lambda: sys.exit(
             llvm_major.detect_main(project_root, json_output=args.json)
         ),
