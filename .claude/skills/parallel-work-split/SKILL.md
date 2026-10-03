@@ -97,9 +97,14 @@ returns:
 
 ```bash
 git -C <repo> worktree add ../<repo>.worktrees/<lane>-<YYYYMMDD> -b <type>/<lane> origin/main
-cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <lane> \
+cd ../<repo>.worktrees/<lane>-<YYYYMMDD> && claude --bg -n <name> \
   --settings '{"crossSessionInbound":"accept"}' "<brief>"
 ```
+
+`<name>` is `<project>-<yyyyMMdd'T'HHmmss.SSSSSSSSSX>.<lane>` in America/Chicago
+(`kb-…` in the knowledge-base): print one with
+`mise run coordinator-handoff -- name --feature <lane>`. The `session-start`
+mod keeps a conforming name and never renames a lane, whose name is its address.
 
 **The COORDINATOR creates the worktree and launches the lane INSIDE it.
 Never launch from the main checkout with a brief that says "create a
@@ -138,6 +143,7 @@ OWN ONLY: <file list>. DO NOT EDIT: <hot files + other lanes' files>.
 NATIVE-FIRST: research the tool's built-in before custom code (use-tool-builtins.md).
 GATES: mise run gate -- run lint|pytest|verify (+lint-docs/pin-actions if applicable); report each rc.
 PERSIST: report to <path> incrementally; findings.md/progress.md append-only; never task_plan.md.
+REPORT TO: the coordinator by name; if it handed off, the newest coordinator by ListAgents recency; fallback .agent/plans/handoff-inbox/<lane>.md.
 STOP AT: commit on the branch. Do NOT push, ship or open a PR; report to the coordinator, who ships serially.
 ```
 
@@ -160,6 +166,17 @@ permission prompt has no non-interactive answer: Ray clears it with
 `claude agents` → `→` on the row → `1`, or `claude attach <id>`. Take results from each lane's report FILE. A `SendMessage` reply
 or `claude logs` output is a notification at best, and a message can be held
 or dropped; scraping logs also pays for every line in your context.
+
+## 7. The coordinator hands itself over
+
+A coordinator is named `dotfiles-<Chicago ISO ns>.coordinator`. At its context
+limit (default 30%, then every 5%) the `coordinator-handoff` mod runs the
+handoff unattended and launches a named successor, which notifies every lane
+and retires the old session through a gate
+(`.claude/skills/coordinator-handoff/SKILL.md`). The **newest coordinator** is
+the newest by ListAgents recency or the successor's notify message — never a
+name sort: the legacy `dotfiles-20261002b.coordinator` sorts after every
+`dotfiles-20261002T…` name.
 
 ## Output
 

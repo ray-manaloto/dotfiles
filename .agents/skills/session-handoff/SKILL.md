@@ -28,6 +28,23 @@ every non-task decision and open question is in the handoff, and the plan +
 memory + handoff + research artifacts reconstruct the full working context.
 If that set has a gap, fix it before emitting the resume prompt.
 
+## Unattended run — invoked by `coordinator-handoff`
+
+No human is at the prompt (rulings 10 and 12 in
+`docs/specs/coordinator-auto-handoff-2026-10-02.md`). Every step still runs,
+with three changes:
+
+- Wherever a step would ask or stop for the user (§0 ambiguity, a §1c ruling,
+  §4's review-gate stop), write the question into the handoff's
+  `## Queued questions` section — recommended option first, `PRO:`/`CON:` per
+  option, a citation — and continue. Never `AskUserQuestion`; nothing flagged
+  is committed or posted. The successor puts the queue to Ray.
+- Also write the tracked copy `docs/handoffs/session-<YYYY-MM-DD><letter>.md`
+  on a docs branch; push with ssh keepalive and ship that docs branch as a
+  PR early (requirement 8). Keep `.agent/plans/main-checkout-ship-queue.md`
+  current; the successor's brief points at the tracked handoff.
+- §6 does not apply: there is no `/clear`; the successor starts from its brief.
+
 ## 1. Snapshot the working state
 
 Gather, don't guess — one generated snapshot, never hand-copied PR state:
@@ -181,12 +198,9 @@ reflected in docs), find and update every affected doc. Walk these in order:
    `DOC_PATHSPECS` change plus a coverage assertion in `tests/test_doc_refs.py`.
 
 **Constraints (machine-enforced — respect or the gate fails):**
-- Markdown size is **class-aware** — see `.claude/rules/md-size-budgets.md`
-  for the table (hk step **`md_size_budget`**, which replaced the retired
-  `claude_md_size_limit`). An `AGENTS.md` additionally carries agnix
-  AGM-003's 12,000-char cap — **Windsurf's rule, not Anthropic's** — which
-  binds first. Do NOT restate a flat "200-line / 12,000-char" limit: that
-  misattribution is exactly what `md-size-budgets.md` exists to kill.
+- Markdown size is **class-aware** — `.claude/rules/md-size-budgets.md` has
+  the table (hk step `md_size_budget`) and the `AGENTS.md`-only agnix
+  AGM-003 cap; never restate a flat "200-line / 12,000-char" limit.
   Verify with `mise run lint` + `mise run lint-docs`; when a file sits near
   a limit, record in the handoff which future edit must trim. Any
   addition needs an offsetting trim — prefer collapsing duplication to a

@@ -42,6 +42,10 @@ from dotfiles_setup.codex_schema import (
 from dotfiles_setup.command_audit import DEFAULT_SESSION_LIMIT, command_audit_main
 from dotfiles_setup.config import DotfilesConfig
 from dotfiles_setup.container import verify_latest_main
+from dotfiles_setup.coordinator_handoff import (
+    add_subcommands as add_coordinator_handoff_subcommands,
+)
+from dotfiles_setup.coordinator_handoff import main as coordinator_handoff_main
 from dotfiles_setup.dag_project import run_project
 from dotfiles_setup.dag_tick import (
     DEFAULT_MAX_AGE_SECONDS,
@@ -166,6 +170,10 @@ from dotfiles_setup.sdlc_team import sdlc_team_main
 from dotfiles_setup.session_orphans import OrphanRequest
 from dotfiles_setup.session_orphans import main as session_orphans_main
 from dotfiles_setup.session_review import LaneChoice, session_review_main
+from dotfiles_setup.session_start import (
+    add_subcommands as add_session_start_subcommands,
+)
+from dotfiles_setup.session_start import main as session_start_main
 from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.skills_mirror import skills_mirror_main
 from dotfiles_setup.sync import SyncOptions, sync_main
@@ -1742,6 +1750,7 @@ def _add_hook_subcommands(
     _add_schema_vendor_subcommands(subparsers)
     _add_fnhook_subcommands(subparsers)
     _add_install_doctor_subcommand(subparsers)
+    _add_session_mod_subcommands(subparsers)
     _add_plugin_health_subcommands(subparsers)
     _add_dependency_currency_subcommand(subparsers)
     _add_pin_parity_subcommand(subparsers)
@@ -1771,6 +1780,23 @@ def _add_install_doctor_subcommand(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Use mise's cached release list instead of forcing a live lookup "
         "(faster, but may compare against a version up to an hour stale)",
+    )
+
+
+def _add_session_mod_subcommands(subparsers: _SubParsers) -> None:
+    """Register the judgement behind the coordinator-handoff + session-start mods."""
+    add_coordinator_handoff_subcommands(
+        subparsers.add_parser(
+            "coordinator-handoff",
+            help="Coordinator auto-handoff at a context limit: decide, name, "
+            "launch the successor, retire the old session",
+        )
+    )
+    add_session_start_subcommands(
+        subparsers.add_parser(
+            "session-start",
+            help="Once-per-session reload + naming decision for the session-start mod",
+        )
     )
 
 
@@ -2984,6 +3010,10 @@ def _build_command_handlers(
         "dependency-currency": lambda: sys.exit(
             dependency_currency_main(project_root=project_root)
         ),
+        "coordinator-handoff": lambda: sys.exit(
+            coordinator_handoff_main(args, project_root)
+        ),
+        "session-start": lambda: sys.exit(session_start_main(args, project_root)),
         "pin-parity": lambda: sys.exit(pin_parity_main(project_root)),
         "plugin-health": lambda: sys.exit(
             plugin_health_main(project_root=project_root)

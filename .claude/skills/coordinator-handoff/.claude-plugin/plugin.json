@@ -1,0 +1,8 @@
+{
+  "name": "coordinator-handoff",
+  "version": "1.0.0",
+  "description": "Auto-submits /coordinator-handoff when a dotfiles coordinator session's context reaches the configured limit, with a visible status-line heartbeat",
+  "author": {
+    "name": "Raymond Manaloto"
+  }
+}

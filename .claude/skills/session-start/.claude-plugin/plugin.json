@@ -1,0 +1,8 @@
+{
+  "name": "session-start",
+  "version": "1.0.0",
+  "description": "On each new interactive session: reload skills and plugins, then name the session <project>-<Chicago ISO ns>.<feature>",
+  "author": {
+    "name": "Raymond Manaloto"
+  }
+}

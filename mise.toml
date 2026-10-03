@@ -1692,6 +1692,19 @@ description = "Audit this session's descendant processes; optionally reap wait l
 # Thin caller; python/src/dotfiles_setup/session_orphans.py. Dry-run by default.
 run = 'uv run --project python dotfiles-setup session-orphans'
 
+[tasks.coordinator-handoff]
+description = "Coordinator auto-handoff: decide | release | name | launch the successor | retire the old coordinator (gated)"
+# Thin caller; python/src/dotfiles_setup/coordinator_handoff.py. Driven by the
+# coordinator-handoff skill + its session.measure hook; `retire` refuses while
+# the old coordinator owns a live heavy run or in-flight harness tasks.
+run = 'uv run --project python dotfiles-setup coordinator-handoff'
+
+[tasks.session-start]
+description = "Once-per-session reload + naming decision behind the session-start mod"
+# Thin caller; python/src/dotfiles_setup/session_start.py. Driven by the
+# session-start skill's session.start hook.
+run = 'uv run --project python dotfiles-setup session-start'
+
 [tasks.reap]
 description = "Reap wedged processes by pattern and age, ancestor-protected (#653). DRY RUN unless --kill"
 # Thin caller; see reap.py. The 2026-08-08 pile was 1,174 wedged mise/shims/git
