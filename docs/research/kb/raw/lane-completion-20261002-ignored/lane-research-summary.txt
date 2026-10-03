@@ -1,0 +1,40 @@
+RESEARCH SWEEP COMPLETED: Lane Completion Detection Protocol
+============================================================
+
+RESEARCH QUESTION:
+How should fan-out workflow watchers detect when a lane has finished?
+The problem: KB2 finished work but showed "blocked" status, causing 7-day watcher loops.
+
+KEY FINDING:
+"Idle" (dimmed) is NOT a terminal state in Claude Code. Lanes need explicit completion signals.
+
+DELIVERABLES WRITTEN:
+1. docs/research/kb/reports/agents/fanout-lane-completion-detection-2026-10-02.md
+   - Full research report with cross-project patterns
+   - Primary sources: Claude Code agent-view docs, stablyai/orca #15185, spec-kitty
+   - GitHub repos touched: 5 (with links)
+
+2. docs/specs/fanout-skill-lane-completion-protocol.md
+   - Implementable 3-layer completion protocol
+   - Watcher algorithm with escalation logic
+   - Lane brief template updates
+   - Implementation checklist
+
+3. findings.md
+   - Summary of core findings
+   - Research sources and insights
+   - Next implementation steps
+
+4. docs/research/kb/raw/fanout-lane-completion-detection-2026-10-02/links/
+   - Offline mirrors of Claude Code docs (3 sources)
+   - README with link index table
+
+SOLUTION PATTERN:
+Lane is "done" when:
+  1. Session state ∈ {done, failed, stopped} (terminal)
+  2. Completion marker written (durable proof)
+  3. State persisted ≥2 minutes
+
+If lane idles >5 min without marker → watcher sends confirmation prompt
+
+READY FOR: Implementation by developer or codex lane
