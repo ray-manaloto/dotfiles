@@ -1,0 +1,520 @@
+# Saved GitHub searches — mise config inheritance in nested Claude Code worktrees (2026-10-03)
+#
+# Re-runnable record behind
+#   docs/research/kb/reports/agents/mise-claude-worktrees-research-2026-10-03.md
+#
+# FORMAT: the #1502 SavedSearchFile schema (schema_version = 1, [[watch]] + [[result]]),
+# from branch feat/1502-saved-searches (schemas/saved-search-file.schema.json, uncommitted
+# WIP as of 2026-10-03). `{nonce}` is rendered FRESH per run and never written back.
+# Code-search total_count is NOT a hit count (tokenizer drops punctuation).
+# A 403 is a rate limit, never zero.
+#
+# RE-RUN
+#   (a) once #1502 lands:  mise run research-saved-search -- rerun docs/research/kb/searches/mise-claude-worktrees.toml
+#                          mise run research-saved-search -- status docs/research/kb/searches/mise-claude-worktrees.toml
+#   (b) by hand, today (each [[watch]]; replace {nonce} with a fresh token, e.g. "zq$(openssl rand -hex 5)nx"):
+#       issues/PRs:  gh api -X GET search/issues -f q='<query>' -f per_page=15 \
+#                      --jq '.total_count, (.items[] | "\(.number) \(.state) \(.title) \(.html_url)")'
+#       discussions: gh api graphql -f q='<query>' -f query='query($q:String!){search(type:DISCUSSION,query:$q,first:15){discussionCount nodes{... on Discussion{number title url}}}}'
+#       code:        gh api -X GET search/code -f q='<query>' -f per_page=20 \
+#                      --jq '.total_count, (.items[] | "\(.repository.full_name) \(.path)")'
+#     Run control_hit (must be > 0) and control_absent (must be 0) with the SAME command shape first.
+#     NOTE: `gh search issues --repo` is broken on this machine (returns 0 silently) — use gh api.
+
+schema_version = 1
+question = "How should nested <repo>/.claude/worktrees/<name> checkouts stop mise inheriting the parent checkout's config?"
+origin = "topic:mise-claude-worktrees"
+
+[[watch]]
+id       = "mise-issues-worktree"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise worktree']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-worktrees-config"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise worktrees config']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-ceiling-env"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise MISE_CEILING_PATHS']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-ceiling-setting"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise ceiling_paths']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-miserc-ceiling"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise miserc ceiling']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-nested-worktree"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise nested worktree']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-claude-worktrees"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise .claude/worktrees']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-issues-stop-parent"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise stop searching parent config']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktree-mise"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree mise']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktree-direnv"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree direnv']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktree-location"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree location outside repository']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktreecreate"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code WorktreeCreate']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktreeinclude"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktreeinclude']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktree-nested"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree nested inside repo']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "cc-issues-worktree-env"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree environment variables']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "direnv-issues-worktree"
+kind     = "issues"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "direnv/direnv"]
+queries  = ['repo:direnv/direnv worktree']
+control_hit    = 'repo:direnv/direnv envrc'
+control_absent = 'repo:direnv/direnv "{nonce}"'
+
+[[watch]]
+id       = "mise-disc-worktree"
+kind     = "discussions"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise worktree']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-disc-ceiling"
+kind     = "discussions"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise ceiling_paths']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-disc-miserc"
+kind     = "discussions"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise miserc']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "mise-disc-parent-config"
+kind     = "discussions"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "jdx/mise"]
+queries  = ['repo:jdx/mise parent directory config']
+control_hit    = 'repo:jdx/mise ceiling'
+control_absent = 'repo:jdx/mise "{nonce}"'
+
+[[watch]]
+id       = "cc-disc-worktree"
+kind     = "discussions"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktree']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "code-ceiling-env"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['MISE_CEILING_PATHS']
+grep     = 'MISE_CEILING_PATHS'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-ceiling-worktrees"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['MISE_CEILING_PATHS worktrees']
+grep     = 'MISE_CEILING_PATHS'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-miserc-ceiling"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['ceiling_paths filename:.miserc.toml']
+grep     = 'ceiling_paths'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-ceiling-config-root"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['"ceiling_paths" config_root']
+grep     = 'ceiling_paths'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-claude-worktrees-ceiling"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['".claude/worktrees" MISE_CEILING_PATHS']
+grep     = 'MISE_CEILING_PATHS'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-claude-worktrees-mise"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['".claude/worktrees" mise.toml']
+grep     = '\.claude/worktrees'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-claude-worktrees-direnv"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['".claude/worktrees" direnv']
+grep     = '\.claude/worktrees'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "code-envrc-source-up-worktrees"
+kind     = "code"
+origin   = "topic:mise-claude-worktrees"
+cadence  = "weekly"
+tags     = ["mise-worktrees", "code"]
+limit    = 20
+queries  = ['"source_up" worktrees filename:.envrc']
+grep     = 'source_up'
+control_hit      = '"[tools]" filename:mise.toml'
+control_hit_grep = '^\[tools\]'
+control_absent   = '"{nonce}" filename:mise.toml'
+
+# Baselines from the 2026-10-03 run. Controls that run: must-hit issues `repo:jdx/mise ceiling`=38,
+# `repo:anthropics/claude-code hooks`=8915, direnv envrc>0; fresh nonce = 0 in all three repos;
+# discussions must-hit `repo:jdx/mise ceiling`=20, nonce=0. anthropics/claude-code discussions: must-hit
+# `hooks` ALSO returned 0, so cc-disc-worktree=0 is "never asked" (discussions appear disabled there), NOT absence.
+# code: must-hit `"[tools]" filename:mise.toml`=26368, fresh nonce=0.
+[[result]]
+watch_id = "mise-issues-worktree"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 65
+
+[[result]]
+watch_id = "mise-issues-worktrees-config"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 20
+
+[[result]]
+watch_id = "mise-issues-ceiling-env"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 6
+
+[[result]]
+watch_id = "mise-issues-ceiling-setting"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 8
+
+[[result]]
+watch_id = "mise-issues-miserc-ceiling"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 7
+
+[[result]]
+watch_id = "mise-issues-nested-worktree"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 16
+
+[[result]]
+watch_id = "mise-issues-claude-worktrees"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 12
+
+[[result]]
+watch_id = "mise-issues-stop-parent"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 8
+
+[[result]]
+watch_id = "cc-issues-worktree-mise"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 9
+
+[[result]]
+watch_id = "cc-issues-worktree-direnv"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 8
+
+[[result]]
+watch_id = "cc-issues-worktree-location"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 79
+
+[[result]]
+watch_id = "cc-issues-worktreecreate"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 172
+
+[[result]]
+watch_id = "cc-issues-worktreeinclude"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 25
+
+[[result]]
+watch_id = "cc-issues-worktree-nested"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 116
+
+[[result]]
+watch_id = "cc-issues-worktree-env"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 95
+
+[[result]]
+watch_id = "direnv-issues-worktree"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 7
+
+[[result]]
+watch_id = "mise-disc-worktree"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 13
+
+[[result]]
+watch_id = "mise-disc-ceiling"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 5
+
+[[result]]
+watch_id = "mise-disc-miserc"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 29
+
+[[result]]
+watch_id = "mise-disc-parent-config"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 65
+
+[[result]]
+watch_id = "cc-disc-worktree"
+date_run = "2026-10-03"
+status = "empty-unverified"
+total_count = 0
+
+[[result]]
+watch_id = "code-ceiling-env"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 358
+
+[[result]]
+watch_id = "code-ceiling-worktrees"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 65
+
+[[result]]
+watch_id = "code-miserc-ceiling"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 5
+
+[[result]]
+watch_id = "code-ceiling-config-root"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 118
+
+[[result]]
+watch_id = "code-claude-worktrees-ceiling"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 13
+
+[[result]]
+watch_id = "code-claude-worktrees-mise"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 489
+
+[[result]]
+watch_id = "code-claude-worktrees-direnv"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 782
+
+[[result]]
+watch_id = "code-envrc-source-up-worktrees"
+date_run = "2026-10-03"
+status = "hits"
+total_count = 3
+
