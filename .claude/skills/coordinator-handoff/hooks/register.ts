@@ -8,6 +8,7 @@ import type { EngineInterface, Register } from "claude-code";
  * The module owns only a cheap pre-filter and the visible heartbeat; python
  * (`dotfiles-setup coordinator-handoff decide`) owns every judgement: the role
  * check against the bg job record, the fired-level state, the re-fire step.
+ * Helpers are deliberately local: each skills-dir plugin loads independently.
  *
  * Function-hook failures are skipped SILENTLY by the engine, so a broken
  * trigger would look exactly like "below the limit" until "Prompt is too
@@ -26,9 +27,14 @@ const DECIDE_TIMEOUT_MS = 60_000;
 const REASON_MAX_CHARS = 80;
 
 /** Mirrors `Decision.to_json()` in `python/src/dotfiles_setup/coordinator_handoff.py`. */
+const REASONS = [
+  "fire", "not-coordinator", "below-limit", "below-next-step", "already-launched",
+  "invalid-session-id", "invalid-percent", "state-write-failed", "state-locked",
+] as const; // Mirrors Python DecisionReason (Literal).
+type DecisionReason = (typeof REASONS)[number];
 type Decision = {
   fire: boolean;
-  reason: string;
+  reason: DecisionReason;
   level: number | null;
   percent: number;
   warnings: string[];
@@ -36,6 +42,8 @@ type Decision = {
 
 /** One toast per distinct reason: a repeating failure must not flood the bar. */
 const toasted = new Set<string>();
+const roles = new Map<string, "coordinator" | "not">();
+const measuring = new Map<string, Promise<void>>();
 
 function toastOnce($: EngineInterface, text: string): void {
   if (toasted.has(text)) return;
@@ -74,9 +82,10 @@ function parseDecision(stdout: string): Decision | null {
   if (typeof fire !== "boolean" || typeof reason !== "string" || typeof percent !== "number") {
     return null;
   }
+  if (!REASONS.some((candidate) => candidate === reason)) return null;
   if (level !== null && typeof level !== "number") return null;
   if (!Array.isArray(warnings) || !warnings.every((w) => typeof w === "string")) return null;
-  return { fire, reason, level, percent, warnings: warnings as string[] };
+  return { fire, reason: reason as DecisionReason, level, percent, warnings: warnings as string[] };
 }
 
 /** The env the decision depends on, handed down explicitly (literal names only). */
@@ -94,6 +103,7 @@ async function decide(
   $: EngineInterface,
   sessionId: string,
   percent: number,
+  noCommit: boolean,
 ): Promise<Decision | string> {
   let run: { exitCode: number; stdout: string; stderr: string };
   try {
@@ -111,6 +121,7 @@ async function decide(
         sessionId,
         "--percent",
         String(percent),
+        ...(noCommit ? ["--no-commit"] : []),
       ],
       { cwd: projectDir, env: await decisionEnv($), timeoutMs: DECIDE_TIMEOUT_MS },
     );
@@ -140,64 +151,112 @@ function belowStatus($: EngineInterface, decision: Decision, percent: number): v
     $.ui.status(`handoff next @${decision.level ?? "?"}%`);
   } else if (decision.reason === "below-limit") {
     $.ui.status(`handoff ${percent}%/${decision.level ?? "?"}%`);
+  } else if (decision.reason === "already-launched") {
+    $.ui.status("handoff already launched");
   } else {
     fail($, decision.reason);
   }
 }
 
-async function measure($: EngineInterface, percent: number): Promise<void> {
+async function releaseFailure(
+  $: EngineInterface, sessionId: string, level: number, noCommit: boolean, reason: string,
+): Promise<void> {
+  fail($, reason);
+  if (noCommit) return;
+  try {
+    const projectDir = (await $.env.get("CLAUDE_PROJECT_DIR")) ?? (await $.session.root());
+    const run = await $.process.run(
+      ["uv", "run", "--project", "python", "dotfiles-setup", "coordinator-handoff",
+        "release", "--session-id", sessionId, "--level", String(level)],
+      { cwd: projectDir, timeoutMs: DECIDE_TIMEOUT_MS },
+    );
+    if (run.exitCode !== 0) {
+      fail($, `${reason}; release rc ${run.exitCode}`);
+      return;
+    }
+  } catch {
+    fail($, `${reason}; release failed to run`);
+    return;
+  }
+  // Releasing never overwrites delivery failure with a successful heartbeat.
+  fail($, reason);
+}
+
+async function measure($: EngineInterface, sessionId: string, percent: number): Promise<void> {
+  if (roles.get(sessionId) === "not") {
+    $.ui.status("handoff n/a (not coordinator)");
+    return;
+  }
   const limit = parseLimit(await $.env.get("DOTFILES_COORDINATOR_HANDOFF_PCT"));
-  if (percent < limit) {
-    // Below the limit: no process, just the heartbeat.
+  if (roles.get(sessionId) === "coordinator" && percent < limit) {
+    // Once the role is known, below the limit needs no process.
     $.ui.status(`handoff ${percent}%/${limit}%`);
     return;
   }
-  const sessionId = await $.session.id();
-  const decision = await decide($, sessionId, percent);
+  const probe = (await $.env.get("DOTFILES_COORDINATOR_HANDOFF_PROBE")) === "1";
+  const dryRun = (await $.env.get("DOTFILES_COORDINATOR_HANDOFF_DRY_RUN")) === "1";
+  const noCommit = probe || dryRun;
+  const decision = await decide($, sessionId, percent, noCommit);
   if (typeof decision === "string") {
     fail($, decision);
     return;
   }
-  for (const warning of decision.warnings) toastOnce($, `coordinator-handoff: ${warning}`);
-  if (!decision.fire) {
-    belowStatus($, decision, percent);
-    return;
+  if (decision.reason === "not-coordinator") roles.set(sessionId, "not");
+  else if (["fire", "below-limit", "below-next-step", "already-launched"].includes(decision.reason)) {
+    roles.set(sessionId, "coordinator");
   }
   const level = decision.level ?? percent;
-  const probe = (await $.env.get("DOTFILES_COORDINATOR_HANDOFF_PROBE")) === "1";
   const args = probe ? "--probe" : `${sessionId} ${percent}`;
-  if ((await $.env.get("DOTFILES_COORDINATOR_HANDOFF_DRY_RUN")) === "1") {
-    const line = `coordinator-handoff DRY-RUN: would run /${SKILL} ${args} (context ${percent}%, level ${level}%)`;
-    $.ui.status(`handoff DRY-RUN @${level}%`);
+  try {
+    for (const warning of decision.warnings) toastOnce($, `coordinator-handoff: ${warning}`);
+    if (!decision.fire) {
+      belowStatus($, decision, percent);
+      return;
+    }
+    if (dryRun) {
+      const line = `coordinator-handoff DRY-RUN: would run /${SKILL} ${args} (context ${percent}%, level ${level}%)`;
+      $.ui.status(`handoff DRY-RUN @${level}%`);
+      $.ui.toast(line);
+      $.ui.log(line);
+      return;
+    }
+    const command = await resolveCommand($);
+    if (command === undefined) {
+      await releaseFailure($, sessionId, level, noCommit, "skill not listed");
+      return;
+    }
+    const line = `coordinator-handoff: context ${percent}% reached ${level}% — running /${command} ${args}`;
+    $.ui.status(`handoff fired @${level}%`);
     $.ui.toast(line);
     $.ui.log(line);
-    return;
+    // Completion is queued until idle: never await command.run inside the hook.
+    void $.command.run({ command, args }).catch((error: unknown) =>
+      releaseFailure($, sessionId, level, noCommit,
+        `command.run rejected: ${error instanceof Error ? error.message : String(error)}`),
+    );
+  } catch (error: unknown) {
+    await releaseFailure($, sessionId, level, noCommit || !decision.fire,
+      `delivery failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const command = await resolveCommand($);
-  if (command === undefined) {
-    fail($, "skill not listed");
-    return;
-  }
-  const line = `coordinator-handoff: context ${percent}% reached ${level}% — running /${command} ${args}`;
-  $.ui.status(`handoff fired @${level}%`);
-  $.ui.toast(line);
-  $.ui.log(line);
-  // Never awaited: `command.run` rejects inside a hook the turn waits on, and
-  // it runs once the session is idle anyway. The rejection must be visible.
-  void $.command.run({ command, args }).catch((error: unknown) => {
-    fail($, `command.run rejected: ${error instanceof Error ? error.message : String(error)}`);
-  });
 }
 
 export const register: Register = (on) => {
   on("session.measure", async ($, e, next) => {
     const result = await next(e);
-    const percent = e.context.percent;
-    if (!e.changed.includes("context") || typeof percent !== "number" || !Number.isFinite(percent)) {
-      return result;
-    }
     try {
-      await measure($, percent);
+      const percent = e.context.percent;
+      if (!e.changed.includes("context") || typeof percent !== "number" || !Number.isFinite(percent)) {
+        return result;
+      }
+      const sessionId = await $.session.id();
+      // Serialise measurements for one session so the first role query is unique.
+      const work = (measuring.get(sessionId) ?? Promise.resolve()).then(() => measure($, sessionId, percent));
+      measuring.set(sessionId, work);
+      try {
+        await work;
+      } finally {
+        if (measuring.get(sessionId) === work) measuring.delete(sessionId);
+      }
     } catch (error: unknown) {
       fail($, `hook failed: ${error instanceof Error ? error.message : String(error)}`);
     }

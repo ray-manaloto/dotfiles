@@ -9,6 +9,7 @@ import type { EngineInterface, Register } from "claude-code";
  * decide`), queues `/reload-skills` then `/reload-plugins --force` — bg spares
  * can predate the claim, so their skill and plugin state may be stale — and
  * applies the naming convention `<project>-<Chicago ISO ns>.<feature>`:
+ * Helpers are deliberately local: each skills-dir plugin loads independently.
  *
  * - `keep`: the `-n` name already conforms;
  * - `rename`: `/rename <name>` with the branch slug as the feature;
@@ -33,15 +34,23 @@ const PROMPT_MAX_CHARS = 2_000;
 const REASON_MAX_CHARS = 80;
 
 /** Mirrors `StartDecision.to_json()` in `python/src/dotfiles_setup/session_start.py`. */
+const ACTIONS = [
+  "keep", "rename", "defer", "nonconforming", "unknown", "already-ran",
+  "non-interactive", "invalid-session-id", "state-write-failed", "state-locked",
+] as const; // Mirrors Python StartAction (Literal).
+type StartAction = (typeof ACTIONS)[number];
 type StartDecision = {
-  action: string;
+  action: StartAction;
   reload: boolean;
   name: string | null;
   prefix: string | null;
 };
 
 /** A deferred rename waiting for the first prompt of this module's lifetime. */
-let pending: { sessionId: string; prefix: string } | null = null;
+type PendingName = { sessionId: string; prefix: string | null; name: string | null };
+const pending = new Map<string, PendingName>();
+const pendingChecked = new Set<string>();
+const renaming = new Set<string>();
 
 const toasted = new Set<string>();
 
@@ -82,9 +91,10 @@ function parseStart(stdout: string): StartDecision | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const { action, reload, name, prefix } = value as Record<string, unknown>;
   if (typeof action !== "string" || typeof reload !== "boolean") return null;
+  if (!ACTIONS.some((candidate) => candidate === action)) return null;
   if (name !== null && typeof name !== "string") return null;
   if (prefix !== null && typeof prefix !== "string") return null;
-  return { action, reload, name, prefix };
+  return { action: action as StartAction, reload, name, prefix };
 }
 
 async function python(
@@ -127,9 +137,25 @@ function toSlug(text: string): string {
     .replace(/-+$/, "");
 }
 
+/** Compatibility boundary: vendored 2.1.277 says string; 2.1.288 returns an object.
+ * Coordinator must regenerate vendor types separately; do not patch declarations.
+ */
+function completionText(reply: string | { isAnswered: boolean; text: string }): string | undefined {
+  return typeof reply === "string" ? reply : (reply.isAnswered ? reply.text : undefined);
+}
+
+async function confirmRename($: EngineInterface, sessionId: string, name: string): Promise<void> {
+  // Only called from an unawaited task: the command runs once the session is idle.
+  await $.command.run({ command: "rename", args: name });
+  const marked = await python($, ["renamed", "--session-id", sessionId, "--name", name]);
+  if (marked.exitCode !== 0) throw new Error(`renamed rc ${marked.exitCode}`);
+  pending.delete(sessionId);
+  $.ui.status("session-start ok (renamed)");
+}
+
 async function renameFromPrompt(
   $: EngineInterface,
-  claim: { sessionId: string; prefix: string },
+  claim: PendingName,
   text: string,
 ): Promise<void> {
   let slug = SLUG_FALLBACK;
@@ -141,18 +167,40 @@ async function renameFromPrompt(
         text.slice(0, PROMPT_MAX_CHARS),
       maxTokens: 30,
     });
-    slug = toSlug(reply) || SLUG_FALLBACK;
+    slug = toSlug(completionText(reply) ?? "") || SLUG_FALLBACK;
   } catch {
     slug = SLUG_FALLBACK;
   }
-  const name = `${claim.prefix}.${slug}`;
-  queue($, "rename", name);
-  const marked = await python($, ["renamed", "--session-id", claim.sessionId, "--name", name]);
-  if (marked.exitCode !== 0) {
-    fail($, `renamed rc ${marked.exitCode}`);
-    return;
+  await confirmRename($, claim.sessionId, claim.name ?? `${claim.prefix}.${slug}`);
+}
+
+function scheduleRename($: EngineInterface, claim: PendingName, text?: string): void {
+  if (renaming.has(claim.sessionId)) return;
+  renaming.add(claim.sessionId);
+  pending.set(claim.sessionId, claim);
+  const work = claim.name === null
+    ? renameFromPrompt($, claim, text ?? "")
+    : confirmRename($, claim.sessionId, claim.name);
+  void work.catch((error: unknown) => {
+    // Keep the claim and Python prefix: a rejected rename is still pending.
+    fail($, `rename failed: ${errorText(error)}`);
+  }).finally(() => renaming.delete(claim.sessionId));
+}
+
+async function recoverPending($: EngineInterface, sessionId: string): Promise<void> {
+  if (pendingChecked.has(sessionId)) return;
+  pendingChecked.add(sessionId);
+  const run = await python($, ["pending", "--session-id", sessionId]);
+  if (run.exitCode !== 0) throw new Error(`pending rc ${run.exitCode}`);
+  const decision = parseStart(run.stdout);
+  if (decision === null) throw new Error("pending output not JSON");
+  if (decision.action === "rename" && decision.name !== null) {
+    pending.set(sessionId, { sessionId, name: decision.name, prefix: null });
+  } else if (decision.prefix !== null) {
+    pending.set(sessionId, { sessionId, prefix: decision.prefix, name: null });
+  } else if (["invalid-session-id", "state-write-failed", "state-locked"].includes(decision.action)) {
+    throw new Error(decision.action);
   }
-  $.ui.status("session-start ok (renamed)");
 }
 
 async function start($: EngineInterface, cwd: string): Promise<void> {
@@ -162,10 +210,16 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
     fail($, decision);
     return;
   }
+  // A repeat with no prefix can still have an unconfirmed branch rename.
+  if (decision.action !== "already-ran" || decision.prefix !== null) pendingChecked.add(sessionId);
+  applyStart($, sessionId, decision);
   if (decision.reload) {
     queue($, "reload-skills");
     queue($, "reload-plugins", "--force");
   }
+}
+
+function applyStart($: EngineInterface, sessionId: string, decision: StartDecision): void {
   switch (decision.action) {
     case "keep":
       $.ui.status("session-start ok");
@@ -175,13 +229,13 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
         fail($, "rename without a name");
         return;
       }
-      queue($, "rename", decision.name);
-      $.ui.status("session-start ok (renamed)");
+      $.ui.status("session-start pending rename");
+      scheduleRename($, { sessionId, name: decision.name, prefix: null });
       return;
     case "defer":
     case "already-ran":
       if (decision.prefix !== null) {
-        pending = { sessionId, prefix: decision.prefix };
+        pending.set(sessionId, { sessionId, prefix: decision.prefix, name: null });
         $.ui.status("session-start ok (name at first prompt)");
       } else if (decision.action === "defer") {
         fail($, "defer without a prefix");
@@ -196,6 +250,9 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
         `session-start: "${decision.name ?? "?"}" is outside <project>-<yyyyMMdd'T'HHmmss.ns±HH>.<feature>; left as is`,
       );
       return;
+    case "unknown":
+      $.ui.status("session-start: name unknown");
+      return;
     default:
       fail($, decision.action);
   }
@@ -204,8 +261,8 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     const result = await next(e);
-    if (!e.isInteractive) return result;
     try {
+      if (!e.isInteractive) return result;
       await start($, e.cwd);
     } catch (error: unknown) {
       fail($, `hook failed: ${errorText(error)}`);
@@ -215,13 +272,14 @@ export const register: Register = (on) => {
 
   on("prompt.submit", async ($, e, next) => {
     const result = await next(e);
-    if (pending === null) return result;
-    // First prompt only: the claim is taken before anything can await.
-    const claim = pending;
-    pending = null;
-    void renameFromPrompt($, claim, e.text).catch((error: unknown) =>
-      fail($, `deferred rename failed: ${errorText(error)}`),
-    );
+    try {
+      const sessionId = await $.session.id();
+      await recoverPending($, sessionId);
+      const claim = pending.get(sessionId);
+      if (claim !== undefined) scheduleRename($, claim, e.text);
+    } catch (error: unknown) {
+      fail($, `pending rename failed: ${errorText(error)}`);
+    }
     return result;
   });
 };

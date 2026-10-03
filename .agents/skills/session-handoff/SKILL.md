@@ -40,8 +40,9 @@ with three changes:
   option, a citation — and continue. Never `AskUserQuestion`; nothing flagged
   is committed or posted. The successor puts the queue to Ray.
 - Also write the tracked copy `docs/handoffs/session-<YYYY-MM-DD><letter>.md`
-  (the successor's brief points at it) and keep
-  `.agent/plans/main-checkout-ship-queue.md` current.
+  on a docs branch; push with ssh keepalive and ship that docs branch as a
+  PR early (requirement 8). Keep `.agent/plans/main-checkout-ship-queue.md`
+  current; the successor's brief points at the tracked handoff.
 - §6 does not apply: there is no `/clear`; the successor starts from its brief.
 
 ## 1. Snapshot the working state

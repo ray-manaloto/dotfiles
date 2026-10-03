@@ -11,7 +11,16 @@ REPO_ROOT = Path(__file__).parent.parent
 HARNESS = REPO_ROOT / "tests" / "fixtures" / "coordinator_handoff_hook" / "harness.ts"
 _BUN_TIMEOUT_S = 90
 #: Every arm the harness runs; a dropped block changes the count and fails here.
-_EXPECTED_ARMS = 23
+_EXPECTED_ARMS = 30
+_REGRESSIONS = [
+    "r4-first-below-role-cache",
+    "r4-role-cache-keyed-by-session",
+    "r4-event-getter-fail-open",
+    "r3-list-failure-releases-level",
+    "r3-release-failure-visible",
+    "r1-already-launched-heartbeat",
+    "r4-concurrent-first-role-query",
+]
 
 
 def test_coordinator_handoff_hook_behaviour_under_bun() -> None:
@@ -26,4 +35,7 @@ def test_coordinator_handoff_hook_behaviour_under_bun() -> None:
     )
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert json.loads(completed.stdout) == {"arms": _EXPECTED_ARMS}
+    assert json.loads(completed.stdout) == {
+        "arms": _EXPECTED_ARMS,
+        "regressions": _REGRESSIONS,
+    }

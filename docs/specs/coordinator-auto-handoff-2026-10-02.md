@@ -165,16 +165,33 @@ State dir: `<project root>/.agent/state/coordinator-handoff/` (gitignored). Jobs
 ### 3c. CLI / mise
 
 ```text
-dotfiles-setup coordinator-handoff decide --session-id ID --percent P   # JSON Decision, rc 0
+dotfiles-setup coordinator-handoff decide --session-id ID --percent P [--no-commit] # JSON Decision, rc 0
+dotfiles-setup coordinator-handoff release --session-id ID --level L    # undo undelivered level
 dotfiles-setup coordinator-handoff name                                 # prints a successor name
 dotfiles-setup coordinator-handoff launch --handoff PATH --old-session ID [--dry-run]
-dotfiles-setup coordinator-handoff retire --old-session ID [--adopted PID ...] [--dry-run]
+dotfiles-setup coordinator-handoff retire --old-session ID [--adopted PID ...] [--accept-inflight] [--state-dir PATH] [--dry-run]
 mise run coordinator-handoff -- <same args>
 ```
 
 `launch` prints the resolved argv, cwd and brief; rc = the `claude --bg` rc (dry-run: 0,
-nothing executed). It refuses (rc 2) a handoff path that does not exist or an old session
-whose name is not a coordinator.
+nothing executed). Refusals (rc 2): `invalid-session-id`, a missing/non-file handoff,
+`not-coordinator`, `already launched <successor name>`, `census-unavailable` (including
+no Claude ancestor or a git/ps failure/timeout), unreadable state, state-write failure,
+or `state-locked` after 10 s. Dry-run takes the lock but records no JSON and launches nothing.
+
+`decide` returns `fire:false` with `invalid-session-id`, `invalid-percent` (non-finite
+or outside 0–100), `not-coordinator`, `already-launched`, `below-limit`, `below-next-step`,
+`state-write-failed` (including unreadable state), or `state-locked`. Preview (`--no-commit`)
+still records `last_seen` but never consumes a firing level. `release` returns 2 on invalid
+id/level or unavailable state; a stale level or an existing launch is a safe no-op (rc 0).
+
+The default handoff state directory is resolved from the CWD's repository's main checkout,
+for decide, release, launch and retire; tests may inject `--state-dir`. The brief carries
+the exact state directory for retirement. `retire`: 0 retired (or dry-run eligible),
+1 BLOCKED by a live/unadopted recorded run or positive/unknown `inFlight.tasks` unless
+explicitly accepted, 2 refused for invalid role/id, missing launch, unreadable state/census
+or a failed process snapshot, 3 stop failed (missing Claude, 60 s timeout or nonzero stop rc,
+printed). The §9 corrections supersede the original §3b UNKNOWN behavior.
 
 ### 3d. The hook — `hooks/register.ts`
 

@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import reap
 from dotfiles_setup import session_start as ss
 from dotfiles_setup.main import setup_parser
 
@@ -21,6 +24,10 @@ _NS = 1_000_000_000
 #: 2026-10-02 16:31:03.123456789 in Chicago (CDT, -05).
 NOW = int(datetime(2026, 10, 2, 21, 31, 3, tzinfo=UTC).timestamp()) * _NS + 123_456_789
 STAMP = "20261002T163103.123456789-05"
+FOREGROUND = (
+    reap.Process(pid=100, ppid=1, age_s=1, state="S", command="claude"),
+    reap.Process(pid=201, ppid=100, age_s=1, state="S", command="python"),
+)
 
 
 def _git(*args: str, cwd: Path) -> None:
@@ -42,10 +49,13 @@ def repo(tmp_path: Path) -> Path:
     return path
 
 
-def _job(jobs_dir: Path, name: str) -> None:
+def _job(jobs_dir: Path, name: str, *, name_source: str = "user") -> None:
     path = jobs_dir / SESSION[:8] / "state.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"sessionId": SESSION, "name": name}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"sessionId": SESSION, "name": name, "nameSource": name_source}),
+        encoding="utf-8",
+    )
 
 
 def _decide(
@@ -54,7 +64,11 @@ def _decide(
     return ss.decide(
         ss.StartRequest(session_id=session_id, cwd=cwd, interactive=interactive),
         ss.StartDeps(
-            state_dir=tmp_path / "state", jobs_dir=tmp_path / "jobs", now_ns=NOW
+            state_dir=tmp_path / "state",
+            jobs_dir=tmp_path / "jobs",
+            now_ns=NOW,
+            processes=FOREGROUND,
+            self_pid=201,
         ),
     )
 
@@ -252,6 +266,7 @@ def test_cli_decide_and_renamed(
 ) -> None:
     """The hook's exact argv shapes parse and answer through `main`."""
     state = str(tmp_path / "state")
+    _job(tmp_path / "jobs", "auto-session", name_source="auto")
     decide_args = setup_parser().parse_args(
         [
             "session-start",
@@ -294,3 +309,121 @@ def test_cli_decide_and_renamed(
     )
     assert ss.main(non_interactive, tmp_path) == 0
     assert json.loads(capsys.readouterr().out)["action"] == "non-interactive"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (
+            "user-conforming",
+            "claude bg-pty-host --bg-spare",
+            "keep",
+            f"dotfiles-{STAMP}.lane",
+        ),
+        ("user-other", "claude bg-pty-host --bg-spare", "nonconforming", "lane-g"),
+        ("auto", "claude bg-pty-host --bg-spare", "defer", None),
+        ("absent", "claude bg-pty-host --bg-spare", "unknown", None),
+        ("absent", "claude --bg-spare", "unknown", None),
+        ("absent", "claude -n lane-g", "nonconforming", "lane-g"),
+        (
+            "absent",
+            f"claude --name dotfiles-{STAMP}.lane",
+            "keep",
+            f"dotfiles-{STAMP}.lane",
+        ),
+        ("absent", "claude --name=lane-g", "nonconforming", "lane-g"),
+        ("auto", "claude -n lane-g", "nonconforming", "lane-g"),
+        ("absent", "claude", "defer", None),
+        ("absent", "claude -n", "unknown", None),
+        ("absent", "claude --name=", "unknown", None),
+        ("absent", 'claude --name "unfinished', "unknown", None),
+    ],
+)
+def test_r10_name_provenance_table_preserves_user_names_and_unknown_spares(
+    tmp_path: Path,
+    repo: Path,
+    case: tuple[str, str, str, str | None],
+) -> None:
+    """Auto names are not -n names; missing spare records cannot authorize rename."""
+    record, argv, action, name = case
+    if record == "user-conforming":
+        _job(tmp_path / "jobs", f"dotfiles-{STAMP}.lane")
+    elif record == "user-other":
+        _job(tmp_path / "jobs", "lane-g")
+    elif record == "auto":
+        _job(tmp_path / "jobs", "auto-session", name_source="auto")
+    processes = (
+        reap.Process(pid=100, ppid=1, age_s=1, state="S", command=argv),
+        FOREGROUND[1],
+    )
+    decision = ss.decide(
+        ss.StartRequest(SESSION, repo),
+        ss.StartDeps(
+            state_dir=tmp_path / "state",
+            jobs_dir=tmp_path / "jobs",
+            now_ns=NOW,
+            processes=processes,
+            self_pid=201,
+        ),
+    )
+    assert (decision.action, decision.name) == (action, name)
+    if action == "unknown":
+        assert decision.prefix is None
+
+
+def test_r10_generated_name_can_be_renamed_on_a_feature_branch(
+    tmp_path: Path, repo: Path
+) -> None:
+    """A job with a harness-generated name still follows the branch naming rule."""
+    _git("checkout", "-q", "-b", "feat/real-task", cwd=repo)
+    _job(tmp_path / "jobs", "auto-title", name_source="auto")
+    decision = _decide(tmp_path, repo)
+    assert (decision.action, decision.name) == ("rename", f"dotfiles-{STAMP}.real-task")
+
+
+def test_r5_session_start_honors_the_same_external_state_lock(
+    tmp_path: Path, repo: Path
+) -> None:
+    """Naming also waits for the native lock and fails visibly at its bound."""
+    state_dir = tmp_path / "state"
+    state_dir.mkdir()
+    with (state_dir / f"{SESSION}.json.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        decision = _decide(tmp_path, repo)
+    assert (decision.action, decision.reload) == ("state-locked", False)
+
+
+def test_r5_concurrent_starts_reload_only_once(tmp_path: Path, repo: Path) -> None:
+    """One atomic naming claim, without lost JSON updates under overlapping calls."""
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        decisions = list(executor.map(lambda _: _decide(tmp_path, repo), range(16)))
+    assert sum(decision.reload for decision in decisions) == 1
+    assert sum(decision.action == "already-ran" for decision in decisions) == 15
+
+
+def test_r12_pending_recovers_across_reload_and_clears_only_after_confirmation(
+    tmp_path: Path, repo: Path
+) -> None:
+    """Persistent prefix remains readable until the resolved rename is recorded."""
+    _decide(tmp_path, repo)
+    recovered = ss.pending(SESSION, tmp_path / "state")
+    assert (recovered.reload, recovered.prefix) == (False, f"dotfiles-{STAMP}")
+    assert ss.pending(SESSION, tmp_path / "state").prefix == recovered.prefix
+    assert ss.mark_renamed(SESSION, f"dotfiles-{STAMP}.task", tmp_path / "state") == 0
+    assert ss.pending(SESSION, tmp_path / "state").prefix is None
+
+
+def test_r12_known_rename_is_recoverable_until_confirmed(
+    tmp_path: Path, repo: Path
+) -> None:
+    """A rejected branch-based rename can also be retried after reload."""
+    _git("checkout", "-q", "-b", "feat/task", cwd=repo)
+    first = _decide(tmp_path, repo)
+    recovered = ss.pending(SESSION, tmp_path / "state")
+    assert (recovered.action, recovered.reload, recovered.name) == (
+        "rename",
+        False,
+        first.name,
+    )
+    assert ss.mark_renamed(SESSION, f"dotfiles-{STAMP}.task", tmp_path / "state") == 0
+    assert ss.pending(SESSION, tmp_path / "state").action == "already-ran"

@@ -11,7 +11,16 @@ REPO_ROOT = Path(__file__).parent.parent
 HARNESS = REPO_ROOT / "tests" / "fixtures" / "session_start_hook" / "harness.ts"
 _BUN_TIMEOUT_S = 90
 #: Every arm the harness runs; a dropped block changes the count and fails here.
-_EXPECTED_ARMS = 17
+_EXPECTED_ARMS = 24
+_REGRESSIONS = [
+    "r11-answered-object-text",
+    "r11-unanswered-object-fallback",
+    "r12-rename-resolution-before-record",
+    "r12-rejected-rename-stays-pending",
+    "r12-first-prompt-recovers-persisted-prefix",
+    "r10-name-unknown-no-rename",
+    "r12-repeat-start-recovers-unconfirmed-name",
+]
 
 
 def test_session_start_hook_behaviour_under_bun() -> None:
@@ -26,4 +35,7 @@ def test_session_start_hook_behaviour_under_bun() -> None:
     )
 
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    assert json.loads(completed.stdout) == {"arms": _EXPECTED_ARMS}
+    assert json.loads(completed.stdout) == {
+        "arms": _EXPECTED_ARMS,
+        "regressions": _REGRESSIONS,
+    }

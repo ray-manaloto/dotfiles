@@ -27,6 +27,7 @@ assert(sessionStart, "session.start handler was not registered");
 assert(promptSubmit, "prompt.submit handler was not registered");
 
 const SESSION = "11111111-aaaa-4000-8000-000000000001";
+let sessionSequence = 0;
 const PREFIX = "dotfiles-20261002T163103.123456789-05";
 
 type ProcessResponse = { exitCode: number; stdout: string; stderr: string } | "throw";
@@ -34,10 +35,14 @@ type ProcessResponse = { exitCode: number; stdout: string; stderr: string } | "t
 type Options = {
   responses?: ProcessResponse[];
   runRejects?: boolean;
-  reply?: string | "throw";
+  reply?: string | { isAnswered: boolean; text: string };
+  sessionId?: string;
+  renameRejects?: boolean;
+  deferRename?: boolean;
 };
 
 function makeServices(options: Options = {}) {
+  const sessionId = options.sessionId ?? `${SESSION}-${++sessionSequence}`;
   const responses = [...(options.responses ?? [])];
   const calls = {
     process: [] as { argv: readonly string[]; init: Record<string, unknown> | undefined }[],
@@ -45,13 +50,15 @@ function makeServices(options: Options = {}) {
     toasts: [] as string[],
     runs: [] as { command: string; args?: string }[],
     completions: [] as { model: string; prompt: string; maxTokens?: number }[],
+    sessionId,
+    resolveRename: null as (() => void) | null,
   };
   const services = {
     env: {
       get: async (name: string) => (name === "CLAUDE_PROJECT_DIR" ? "/repo" : undefined),
     },
     session: {
-      id: async () => SESSION,
+      id: async () => sessionId,
       root: async () => "/session-root",
     },
     process: {
@@ -77,7 +84,12 @@ function makeServices(options: Options = {}) {
       list: async () => [],
       run: async (input: { command: string; args?: string }) => {
         calls.runs.push(input);
-        if (options.runRejects) throw new Error("scripted reject");
+        if (options.runRejects || (input.command === "rename" && options.renameRejects)) {
+          throw new Error("scripted reject");
+        }
+        if (input.command === "rename" && options.deferRename) {
+          await new Promise<void>((resolve) => { calls.resolveRename = resolve; });
+        }
         return {};
       },
     },
@@ -142,12 +154,17 @@ async function prompt(services: unknown, text = "Fix the CI gate for the lock re
 }
 
 let arms = 0;
+const regressions: string[] = [];
 
 // Nothing pending: a prompt does nothing at all.
 {
-  const { services, calls } = makeServices();
+  const { services, calls } = makeServices({
+    responses: [answer({ action: "already-ran", reload: false })],
+  });
   await prompt(services);
-  assert.equal(calls.process.length, 0);
+  await prompt(services);
+  assert.equal(calls.process.length, 1, "first prompt recovers pending state exactly once");
+  assert.equal(calls.process[0].argv[6], "pending");
   assert.equal(calls.runs.length, 0);
   assert.equal(calls.completions.length, 0);
   arms += 1;
@@ -178,7 +195,7 @@ let arms = 0;
     "session-start",
     "decide",
     "--session-id",
-    SESSION,
+    calls.sessionId,
     "--cwd",
     "/work",
   ]);
@@ -188,14 +205,15 @@ let arms = 0;
   arms += 1;
 }
 
-// rename: reloads, then `/rename` with python's exact name as its args.
+// R12: `/rename` is queued BEFORE reloads; record only after it resolves.
 {
   const name = `${PREFIX}.coordinator-auto-handoff`;
   const { services, calls } = makeServices({
-    responses: [answer({ action: "rename", reload: true, name })],
+    responses: [answer({ action: "rename", reload: true, name }), ok],
   });
   await start(services);
-  assert.deepEqual(calls.runs, [...RELOADS, { command: "rename", args: name }]);
+  assert.deepEqual(calls.runs, [{ command: "rename", args: name }, ...RELOADS]);
+  assert.equal(calls.process[1].argv[6], "renamed");
   assert.equal(lastStatus(calls), "session-start ok (renamed)");
   arms += 1;
 }
@@ -241,7 +259,7 @@ let arms = 0;
     "session-start",
     "renamed",
     "--session-id",
-    SESSION,
+    calls.sessionId,
     "--name",
     name,
   ]);
@@ -301,7 +319,8 @@ let arms = 0;
 // already-ran with nothing pending: no command now or at the next prompt.
 {
   const { services, calls } = makeServices({
-    responses: [answer({ action: "already-ran", reload: false, name: `${PREFIX}.x` })],
+    responses: [answer({ action: "already-ran", reload: false, name: `${PREFIX}.x` }),
+      answer({ action: "already-ran", reload: false, name: `${PREFIX}.x` })],
   });
   await start(services);
   await prompt(services);
@@ -370,8 +389,112 @@ let arms = 0;
   await start(services);
   await prompt(services);
   assert.deepEqual(calls.runs.at(-1), { command: "rename", args: `${PREFIX}.lane-work` });
-  assert.equal(lastStatus(calls), "session-start ERROR: renamed rc 2");
+  assert.equal(lastStatus(calls), "session-start ERROR: rename failed: renamed rc 2");
   arms += 1;
 }
 
-console.log(JSON.stringify({ arms }));
+// R11: the running engine's answered object uses its text, not fallback .session.
+{
+  const { services, calls } = makeServices({
+    responses: [answer({ action: "defer", reload: true, prefix: PREFIX }), ok],
+    reply: { isAnswered: true, text: "Repair current runtime result" },
+  });
+  await start(services);
+  await prompt(services);
+  assert.deepEqual(calls.runs.at(-1), { command: "rename", args: `${PREFIX}.repair-current-runtime-result` });
+  regressions.push("r11-answered-object-text");
+  arms += 1;
+}
+
+// R11: unanswered text is ignored; the documented fallback still applies.
+{
+  const { services, calls } = makeServices({
+    responses: [answer({ action: "defer", reload: true, prefix: PREFIX }), ok],
+    reply: { isAnswered: false, text: "This text must not name the session" },
+  });
+  await start(services);
+  await prompt(services);
+  assert.deepEqual(calls.runs.at(-1), { command: "rename", args: `${PREFIX}.session` });
+  regressions.push("r11-unanswered-object-fallback");
+  arms += 1;
+}
+
+// R12: promise completion, not queueing, determines bookkeeping and success.
+{
+  const name = `${PREFIX}.confirmed-task`;
+  const { services, calls } = makeServices({ deferRename: true,
+    responses: [answer({ action: "rename", reload: true, name }), ok],
+  });
+  await start(services);
+  assert.deepEqual(calls.runs, [{ command: "rename", args: name }, ...RELOADS]);
+  assert.equal(calls.process.length, 1, "no renamed record while command is unresolved");
+  assert.equal(lastStatus(calls), "session-start pending rename");
+  calls.resolveRename?.();
+  await flush();
+  assert.equal(calls.process[1].argv[6], "renamed");
+  assert.equal(lastStatus(calls), "session-start ok (renamed)");
+  regressions.push("r12-rename-resolution-before-record");
+  arms += 1;
+}
+
+// R12: rejected deferred rename leaves Python and module pending state intact.
+{
+  const rejecting = makeServices({ renameRejects: true,
+    responses: [answer({ action: "defer", reload: true, prefix: PREFIX })],
+    reply: "keep this pending",
+  });
+  await start(rejecting.services);
+  await prompt(rejecting.services);
+  assert.equal(rejecting.calls.process.length, 1, "rejected rename must not record renamed");
+  assert.equal(lastStatus(rejecting.calls), "session-start ERROR: rename failed: scripted reject");
+  const retry = makeServices({ sessionId: rejecting.calls.sessionId, responses: [ok], reply: "retry naming" });
+  await prompt(retry.services);
+  assert.deepEqual(retry.calls.runs, [{ command: "rename", args: `${PREFIX}.retry-naming` }]);
+  assert.equal(retry.calls.process[0].argv[6], "renamed");
+  regressions.push("r12-rejected-rename-stays-pending");
+  arms += 1;
+}
+
+// R12: no session.start after an unchanged-module reload; first prompt recovers Python state.
+{
+  const { services, calls } = makeServices({
+    responses: [answer({ action: "already-ran", reload: false, prefix: PREFIX }), ok],
+    reply: "recover after reload",
+  });
+  await prompt(services);
+  assert.equal(calls.process[0].argv[6], "pending");
+  assert.deepEqual(calls.runs, [{ command: "rename", args: `${PREFIX}.recover-after-reload` }]);
+  await prompt(services);
+  assert.equal(calls.process.length, 2, "pending read cached; one successful rename");
+  regressions.push("r12-first-prompt-recovers-persisted-prefix");
+  arms += 1;
+}
+
+// R10: unknown spare names are visible and never renamed, now or at a prompt.
+{
+  const { services, calls } = makeServices({ responses: [answer({ action: "unknown", reload: true })] });
+  await start(services);
+  await prompt(services);
+  assert.deepEqual(calls.runs, RELOADS);
+  assert.equal(lastStatus(calls), "session-start: name unknown");
+  regressions.push("r10-name-unknown-no-rename");
+  arms += 1;
+}
+
+// R12: a changed module can run start again before recovering an unconfirmed known rename.
+{
+  const name = `${PREFIX}.retry-known`;
+  const { services, calls } = makeServices({ responses: [
+    answer({ action: "already-ran", reload: false, name }),
+    answer({ action: "rename", reload: false, name }), ok,
+  ] });
+  await start(services);
+  await prompt(services);
+  assert.equal(calls.process[1].argv[6], "pending");
+  assert.deepEqual(calls.runs, [{ command: "rename", args: name }]);
+  assert.equal(calls.process[2].argv[6], "renamed");
+  regressions.push("r12-repeat-start-recovers-unconfirmed-name");
+  arms += 1;
+}
+
+console.log(JSON.stringify({ arms, regressions }));

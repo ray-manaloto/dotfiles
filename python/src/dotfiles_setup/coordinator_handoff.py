@@ -20,8 +20,8 @@ The census must be taken by the OLD session at launch, inside its own process
 tree: bg sessions run as claimed spares whose argv carries no session id, so
 the successor cannot find the old tree by ``ps`` (probed 2026-10-02).
 
-``stamped_name`` is the one timestamp formatter shared with the
-``session-start`` mod (``session_start.py``): ``<project>-<Chicago ISO ns>.<x>``.
+``session_common.stamped_name`` is the timestamp formatter shared with the
+``session-start`` mod: ``<project>-<Chicago ISO ns>.<x>``.
 
 Spec: ``docs/specs/coordinator-auto-handoff-2026-10-02.md``.
 """
@@ -33,16 +33,31 @@ import logging
 import math
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-from zoneinfo import ZoneInfo
+from typing import TYPE_CHECKING, Any, Literal
 
 from dotfiles_setup import reap
+from dotfiles_setup.session_common import (
+    PROJECT,
+    SHORT_ID_LEN,
+    StateLockedError,
+    default_jobs_dir,
+    job_record,
+    main_checkout,
+    now_iso,
+    read_state,
+    session_name,
+    stamped_name,
+    state_lock,
+    valid_session_id,
+    write_state,
+)
+from dotfiles_setup.session_common import SessionError as CoordinatorHandoffError
 from dotfiles_setup.session_orphans import _session_root
 
 if TYPE_CHECKING:
@@ -54,8 +69,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 COORDINATOR_NAME_RE = re.compile(r"^dotfiles-.+\.coordinator$")
-CHICAGO = ZoneInfo("America/Chicago")
-PROJECT = "dotfiles"
 COORDINATOR_FEATURE = "coordinator"
 
 ENV_LIMIT = "DOTFILES_COORDINATOR_HANDOFF_PCT"
@@ -65,12 +78,20 @@ DEFAULT_STEP_PCT = 5.0
 _MAX_PCT = 100.0
 #: Absorbs float noise in ``(percent - limit) / step`` so 35.0 at step 5 is k=1.
 _LEVEL_EPSILON = 1e-9
-_NS_PER_S = 1_000_000_000
-_SECONDS_PER_HOUR = 3600
-_SECONDS_PER_MINUTE = 60
-SHORT_ID_LEN = 8
-#: A session id becomes a filename; anything but this shape is refused.
-_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,}$")
+STOP_TIMEOUT_S = 60
+_LSOF_TIMEOUT_S = 10
+
+type DecisionReason = Literal[
+    "fire",
+    "not-coordinator",
+    "below-limit",
+    "below-next-step",
+    "already-launched",
+    "invalid-session-id",
+    "invalid-percent",
+    "state-write-failed",
+    "state-locked",
+]
 
 STATE_SUBDIR = Path(".agent") / "state" / "coordinator-handoff"
 SHIP_QUEUE = Path(".agent") / "plans" / "main-checkout-ship-queue.md"
@@ -83,24 +104,24 @@ CROSS_SESSION_SETTINGS = '{"crossSessionInbound":"accept"}'
 #: process of its chain the census sees. `(?![\w-])` keeps `ship-queue` out.
 HEAVY_COMMAND_RE = re.compile(
     r"(?:^|[\s/'\";&|(])"
-    r"(?:mise\s+run\s+(?:ship|land|sync|verify-local|bounded-wait|kb-ship|kb-land)"
+    r"(?:mise\s+(?:-C\s+(?:\"[^\"]+\"|'[^']+'|\S+)\s+)?run\s+(?:--\s+)?"
+    r"(?:dev-rebuild|up|persistence|gate|lock-image|lock-shared|kb-ship|kb-land|"
+    r"ship|land|sync|verify-local|verify-container-latest|bounded-wait|automerge)"
     r"|dotfiles-setup\s+(?:pr\s+(?:ship|land)|docker\s+sync|bounded-wait)"
     r"|kb-setup\s+(?:ship|land))"
     r"(?![\w-])"
 )
 #: The first stdout redirect target in a command line (`> FILE`, `>> FILE`,
 #: `1> FILE`), never an fd duplication such as `2>&1`.
-_REDIRECT_RE = re.compile(r"(?:^|[\s;])1?>>?\s*(?!&)([^\s;&|<>]+)")
+_REDIRECT_RE = re.compile(
+    r"(?:^|[\s;])1?>>?\s*(?!&)(?:\"([^\"]*)\"|'([^']*)'|([^\s;&|<>]+))"
+)
 #: The handoff section the old coordinator queues every open question into
 #: (ruling 12). A level-2 heading; the section ends at the next level-2 one.
 _QUEUED_HEADING_RE = re.compile(
     r"^##\s+Queued questions\s*$", re.MULTILINE | re.IGNORECASE
 )
 _NEXT_H2_RE = re.compile(r"^##\s", re.MULTILINE)
-
-
-class CoordinatorHandoffError(RuntimeError):
-    """A precondition of launch or retire could not be established."""
 
 
 # ── configuration ────────────────────────────────────────────────────────────
@@ -149,7 +170,7 @@ class Decision:
     """What the hook acts on. ``level``: the fired level, else the next one."""
 
     fire: bool
-    reason: str
+    reason: DecisionReason
     level: float | None
     session_id: str
     name: str | None
@@ -161,42 +182,6 @@ class Decision:
         payload = asdict(self)
         payload["warnings"] = list(self.warnings)
         return json.dumps(payload, sort_keys=True)
-
-
-def valid_session_id(session_id: str) -> bool:
-    """Whether ``session_id`` is safe to use as a file name."""
-    return bool(_SESSION_ID_RE.fullmatch(session_id))
-
-
-def read_json(path: Path) -> object:
-    """Parsed JSON at ``path``, or ``None`` when missing or unreadable."""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        return None
-
-
-def _job_record(session_id: str, jobs_dir: Path) -> dict[str, Any] | None:
-    """The bg job record, only when its ``sessionId`` is exactly ``session_id``."""
-    if not valid_session_id(session_id):
-        return None
-    data = read_json(jobs_dir / session_id[:SHORT_ID_LEN] / "state.json")
-    if not isinstance(data, dict) or data.get("sessionId") != session_id:
-        return None
-    return data
-
-
-def session_name(session_id: str, jobs_dir: Path) -> str | None:
-    """The bg job record's ``name``, only when its ``sessionId`` matches.
-
-    The record (``~/.claude/jobs/<id[:8]>/state.json``) is undocumented harness
-    state, so every doubt — missing, unreadable, not an object, mismatched id,
-    non-string name — answers ``None``: "not a coordinator". Only top-level
-    keys are read; nested records carry their own ``name``.
-    """
-    record = _job_record(session_id, jobs_dir)
-    name = None if record is None else record.get("name")
-    return name if isinstance(name, str) else None
 
 
 def is_coordinator(name: str | None) -> bool:
@@ -217,25 +202,6 @@ def fired_level(percent: float, cfg: Config) -> float:
     return cfg.limit_pct + steps * cfg.step_pct
 
 
-def read_state(path: Path) -> dict[str, Any]:
-    """The JSON object at ``path``, or an empty one."""
-    data = read_json(path)
-    return data if isinstance(data, dict) else {}
-
-
-def write_state(path: Path, state: Mapping[str, Any]) -> None:
-    """Atomic replace, so a crash never leaves a half-written state file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(f".{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", "utf-8")
-    tmp.replace(path)
-
-
-def now_iso() -> str:
-    """Chicago wall time, seconds precision — for state-file stamps."""
-    return datetime.now(CHICAGO).isoformat(timespec="seconds")
-
-
 def _last_fired(state: Mapping[str, Any]) -> float | None:
     value = state.get("last_fired")
     if isinstance(value, bool) or not isinstance(value, int | float):
@@ -244,11 +210,18 @@ def _last_fired(state: Mapping[str, Any]) -> float | None:
 
 
 def _judge(
-    state: dict[str, Any], percent: float, cfg: Config, name: str | None
-) -> tuple[bool, str, float | None]:
+    state: dict[str, Any],
+    percent: float,
+    cfg: Config,
+    name: str | None,
+    *,
+    no_commit: bool,
+) -> tuple[bool, DecisionReason, float | None]:
     """``(fire, reason, level)``; a fire records ``last_fired`` into ``state``."""
     if not is_coordinator(name):
         return False, "not-coordinator", None
+    if "launch" in state:
+        return False, "already-launched", None
     last = _last_fired(state)
     threshold = next_level(last, cfg)
     if percent < threshold:
@@ -256,13 +229,23 @@ def _judge(
     # max(): a limit/step change between fires can place fired_level under the
     # threshold; never record a level that re-fires sooner.
     level = max(fired_level(percent, cfg), threshold)
-    state["last_fired"] = level
+    if not no_commit:
+        state["previous_fired"] = last
+        state["last_fired"] = level
     return True, "fire", level
 
 
+@dataclass(frozen=True)
+class DecideRequest:
+    """One measurement and whether it can consume a firing level."""
+
+    session_id: str
+    percent: float
+    no_commit: bool = False
+
+
 def decide(
-    session_id: str,
-    percent: float,
+    request: DecideRequest,
     *,
     env: Mapping[str, str],
     jobs_dir: Path,
@@ -274,27 +257,34 @@ def decide(
     measured" from "measured, below". On a fire, ``last_fired`` is persisted
     BEFORE returning; when that write fails the answer is ``fire: False``.
     """
+    session_id, percent = request.session_id, request.percent
     cfg = load_config(env)
     warnings = list(cfg.warnings)
     fire = False
     level: float | None = None
     name: str | None = None
+    reason: DecisionReason
     if not valid_session_id(session_id):
         reason = "invalid-session-id"
-    elif not math.isfinite(percent) or percent < 0:
+    elif not math.isfinite(percent) or not 0 <= percent <= _MAX_PCT:
         reason = "invalid-percent"
     else:
         path = state_dir / f"{session_id}.json"
-        state = read_state(path)
-        state["last_seen"] = {"at": now_iso(), "percent": percent}
         name = session_name(session_id, jobs_dir)
-        fire, reason, level = _judge(state, percent, cfg, name)
         try:
-            write_state(path, state)
+            with state_lock(path):
+                state = read_state(path)
+                state["last_seen"] = {"at": now_iso(), "percent": percent}
+                fire, reason, level = _judge(
+                    state, percent, cfg, name, no_commit=request.no_commit
+                )
+                write_state(path, state)
+        except StateLockedError as exc:
+            warnings.append(str(exc))
+            fire, reason = False, "state-locked"
         except OSError as exc:
             warnings.append(f"state write failed: {exc}")
-            if fire:
-                fire, reason = False, "state-write-failed"
+            fire, reason = False, "state-write-failed"
     return Decision(
         fire=fire,
         reason=reason,
@@ -306,40 +296,28 @@ def decide(
     )
 
 
-# ── names ────────────────────────────────────────────────────────────────────
-
-
-def _offset_suffix(offset_s: int) -> str:
-    if offset_s == 0:
-        return "Z"
-    sign = "+" if offset_s > 0 else "-"
-    hours, rest = divmod(abs(offset_s), _SECONDS_PER_HOUR)
-    minutes = rest // _SECONDS_PER_MINUTE
-    return f"{sign}{hours:02d}{minutes:02d}" if minutes else f"{sign}{hours:02d}"
-
-
-def chicago_stamp(now_ns: int) -> str:
-    """``yyyyMMdd'T'HHmmss.<9-digit ns><X>`` in America/Chicago.
-
-    ``X`` is ``±HH``, ``±HHMM`` when the minutes are non-zero, or ``Z`` at a
-    zero offset.
-    """
-    seconds, nanos = divmod(now_ns, _NS_PER_S)
-    moment = datetime.fromtimestamp(seconds, tz=CHICAGO)
-    offset = moment.utcoffset()
-    offset_s = 0 if offset is None else int(offset.total_seconds())
-    return f"{moment:%Y%m%dT%H%M%S}.{nanos:09d}{_offset_suffix(offset_s)}"
-
-
-def stamped_name(project: str, feature: str, now_ns: int) -> str:
-    """``<project>-<chicago_stamp>.<feature>`` — the one session-name formatter.
-
-    Shared by the coordinator successor and the ``session-start`` mod, so the
-    two can never drift apart. NOTE: a legacy name like
-    ``dotfiles-20261002b.coordinator`` sorts AFTER ``dotfiles-20261002T…``
-    (``b`` > ``T``), so "newest coordinator" is never a name sort.
-    """
-    return f"{project}-{chicago_stamp(now_ns)}.{feature}"
+def release(session_id: str, level: float, *, state_dir: Path) -> int:
+    """Undo only this undelivered fire; never erase a newer fire or a launch."""
+    if not valid_session_id(session_id) or not math.isfinite(level):
+        logger.error(
+            "coordinator-handoff release: invalid-session-id or invalid-percent"
+        )
+        return 2
+    path = state_dir / f"{session_id}.json"
+    try:
+        with state_lock(path):
+            state = read_state(path)
+            if "launch" not in state and _last_fired(state) == level:
+                previous = state.pop("previous_fired", None)
+                if previous is None:
+                    state.pop("last_fired", None)
+                else:
+                    state["last_fired"] = previous
+                write_state(path, state)
+    except OSError:
+        logger.exception("coordinator-handoff release failed")
+        return 2
+    return 0
 
 
 def successor_name(now_ns: int) -> str:
@@ -348,25 +326,6 @@ def successor_name(now_ns: int) -> str:
 
 
 # ── repository + transcript lookups ──────────────────────────────────────────
-
-
-def main_checkout(cwd: Path) -> Path:
-    """The main working tree: the first entry of ``git worktree list``."""
-    result = subprocess.run(
-        ["git", "-C", str(cwd), "worktree", "list", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        msg = f"git worktree list exited {result.returncode}: {result.stderr.strip()}"
-        raise CoordinatorHandoffError(msg)
-    for line in result.stdout.splitlines():
-        if line.startswith("worktree "):
-            return Path(line.removeprefix("worktree "))
-    msg = "git worktree list printed no worktree entry"
-    raise CoordinatorHandoffError(msg)
 
 
 def transcript_path(session_id: str, projects_dir: Path) -> Path | None:
@@ -404,7 +363,31 @@ def _log_path(command: str) -> str | None:
     match = _REDIRECT_RE.search(command)
     if match is None:
         return None
-    return match.group(1).strip("'\"") or None
+    target = next(group for group in match.groups() if group is not None)
+    return (f"unexpanded:{target}" if "$" in target else target) or None
+
+
+def stdout_log(pid: int, *, runner: Runner | None = None) -> str | None:
+    """Resolve fd 1 through native lsof; only an existing regular file is a log."""
+    try:
+        result = (runner or subprocess.run)(
+            ["lsof", "-a", "-p", str(pid), "-d", "1", "-Fn"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_LSOF_TIMEOUT_S,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.warning(
+            "coordinator-handoff census: fd 1 unavailable for pid %d: %s", pid, exc
+        )
+        return None
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("n") and Path(line[1:]).is_file():
+            return line[1:]
+    return None
 
 
 def census(
@@ -412,6 +395,7 @@ def census(
     *,
     self_pid: int,
     root_pid: int | None = None,
+    runner: Runner | None = None,
 ) -> tuple[HeavyRun, ...]:
     """The outermost heavy descendants of this session, minus the caller's chain.
 
@@ -444,7 +428,12 @@ def census(
         if any(ancestor in heavy for ancestor in ancestors):
             continue
         command = by_pid[pid].command
-        runs.append(HeavyRun(pid, command, _log_path(command)))
+        log = stdout_log(pid, runner=runner)
+        if log is None:
+            descendants = reap.descendant_pids(processes, pid)
+            if descendants:
+                log = stdout_log(descendants[0], runner=runner)
+        runs.append(HeavyRun(pid, command, log or _log_path(command)))
     return tuple(runs)
 
 
@@ -461,6 +450,7 @@ class BriefContext:
     handoff: Path
     ship_queue: Path
     inbox: Path
+    state_dir: Path
     heavy_runs: tuple[HeavyRun, ...] = ()
     queued: str | None = None
 
@@ -490,6 +480,7 @@ Handover record:
 - old transcript: `{transcript}`
 - handoff: `{ctx.handoff}`
 - ship queue: `{ctx.ship_queue}`
+- handoff state directory: `{ctx.state_dir}` (pass this exact --state-dir to retire)
 - heavy runs the old coordinator owned at launch (census):
 {run_lines}
 
@@ -519,13 +510,19 @@ in the handoff AND in `task_plan.md` (you are the coordinator; it is yours).
 2. SendMessage every ListAgents lane your session name as the new coordinator \
 (the fallback inbox rule is unchanged).
 3. For each recorded heavy run: wait for it (`mise run bounded-wait` on its \
-log's rc line) or adopt its result explicitly.
+resolved log's rc line) or adopt its result explicitly. A log marked \
+`unexpanded:` is unresolved redirect text: find its real path first; never \
+wait on a literal `$LOG` or an absent log.
 4. Retire the old session ONLY through the gate — never a bare `claude stop` \
 on a coordinator: `mise run coordinator-handoff -- retire --old-session \
-{ctx.old_session_id} [--adopted PID ...]`. It refuses (rc 1) while a recorded \
+{ctx.old_session_id} --state-dir {shlex.quote(str(ctx.state_dir))} \
+[--adopted PID ...]`. It blocks (rc 1) while a recorded \
 run is live and unadopted, or while the old session's harness tasks are in \
-flight (`--accept-inflight` overrides that deliberately); rc 0 runs \
-`claude stop {short_id}`.
+flight or unknown (`--accept-inflight` overrides that deliberately). Codes: \
+0 = retired; 1 = BLOCKED (wait/adopt or deliberately accept inFlight); \
+2 = refused (invalid role/id, missing launch or unreadable state); \
+3 = stop failed (missing claude, 60s timeout or nonzero stop rc, printed). \
+Never treat rc 3 as a reason to wait for heavy work.
 5. Put the queued questions to Ray.
 6. Resume the ship queue.
 """
@@ -539,11 +536,6 @@ def launch_argv(name: str, brief: str) -> list[str]:
 # ── launch ───────────────────────────────────────────────────────────────────
 
 
-def default_jobs_dir() -> Path:
-    """The harness bg job records."""
-    return Path.home() / ".claude" / "jobs"
-
-
 def default_projects_dir() -> Path:
     """The harness transcripts root."""
     return Path.home() / ".claude" / "projects"
@@ -553,7 +545,7 @@ def default_projects_dir() -> Path:
 class LaunchDeps:
     """Every collaborator of :func:`launch`, injectable for the tests."""
 
-    state_dir: Path
+    state_dir: Path | None = None
     jobs_dir: Path = field(default_factory=default_jobs_dir)
     projects_dir: Path = field(default_factory=default_projects_dir)
     cwd: Path | None = None
@@ -569,22 +561,36 @@ def _write(deps: LaunchDeps, text: str) -> None:
     (deps.out or sys.stdout.write)(text)
 
 
-def _gather(
-    handoff: Path, deps: LaunchDeps
-) -> tuple[Path, tuple[HeavyRun, ...], str] | str:
-    """``(main checkout, census, handoff text)``, or why one is unavailable."""
+def _gather(handoff: Path, deps: LaunchDeps) -> tuple[tuple[HeavyRun, ...], str] | str:
+    """``(census, handoff text)``, or why one is unavailable."""
     try:
-        checkout = main_checkout(Path.cwd() if deps.cwd is None else deps.cwd)
         table = reap.snapshot() if deps.processes is None else deps.processes
         runs = census(
             table,
             self_pid=os.getpid() if deps.self_pid is None else deps.self_pid,
             root_pid=deps.root_pid,
+            runner=deps.runner,
         )
         handoff_text = handoff.read_text(encoding="utf-8")
-    except (CoordinatorHandoffError, reap.ReapError, OSError) as exc:
+    except (
+        CoordinatorHandoffError,
+        reap.ReapError,
+        OSError,
+        subprocess.TimeoutExpired,
+    ) as exc:
         return str(exc)
-    return checkout, runs, handoff_text
+    return runs, handoff_text
+
+
+@dataclass(frozen=True)
+class LaunchContext:
+    """Validated launch identity and its canonical repository/state paths."""
+
+    handoff: Path
+    old_session_id: str
+    old_name: str
+    checkout: Path
+    state_dir: Path
 
 
 def launch(
@@ -601,6 +607,9 @@ def launch(
     argv, cwd and brief and records and executes nothing. Otherwise the
     ``claude --bg`` rc.
     """
+    if not valid_session_id(old_session_id):
+        logger.error("coordinator-handoff launch: invalid-session-id")
+        return 2
     if not handoff.is_file():
         logger.error("coordinator-handoff launch: handoff %s does not exist", handoff)
         return 2
@@ -612,20 +621,61 @@ def launch(
             old_name,
         )
         return 2
+    try:
+        checkout = main_checkout(
+            Path.cwd() if deps.cwd is None else deps.cwd, runner=deps.runner
+        )
+        state_dir = deps.state_dir or checkout / STATE_SUBDIR
+        path = state_dir / f"{old_session_id}.json"
+        with state_lock(path):
+            state = read_state(path)
+            if "launch" in state:
+                record = state["launch"]
+                successor = (
+                    record.get("successor", "unknown")
+                    if isinstance(record, dict)
+                    else "unknown"
+                )
+                logger.error(
+                    "coordinator-handoff launch: already launched %s", successor
+                )
+                return 2
+            return _launch_locked(
+                LaunchContext(handoff, old_session_id, old_name, checkout, state_dir),
+                deps,
+                state,
+                dry_run=dry_run,
+            )
+    except CoordinatorHandoffError, OSError, subprocess.TimeoutExpired:
+        logger.exception("coordinator-handoff launch refused")
+        return 2
+
+
+def _launch_locked(
+    ctx: LaunchContext,
+    deps: LaunchDeps,
+    state: dict[str, Any],
+    *,
+    dry_run: bool,
+) -> int:
+    """Gather and signal while holding the launch-record transaction lock."""
+    handoff, old_session_id = ctx.handoff, ctx.old_session_id
+    checkout, state_dir = ctx.checkout, ctx.state_dir
     gathered = _gather(handoff, deps)
     if isinstance(gathered, str):
-        logger.error("coordinator-handoff launch refused: %s", gathered)
+        logger.error("coordinator-handoff launch: census-unavailable: %s", gathered)
         return 2
-    checkout, runs, handoff_text = gathered
+    runs, handoff_text = gathered
     name = successor_name(time.time_ns() if deps.now_ns is None else deps.now_ns)
     brief = successor_brief(
         BriefContext(
-            old_name=old_name,
+            old_name=ctx.old_name,
             old_session_id=old_session_id,
             old_transcript=transcript_path(old_session_id, deps.projects_dir),
             handoff=handoff.resolve(),
             ship_queue=checkout / SHIP_QUEUE,
             inbox=checkout / HANDOFF_INBOX,
+            state_dir=state_dir.resolve(),
             heavy_runs=runs,
             queued=queued_questions(handoff_text),
         )
@@ -635,8 +685,7 @@ def launch(
     if dry_run:
         _write(deps, "DRY RUN: nothing recorded, nothing executed\n")
         return 0
-    path = deps.state_dir / f"{old_session_id}.json"
-    state = read_state(path)
+    path = state_dir / f"{old_session_id}.json"
     state["census"] = [asdict(run) for run in runs]
     state["launch"] = {
         "at": now_iso(),
@@ -691,37 +740,29 @@ def _recorded_runs(state: Mapping[str, Any]) -> tuple[HeavyRun, ...] | None:
 
 def in_flight_tasks(jobs_dir: Path, session_id: str) -> int | None:
     """The old job's ``inFlight.tasks``, or ``None`` when it cannot be read."""
-    record = _job_record(session_id, jobs_dir)
+    record = job_record(session_id, jobs_dir)
     in_flight = None if record is None else record.get("inFlight")
     tasks = in_flight.get("tasks") if isinstance(in_flight, dict) else None
-    if isinstance(tasks, bool) or not isinstance(tasks, int):
+    if isinstance(tasks, bool) or not isinstance(tasks, int) or tasks < 0:
         return None
     return tasks
 
 
 def _in_flight_blocks(request: RetireRequest, in_flight: int | None) -> bool:
     """Whether harness tasks in flight block retire on their own (item 16)."""
-    if in_flight is None:
-        logger.warning(
-            "coordinator-handoff retire: inFlight.tasks UNKNOWN for %s; "
-            "the census decides",
-            request.old_session_id,
-        )
-        return False
-    logger.info("coordinator-handoff retire: inFlight.tasks=%d", in_flight)
-    if in_flight <= 0:
+    if in_flight == 0:
         return False
     if request.accept_inflight:
         logger.warning(
             "coordinator-handoff retire: --accept-inflight given; ignoring "
-            "inFlight.tasks=%d",
+            "inFlight.tasks=%s",
             in_flight,
         )
         return False
     logger.error(
-        "coordinator-handoff retire: BLOCK inFlight.tasks=%d for %s "
+        "coordinator-handoff retire: BLOCK inFlight %s for %s "
         "(pass --accept-inflight only after confirming they may die)",
-        in_flight,
+        "unknown" if in_flight is None else f"tasks={in_flight}",
         request.old_session_id,
     )
     return True
@@ -733,10 +774,9 @@ def retire(request: RetireRequest, deps: RetireDeps) -> int:
     Two independent blockers (rc 1): a recorded run still alive with the SAME
     command line (so a reused pid never blocks) and not adopted, naming each
     pid/argv/log; and the old job's ``inFlight.tasks > 0`` unless
-    ``accept_inflight``. An unreadable ``inFlight`` is UNKNOWN — reported, and
-    the census alone decides. rc 2 when the old session is not a coordinator
-    or has no launch record. Otherwise runs ``claude stop <old short id>``
-    (skipped under ``dry_run``) and returns its rc.
+    ``accept_inflight``. Unknown inFlight also blocks unless accepted. rc 2:
+    invalid role/id or missing/unreadable launch state. rc 3: stop failure or
+    timeout. Otherwise claude stop succeeds (rc 0); dry-run never invokes it.
     """
     old = request.old_session_id
     name = session_name(old, deps.jobs_dir)
@@ -745,9 +785,19 @@ def retire(request: RetireRequest, deps: RetireDeps) -> int:
             "coordinator-handoff retire: %s is not a coordinator (name %r)", old, name
         )
         return 2
-    state = read_state(deps.state_dir / f"{old}.json")
+    try:
+        state = read_state(deps.state_dir / f"{old}.json")
+    except OSError:
+        logger.exception("coordinator-handoff retire: unreadable state")
+        return 2
     runs = _recorded_runs(state)
-    if not isinstance(state.get("launch"), dict) or runs is None:
+    launch_record = state.get("launch")
+    if (
+        not isinstance(launch_record, dict)
+        or not isinstance(launch_record.get("successor"), str)
+        or not launch_record["successor"]
+        or runs is None
+    ):
         logger.error(
             "coordinator-handoff retire: no (valid) launch record for %s in %s",
             old,
@@ -781,21 +831,46 @@ def retire(request: RetireRequest, deps: RetireDeps) -> int:
             "coordinator-handoff retire: DRY RUN — would run claude stop %s", short_id
         )
         return 0
-    runner = deps.runner or subprocess.run
-    return runner(["claude", "stop", short_id], check=False).returncode
+    return _stop(short_id, deps.runner)
+
+
+def _stop(short_id: str, runner: Runner | None) -> int:
+    """Distinct operational failure code, separate from retirement blockers."""
+    runner = runner or subprocess.run
+    try:
+        result = runner(
+            ["claude", "stop", short_id], check=False, timeout=STOP_TIMEOUT_S
+        )
+    except OSError, subprocess.TimeoutExpired:
+        logger.exception("coordinator-handoff retire: stop failed")
+        return 3
+    if result.returncode != 0:
+        logger.error("coordinator-handoff retire: claude stop rc %d", result.returncode)
+        return 3
+    return 0
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
 
 def add_subcommands(parser: argparse.ArgumentParser) -> None:
-    """``coordinator-handoff {decide,name,launch,retire}``."""
+    """``coordinator-handoff {decide,release,name,launch,retire}``."""
     sub = parser.add_subparsers(dest="handoff_command", required=True)
     decide_parser = sub.add_parser(
         "decide", help="JSON fire decision for one context measurement (rc 0)"
     )
     decide_parser.add_argument("--session-id", required=True)
     decide_parser.add_argument("--percent", type=float, required=True)
+    decide_parser.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="Report without consuming a firing level",
+    )
+    release_parser = sub.add_parser(
+        "release", help="Restore an undelivered firing level"
+    )
+    release_parser.add_argument("--session-id", required=True)
+    release_parser.add_argument("--level", type=float, required=True)
     name_parser = sub.add_parser(
         "name",
         help="Print a fresh <project>-<Chicago ISO ns>.<feature> session name "
@@ -822,7 +897,7 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
         help="Stop even while the old session's harness tasks are in flight",
     )
     retire_parser.add_argument("--dry-run", action="store_true")
-    for child in (decide_parser, launch_parser, retire_parser):
+    for child in (decide_parser, release_parser, launch_parser, retire_parser):
         child.add_argument(
             "--jobs-dir", type=Path, default=None, help="Override ~/.claude/jobs"
         )
@@ -830,29 +905,37 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
             "--state-dir",
             type=Path,
             default=None,
-            help="Override <project>/.agent/state/coordinator-handoff",
+            help="Override <main checkout>/.agent/state/coordinator-handoff "
+            "(tests or explicit handoff)",
         )
 
 
-def main(args: argparse.Namespace, project_root: Path) -> int:
+def main(args: argparse.Namespace, _project_root: Path) -> int:
     """Dispatch one parsed ``coordinator-handoff`` invocation."""
-    state_dir = getattr(args, "state_dir", None) or project_root / STATE_SUBDIR
-    jobs_dir = getattr(args, "jobs_dir", None) or default_jobs_dir()
     command = args.handoff_command
+    if command == "name":
+        name = stamped_name(args.project, args.feature, time.time_ns())
+        sys.stdout.write(name + "\n")
+        return 0
+    try:
+        state_dir = (
+            getattr(args, "state_dir", None) or main_checkout(Path.cwd()) / STATE_SUBDIR
+        )
+    except CoordinatorHandoffError:
+        logger.exception("coordinator-handoff %s: repository unavailable", command)
+        return 2
+    jobs_dir = getattr(args, "jobs_dir", None) or default_jobs_dir()
     if command == "decide":
         decision = decide(
-            args.session_id,
-            args.percent,
+            DecideRequest(args.session_id, args.percent, no_commit=args.no_commit),
             env=os.environ,
             jobs_dir=jobs_dir,
             state_dir=state_dir,
         )
         sys.stdout.write(decision.to_json() + "\n")
         return 0
-    if command == "name":
-        name = stamped_name(args.project, args.feature, time.time_ns())
-        sys.stdout.write(name + "\n")
-        return 0
+    if command == "release":
+        return release(args.session_id, args.level, state_dir=state_dir)
     if command == "launch":
         return launch(
             args.handoff,
@@ -860,6 +943,11 @@ def main(args: argparse.Namespace, project_root: Path) -> int:
             dry_run=args.dry_run,
             deps=LaunchDeps(state_dir=state_dir, jobs_dir=jobs_dir),
         )
+    return _retire_main(args, jobs_dir, state_dir)
+
+
+def _retire_main(args: argparse.Namespace, jobs_dir: Path, state_dir: Path) -> int:
+    """Acquire the public CLI's process snapshot before entering the retire gate."""
     try:
         processes = reap.snapshot()
     except reap.ReapError:

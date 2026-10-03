@@ -10,7 +10,11 @@ The `session.measure` hook in
 `.claude/skills/coordinator-handoff/hooks/register.ts` submits this skill when a
 session named `dotfiles-….coordinator` (bg job record, fail closed) crosses
 `DOTFILES_COORDINATOR_HANDOFF_PCT` (default 30) and again every
-`DOTFILES_COORDINATOR_HANDOFF_STEP_PCT` (default 5) above it. The judgement
+`DOTFILES_COORDINATOR_HANDOFF_STEP_PCT` (default 5) above it until launch.
+An existing launch record prevents every subsequent fire and second launch.
+The first measurement caches the role; lanes make no further Python calls.
+DRY_RUN/PROBE pass `--no-commit`; failed delivery releases the consumed level.
+The judgement
 is `mise run coordinator-handoff -- decide`; the spec is
 `docs/specs/coordinator-auto-handoff-2026-10-02.md`.
 
@@ -52,8 +56,10 @@ It records the census of this session's live heavy runs (ship, land, sync,
 verify-local, bounded-wait, kb-ship, kb-land), then starts
 `claude --bg -n dotfiles-<Chicago ISO ns>.coordinator` from the main checkout
 with a brief carrying the transcript path, the handoff, the ship queue, the
-census and the queued questions. rc 2 means it refused (missing handoff, not a
-coordinator, census unavailable): record that in the handoff and stop.
+census and the queued questions. State lives in the CWD repository's main
+checkout; the brief gives retire its exact `--state-dir`. rc 2 means refused
+(invalid id, missing handoff, not a coordinator, already launched, unavailable
+census/state or a 10 s lock timeout): record that in the handoff and stop.
 
 ## 3. Go idle
 

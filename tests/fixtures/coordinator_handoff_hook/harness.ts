@@ -24,6 +24,7 @@ assert(measure, "session.measure handler was not registered");
 assert.equal(handlers.size, 1, "only session.measure is hooked");
 
 const SESSION = "abcdef12-0000-4000-8000-000000000001";
+let sessionSequence = 0;
 
 type ProcessResponse = { exitCode: number; stdout: string; stderr: string } | "throw";
 
@@ -33,9 +34,12 @@ type Options = {
   commands?: string[];
   runRejects?: boolean;
   projectDir?: string | null;
+  sessionId?: string;
+  listThrows?: boolean;
 };
 
 function makeServices(options: Options = {}) {
+  const sessionId = options.sessionId ?? `${SESSION}-${++sessionSequence}`;
   const env: Record<string, string> = { ...(options.env ?? {}) };
   if (options.projectDir !== null) env.CLAUDE_PROJECT_DIR = options.projectDir ?? "/repo";
   const responses = [...(options.responses ?? [])];
@@ -48,13 +52,14 @@ function makeServices(options: Options = {}) {
     lists: 0,
     runs: [] as { command: string; args?: string }[],
     roots: 0,
+    sessionId,
   };
   const services = {
     env: {
       get: async (name: string) => (name in env ? env[name] : undefined),
     },
     session: {
-      id: async () => SESSION,
+      id: async () => sessionId,
       root: async () => {
         calls.roots += 1;
         return "/session-root";
@@ -84,6 +89,7 @@ function makeServices(options: Options = {}) {
     command: {
       list: async () => {
         calls.lists += 1;
+        if (options.listThrows) throw new Error("scripted list failure");
         return commands.map((name) => ({ name, description: "", source: "plugin" }));
       },
       run: async (input: { command: string; args?: string }) => {
@@ -136,6 +142,8 @@ async function run(services: unknown, event: Record<string, unknown>) {
 }
 
 let arms = 0;
+const regressions: string[] = [];
+const ok = { exitCode: 0, stdout: "", stderr: "" };
 
 // A measurement that did not move the context does nothing at all.
 {
@@ -155,11 +163,15 @@ let arms = 0;
   arms += 1;
 }
 
-// Below the default limit: ZERO process calls, and the heartbeat says so.
+// R4: first measurement discovers the role even below the limit. Then zero processes.
 for (const percent of [23, 29.9]) {
-  const { services, calls } = makeServices();
+  const { services, calls } = makeServices({
+    responses: [decision({ fire: false, reason: "below-limit", level: 30, percent })],
+  });
   await run(services, measured(percent));
-  assert.equal(calls.process.length, 0);
+  assert.equal(calls.process.length, 1);
+  await run(services, measured(percent));
+  assert.equal(calls.process.length, 1, "cached coordinator under limit needs no second process");
   assert.equal(calls.lists, 0);
   assert.equal(lastStatus(calls), `handoff ${percent}%/30%`);
   arms += 1;
@@ -167,14 +179,18 @@ for (const percent of [23, 29.9]) {
 
 // A configured limit moves the pre-filter; an invalid one falls back to 30.
 {
-  const raised = makeServices({ env: { DOTFILES_COORDINATOR_HANDOFF_PCT: "50" } });
+  const raised = makeServices({ env: { DOTFILES_COORDINATOR_HANDOFF_PCT: "50" },
+    responses: [decision({ fire: false, reason: "below-limit", level: 50, percent: 40 })],
+  });
   await run(raised.services, measured(40));
-  assert.equal(raised.calls.process.length, 0);
+  assert.equal(raised.calls.process.length, 1);
   assert.equal(lastStatus(raised.calls), "handoff 40%/50%");
 
-  const invalid = makeServices({ env: { DOTFILES_COORDINATOR_HANDOFF_PCT: "abc" } });
+  const invalid = makeServices({ env: { DOTFILES_COORDINATOR_HANDOFF_PCT: "abc" },
+    responses: [decision({ fire: false, reason: "below-limit", level: 30, percent: 23 })],
+  });
   await run(invalid.services, measured(23));
-  assert.equal(invalid.calls.process.length, 0);
+  assert.equal(invalid.calls.process.length, 1);
   assert.equal(lastStatus(invalid.calls), "handoff 23%/30%");
   arms += 2;
 }
@@ -196,7 +212,7 @@ for (const percent of [23, 29.9]) {
     "coordinator-handoff",
     "decide",
     "--session-id",
-    SESSION,
+    calls.sessionId,
     "--percent",
     "90",
   ]);
@@ -253,7 +269,7 @@ for (const percent of [23, 29.9]) {
   });
   await run(services, measured(30));
   assert.equal(calls.lists, 1);
-  assert.deepEqual(calls.runs, [{ command: "coordinator-handoff", args: `${SESSION} 30` }]);
+  assert.deepEqual(calls.runs, [{ command: "coordinator-handoff", args: `${calls.sessionId} 30` }]);
   assert.equal(lastStatus(calls), "handoff fired @30%");
   assert.equal(calls.toasts.length, 1);
   assert.equal(calls.logs.length, 1);
@@ -269,7 +285,7 @@ for (const percent of [23, 29.9]) {
   });
   await run(qualified.services, measured(36));
   assert.deepEqual(qualified.calls.runs, [
-    { command: "coordinator-handoff:coordinator-handoff", args: `${SESSION} 36` },
+    { command: "coordinator-handoff:coordinator-handoff", args: `${qualified.calls.sessionId} 36` },
   ]);
 
   const both = makeServices({
@@ -277,7 +293,7 @@ for (const percent of [23, 29.9]) {
     responses: [decision({ fire: true, reason: "fire", level: 35, percent: 36 })],
   });
   await run(both.services, measured(36));
-  assert.deepEqual(both.calls.runs, [{ command: "coordinator-handoff", args: `${SESSION} 36` }]);
+  assert.deepEqual(both.calls.runs, [{ command: "coordinator-handoff", args: `${both.calls.sessionId} 36` }]);
   arms += 2;
 }
 
@@ -289,6 +305,7 @@ for (const percent of [23, 29.9]) {
   });
   await run(services, measured(30));
   assert.deepEqual(calls.runs, [{ command: "coordinator-handoff", args: "--probe" }]);
+  assert.equal(calls.process[0].argv.at(-1), "--no-commit");
   arms += 1;
 }
 
@@ -305,6 +322,7 @@ for (const percent of [23, 29.9]) {
   assert.match(calls.toasts[0], /DRY-RUN: would run \/coordinator-handoff /);
   assert.equal(calls.logs.length, 1);
   assert.equal(lastStatus(calls), "handoff DRY-RUN @30%");
+  assert.equal(calls.process[0].argv.at(-1), "--no-commit");
   arms += 1;
 }
 
@@ -312,12 +330,13 @@ for (const percent of [23, 29.9]) {
 {
   const { services, calls } = makeServices({
     commands: ["compact"],
-    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 })],
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }), ok],
   });
   await run(services, measured(30));
   assert.equal(calls.runs.length, 0);
   assert.equal(lastStatus(calls), "handoff ERROR: skill not listed");
   assert.equal(calls.toasts.at(-1), "coordinator-handoff: skill not listed");
+  assert.deepEqual(calls.process[1].argv.slice(6), ["release", "--session-id", calls.sessionId, "--level", "30"]);
   arms += 1;
 }
 
@@ -325,12 +344,13 @@ for (const percent of [23, 29.9]) {
 {
   const { services, calls } = makeServices({
     runRejects: true,
-    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 })],
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }), ok],
   });
   await run(services, measured(30));
   assert.equal(calls.runs.length, 1);
   assert.equal(lastStatus(calls), "handoff ERROR: command.run rejected: scripted reject");
   assert.equal(calls.toasts.at(-1), "coordinator-handoff: command.run rejected: scripted reject");
+  assert.equal(calls.process[1].argv[6], "release");
   arms += 1;
 }
 
@@ -392,4 +412,84 @@ for (const percent of [23, 29.9]) {
   arms += 1;
 }
 
-console.log(JSON.stringify({ arms }));
+// R4: lane role is queried below limit once, then cached even above it.
+{
+  const { services, calls } = makeServices({
+    responses: [decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 })],
+  });
+  await run(services, measured(5));
+  await run(services, measured(90));
+  assert.equal(calls.process.length, 1);
+  assert.equal(lastStatus(calls), "handoff n/a (not coordinator)");
+  regressions.push("r4-first-below-role-cache");
+  arms += 1;
+}
+
+// R4: cached roles belong to session ids, not the entire loaded module.
+{
+  const lane = makeServices({ responses: [decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 })] });
+  const coordinator = makeServices({ responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 })] });
+  await run(lane.services, measured(5));
+  await run(coordinator.services, measured(30));
+  assert.equal(lane.calls.runs.length, 0);
+  assert.equal(coordinator.calls.runs.length, 1);
+  regressions.push("r4-role-cache-keyed-by-session");
+  arms += 1;
+}
+
+// R4: a throwing event getter is inside try and overwrites stale status.
+{
+  const { services, calls } = makeServices();
+  await run(services, { get context() { throw new Error("bad context getter"); } });
+  assert.equal(lastStatus(calls), "handoff ERROR: hook failed: bad context getter");
+  regressions.push("r4-event-getter-fail-open");
+  arms += 1;
+}
+
+// R3: listing failure releases the exact consumed level and stays ERROR.
+{
+  const { services, calls } = makeServices({ listThrows: true,
+    responses: [decision({ fire: true, reason: "fire", level: 35, percent: 36 }), ok],
+  });
+  await run(services, measured(36));
+  assert.deepEqual(calls.process[1].argv.slice(6), ["release", "--session-id", calls.sessionId, "--level", "35"]);
+  assert.equal(lastStatus(calls), "handoff ERROR: delivery failed: scripted list failure");
+  regressions.push("r3-list-failure-releases-level");
+  arms += 1;
+}
+
+// R3: failure to release itself is visible, never a false success.
+{
+  const { services, calls } = makeServices({ commands: [],
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }), { exitCode: 2, stdout: "", stderr: "locked" }],
+  });
+  await run(services, measured(30));
+  assert.equal(lastStatus(calls), "handoff ERROR: skill not listed; release rc 2");
+  regressions.push("r3-release-failure-visible");
+  arms += 1;
+}
+
+// R1: durable launch is a quiet terminal state, with no submit.
+{
+  const { services, calls } = makeServices({
+    responses: [decision({ fire: false, reason: "already-launched", level: null, percent: 90 })],
+  });
+  await run(services, measured(90));
+  assert.equal(lastStatus(calls), "handoff already launched");
+  assert.equal(calls.runs.length, 0);
+  regressions.push("r1-already-launched-heartbeat");
+  arms += 1;
+}
+
+// R4: overlapping first measurements still make one role query.
+{
+  const { services, calls } = makeServices({
+    responses: [decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 })],
+  });
+  await Promise.all([run(services, measured(5)), run(services, measured(90))]);
+  assert.equal(calls.process.length, 1);
+  regressions.push("r4-concurrent-first-role-query");
+  arms += 1;
+}
+
+console.log(JSON.stringify({ arms, regressions }));

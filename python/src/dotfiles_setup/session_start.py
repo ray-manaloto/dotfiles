@@ -19,7 +19,7 @@ The state file is written BEFORE answering, so a reload that re-fires
 ``session.start`` answers ``already-ran`` — which carries a still-pending
 ``defer`` prefix, because a reload discards the hook module's memory.
 
-The timestamp comes from ``coordinator_handoff.stamped_name`` /
+The timestamp comes from ``session_common.stamped_name`` /
 ``chicago_stamp`` — one formatter for both mods.
 
 Spec: ``docs/specs/coordinator-auto-handoff-2026-10-02.md`` §8.
@@ -29,25 +29,31 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import shlex
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-from dotfiles_setup.coordinator_handoff import (
+from dotfiles_setup import reap
+from dotfiles_setup.session_common import (
     PROJECT,
+    StateLockedError,
     chicago_stamp,
     default_jobs_dir,
+    job_record,
     now_iso,
     read_state,
-    session_name,
     stamped_name,
+    state_lock,
     valid_session_id,
     write_state,
 )
+from dotfiles_setup.session_orphans import _session_root
 
 if TYPE_CHECKING:
     import argparse
@@ -65,12 +71,25 @@ STATE_SUBDIR = Path(".agent") / "state" / "session-start"
 FALLBACK_DEFAULT_BRANCH = "main"
 _GIT_TIMEOUT_S = 10
 
+type StartAction = Literal[
+    "keep",
+    "rename",
+    "defer",
+    "nonconforming",
+    "unknown",
+    "already-ran",
+    "non-interactive",
+    "invalid-session-id",
+    "state-write-failed",
+    "state-locked",
+]
+
 
 @dataclass(frozen=True)
 class StartDecision:
     """What the hook acts on; mirrored by ``parseStart`` in ``register.ts``."""
 
-    action: str
+    action: StartAction
     reload: bool
     name: str | None
     prefix: str | None
@@ -110,6 +129,49 @@ class StartDeps:
     jobs_dir: Path = field(default_factory=default_jobs_dir)
     now_ns: int | None = None
     runner: Runner | None = None
+    processes: tuple[reap.Process, ...] | None = None
+    self_pid: int | None = None
+
+
+def user_name(session_id: str, deps: StartDeps) -> tuple[str | None, bool]:
+    """User name plus whether absence is known; spares without records fail closed.
+
+    Harness-generated names are not -n names. Foreground sessions lack job
+    records, so reuse the measured nearest-Claude ancestry walk to read argv.
+    """
+    record = job_record(session_id, deps.jobs_dir)
+    if record is not None and record.get("nameSource") == "user":
+        name = record.get("name")
+        return (name, True) if isinstance(name, str) and name else (None, False)
+    try:
+        processes = reap.snapshot() if deps.processes is None else deps.processes
+    except reap.ReapError:
+        return None, False
+    root = _session_root(
+        processes, os.getpid() if deps.self_pid is None else deps.self_pid
+    )
+    command = next((p.command for p in processes if p.pid == root), None)
+    if command is None:
+        return None, record is not None
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return None, False
+    return _argv_name(argv, record_present=record is not None)
+
+
+def _argv_name(argv: list[str], *, record_present: bool) -> tuple[str | None, bool]:
+    """Resolve explicit naming flags before the foreground/spare fallback."""
+    for index, arg in enumerate(argv):
+        if arg in {"-n", "--name"}:
+            if index + 1 < len(argv) and not argv[index + 1].startswith("-"):
+                return argv[index + 1], True
+            return None, False
+        if arg.startswith("--name="):
+            name = arg.removeprefix("--name=")
+            return (name, True) if name else (None, False)
+    spare = "--bg-spare" in argv or "bg-pty-host" in argv
+    return None, record_present or not spare
 
 
 def feature_slug(branch: str) -> str:
@@ -153,9 +215,12 @@ def default_branch(cwd: Path, runner: Runner) -> str:
 
 
 def _classify(
-    request: StartRequest, name: str | None, deps: StartDeps
-) -> tuple[str, str | None, str | None]:
+    request: StartRequest, deps: StartDeps
+) -> tuple[StartAction, str | None, str | None]:
     """``(action, name, prefix)`` for a session seen for the first time."""
+    name, known = user_name(request.session_id, deps)
+    if not known:
+        return "unknown", None, None
     if name is not None:
         return ("keep" if is_conforming(name) else "nonconforming"), name, None
     now_ns = time.time_ns() if deps.now_ns is None else deps.now_ns
@@ -186,7 +251,7 @@ def _repeat(request: StartRequest, state: dict[str, object]) -> StartDecision:
 
 
 def _inert(
-    action: str, session_id: str, warnings: tuple[str, ...] = ()
+    action: StartAction, session_id: str, warnings: tuple[str, ...] = ()
 ) -> StartDecision:
     """An answer the hook acts on by doing nothing but its status line."""
     return StartDecision(
@@ -206,15 +271,18 @@ def decide(request: StartRequest, deps: StartDeps) -> StartDecision:
     if not valid_session_id(request.session_id):
         return _inert("invalid-session-id", request.session_id)
     path = deps.state_dir / f"{request.session_id}.json"
-    state = read_state(path)
-    if "action" in state:
-        return _repeat(request, state)
-    action, name, prefix = _classify(
-        request, session_name(request.session_id, deps.jobs_dir), deps
-    )
-    state.update({"at": now_iso(), "action": action, "name": name, "prefix": prefix})
     try:
-        write_state(path, state)  # state before answer: once per session id
+        with state_lock(path):
+            state = read_state(path)
+            if "action" in state:
+                return _repeat(request, state)
+            action, name, prefix = _classify(request, deps)
+            state.update(
+                {"at": now_iso(), "action": action, "name": name, "prefix": prefix}
+            )
+            write_state(path, state)
+    except StateLockedError as exc:
+        return _inert("state-locked", request.session_id, (str(exc),))
     except OSError as exc:
         return _inert(
             "state-write-failed", request.session_id, (f"state write failed: {exc}",)
@@ -229,22 +297,49 @@ def decide(request: StartRequest, deps: StartDeps) -> StartDecision:
 
 
 def mark_renamed(session_id: str, name: str, state_dir: Path) -> int:
-    """Record that a deferred rename was queued, so no reload repeats it."""
+    """Record a resolved rename, preserving concurrent session bookkeeping."""
     if not valid_session_id(session_id):
         logger.error("session-start renamed: invalid session id %r", session_id)
         return 2
     path = state_dir / f"{session_id}.json"
-    state = read_state(path)
-    if "action" not in state:
-        logger.error("session-start renamed: no decision recorded for %s", session_id)
-        return 2
-    state["renamed"] = {"at": now_iso(), "name": name}
     try:
-        write_state(path, state)
+        with state_lock(path):
+            state = read_state(path)
+            if "action" not in state:
+                logger.error(
+                    "session-start renamed: no decision recorded for %s", session_id
+                )
+                return 2
+            state["renamed"] = {"at": now_iso(), "name": name}
+            write_state(path, state)
     except OSError:
         logger.exception("session-start renamed: state write failed")
         return 1
     return 0
+
+
+def pending(session_id: str, state_dir: Path) -> StartDecision:
+    """Recover a pending rename after a plugin reload, without reloading again."""
+    if not valid_session_id(session_id):
+        return _inert("invalid-session-id", session_id)
+    try:
+        with state_lock(state_dir / f"{session_id}.json"):
+            state = read_state(state_dir / f"{session_id}.json")
+    except StateLockedError as exc:
+        return _inert("state-locked", session_id, (str(exc),))
+    except OSError as exc:
+        return _inert("state-write-failed", session_id, (str(exc),))
+    if state.get("action") == "rename" and state.get("renamed") is None:
+        name = state.get("name")
+        if isinstance(name, str):
+            return StartDecision(
+                action="rename",
+                reload=False,
+                name=name,
+                prefix=None,
+                session_id=session_id,
+            )
+    return _repeat(StartRequest(session_id, Path.cwd()), state)
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -267,11 +362,15 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
         help="A -p/SDK session: answer non-interactive and do nothing",
     )
     renamed_parser = sub.add_parser(
-        "renamed", help="Record that the deferred rename was queued"
+        "renamed", help="Record that rename resolved successfully"
     )
     renamed_parser.add_argument("--session-id", required=True)
     renamed_parser.add_argument("--name", required=True)
-    for child in (decide_parser, renamed_parser):
+    pending_parser = sub.add_parser(
+        "pending", help="Read pending naming state after plugin reload"
+    )
+    pending_parser.add_argument("--session-id", required=True)
+    for child in (decide_parser, renamed_parser, pending_parser):
         child.add_argument(
             "--state-dir",
             type=Path,
@@ -288,6 +387,9 @@ def main(args: argparse.Namespace, project_root: Path) -> int:
     state_dir = args.state_dir or project_root / STATE_SUBDIR
     if args.session_start_command == "renamed":
         return mark_renamed(args.session_id, args.name, state_dir)
+    if args.session_start_command == "pending":
+        sys.stdout.write(pending(args.session_id, state_dir).to_json() + "\n")
+        return 0
     decision = decide(
         StartRequest(
             session_id=args.session_id,
