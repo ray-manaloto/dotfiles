@@ -8,6 +8,7 @@ checkout from a lane is the whole point of the task (Ray ruling b).
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 import sys
@@ -291,7 +292,7 @@ def test_a_takeover_while_waiting_for_the_lock_refuses_the_write(
     result: list[int] = []
     argv = ["plan-apply", "--edits", str(edits), "--jobs-dir", str(jobs_dir)]
 
-    with state_lock(main_repo / handoff_inbox.LOCK_SUBDIR / plan.name):
+    with state_lock(handoff_inbox.lock_path(main_repo, plan)):
         worker = threading.Thread(target=lambda: result.append(_run(argv)))
         worker.start()
         time.sleep(0.5)  # the worker has passed the pre-input check by now
@@ -305,3 +306,77 @@ def test_a_takeover_while_waiting_for_the_lock_refuses_the_write(
 
     assert result == [2]
     assert plan.read_text() == before
+
+
+def test_a_newer_finished_coordinator_does_not_lock_out_the_live_one(
+    jobs_dir: Path,
+) -> None:
+    """Cold review F2: a stopped/done successor record must not win."""
+    for state, sid in (("stopped", "ffffffff-1"), ("done", "ffffffff-2")):
+        path = jobs_dir / sid[:8] / "state.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "sessionId": sid + "-pad",
+                    "name": f"dotfiles-20261003T16000{sid[-1]}.0-05.coordinator",
+                    "createdAt": "2026-10-03T21:00:00Z",
+                    "state": state,
+                }
+            )
+        )
+    env = {handoff_inbox.SESSION_ENV: NEWEST_ID}
+    assert handoff_inbox.require_newest_coordinator(env, jobs_dir) == NEWEST
+    _job(
+        jobs_dir,
+        "99999999-1111-2222-3333-444444444444",
+        "dotfiles-20261003T160009.0-05.coordinator",
+        "2026-10-03T21:00:00Z",
+    )
+    with pytest.raises(handoff_inbox.InboxError, match="not the newest"):
+        handoff_inbox.require_newest_coordinator(env, jobs_dir)
+
+
+def test_append_reads_the_body_from_file_or_stdin(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_repo, _ = repos
+    body = tmp_path / "body.md"
+    body.write_text("from a file\n")
+    monkeypatch.setattr(sys, "stdin", io.StringIO("from stdin\n"))
+
+    assert _run(["append", "--lane", "L9", "--file", str(body)]) == 0
+    assert _run(["append", "--lane", "L9"]) == 0
+
+    text = (main_repo / ".agent" / "plans" / "handoff-inbox" / "L9.md").read_text()
+    assert text.index("from a file") < text.index("from stdin")
+
+
+def test_a_non_utf8_file_is_refused_not_a_traceback(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """Cold review F5: rc=2 (refused), never rc=1 (which means NOT FOUND)."""
+    main_repo, _ = repos
+    binary = tmp_path / "blob.bin"
+    binary.write_bytes(b"\xff\xfe\x00\x81")
+
+    assert _run(["append", "--lane", "L9", "--file", str(binary)]) == 2
+    assert _run(["append", "--lane", "../x", "--file", str(tmp_path / "nope")]) == 2
+    assert not (main_repo / ".agent" / "plans").exists()
+
+
+def test_lock_and_backup_names_do_not_collide_and_backups_are_pruned(
+    repos: tuple[Path, Path],
+) -> None:
+    """Cold review F7: an inbox lane named ``task_plan`` is not the plan."""
+    main_repo, _ = repos
+    plan = main_repo / "task_plan.md"
+    lane = main_repo / ".agent" / "plans" / "handoff-inbox" / "task_plan.md"
+    assert handoff_inbox.lock_path(main_repo, plan) != handoff_inbox.lock_path(
+        main_repo, lane
+    )
+    for n in range(handoff_inbox.BACKUPS_KEPT + 3):
+        assert _run(["append", "--lane", "task_plan", "--message", f"m{n}"]) == 0
+    backups = list((main_repo / handoff_inbox.BACKUP_SUBDIR).iterdir())
+    assert len(backups) == handoff_inbox.BACKUPS_KEPT
+    assert all(not b.name.startswith("task_plan.md.") for b in backups)

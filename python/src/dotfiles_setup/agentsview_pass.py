@@ -171,13 +171,13 @@ def project_name(repo_root: Path) -> str:
         return repo_root.name
 
 
-def _session_ids(payload: object, project_name: str) -> tuple[str, ...]:
+def _session_ids(payload: object, expected_project: str) -> tuple[str, ...]:
     rows = _rows(payload, "sessions")
     selected: list[str] = []
     for row in rows:
         agent = row.get("agent")
         project = row.get("project")
-        if agent != "claude" or project != project_name:
+        if agent != "claude" or project != expected_project:
             message = (
                 "session list returned a row outside its native filters: "
                 f"agent={agent!r} project={project!r}"

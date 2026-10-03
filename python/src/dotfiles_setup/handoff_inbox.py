@@ -21,15 +21,24 @@ The newest coordinator only (Ray ruled 2026-10-03 ~15:00):
 
 The caller's identity is ``CLAUDE_CODE_SESSION_ID`` resolved through its
 harness job record; it must carry a coordinator name and the newest
-``createdAt`` of every coordinator-named record. The environment variable is
-caller-supplied, so this check guards against a lane or a superseded
-coordinator writing by mistake, not against a hostile process.
+``createdAt`` of every coordinator-named record that is still live (a
+``done`` or ``stopped`` record is skipped, so a dead successor cannot lock the
+live coordinator out). It is checked again once the target's lock is held.
+
+Limits, stated so nobody relies on more: the variable is caller-supplied, and
+an Agent-tool subagent inherits its parent's session id, so a coordinator's
+own delegates pass the gate, as does any process that exports the id or
+points ``--jobs-dir`` elsewhere. The gate stops a LANE session or a
+SUPERSEDED coordinator writing by mistake; it is not an access control.
 
 An edit list is JSON: a list of ``{"replace": <old>, "with": <new>}`` and
 ``{"append": <text>}`` objects. Every ``replace`` anchor must occur exactly
-once in the current text (an anchor assert, so an empty or drifted file can
-never be silently rewritten). All edits are validated before anything is
-written; the write is an atomic replace, preceded by a timestamped backup.
+once in the current text, so a drifted file is refused rather than rewritten;
+an ``append``-only list has no anchor and so cannot detect drift. All edits
+are validated before anything is written; the write is an atomic replace,
+preceded by a timestamped backup (the newest ``BACKUPS_KEPT`` per file are
+kept). The lock orders this module's own writers only; a direct Edit of the
+same file is not serialised against it.
 """
 
 from __future__ import annotations
@@ -67,6 +76,9 @@ TASK_PLAN = Path("task_plan.md")
 LOCK_SUBDIR = Path(".agent") / "state" / "handoff-inbox"
 BACKUP_SUBDIR = LOCK_SUBDIR / "backups"
 SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
+#: Harness job states after which a record no longer owns anything.
+TERMINAL_JOB_STATES = frozenset({"done", "stopped"})
+BACKUPS_KEPT = 20
 
 RC_OK = 0
 RC_NOT_FOUND = 1
@@ -180,6 +192,7 @@ def require_newest_coordinator(env: Mapping[str, str], jobs_dir: Path) -> str:
             isinstance(other, str)
             and is_coordinator(other)
             and at is not None
+            and data.get("state") not in TERMINAL_JOB_STATES
             and (newest is None or at > newest[0])
         ):
             newest = (at, other)
@@ -192,13 +205,27 @@ def require_newest_coordinator(env: Mapping[str, str], jobs_dir: Path) -> str:
     return name
 
 
+def _key(checkout: Path, target: Path) -> str:
+    """A per-file name unique across kinds: ``task_plan.md`` vs an inbox lane."""
+    return str(target.relative_to(checkout)).replace("/", "__")
+
+
+def lock_path(checkout: Path, target: Path) -> Path:
+    """The lock base path ``_locked_write`` holds for ``target``."""
+    return checkout / LOCK_SUBDIR / _key(checkout, target)
+
+
 def _backup(checkout: Path, target: Path) -> None:
     if not target.exists():
         return
+    key = _key(checkout, target)
     stamp = datetime.now().astimezone().strftime("%Y%m%dT%H%M%S%f")
-    backup = checkout / BACKUP_SUBDIR / f"{target.name}.{stamp}"
-    backup.parent.mkdir(parents=True, exist_ok=True)
-    backup.write_bytes(target.read_bytes())
+    directory = checkout / BACKUP_SUBDIR
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{key}.{stamp}").write_bytes(target.read_bytes())
+    # The stamp sorts chronologically, so the oldest come first.
+    for old in sorted(directory.glob(f"{key}.*"))[:-BACKUPS_KEPT]:
+        old.unlink(missing_ok=True)
 
 
 def _replace_atomically(target: Path, text: str) -> None:
@@ -225,8 +252,7 @@ def _locked_write(
     than writing on the strength of a check made before the takeover. Its
     result, the caller's name, is handed to ``transform``.
     """
-    lock = checkout / LOCK_SUBDIR / target.name
-    with state_lock(lock):
+    with state_lock(lock_path(checkout, target)):
         caller = authorize() if authorize is not None else ""
         current = target.read_text(encoding="utf-8") if target.exists() else ""
         updated = transform(current, caller)
@@ -356,7 +382,8 @@ def _dispatch(args: argparse.Namespace, checkout: Path) -> int:
     if command == "read":
         return _read(checkout, args.lane)
     if command == "append":
-        written = append(checkout, args.lane, _body(args), title=args.title)
+        lane = valid_lane(args.lane)
+        written = append(checkout, lane, _body(args), title=args.title)
     else:
         jobs_dir = args.jobs_dir or default_jobs_dir()
         env = dict(os.environ)
@@ -397,6 +424,6 @@ def main(args: argparse.Namespace) -> int:
     try:
         checkout = main_checkout(Path.cwd())
         return _dispatch(args, checkout)
-    except (InboxError, SessionError, OSError) as exc:
+    except (InboxError, SessionError, OSError, UnicodeDecodeError) as exc:
         sys.stderr.write(f"handoff-inbox {args.inbox_command}: {exc}\n")
         return RC_REFUSED
