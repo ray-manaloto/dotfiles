@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import coordinator_handoff, handoff_inbox
 from dotfiles_setup.main import setup_parser
+from dotfiles_setup.session_common import state_lock
 
 NEWEST = "dotfiles-20261003T144132.124570000-05.coordinator"
 OLDER = "dotfiles-20261003T140808.926861000-05.coordinator"
@@ -267,3 +270,38 @@ def test_queue_append_and_inbox_edit_are_coordinator_only(
 def test_malformed_edit_lists_are_refused(payload: object) -> None:
     with pytest.raises(handoff_inbox.InboxError):
         handoff_inbox.parse_edits(payload)
+
+
+def test_a_takeover_while_waiting_for_the_lock_refuses_the_write(
+    repos: tuple[Path, Path],
+    jobs_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authority is re-checked once the lock is held, not only before it.
+
+    The newest coordinator starts ``plan-apply`` while another writer holds the
+    file lock; a successor is launched before the lock frees. The write must be
+    refused (codex review of 767ff5b7, P2).
+    """
+    main_repo, _ = repos
+    plan, edits = _plan(main_repo, tmp_path)
+    before = plan.read_text()
+    monkeypatch.setenv(handoff_inbox.SESSION_ENV, NEWEST_ID)
+    result: list[int] = []
+    argv = ["plan-apply", "--edits", str(edits), "--jobs-dir", str(jobs_dir)]
+
+    with state_lock(main_repo / handoff_inbox.LOCK_SUBDIR / plan.name):
+        worker = threading.Thread(target=lambda: result.append(_run(argv)))
+        worker.start()
+        time.sleep(0.5)  # the worker has passed the pre-input check by now
+        _job(
+            jobs_dir,
+            "eeeeeeee-1111-2222-3333-444444444444",
+            "dotfiles-20261003T150000.000000000-05.coordinator",
+            "2026-10-03T20:00:00Z",
+        )
+    worker.join(timeout=15)
+
+    assert result == [2]
+    assert plan.read_text() == before

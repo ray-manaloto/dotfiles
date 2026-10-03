@@ -212,13 +212,24 @@ def _replace_atomically(target: Path, text: str) -> None:
 
 
 def _locked_write(
-    checkout: Path, target: Path, transform: Callable[[str], str]
+    checkout: Path,
+    target: Path,
+    transform: Callable[[str, str], str],
+    *,
+    authorize: Callable[[], str] | None = None,
 ) -> None:
-    """Read, transform and replace ``target`` under its own lock."""
+    """Authorize, read, transform and replace ``target`` under its own lock.
+
+    ``authorize`` runs only once the lock is held, so a coordinator superseded
+    while this call waited for the lock (or for its input) is refused rather
+    than writing on the strength of a check made before the takeover. Its
+    result, the caller's name, is handed to ``transform``.
+    """
     lock = checkout / LOCK_SUBDIR / target.name
     with state_lock(lock):
+        caller = authorize() if authorize is not None else ""
         current = target.read_text(encoding="utf-8") if target.exists() else ""
-        updated = transform(current)
+        updated = transform(current, caller)
         _backup(checkout, target)
         _replace_atomically(target, updated)
 
@@ -238,16 +249,27 @@ def append(checkout: Path, lane: str, body: str, *, title: str | None = None) ->
         msg = "refused: --title must be one non-empty line"
         raise InboxError(msg)
     entry = record(title or lane, body, stamp=now_iso())
-    _locked_write(checkout, target, lambda current: current + entry)
+    _locked_write(checkout, target, lambda current, _caller: current + entry)
     return target
 
 
-def edit_file(checkout: Path, target: Path, edits: tuple[Edit, ...]) -> Path:
+def edit_file(
+    checkout: Path,
+    target: Path,
+    edits: tuple[Edit, ...],
+    *,
+    authorize: Callable[[], str] | None = None,
+) -> Path:
     """Apply a typed edit list to an existing file; return the path written."""
     if not target.is_file():
         msg = f"refused: {target} does not exist"
         raise InboxError(msg)
-    _locked_write(checkout, target, lambda current: apply_edits(current, edits))
+    _locked_write(
+        checkout,
+        target,
+        lambda current, _caller: apply_edits(current, edits),
+        authorize=authorize,
+    )
     return target
 
 
@@ -337,20 +359,35 @@ def _dispatch(args: argparse.Namespace, checkout: Path) -> int:
         written = append(checkout, args.lane, _body(args), title=args.title)
     else:
         jobs_dir = args.jobs_dir or default_jobs_dir()
-        name = require_newest_coordinator(os.environ, jobs_dir)
+        env = dict(os.environ)
+
+        def authorize() -> str:
+            return require_newest_coordinator(env, jobs_dir)
+
+        # Fail fast for a caller that is plainly not the coordinator, before
+        # reading any input; the binding check is the one inside the lock.
+        authorize()
         if command == "queue-append":
             body = _body(args)
             if not body.strip():
                 msg = "refused: empty body"
                 raise InboxError(msg)
-            entry = record(name, body, stamp=now_iso())
             written = ship_queue(checkout)
-            _locked_write(checkout, written, lambda current: current + entry)
+            _locked_write(
+                checkout,
+                written,
+                lambda current, caller: current + record(caller, body, stamp=now_iso()),
+                authorize=authorize,
+            )
         elif command == "plan-apply":
-            written = edit_file(checkout, checkout / TASK_PLAN, _edits(args.edits))
+            written = edit_file(
+                checkout, checkout / TASK_PLAN, _edits(args.edits), authorize=authorize
+            )
         else:
             target = inbox_dir(checkout) / f"{valid_lane(args.lane)}.md"
-            written = edit_file(checkout, target, _edits(args.edits))
+            written = edit_file(
+                checkout, target, _edits(args.edits), authorize=authorize
+            )
     sys.stdout.write(f"{written}\n")
     return RC_OK
 
