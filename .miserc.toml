@@ -2,3 +2,12 @@
 # environments by default from 2027.6.0 and warns from 2026.12.0 (upstream docs/configuration/environments.md
 # "Rollout"). false = today's behaviour; revisit if a real host-vs-container variable difference appears.
 auto_env = false
+
+# Stop upward config discovery at THIS checkout's parent (#1614). The ceiling directory itself is excluded
+# (mise settings.toml `ceiling_paths`), so in the main checkout this is <main>/.. and the checkout's own
+# config still loads; in a Claude Code worktree at <main>/.claude/worktrees/<x> it is
+# <main>/.claude/worktrees, so the main checkout's mise.toml, mise.local.toml and conf.d stop leaking in.
+# Must stay `config_root | dirname`: a non-canonical path (`.../..`) or a failed render matches no
+# ancestor and silently disables the ceiling. An exported MISE_CEILING_PATHS overrides this file entirely.
+# Gated by verify `config.mise-worktree-ceiling` and tests/test_miserc_ceiling.py.
+ceiling_paths = ["{{ config_root | dirname }}"]

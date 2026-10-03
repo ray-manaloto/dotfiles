@@ -1055,6 +1055,15 @@ def test_mise_requirement_task_exposes_required_root_and_configurable_limit(
     container_env["MISE_TRUSTED_CONFIG_PATHS"] = os.pathsep.join(
         (str(REPO_ROOT), str(hostile_root))
     )
+    # #1614: this test runs `mise --cd REPO_ROOT` from a cwd OUTSIDE the repo
+    # (hostile_root), and mise discovers .miserc.toml from the INVOCATION cwd before
+    # it applies --cd, so the repo's tracked ceiling_paths is never read here.
+    # Without an explicit ceiling, a checkout nested at <main>/.claude/worktrees/<x>
+    # walks up into <main>/mise.toml, which defines the same task, and the `ignored`
+    # arm below succeeds. The env value pins the walk to this checkout wherever it
+    # sits; the real fix for in-tree mise runs is .miserc.toml (gated by
+    # tests/test_miserc_ceiling.py).
+    container_env["MISE_CEILING_PATHS"] = str(REPO_ROOT.resolve().parent)
     result = subprocess.run(
         [
             "mise",
