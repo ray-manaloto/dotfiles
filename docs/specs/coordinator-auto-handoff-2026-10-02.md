@@ -456,6 +456,55 @@ to `python/src/dotfiles_setup/session_common.py`. The two hook modules stay self
 md-size bullet trim there is recorded in the commit body as a budget offset; §3c lists every
 refusal reason incl. `invalid-session-id`/`invalid-percent` and census-unavailable.
 
+## 10. Review round 2 — corrections to implement (respec of df481e1f; LAST respec round)
+
+Source: `docs/research/kb/reports/agents/cold-review-coordinator-auto-handoff-df481e1f.md`
+(Opus cold review, 18 findings). Round 2 of at most two (`codex-sdlc-team` § Review tiers):
+residue after this round goes to Ray, not a third respec. Each item needs a test arm that FAILS
+on df481e1f and passes after (name it in the report).
+
+**S1 (HIGH #1) PROBE and DRY_RUN never loop and never spend real levels.** `decide --probe`
+fires at most ONCE per session (state key `probe_fired`), then answers `probe-done`;
+`decide --dry-run` fires once per level under its own key `dry_run_fired` (real `last_fired`
+untouched). The hook passes `--probe`/`--dry-run` instead of `--no-commit`; DRY_RUN toasts via
+`toastOnce` (#6). Harness arm: three consecutive measurements at/above the limit under PROBE
+queue exactly one command.
+
+**S2 (HIGH #2) A failed start never latches.** `launch` writes `launch_pending {name, at}`
+before `claude --bg` (timeout 60 s, #7) and promotes it to `launch` only on rc 0; on any failure
+(non-zero rc, missing binary, timeout) it deletes `launch_pending`, calls the same rollback as
+`release`, and returns rc 3 ("start failed", distinct from refusal rc 2). `decide` treats a
+`launch_pending` younger than 15 min as `launch-in-progress` (no fire) and an older one as stale
+(ignored, reported in `warnings`). Do not hold the flock across the `claude --bg` call: write
+pending under lock, release, run, re-acquire to promote/rollback.
+
+**S3 (HIGH #3) Log path from the heavy COMMAND, not its shell wrapper.** For each outermost
+heavy match, choose the log from the first process in its subtree (self included, depth-first)
+whose argv[0] basename is not a shell (`sh|bash|zsh|dash`) and whose argv matches the heavy
+regex; read THAT process's fd 1 via lsof. An fd-1 path under a harness `tasks/` dir ending
+`.output` is recorded as `harness-output:<path>` and the brief says "no rc file — wait on pid
+exit" for it. Relative fallback paths are made absolute against that process's cwd (`lsof -d
+cwd`, #15). Replace the enshrining test at `tests/test_coordinator_handoff.py:1066-1088` with
+arms for: wrapper zsh → child mise with `> LOG` (records LOG), harness-output only, relative
+fallback.
+
+**S4 (MED #4, LOW #5) Role cache with one re-check, no lane state.** The hook caches
+`coordinator` for the module lifetime; a `not-coordinator` answer is cached only until the first
+measurement at/above the limit, which re-asks python once and then caches. `decide` writes NO
+state file for a non-coordinator (role check before any write). Arms: transient miss below the
+limit recovers at the limit; at most two processes per non-coordinator session; no state file
+for a lane.
+
+**S5 (LOW) Contract tidy.** Non-UTF-8 handoff → rc 2 (#8); SKILL §2 census list replaced by a
+pointer to `HEAVY_COMMAND_RE` (#9); git failure reason text `census-unavailable` (#10);
+`release` reports `invalid-level` (#11); an inFlight-only block names `--accept-inflight`, not
+`--adopted` (#12); `/rename` success is confirmed by python `session-start renamed` re-reading
+the job record name when one exists (foreground: resolution suffices) — mismatch keeps it
+pending (#13); `recoverPending` marks checked only after a successful `pending` read (#14);
+lock tests pass a short `timeout_s` (#16); mise.toml `coordinator-handoff` description names
+`release` (#18); reword SKILL text so no sentence says "Claude ancestor" (the mirror generator
+rewrites it to "Codex", #17 — the generator bug itself is a sibling ticket, not this change).
+
 ## GitHub repos touched
 
 _None._ (Offline vendor docs in the knowledge-base corpus and the bundled CC 2.1.288 type file only.)
