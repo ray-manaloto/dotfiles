@@ -101,11 +101,13 @@ queries = ['include-what-you-use', 'IWYU']
 id = "iwyu-upstream-releases"
 kind = "releases"
 origin = "topic:iwyu-llvm"
-question = "An IWYU release compatible with Clang 23"
+question = "A new IWYU release (each note says 'Compatible with Clang N'); the rerun's NEW/GONE diff surfaces it"
 repo = "include-what-you-use/include-what-you-use"
 cadence = "daily"
 limit = 10
-queries = ['Clang 23']
+# The fanout release filter is case-insensitive and drops terms under 3 chars (research_fanout.py:664-668),
+# so a major number cannot be filtered on; match every release note and rely on the diff (lane 1502, 2026-10-03).
+queries = ['Compatible']
 
 # --- baseline (code-search total_count from the sweep, 2026-10-03) ---------------------------
 
