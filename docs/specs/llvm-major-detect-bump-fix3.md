@@ -1,4 +1,4 @@
-# Spec — fix round 3: LLVM-deb Renovate group, major-following registryUrls, daily container-free stale-pin check
+# Spec — fix round 3 (rev 2): LLVM-deb Renovate group, major-following registryUrls, daily container-free stale-pin check
 
 Parents: `docs/specs/llvm-major-detect-bump.md` rev 3, plus fix1 and fix2 (in 4b56cf59 and 682d626d). Ruling (Ray, via
 the coordinator, 2026-10-03): "fix Renovate NOW". Three parts: (1) an own automerging Renovate group for the LLVM debs;
@@ -36,7 +36,47 @@ After this round:
 
 ## 3. Required behaviour
 
-**(1) LLVM-deb group.** Add a `packageRules` entry, placed AFTER `packageRules[0]` and `[3]` so that it wins:
+**Rev 2 corrections (premise-verifier `docs/research/kb/reports/agents/premise-verifier-llvm-fix3-2026-10-03.md`)
+OVERRIDE anything below that they contradict:**
+- **M1:** the clang-p2996 rule must stay LAST (`tests/test_p2996_single_literal.py:162-163` asserts
+  `clang_index == len(rules) - 1`). INSERT the new LLVM rule immediately BEFORE the clang rule, not at the end. Add
+  `tests/test_p2996_single_literal.py` to the allowed pytest set.
+- **M2 (architect-probed 2026-10-03):** resolute arm64 indexes return 200 at
+  `http://ports.ubuntu.com/ubuntu-ports/dists/{resolute,resolute-updates,resolute-security}/main/binary-arm64/Packages.gz`
+  (1.86 MB / 0.91 MB / 0.70 MB). `archive.ubuntu.com/ubuntu/dists/resolute/main/binary-arm64` also answered 200,
+  byte-identical, and amd64 answered 200 on archive and security. A bogus suite on ports returned 404. Use
+  `ports.ubuntu.com/ubuntu-ports` for every arm64 Ubuntu index (the canonical arm64 mirror), and archive (release,
+  updates) / security (security) for amd64.
+- **M3 inventory = 72**: ALL `[bootstrap.packages]` pins, active AND commented. The commented ones are "correct as-is on
+  uncomment", so their rot matters too. LLVM = `llvm_major.llvm_pins(text)` (58, with `active` flags). Ubuntu = every
+  other pin, via a NEW public helper `llvm_major.bootstrap_pins(text) -> dict[str, tuple[str, bool]]` built on the
+  existing `_PIN` regex (`llvm_pins` should then derive from it). Do not import private names from another module. 52 +
+  6 LLVM + 14 Ubuntu = 72. Report active and commented counts separately.
+- **M6 (architect-probed):** `matchCurrentValue` is documented on https://docs.renovatebot.com/configuration-options/
+  (8 hits on that page, against 4 for the control `matchDepNames`). The lane cites the section it read and proves the
+  regex under RE2 with the repo's `uv run --project python dotfiles-setup renovate-validate` (hk `renovate_config_validate`,
+  `hk.pkl:558-560`) and `tests/test_renovate_validate.py`. Add that test to the allowed pytest set.
+- **M4:** the new group rule must NOT carry its own `registryUrls`. `llvm_major._registry_urls` (`llvm_major.py:527-538`)
+  requires exactly one apt.llvm.org registryUrl repo-wide. If part (2) goes native, update that parity check in the same
+  commit. The new rule's `description` must not repeat any token bound by suites.toml (`custom.regex` :908,
+  `github>jdx/renovate-config` :917, the graphify description sentence :1630); `token-audit` will catch it.
+- **M5:** `mise run renovate-dryrun` (needs `GITHUB_COM_TOKEN`) is the native proof that the 58 LLVM deps land in the
+  new group branch. Run it if the token is present (presence-test only: `[ -n "$GITHUB_COM_TOKEN" ]`; NEVER print the
+  value). Otherwise do the offline 58/14 regex check and say the dry run was not run, and why.
+- **M8:** fetch through `llvm_major.default_fetcher` (status-aware, `--max-time 60`), never `apt_repo._default_fetcher`
+  (no timeout). Copy the dual-arch pattern of `llvm_major._index_version` (:595-621). Build Ubuntu queries with
+  `RepoQuery(repo=…, suite=…, arch=…)` directly.
+- **M10:** add `apt_liveness` to the module tuple that `parity_violations` scans for LLVM literals
+  (`llvm_major.py:578-581`), and keep the new code literal-free.
+- **M11:** index presence is NOT installability (`apt_pins.py:11-27`). The issue title and body say "published in the live
+  index", never "installs"; `verify-apt-pins` remains the installability proof.
+- **M12:** `GH_TOKEN` goes on the standing-issue steps only, not on the apt-liveness step (curl only).
+- **Corrected cause (row 6):** #442 and #947 were "update all dependencies" (group:all era, dropped in #1062,
+  `renovate.json:28`), and #1063 and #1449 were "image-build inputs". Either way, an apt pin rode in a group whose
+  unrelated reds blocked it.
+
+**(1) LLVM-deb group.** Add a `packageRules` entry, placed AFTER `packageRules[0]` and `[3]` so that it wins (and BEFORE
+the clang rule, per M1):
 - match `matchDatasources: ["deb"]` + `matchFileNames: [".devcontainer/mise-system.toml"]` + a `matchCurrentValue`
   regex for the apt.llvm.org snapshot signature (`/~\+\+\d{14}\+[0-9a-f]+-1~exp1~/`), the same discriminator as
   `llvm_major._APT_LLVM_VERSION`. Renovate uses RE2, so no lookaround;
@@ -90,8 +130,8 @@ In both cases, cite the Renovate docs page or source you read.
 - Static checks the lane MAY run: `mise exec -- renovate-config-validator renovate.json` (or the repo's existing
   renovate validation task, if one exists — find it first), actionlint, zizmor, `mise run pin-actions`, and
   `dotfiles-setup token-audit`.
-- Targeted pytest ONLY: `tests/test_apt_liveness.py tests/test_llvm_major.py tests/test_workflow_hooks.py`, plus
-  `tests/test_renovate*.py` if renovate.json shape tests exist.
+- Targeted pytest ONLY: `tests/test_apt_liveness.py tests/test_llvm_major.py tests/test_workflow_hooks.py
+  tests/test_p2996_single_literal.py tests/test_renovate_validate.py tests/test_renovate_ignored_authors.py`.
 
 ## 5. Verification (each armed both ways)
 
