@@ -1,6 +1,7 @@
-# Spec — LLVM major detection, `llvm-bump`, parity gate, and the 22 → 23 bump
+# Spec — LLVM major detection (with IWYU readiness gate), `llvm-bump`, and the parity gate
 
-Status: DRAFT for coordinator ratification (lane llvm23, 2026-10-02). Ship ordering: AFTER `chore/lock-format-upgrade`;
+Status: rev 3. Rev 2 was RATIFIED by the coordinator with Ray's OK (2026-10-02); rev 3 adds Ray's IWYU-hold
+amendment (fork answered (b), made programmatic). Lane llvm23. Ship ordering: AFTER `chore/lock-format-upgrade`;
 rebase onto origin/main before dispatch and re-read every `L` premise below (line numbers will move).
 
 Rulings: `.agent/plans/llvm-grilling-rulings-2026-10-02.md` (main checkout) and § "Ray's ruling" in
@@ -9,15 +10,22 @@ Rulings: `.agent/plans/llvm-grilling-rulings-2026-10-02.md` (main checkout) and 
 
 ## 1. Objective
 
-Replace apt LLVM 22 with 23 in the devcontainer image (no side-by-side) and make every future major bump
-**detected, not typed**. Nothing committed may carry an LLVM major that a parity gate does not tie back to the one
+Make every LLVM major bump **detected, not typed**, and gate it on IWYU readiness. THIS PR ships the detector,
+`llvm-bump` and the parity check with the pins **staying at 22**. Ray (2026-10-02) ruled to HOLD the 22 → 23 swap
+(replace, no side-by-side) until conda-forge ships an `include-what-you-use` built against clang 23. The hold is a
+programmatic gate, not a note: today the detector must report "23 GA+served, held: IWYU" and change nothing. The
+23 swap is a later `mise run llvm-bump`, once the gate opens, FOLLOWED BY `mise run lock-image`. The image installs
+with `--locked`, and `.devcontainer/mise-system.lock` pins iwyu 0.26 / libllvm22 (~:3502-3553), so without a re-lock
+the image keeps clang-22 IWYU even after the gate opens. `llvm-bump` prints that next step after a real write. Nothing committed may carry an LLVM major that a parity gate does not tie back to the one
 source of truth, the `.devcontainer/mise-system.toml` `[bootstrap.packages]` pins.
 
 Failures this prevents:
 - a hand-typed major goes stale or contradicts itself across six files (Dockerfile suite, Dockerfile smoke paths,
   `_.path`, Renovate registryUrl, `apt_pins.py` probe suite, `image.py` anchor key);
 - a bump driven by apt.llvm.org's stale labels (`llvm.sh` `CURRENT_LLVM_STABLE=22` while 23 is GA and served);
-- a bump during the release-candidate window (the `-23` suite went live before 23.1.0 GA).
+- a bump during the release-candidate window (the `-23` suite went live before 23.1.0 GA);
+- a bump that strands the conda IWYU on an older clang than the apt toolchain (`"conda:include-what-you-use" =
+  "latest"`, `mise-system.toml:74`, rationale at :58-60).
 
 ## 2. Files
 
@@ -44,9 +52,11 @@ Modify:
   reaches all of them. Every suite name,
   `apt-cache policy clang-…`, `/usr/lib/llvm-…/bin` path and version assertion uses `${LLVM_MAJOR}`; prose comments
   that describe the CURRENT major become major-neutral (dated historical probe statements keep their numbers).
-- `.devcontainer/mise-system.toml` — 52 active pins + 6 commented pins regenerated at 23; `_.path`; major-neutral
-  prose for current-state comments (lines ~50-60, 87-88, 173-217); the "Regenerate with" line names `mise run llvm-bump`.
-- `renovate.json` — the `apt.llvm.org` registryUrl suite (line ~79).
+- `.devcontainer/mise-system.toml` — pins and `_.path` UNCHANGED (stay 22); major-neutral prose for current-state
+  comments (lines ~50-60, 87-88, 173-217); the "Regenerate with" line names `mise run llvm-bump`; the IWYU rationale
+  (:58-60) states that a major bump is gated on conda-forge IWYU targeting that clang (`llvm_major.iwyu_ready`).
+- `renovate.json` — UNCHANGED in this PR (stays `-22`); listed only because `llvm-parity` reads it and a future
+  `llvm-bump` rewrites its suite.
 - `python/src/dotfiles_setup/apt_pins.py` — the probe script's `llvm-toolchain-%s-22` (line ~145) takes the major
   from the `clang-<N>` key inside the `pins` mapping it already receives. `probe_script(pins, fingerprint)` keeps its
   name AND signature (`suites.toml:2358` requires the token `def probe_script(`; `tests/test_apt_pins.py:106` passes
@@ -82,7 +92,11 @@ class Detection:
     target: int              # TARGET
     served: dict[int, bool]  # GATE results probed, keyed by major
     trunk: int               # K (unnumbered suite's clang-K)
-    reason: str              # one human line, e.g. "M=23 served" / "M=24 not served for resolute; highest served in [P, M-1] = 23"
+    iwyu_ready: dict[int, bool]  # IWYU gate results probed, keyed by major
+    held_on: int | None      # the highest served major > TARGET that the IWYU gate blocks, else None
+    reason: str              # one human line, e.g. "M=23 served" / "M=24 not served for resolute; highest served
+                             # in [P, M-1] = 23" / "23 GA+served, held: IWYU (conda-forge include-what-you-use
+                             # newest linux builds target libllvm22)"
 
 def llvm_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]
     # The LLVM pin set: anchor = the single key matching ^apt:clang-(\d+)$ ; the set is EVERY
@@ -109,13 +123,31 @@ def suite_served(codename: str, major: int, fetch: Fetcher) -> bool
     # True iff status == 200 AND body contains the line "Codename: llvm-toolchain-{C}-{N}".
     # 404 → False. Any other status, redirect, or network error → RAISE (never-asked ≠ no).
 
+def iwyu_ready(major: int, fetch: Fetcher) -> bool
+    # GET https://api.anaconda.org/package/conda-forge/include-what-you-use/files  (JSON list of files).
+    # Consider only files with "main" in labels and attrs.subdir in {"linux-64", "linux-aarch64"} (the image is
+    # dual-arch; win-64 builds carry no LLVM depends at all). For EACH of the two subdirs take the newest file by
+    # (version, attrs.build_number). Versions compare NUMERICALLY as a tuple of ints split on "."
+    # (0.9 < 0.26; a string sort would invert that). A version with any non-integer segment → RAISE
+    # (don't add a dependency for a richer comparator; `packaging` is only transitive in python/uv.lock). This
+    # approximates what mise's `"latest"` resolves; the shipped build is whatever the lock pins, see Objective.
+    # Then read the libllvm<N> entry of its
+    # attrs.depends (regex ^libllvm(\d+)\b). True iff BOTH subdirs' newest build depends on libllvm{major}.
+    # RAISE (never False) on: non-200, non-JSON, a subdir with no files, or a newest build with no libllvm<N>
+    # depend (the metadata shape changed — never-asked ≠ no).
+
 def trunk_major(codename: str, fetch: Fetcher) -> int
     # clang-K from dists/llvm-toolchain-{C}/main/binary-amd64/Packages.gz (reuse apt_repo.parse_packages).
 
 def detect(...) -> Detection
-    # TARGET = M if GATE(M)
-    #        else max N in [P, M-1] with GATE(N)        (Ray 2026-10-02: highest served below M, never below P)
-    #        else RAISE (FAIL LOUD).
+    # SERVED = {N in [P, M] : GATE(N)}; if SERVED is empty → RAISE (FAIL LOUD).
+    # served_target = max(SERVED)              (Ray 2026-10-02: M if served, else highest served below M, never below P)
+    # TARGET = max N in SERVED with N == P or iwyu_ready(N)
+    #                                          (Ray 2026-10-02 rev 3, IWYU hold; P itself is not re-gated — it is what
+    #                                           is installed today)
+    #   If NO N in SERVED satisfies that (P is not served AND every served N > P is IWYU-blocked) → RAISE
+    #   (FAIL LOUD: the pinned suite is gone and nothing ready replaces it).
+    # held_on = served_target if served_target > TARGET else None.
     # If M < P → RAISE (would be a downgrade).
     # Assert-only cross-checks (mismatch RAISES, never re-selects):
     #   K - 1 in {M, M+1};  GATE(K) is False.
@@ -147,11 +179,14 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan
     # No other text is edited.
 
 # CLI (main.py)
-llvm-detect [--json]                 # rc 0 always prints the Detection; rc 0 if TARGET == P, rc 3 if a bump is due,
-                                     # rc 1 on any raised failure (with the reason on stderr)
+llvm-detect [--json]                 # always prints the Detection. rc 0: TARGET == P, nothing held;
+                                     # rc 3: a bump is due (TARGET > P); rc 4: TARGET == P but held_on is set
+                                     # (prints the "held: IWYU" reason); rc 1 on any raised failure (reason on stderr)
 llvm-parity                          # rc 0 clean, rc 1 with violations listed
-llvm-bump [--dry-run] [--major N]    # --major only valid WITH --dry-run (control-arm reproduction); writes files
-                                     # only without --dry-run; runs llvm-parity after writing and returns its rc
+llvm-bump [--dry-run] [--major N]    # --major only valid WITH --dry-run (plan evidence / control arm: it skips
+                                     # detection and both gates and only PLANS); writes files only without --dry-run;
+                                     # when TARGET == P (incl. held) it prints the Detection reason, writes NOTHING,
+                                     # rc 0; after writing it runs llvm-parity and returns its rc
 ```
 
 ## 4. Constraints and invariants
@@ -167,6 +202,8 @@ llvm-bump [--dry-run] [--major N]    # --major only valid WITH --dry-run (contro
 - No inline suppressions (`noqa`, `type: ignore`, …). `ruff` + `ty` clean.
 - Renovate keeps within-major patching through `apt-mise-system`; do not add a github-releases customManager.
 - The Dockerfile keeps reading the codename at build time from `/etc/os-release`; only the major becomes an ARG.
+- The pins, `_.path`, Dockerfile `ARG LLVM_MAJOR`, `apt_pins` and Renovate stay at **22** in this PR. Do NOT run
+  `mise run llvm-bump` without `--dry-run`, except in verification step 3, where it must write nothing.
 - Do not build images locally (`do-not.md` #2). Do not run container gates; the coordinator grants a host SLOT and runs
   `mise run verify-apt-pins` itself.
 - The existing build-time smoke semantics are preserved exactly (same binaries tested, same sanitizer link, same
@@ -183,16 +220,39 @@ Run, file-captured rc each (`mise run gate -- run <name>` where available):
    - parity: clean tree → []; each site mutated alone (ARG, `_.path`, renovate suite, a stray literal) → exactly that
      violation.
    - pinned_major: mixed majors → raises; mixed version strings → raises.
-2. **Reproduction control arm (live network):** on the PRE-bump tree, `mise run llvm-bump -- --dry-run --major 22`
+   - iwyu_ready (fixtures derived from the saved raw response
+     `docs/research/kb/raw/llvm-23-lane-2026-10-02/conda-forge-include-what-you-use-files-2026-10-03.json`):
+     newest linux-64 AND linux-aarch64 builds on libllvm{M} → True; only ONE subdir's newest build on libllvm{M}
+     (the other on an older libllvm) → False; a subdir with NO files at all → raises; the newest build_number wins
+     over an older build of the same version; version `0.26` beats `0.9` (numeric, not string); a non-integer
+     version segment → raises; win-64-only or label-less files are ignored; non-200 or 3xx → raises; a newest build
+     without any libllvm depend → raises.
+   - detect: P not served and every served N > P IWYU-blocked → raises.
+   - CLI (offline, injected fetchers): `llvm-detect` returns 0 / 3 / 4 / 1 for up-to-date / bump due / held / raised;
+     `llvm-bump` on a held detection returns 0 and writes no file (assert the tree is unchanged).
+   - detect with the IWYU gate: (M served, IWYU(M) false, P served) → TARGET P, held_on M, reason contains
+     "held: IWYU"; (M served, IWYU(M) false, M-1 served, IWYU(M-1) true, P = M-2) → TARGET M-1, held_on M;
+     (M served, IWYU(M) true) → TARGET M, held_on None.
+2. **Reproduction control arm (live network):** on this PR's tree, `mise run llvm-bump -- --dry-run --major 22`
    must produce a plan whose pin set equals the current 58 pins (52 active + 6 commented) — print the diff; it must be
    empty except for version strings if the `-22` build rotated. This proves the planner derives the committed set.
-3. `mise run llvm-detect -- --json` on the pre-bump tree → TARGET 23, rc 3. Then `mise run llvm-bump` → writes;
-   `mise run llvm-detect` → rc 0; `mise run llvm-parity` → rc 0.
-4. Parity fail arm: temporarily set `_.path` back to `llvm-22` → `mise run llvm-parity` rc 1 naming `_.path`; restore.
+3. **The ruled evidence (live network):** `mise run llvm-detect -- --json` → pinned 22, newest_ga 23, served
+   {22: true, 23: true}, iwyu_ready {23: false}, TARGET 22, held_on 23, reason contains "23 GA+served, held: IWYU",
+   **rc 4** (read the rc from the file you captured it into). **GUARD: if that rc is NOT 4, STOP and report it as a
+   finding; do NOT run `llvm-bump` without `--dry-run`. The gate may have opened since this spec was written, and
+   running it would write the held bump.** Only on rc 4: `mise run llvm-bump` (no --dry-run) → prints the held reason, rc 0, and `git status --porcelain` is
+   byte-identical before and after (proves nothing was written). Control arm for the gate itself: direct calls
+   `iwyu_ready(22, live fetch)` → True (it can say yes) and `iwyu_ready(23, live fetch)` → False. Print all three.
+3b. **Plan evidence for the future swap:** `mise run llvm-bump -- --dry-run --major 23` → a 58-name plan across both
+   arches with one version string and no RAISE. Writes nothing.
+4. Parity fail arm: temporarily set `_.path` to `/usr/lib/llvm-23/bin` (pins still 22) → `mise run llvm-parity` rc 1
+   naming `_.path`; restore, then re-run → rc 0.
 5. `mise run lint` rc 0; `uv run --project python pytest tests/ -x -q` rc 0; `mise run verify` 0 failed.
 6. `git grep -nE '[a-z+]-22([^0-9.]|$)|[a-z]22([^0-9.]|$)|"22"|version 22|\^22' -- . ':!docs' ':!tests' ':!*.md' ':!*.lock'`
-   → empty, except dated historical-probe comments and non-LLVM hits the lane lists one by one in its report with a
-   reason each (prints the command). Control arm: the same command on the PRE-change tree must hit `main.py:235`,
+   → hits ONLY in the parity-checked sites (54 of the 58 `mise-system.toml` pin lines — the four major-less names
+   don't match — plus `_.path` and `renovate.json`'s registryUrl; the Dockerfile `ARG LLVM_MAJOR=22` line doesn't
+   match the pattern either, and parity covers it), plus dated historical-probe comments and non-LLVM hits
+   that the lane lists one by one in its report, with a reason each (prints the command). Control arm: the same command on the PRE-change tree must hit `main.py:235`,
    `image.py:765`, `flang-22`, `libomp-22-dev` and `libllvm22` — if it misses any, the pattern is broken.
    (Armed by the architect on be45841a: all five hit. The known non-LLVM noise is hex digests —
    `.github/workflows/image-analysis.yml:171`, `python/src/dotfiles_setup/skillopt_provenance.py:32`,
@@ -201,8 +261,9 @@ Run, file-captured rc each (`mise run gate -- run <name>` where available):
 
 ## 6. Commit
 
-`lane` — one commit for the tooling (module, CLI, tasks, hk step, tests, parameterisation of Dockerfile/apt_pins/image
-at the CURRENT major 22, parity green), then one commit for the bump (`mise run llvm-bump` output only). Conventional
+`lane` — ONE commit: the tooling (module, CLI, tasks, hk step, tests, and the parameterisation of
+Dockerfile/apt_pins/image at the CURRENT major 22, parity green). NO bump commit: the IWYU gate holds the swap (Ray,
+2026-10-02). Conventional
 commits; end each body with the attribution lines the coordinator supplies. Never push.
 
 ## 7. PREMISES
@@ -231,5 +292,6 @@ commits; end each body with the attribution lines the coordinator supplies. Neve
 | 19 | L | Rev 2 (row was REFUTED by premise-verifier): two more live literals exist — `image.py:765` (`find … /usr/lib/llvm-22`, tier-3 libclc smoke) and `main.py:235` (`--llvm-version default="22"`). Both are now in Files and in the parity check. No hits in `.github/**`, `docker-bake.hcl`, `python/verification/suites.toml`, `scripts/`, `home/`, `.claude/` | `docs/research/kb/reports/agents/premise-verifier-llvm-major-detect-bump-2026-10-02.md` |
 | 21 | L | Dockerfile and bake carry the same `BASE_IMAGE` and are kept "in lockstep" by convention | `.devcontainer/Dockerfile:14`, `docker-bake.hcl:78-81` |
 | 22 | E | conda-forge `include-what-you-use` latest = 0.26 (clang 22); upstream has a `clang_23` branch but no 0.27 release (newest release 0.26, 2026-03-22); control `repos/include-what-you-use/zzq-nonexist-k3` → 404 | probe this session (`api.anaconda.org`, `gh api`) |
-| 23 | A | **OPEN FORK for the coordinator — iwyu stays on clang 22 after the bump** (`"conda:include-what-you-use" = "latest"`, `mise-system.toml:74`; rationale at :58-60 says "matching clang-22"). Lane recommendation: accept the temporary mismatch (iwyu ships its own isolated clang 22 inside its conda env; `latest` picks up 0.27 when conda-forge publishes it) and rewrite :58-60 to say so; do NOT build iwyu from source (ruling 2: prebuilt only). Spec is NOT dispatched until this is ruled |
+| 24 | E | conda-forge `include-what-you-use` file metadata: 45 files. 0.26 `linux-64` and `linux-aarch64` depend on `libclang-cpp22.1 >=22.1.0,<22.2.0a0` + `libllvm22 >=22.1.0,<22.2.0a0`; 0.25 osx builds depend on `libllvm21`; win-64 builds carry NO llvm depends; latest label `main`; versions 0.17-0.26. The endpoint answers a DIRECT 200 with no redirect (curl without `-L`); a bogus package → 404 without `-L` too. Control `conda-forge/zzq-nonexist-iwyu-k3/files` → 404. So iwyu_ready(22)=True and iwyu_ready(23)=False today. The local half is corroborated by `.devcontainer/mise-system.lock:3502-3553` (iwyu 0.26 build `_1`, linux-x64 + linux-arm64, conda_deps libllvm22) | raw response saved: `docs/research/kb/raw/llvm-23-lane-2026-10-02/conda-forge-include-what-you-use-files-2026-10-03.json` (59,980 bytes) |
+| 23 | A | **RESOLVED (Ray 2026-10-02): (b) hold, made programmatic as the IWYU gate above.** Original fork text: iwyu stays on clang 22 after the bump (`"conda:include-what-you-use" = "latest"`, `mise-system.toml:74`; rationale at :58-60 says "matching clang-22"). Lane recommendation: accept the temporary mismatch (iwyu ships its own isolated clang 22 inside its conda env; `latest` picks up 0.27 when conda-forge publishes it) and rewrite :58-60 to say so; do NOT build iwyu from source (ruling 2: prebuilt only). (Superseded: Ray chose (b), the hold.) |
 | 20 | A | `gh api --paginate repos/llvm/llvm-project/releases` is within rate limits (core 4927 remaining at 01:50 UTC) |
