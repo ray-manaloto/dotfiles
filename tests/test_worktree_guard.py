@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -55,7 +56,8 @@ def test_denies_paths_outside_main_worktree_directory(
     main, sibling, _ = worktrees
     allowed = main / ".claude" / "worktrees"
     targets = {
-        "sibling": main / ".." / "repo.worktrees" / "handoff-2026-10-03c",
+        # The fixture's EXISTING registered sibling: denied for location alone.
+        "sibling": sibling,
         "nested": sibling / ".claude" / "worktrees" / "x",
         "escape": allowed / ".." / ".." / "escape",
         "directory": allowed,
@@ -178,7 +180,7 @@ def test_path_takes_precedence_if_both_keys_are_supplied(
 def test_dispatch_routes_enterworktree(
     worktrees: tuple[Path, Path, Path],
 ) -> None:
-    """An unwired dispatcher cannot pass by taking a non-repo fail-open path."""
+    """An unwired dispatcher returns "" for EnterWorktree and fails the deny arm."""
     main, sibling, canonical = worktrees
     raw = json.dumps(
         {"tool_name": "EnterWorktree", "tool_input": {"path": str(sibling)}}
@@ -193,8 +195,19 @@ def test_dispatch_routes_enterworktree(
         assert hook_dispatch.dispatch(main, raw) == ""
 
 
+def _assert_unverified(reason: str | None, cause: str) -> None:
+    """R2-2: a verification failure is denied with its own message and cause."""
+    assert reason is not None
+    assert "#1606" in reason
+    assert "could not verify it (fails closed)" in reason
+    assert cause in reason
+    assert "must be an existing worktree under" not in reason
+    assert "<main>" not in reason
+
+
 def test_nonrepo_denies_unverifiable_path(tmp_path: Path) -> None:
-    assert worktree_guard.decide({"path": str(tmp_path / "x")}, tmp_path) is not None
+    reason = worktree_guard.decide({"path": str(tmp_path / "x")}, tmp_path)
+    _assert_unverified(reason, "not a git repository")
 
 
 def test_missing_git_denies_unverifiable_path(
@@ -202,7 +215,42 @@ def test_missing_git_denies_unverifiable_path(
 ) -> None:
     main, sibling, _ = worktrees
     monkeypatch.setenv("PATH", str(main / "no-binaries"))
-    assert worktree_guard.decide({"path": str(sibling)}, main) is not None
+    reason = worktree_guard.decide({"path": str(sibling)}, main)
+    _assert_unverified(reason, "No such file or directory")
+
+
+def test_failed_worktree_list_denies_with_git_stderr(
+    worktrees: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The registration query failing is a verification failure, not a location.
+
+    A real PATH-front ``git`` forwards every call to the real binary except
+    ``worktree list``, which fails the way git does — no in-process mock.
+    """
+    main, _, canonical = worktrees
+    # `git` on PATH may be a mise shim that re-resolves `git` through PATH and
+    # would find this shim again; exec git's own binary from its exec-path.
+    exec_path = subprocess.run(
+        ["git", "--exec-path"], capture_output=True, text=True, check=True, timeout=10
+    ).stdout.strip()
+    real_git = str((Path(exec_path) / "git").resolve())
+    shim_dir = tmp_path / "shim"
+    shim_dir.mkdir()
+    shim = shim_dir / "git"
+    shim.write_text(
+        f"#!{sys.executable}\n"
+        "import os, sys\n"
+        "if sys.argv[1:3] == ['worktree', 'list']:\n"
+        "    sys.stderr.write('fatal: simulated worktree list failure\\n')\n"
+        "    sys.exit(128)\n"
+        f"os.execv({real_git!r}, [{real_git!r}, *sys.argv[1:]])\n"
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
+    reason = worktree_guard.decide({"path": str(canonical)}, main)
+    _assert_unverified(reason, "fatal: simulated worktree list failure")
 
 
 @pytest.mark.parametrize("path", [None, "", 1])

@@ -99,7 +99,8 @@ SUBAGENT_CONTRACT_MODE = "subagent-contract"
 #: The tools the deny guard decides on, then the ones only graphify nudges.
 _GUARDED_TOOLS = ("Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit")
 _GRAPHIFY_TOOLS = ("Grep", "Read", "Glob")
-# EnterWorktree routes separately: it needs the wrapper's project-root anchor.
+# EnterWorktree routes separately: its repo anchor is the payload `cwd`, falling
+# back to the wrapper's project root when the payload carries none.
 _WORKTREE_TOOLS = ("EnterWorktree",)
 _SUBAGENT_CONTRACT_COMMAND = (
     f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
@@ -470,35 +471,107 @@ def check_ask_quality_endtoend(project_root: Path, wrapper: str) -> list[str]:
     return failures
 
 
+def _worktree_fixture(tmp: Path, env: dict[str, str]) -> tuple[Path, Path, Path]:
+    """A real repo with one managed and one sibling linked worktree (#1606).
+
+    The sibling is the a8d7baf5 shape (``<tmp>/repo.worktrees/lane``): it
+    EXISTS and is REGISTERED, so a guard can only deny it for its location.
+    Raises :class:`subprocess.CalledProcessError` when git cannot build it.
+    """
+    main = tmp / "repo"
+    managed = main / ".claude" / "worktrees" / "lane"
+    sibling = tmp / "repo.worktrees" / "lane"
+    main.mkdir()
+    ident = ["-c", "user.name=selfcheck", "-c", "user.email=selfcheck@invalid"]
+    for args in (
+        ["init", "-b", "main"],
+        [*ident, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "x"],
+        ["worktree", "add", "-b", "managed", str(managed)],
+        ["worktree", "add", "-b", "sibling", str(sibling)],
+    ):
+        subprocess.run(
+            ["git", *args],
+            cwd=main,
+            env=env,
+            capture_output=True,
+            check=True,
+            timeout=_PROBE_TIMEOUT_S,
+        )
+    return main, managed, sibling
+
+
+def _enterworktree(path: Path, cwd: Path) -> str:
+    """An EnterWorktree payload whose session cwd anchors the guard's repo."""
+    return json.dumps(
+        {
+            "tool_name": "EnterWorktree",
+            "tool_input": {"path": str(path)},
+            "cwd": str(cwd),
+        }
+    )
+
+
 def check_worktree_guard_endtoend(project_root: Path, wrapper: str) -> list[str]:
-    """Drive EnterWorktree through the REAL wrapper (external deny + name allow).
+    """Drive EnterWorktree through the REAL wrapper: deny, path allow, name allow.
 
     Matcher membership alone cannot detect a dispatcher that ignores the tool.
-    The project anchor is explicit even when selfcheck runs in a linked worktree.
+    The deny arm targets an existing REGISTERED sibling worktree and the path
+    arm an existing registered managed one, on a real temp repo, so a guard
+    that denies every ``path=`` fails the allow arm and one that allows every
+    ``path=`` fails the deny arm. The payload ``cwd`` anchors the guard to that
+    repo; ``CLAUDE_PROJECT_DIR`` stays explicit for a linked-worktree selfcheck.
     """
     failures: list[str] = []
-    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project_root)}
+    # Inherited Git-local state (a hook's GIT_DIR) would aim git at another repo.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["CLAUDE_PROJECT_DIR"] = str(project_root)
     with tempfile.TemporaryDirectory(prefix="dotfiles-worktree-guard-") as tmp:
+        try:
+            main, managed, sibling = _worktree_fixture(Path(tmp).resolve(), env)
+        except (OSError, subprocess.SubprocessError) as exc:
+            return [f"EnterWorktree selfcheck could not build its git fixture: {exc}"]
         denied = _run(
             [_SYSTEM_BASH, wrapper],
-            stdin=json.dumps(
-                {"tool_name": "EnterWorktree", "tool_input": {"path": tmp}}
-            ),
+            stdin=_enterworktree(sibling, main),
+            cwd=project_root,
+            env=env,
+        )
+        path_allowed = _run(
+            [_SYSTEM_BASH, wrapper],
+            stdin=_enterworktree(managed, main),
             cwd=project_root,
             env=env,
         )
     if denied.returncode != 0:
         failures.append(
-            f"pretooluse wrapper exited {denied.returncode} on an external "
+            f"pretooluse wrapper exited {denied.returncode} on a sibling "
             f"EnterWorktree path (must exit 0): {denied.stderr.strip()}"
         )
     elif '"permissionDecision": "deny"' not in denied.stdout:
         failures.append(
-            "pretooluse wrapper did not DENY an external EnterWorktree path — "
-            f"the #1606 guard is not reachable. stdout={denied.stdout.strip()!r}"
+            "pretooluse wrapper did not DENY a registered sibling worktree outside "
+            ".claude/worktrees — the #1606 guard is not reachable or allows "
+            f"every path. stdout={denied.stdout.strip()!r}"
+        )
+    elif "must be an existing worktree under" not in denied.stdout:
+        failures.append(
+            "pretooluse EnterWorktree deny was not the LOCATION deny (did "
+            f"verification fail?): {denied.stdout.strip()!r}"
         )
     elif "#1606" not in denied.stdout or "EnterWorktree name=" not in denied.stdout:
         failures.append("pretooluse EnterWorktree deny lost its #1606 name= redirect")
+
+    if path_allowed.returncode != 0:
+        failures.append(
+            f"pretooluse wrapper exited {path_allowed.returncode} on a managed "
+            f"EnterWorktree path: {path_allowed.stderr.strip()}"
+        )
+    elif path_allowed.stdout.strip():
+        failures.append(
+            "pretooluse wrapper was not silent on a registered worktree under "
+            ".claude/worktrees — the #1606 guard denies every path. "
+            f"stdout={path_allowed.stdout.strip()!r}"
+        )
 
     allowed = _run(
         [_SYSTEM_BASH, wrapper],

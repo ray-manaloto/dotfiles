@@ -11,15 +11,18 @@ s plus 0.61-0.69 s of process starts per call, on every call, in every session
 ``scripts/pretooluse-guard.sh`` now runs this module directly with the venv's
 own interpreter (``python -m dotfiles_setup.hook_dispatch <root>``) — no ``uv``
 resolution per call, and only light imports (``dotfiles_setup.main`` alone costs
-~300 ms). One stdin read feeds both halves:
+~300 ms). One stdin read feeds three consumers:
 
 1. the policy guard (:func:`hook_guard.decide_payload`) for the tools it
    governs — a deny is final, and the nudge is skipped;
-2. graphify's advisory nudge (:func:`graphify_hook.nudge`) for the tools
+2. the #1606 EnterWorktree location guard (:func:`worktree_guard.decide`),
+   anchored to the payload ``cwd`` (the project root when absent) — it fails
+   CLOSED itself, denying any path it cannot verify;
+3. graphify's advisory nudge (:func:`graphify_hook.nudge`) for the tools
    graphify reads: Bash and Grep are ``search``, Read and Glob are ``read``.
 
-Fails open like its predecessors: any exception leaves the call allowed, and
-the bash wrapper records the fail-open (#343).
+Fails open like its predecessors only on an UNCAUGHT exception: that leaves the
+call allowed, and the bash wrapper records the fail-open (#343).
 """
 
 from __future__ import annotations

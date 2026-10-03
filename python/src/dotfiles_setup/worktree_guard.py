@@ -17,8 +17,8 @@ def handles(tool_name: str) -> bool:
     return tool_name == "EnterWorktree"
 
 
-def _deny_reason(target: Path, main: Path | None = None) -> str:
-    checkout = str(main) if main is not None else "<main>"
+def _deny_reason(target: Path, main: Path) -> str:
+    checkout = str(main)
     allowed = f"{checkout}/.claude/worktrees"
     return (
         f"#1606: EnterWorktree path={target} must be an existing worktree under "
@@ -31,6 +31,46 @@ def _deny_reason(target: Path, main: Path | None = None) -> str:
     )
 
 
+def _unverified_reason(target: Path, detail: str) -> str:
+    """Fail closed when git cannot answer, naming why instead of a location."""
+    cause = " ".join(detail.split())[:300] or "git printed no diagnostic"
+    return (
+        f"#1606: EnterWorktree path={target} was denied because the guard could "
+        f"not verify it (fails closed): {cause}. Check the repository with "
+        "`git worktree list`; for a NEW worktree, use `EnterWorktree name=<name>` "
+        "from the main checkout."
+    )
+
+
+class _VerificationError(Exception):
+    """Git could not answer; the guard fails closed and reports this cause."""
+
+
+def _git(cmd: list[str], anchor: Path) -> str:
+    """Run one git query from ``anchor``; any failure is a verification error."""
+    try:
+        proc = subprocess.run(
+            cmd, cwd=anchor, capture_output=True, text=True, check=False, timeout=5
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise _VerificationError(str(exc)) from exc
+    if proc.returncode != 0:
+        raise _VerificationError(proc.stderr or f"{cmd} exited {proc.returncode}")
+    return proc.stdout
+
+
+def _main_checkout(anchor: Path) -> Path:
+    """The main checkout owning ``anchor``'s repository (common dir's parent)."""
+    common = _git(["git", "rev-parse", "--git-common-dir"], anchor).strip()
+    if not common:
+        msg = "git rev-parse --git-common-dir printed nothing"
+        raise _VerificationError(msg)
+    common_dir = Path(common)
+    if not common_dir.is_absolute():
+        common_dir = anchor / common_dir
+    return common_dir.resolve().parent
+
+
 def decide(
     tool_input: dict[str, object], project_dir: Path, cwd: Path | None = None
 ) -> str | None:
@@ -41,47 +81,19 @@ def decide(
     target = Path(path)
     try:
         anchor = (cwd if cwd is not None else project_dir).resolve()
-        proc = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            cwd=anchor,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-        if proc.returncode != 0 or not proc.stdout.strip():
-            return _deny_reason(target)
-        common_dir = Path(proc.stdout.strip())
-        if not common_dir.is_absolute():
-            common_dir = anchor / common_dir
-        main = common_dir.resolve().parent
+        main = _main_checkout(anchor)
         if not target.is_absolute():
             target = anchor / target
         target = target.resolve()
-    except OSError, ValueError, subprocess.SubprocessError:
-        return _deny_reason(target)
-
-    allowed = main / ".claude" / "worktrees"
-    if target != allowed and target.is_relative_to(allowed):
-        try:
-            proc = subprocess.run(
-                ["git", "worktree", "list", "--porcelain", "-z"],
-                cwd=anchor,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-            )
-            if (
-                target.is_dir()
-                and proc.returncode == 0
-                and any(
-                    Path(record.removeprefix("worktree ")).resolve() == target
-                    for record in proc.stdout.split("\0")
-                    if record.startswith("worktree ")
-                )
+        allowed = main / ".claude" / "worktrees"
+        if target != allowed and target.is_relative_to(allowed) and target.is_dir():
+            listing = _git(["git", "worktree", "list", "--porcelain", "-z"], anchor)
+            if any(
+                Path(record.removeprefix("worktree ")).resolve() == target
+                for record in listing.split("\0")
+                if record.startswith("worktree ")
             ):
                 return None
-        except OSError, ValueError, subprocess.SubprocessError:
-            pass
+    except (OSError, ValueError, _VerificationError) as exc:
+        return _unverified_reason(target, str(exc))
     return _deny_reason(target, main)

@@ -49,8 +49,9 @@ Run `.agents/skills/session-handoff/SKILL.md` in full, under its
   Re-enter that existing registered worktree with
   `EnterWorktree path=<main>/.claude/worktrees/<name>`.
   Ship the docs-only handoff branch early as a PR with `mise run ship` from
-  the handoff worktree itself: `python/src/dotfiles_setup/pr.py:598-626` permits
-  linked-worktree ship when the change does not need a full sync.
+  the handoff worktree itself: the ship preflight (`pr._ship_preflight`) refuses
+  a linked worktree only when `needs_full_sync` is true, so a docs-only change
+  ships from it.
   Before any main-checkout ship, use `ExitWorktree` with `keep` to leave the
   isolated session; never redirect Bash into main while in EnterWorktree.
   Launch ship as a harness background run
