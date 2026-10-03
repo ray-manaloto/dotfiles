@@ -72,17 +72,23 @@ distinguish `state-locked`, `state-unreadable`, `state-write-failed`,
 `worktree-unavailable`, `handoff-unreadable`, and `census-unavailable` (process
 snapshot/tree failure; unavailable fd-1 logs use the redirect fallback).
 rc 0 means started and recorded (dry-run: nothing recorded or executed).
-rc 3 means start failed (missing executable, 60 s timeout or nonzero rc): pending
-state is removed, the fired level is kept, and the hook retries at the next step.
-rc 4 means successor STARTED but not recorded — do not relaunch. Its pending
-record is marked `started: true`; it blocks firing regardless of age and is
-accepted by retire. An independent started receipt preserves that confirmation
-if the session-state lock or promotion write fails.
+rc 3 means start failed (missing executable, 60 s timeout, nonzero rc, or the
+pending record could not be finalised — that last case can leave it in place for
+up to 15 minutes): the fired level is kept and the hook retries at the next step.
+**On rc 3 do NOT go idle**: no successor exists. Record the failure in the
+handoff's `## Queued questions` and keep coordinating; the next +5% step re-runs
+this skill.
+rc 4 means successor STARTED but not recorded — do not relaunch. When either the
+independent started receipt or the session-state write succeeded, the pending
+record is marked `started: true`, blocks firing regardless of age and is accepted
+by retire. If both writes failed, nothing records the start: put the successor's
+name in the handoff and tell the successor to retire you by that record-less path
+(`retire` refuses — escalate it as a queued question).
 Harness logs marked `harness-output:` have no rc file; wait on pid exit.
 Redirect fallback skips the harness's final `eval` prelude; `/dev/null` is no
 log. With no log, wait on pid exit.
 
-## 3. Go idle
+## 3. Go idle (rc 0 or rc 4 only)
 
 Tell the successor nothing more. Start no new work and message no lane. The
 successor reviews your transcript against the handoff, notifies the lanes,
