@@ -505,6 +505,41 @@ lock tests pass a short `timeout_s` (#16); mise.toml `coordinator-handoff` descr
 `release` (#18); reword SKILL text so no sentence says "Claude ancestor" (the mirror generator
 rewrites it to "Codex", #17 — the generator bug itself is a sibling ticket, not this change).
 
+## 11. Review round 3 — corrections (respec of bdedf8d1; Ray authorised a third codex round, 2026-10-02)
+
+Source: `docs/research/kb/reports/agents/cold-review-coordinator-auto-handoff-bdedf8d1.md`
+(F1-F10). Ray's ruling: a third codex round; retry policy stays "wait for the next step" (no
+extra attempt cap beyond the (100 − limit) / step bound it implies). Each item needs a test arm
+that FAILS on bdedf8d1 and passes after (name it).
+
+**T1 (HIGH F1, LOW F5) Failed start waits for the next step.** On `launch` rc 3 the fired level
+is KEPT (no rollback of `last_fired`); only `launch_pending` is cleared. So a failing start
+retries at most once per step. Replace the test asserting immediate re-fire
+(`tests/test_coordinator_handoff.py:1274`). SKILL.md rc-3 text says "retries at the next step".
+
+**T2 (MED F3, LOW F10) Started-but-unrecorded is its own outcome.** If `claude --bg` returned 0
+but promoting `launch_pending` → `launch` fails, return rc 4 "successor STARTED but not recorded
+— do not relaunch", keep `launch_pending` marked `started: true` with the successor name, and
+make `decide` treat a `started` pending record as `already-launched` regardless of age, and
+`retire` accept it as the launch record. Fix the `launch` docstring and list rc 0/2/3/4.
+
+**T3 (MED F2) Fallback redirect skips the harness wrapper.** When the outermost heavy process is
+a harness shell wrapper (argv contains the `eval '` prelude), the redirect fallback parses only
+the text after the LAST `eval '` and never returns `/dev/null`; a `/dev/null` result is treated
+as no log (brief: "wait on pid exit"). Test fixtures use the REAL wrapper prelude shape (copy it
+from the cold review's measured sample, with a placeholder snapshot path).
+
+**T4 (MED F4) Failed probe is reported as failed.** The probe is marked used only after
+`command.run` resolves; on rejection the hook releases it (python `release --probe`) and shows
+`handoff ERROR: probe delivery failed`; status `handoff probe done` only after success.
+
+**T5 (LOW F6-F9)** Distinct refusal reasons (`state-locked`, `state-unreadable`,
+`worktree-unavailable`, `census-unavailable` only for ps/lsof failure) (F6); the
+`not-coordinator` cache at/above the limit expires after 10 minutes of module time
+(`$.clock.now`) so a transient miss recovers (F7); a pending launch with an unreadable age is
+treated as stale with a warning, never as blocking forever (F8); a failed session-start
+`pending` read retries at most 3 times per module lifetime, then stops with one ERROR (F9).
+
 ## GitHub repos touched
 
 _None._ (Offline vendor docs in the knowledge-base corpus and the bundled CC 2.1.288 type file only.)
