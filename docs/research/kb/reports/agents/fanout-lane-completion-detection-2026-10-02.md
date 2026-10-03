@@ -13,6 +13,8 @@
 
 ## Answer
 
+> **Updated 2026-10-02 (see Addendum):** both mandatory gaps are closed (vibe-kanban control = 6; claude-squad 200, no redirect), and a watcher tick read KB2 as state "blocked" with no waitingFor on the --json surface (status not recorded). Read Answer #1, Conflicts #1 and Recommendation step 0 with that update; row 4b of the protocol is the observed case.
+
 **The sweep is INCOMPLETE.** The verification pass (see Verification) downgraded the headline: the
 documented `state == done` was wrongly demoted on a misattributed issue, and the recommended protocol is
 a design synthesis, untested. Two mandatory items did not run: (1) the dependency re-run for

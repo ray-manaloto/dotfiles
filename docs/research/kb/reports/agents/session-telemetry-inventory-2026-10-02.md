@@ -183,6 +183,8 @@ Sessions also carry `session_kind` (e.g. `"bg"`), `entrypoint`, `source_version`
 
 ## GitHub repos touched
 
+_Added by the persisting session for `research-repo-enumeration.md`; not part of the agent's text. Everything above this section matches the agent's final message byte-for-byte (verified 2026-10-03 against its `subagents/agent-a8cecb769fb001a71.jsonl` transcript)._
+
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles): agentsview wrappers, session tooling, research-sweep
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base): offline docs mirrors, webclaw
 - [mrkhachaturov/agent-harness-docs](https://github.com/mrkhachaturov/agent-harness-docs): harness docs clone

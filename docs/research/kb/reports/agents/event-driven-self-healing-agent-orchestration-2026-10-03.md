@@ -44,8 +44,10 @@ With that caveat, the evidence points one way:
    the user backgrounded and then killed is marked stopped, not restarted. `claude respawn
    <id>` "resumes its saved conversation" (`agent-view.md:695`). Neither line says what happens
    to context size; a resumed coordinator will normally auto-compact on its next turn
-   (`context-window.md:1618-1632`; this repo deliberately leaves `DISABLE_AUTO_COMPACT` unset,
-   though in this incident auto-compact was off). The real native gap is narrower than "full
+   (`context-window.md:1618-1632`). On THIS machine auto-compact is disabled at user scope
+   (`~/.claude/settings.json` `"autoCompactEnabled": false`), so a full coordinator does NOT compact
+   and the project's `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=33` is inert; the native "auto-compaction
+   covers a full session" path is unavailable here. The real native gap is narrower than "full
    context": a coordinator that is stuck, blocked or too full to take a turn has not "exited
    unexpectedly", so the supervisor does not restart it, and compaction can stop with a
    "thrashing" error when one large output refills the context. This repo hands off at a 30%
@@ -132,7 +134,7 @@ ranked list.
 | Codex lacks a first-class Monitor tool | **ISSUE (feature request)** | https://github.com/openai/codex/issues/44855 | "add a first-class `monitor` capability to Codex, similar to Claude Code's Monitor tool" |
 | launchd `WatchPaths` is race-prone; `QueueDirectories` keeps a job alive while a dir is non-empty | **SHIPS (OS man page, measured locally)** | `man launchd.plist` (WatchPaths, QueueDirectories) | "Use of this key is highly discouraged, as filesystem event monitoring is highly race-prone" |
 | `mise bootstrap` launchd agents know `keep_alive`, `queue_directories`, `run_at_load`, `start_calendar_interval` (no `watch_paths`) | **MEASURED (strings of `~/.local/bin/mise`; control: known keys `start_interval`/`working_directory` hit 2/5×)** | `~/.local/bin/mise` | `keep_alive` ×6, `queue_directories` ×4, `watch_paths` 0 |
-| This repo already runs launchd agents via `mise bootstrap`, interval-driven (`start_interval = 60` dag-tick, `300` another) | **SHIPS (repo)** | `mise.toml:1538-1545`, `:1585` | `start_interval = 60` |
+| This repo already runs launchd agents via `mise bootstrap`, interval-driven (`start_interval = 60` dag-tick, `300` another) | **SHIPS (repo)** | `mise.toml` `[bootstrap.macos.launchd.agents.dotfiles-dag-tick]`, `[bootstrap.macos.launchd.agents.dotfiles-dag-project]` | `start_interval = 60` |
 
 ### Code search
 
@@ -235,9 +237,6 @@ Mandatory gaps (the sweep is incomplete because of these):
 
 Unverified empties, named as gaps rather than as "nothing found":
 - context7 for the ai-software-factory query: `error` (exited 1).
-- github-discussions for `claude-agents-json-state-done-blocked-stop-hook-idle`: empty_unverified, count 0.
-- herdr (`ogulcancelik/herdr`): GitHub sources errored, and the rest are empty_unverified.
-- devflowinc/uzi, kenn-io/agentsview, kbwo/ccmanager: empty_unverified.
 - ruvnet/claude-flow: error plus empty_unverified. The README code search count of 0 is unarmed.
 - langchain-ai/langgraph: discussions empty_unverified, and code search rate-limited.
 - All-Hands-AI/OpenHands: error plus empty_unverified. The README code search count of 0 is unarmed.
@@ -249,6 +248,7 @@ Unverified empties, named as gaps rather than as "nothing found":
   the mandatory gap).
 
 Other gaps:
+- Three "unverified empties" rows (claude-agents-json… discussions, herdr, uzi/agentsview/ccmanager) were carried in from the 2026-10-02 lane-completion sweep's input and were removed: they were never part of this run.
 - Composio AO: issue #816 is closed and PR #819 was closed unmerged. Whether respawn-resume
   shipped some other way is unknown, and the AO issue search returned 422 (the repo may have
   been renamed or moved).
@@ -341,7 +341,7 @@ inside `--bg` sessions (untested).
    closes the "coordinator started 45 s before the hook landed" hole. It still cannot fire
    once the session cannot take a turn, which is why item 1 is primary.
 3. **Use `claude agents --json --all` as the supervisor's state source**, not the files under
-   `~/.claude/jobs/` (`agent-view.md:130`). Treat the `Notification` `agent_completed` hook as
+   `~/.claude/jobs/` (`agent-view.md:731`). Treat the `Notification` `agent_completed` hook as
    best-effort only, because it fires only while agent view is open.
 4. **Adopt claude-tmux-dog's recovery ladder as a pattern, not as a dependency** (11 stars,
    tmux-bound): nudge, then compact, then a "death-loop rebuild" after N fast Stops, then
@@ -385,8 +385,8 @@ subagents / 11.6 M token field figure (inherited, not re-derived).
 session it restarts, and the research-sweep-run saved-searches phase is still missing. Three
 supports are weaker. (a) The justification for custom code is no longer "the vendor refused":
 the requests lapsed under a stale bot and a partial fix shipped, so a native trigger may still
-arrive and the supervisor should stay minimal. (b) Native handling is better than stated:
-auto-compaction exists, so the gap is a wedged or blocked coordinator, not a merely full one.
+arrive and the supervisor should stay minimal. (b) auto-compaction exists natively but is disabled on this machine, so here the gap
+includes a merely full coordinator.
 (c) "Only agent view gets push signals" is too strong: settings `Stop`/`StopFailure`/
 `SessionEnd` hooks are a plausible event-driven producer for `--bg` sessions, which supports
 Recommendation 2 but must be tested before it is relied on.
@@ -449,8 +449,8 @@ strings in the mise binary.
 This sweep ran `.claude/workflows/research-sweep-run.js` from the `docs/lane-completion-protocol` worktree. That worktree branched from `main` at aeeb9164, **before #1581** (lane C, `fix/research-sweep-1471-1514`) merged. So the sweep ran the old workflow:
 
 - **"Retrospect is absent" is wrong.** The Retrospect phase (proposal file only, never applied) is on `main` via #1581.
-- **Stage evidence is lower-trust in this run.** In the old workflow, mandatory-stage evidence was agent-reported rather than probe-recorded (#1514), and any must-hit armed code search (#1471, F4). Treat this report's `mandatory-gap` list and its `empty_unverified` rows as lower-trust than a run on current `main`.
+- **Stage evidence is lower-trust in this run.** In the old workflow, mandatory-stage evidence was agent-reported rather than probe-recorded (#1514), and any must-hit result counted as an armed control (#1471 F4); both are fixed on main. Treat this report's `mandatory-gap` list and its `empty_unverified` rows as lower-trust than a run on current `main`.
 - **Still true:** saved, re-runnable GitHub searches are not on `main` (lane `saved-searches-1502` is building a Save phase), and the Dependencies phase covers issues, PRs and discussions.
 - **Re-run needed** on current `main`, with OpenHands as `OpenHands/OpenHands` and claude-flow as `ruvnet/ruflo`. Both redirected and were skipped.
 
-The orchestration and restart recommendations above don't depend on the workflow version and stand as written.
+Recommendations 1-5 do not depend on the workflow version. Recommendation 6 is DONE on main (#1581 Retrospect); Recommendation 7's "#1502 needs N1" is superseded (task_plan "#1502 proceeds NOW … no N1 dependency"; lane saved-searches-1502). Answer table row 2, Gaps :305 and Verification #5 carry the same stale N1/Retrospect statements.
