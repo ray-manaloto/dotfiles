@@ -173,12 +173,17 @@ def test_state_is_persisted_before_the_fire_is_returned(tmp_path: Path) -> None:
     assert state["last_seen"]["percent"] == 31.0
 
 
-def test_last_seen_is_written_even_below_and_for_a_lane(tmp_path: Path) -> None:
-    """A reader can tell "never measured" from "measured, below"."""
+def test_last_seen_below_limit_is_only_written_for_a_coordinator(
+    tmp_path: Path,
+) -> None:
+    """Lane measurements leave no state; coordinators still get a heartbeat."""
     _job(tmp_path / "jobs", name="dotfiles-lane.feature")
     decision = _decide(tmp_path, 5.0)
-    state = json.loads((tmp_path / "state" / f"{SESSION}.json").read_text())
     assert decision.reason == "not-coordinator"
+    assert not (tmp_path / "state").exists()
+    _job(tmp_path / "jobs")
+    assert _decide(tmp_path, 5.0).reason == "below-limit"
+    state = json.loads((tmp_path / "state" / f"{SESSION}.json").read_text())
     assert state["last_seen"]["percent"] == 5.0
     assert "last_fired" not in state
 
@@ -1188,6 +1193,8 @@ def test_s1_probe_once_and_dry_run_steps_leave_real_levels_unspent(
 
     assert not preview(29, probe=True).fire
     assert preview(30, probe=True).fire
+    assert preview(30, probe=True).reason == "probe-in-progress"
+    assert ch.release(SESSION, state_dir=state, mode="probe-delivered") == 0
     for percent in (30, 35, 90):
         assert preview(percent, probe=True).reason == "probe-done"
     assert preview(30, dry_run=True).fire
@@ -1218,14 +1225,14 @@ def test_s1_probe_once_and_dry_run_steps_leave_real_levels_unspent(
     ],
 )
 @pytest.mark.usefixtures("coordinator_jobs")
-def test_s2_failed_start_rolls_back_unlocked_and_can_retry(
+def test_t1_failed_start_keeps_level_and_retries_only_at_next_step(
     tmp_path: Path,
     checkouts: tuple[Path, Path],
     handoff: Path,
     caplog: pytest.LogCaptureFixture,
     case: tuple[int | None, str],
 ) -> None:
-    """A failed process start is rc 3 and restores the same delivery threshold."""
+    """Every start-failure mode keeps 45 consumed; 50 is the next attempt."""
     previous, failure = case
     if previous is not None:
         assert _decide(tmp_path, previous).fire
@@ -1267,11 +1274,13 @@ def test_s2_failed_start_rolls_back_unlocked_and_can_retry(
     stored = json.loads(path.read_text())
     assert "launch_pending" not in stored
     assert "launch" not in stored
-    assert stored.get("last_fired") == previous
+    assert stored["last_fired"] == 45
     assert "start failed" in caplog.text
     if failure == "nonzero":
         assert "claude --bg rc 7" in caplog.text
-    assert _decide(tmp_path, 45).fire
+    assert not _decide(tmp_path, 45).fire
+    assert not _decide(tmp_path, 49.9).fire
+    assert _decide(tmp_path, 50).fire
     assert (
         ch.launch(
             handoff,
@@ -1440,7 +1449,7 @@ def test_s5_non_utf8_handoff_refuses_with_code_2(
         )
         == 2
     )
-    assert "census-unavailable" in caplog.text
+    assert "handoff-unreadable" in caplog.text
     assert runner.calls == []
 
 
@@ -1490,12 +1499,12 @@ def test_s5_skill_and_task_contracts_point_to_current_authority() -> None:
 
 
 @pytest.mark.usefixtures("coordinator_jobs")
-def test_s5_git_failure_uses_census_unavailable(
+def test_t5_git_failure_uses_worktree_unavailable(
     tmp_path: Path,
     handoff: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Main-checkout discovery failures carry the same documented census reason."""
+    """Git discovery failure is distinct from a process-table failure."""
 
     def git(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         assert argv[0] == "git"
@@ -1510,4 +1519,251 @@ def test_s5_git_failure_uses_census_unavailable(
         runner=git,
     )
     assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 2
-    assert "census-unavailable" in caplog.text
+    assert "worktree-unavailable" in caplog.text
+    assert "census-unavailable" not in caplog.text
+
+
+# ── review round 3: baseline bdedf8d1 regression arms ─────────────────────────
+
+
+@pytest.fixture
+def launch_inputs(checkouts: tuple[Path, Path], handoff: Path) -> tuple[Path, Path]:
+    """A lane cwd and its handoff for filesystem-failure launch scenarios."""
+    return checkouts[1], handoff
+
+
+@pytest.mark.parametrize(
+    "failure", ["promotion", "marker-write", "lock", "claim", "state-read"]
+)
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_t2_started_promotion_failure_blocks_relaunch_and_allows_retire(
+    tmp_path: Path,
+    launch_inputs: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: str,
+) -> None:
+    """Successful dispatch is never reported as start failure or retried after TTL."""
+    assert _decide(tmp_path, 45).fire
+    path = tmp_path / "state" / f"{SESSION}.json"
+    boundary = _Recorder(0)
+    real_replace = Path.replace
+    lock_fd: int | None = None
+    dispatched: list[str] = []
+    failed_once = False
+
+    def replace(source: Path, target: str | os.PathLike[str]) -> Path:
+        nonlocal failed_once
+        if Path(target) == path and dispatched and not failed_once:
+            payload = json.loads(source.read_text())
+            if (failure == "promotion" and "launch" in payload) or (
+                failure == "marker-write"
+                and payload.get("launch_pending", {}).get("started") is True
+            ):
+                failed_once = True
+                msg = "injected state replacement failure after successful dispatch"
+                raise OSError(msg)
+        return real_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", replace)
+
+    def start(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal lock_fd
+        if argv[0] != "claude":
+            return boundary(argv, **kwargs)
+        dispatched.append(argv[3])
+        if failure == "lock":
+            lock_fd = os.open(path.with_suffix(".json.lock"), os.O_RDWR)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        elif failure == "claim":
+            state = json.loads(path.read_text())
+            state["launch_pending"]["name"] = "changed-claim"
+            path.write_text(json.dumps(state))
+        elif failure == "state-read":
+            path.write_text("{")
+        return subprocess.CompletedProcess(argv, 0)
+
+    deps = ch.LaunchDeps(
+        state_dir=tmp_path / "state",
+        jobs_dir=tmp_path / "jobs",
+        cwd=launch_inputs[0],
+        processes=TREE,
+        self_pid=201,
+        runner=start,
+        out=lambda _text: None,
+        lock_timeout_s=_SHORT_LOCK_TIMEOUT_S,
+    )
+    try:
+        assert ch.launch(launch_inputs[1], SESSION, dry_run=False, deps=deps) == 4
+    finally:
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            os.close(lock_fd)
+    assert "successor STARTED but not recorded" in caplog.text
+    assert "start failed" not in caplog.text
+    # Retirement works even before decide has recovered the receipt into main state.
+    assert _retire(tmp_path, ()) == 0
+    assert _decide(tmp_path, 90).reason == "already-launched"
+    state = json.loads(path.read_text())
+    assert state["launch_pending"]["started"] is True
+    assert state["launch_pending"]["name"] == dispatched[0]
+    state["launch_pending"]["at"] = "2000-01-01T00:00:00-06:00"
+    path.write_text(json.dumps(state))
+    assert _decide(tmp_path, 100).reason == "already-launched"
+    assert ch.launch(launch_inputs[1], SESSION, dry_run=False, deps=deps) == 2
+    assert len(dispatched) == 1
+
+
+@pytest.mark.parametrize("at", [None, "2000-01-01T00:00:00-06:00"])
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_t2_started_pending_without_receipt_is_terminal_and_retirable(
+    tmp_path: Path,
+    at: str | None,
+) -> None:
+    """The started flag alone suffices, even for a pending record with no age."""
+    _record_launch(tmp_path / "state", ())
+    path = tmp_path / "state" / f"{SESSION}.json"
+    state = json.loads(path.read_text())
+    state.pop("launch")
+    state["launch_pending"] = {"name": COORDINATOR, "started": True}
+    if at is not None:
+        state["launch_pending"]["at"] = at
+    path.write_text(json.dumps(state))
+    assert _decide(tmp_path, 100).reason == "already-launched"
+    assert _retire(tmp_path, ()) == 0
+
+
+# E3's measured Bash-tool shape; snapshot location is deliberately a placeholder.
+_MEASURED_WRAPPER = (
+    "/bin/zsh -c -l source /tmp/placeholder-shell-snapshot.sh && "
+    "{ \\builtin unalias -- 'unsetenv'; … } >/dev/null 2>&1 || true && eval '"
+)
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ('mise run ship > "$LOG"', "unexpanded:$LOG"),
+        ('mise run ship > "$LOG/ship rc.log"', "unexpanded:$LOG/ship rc.log"),
+        ("mise run ship > /logs/ship.log", "/logs/ship.log"),
+        ("mise run ship > /dev/null", None),
+        ("mise run ship", None),
+        ("eval 'mise run ship > /logs/inner.log'", "/logs/inner.log"),
+    ],
+)
+def test_t3_measured_eval_wrapper_skips_prelude_redirect(
+    payload: str, expected: str | None, tmp_path: Path
+) -> None:
+    """Missing child fd logs must never turn the wrapper prelude into a log."""
+    wrapper = _MEASURED_WRAPPER + payload + "'"
+    tree = (*TREE[:4], _proc(300, 100, wrapper), _proc(301, 300, "mise run ship"))
+    runs = ch.census(tree, self_pid=201, runner=_Recorder(0))
+    assert runs == (ch.HeavyRun(300, wrapper, expected),)
+    if expected is None:
+        brief = ch.successor_brief(
+            ch.BriefContext(
+                old_name=COORDINATOR,
+                old_session_id=SESSION,
+                old_transcript=None,
+                handoff=tmp_path / "handoff.md",
+                ship_queue=tmp_path / "queue.md",
+                inbox=tmp_path / "inbox",
+                state_dir=tmp_path / "state",
+                heavy_runs=runs,
+            )
+        )
+        assert "no rc file — wait on pid exit" in brief
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_t4_probe_is_pending_until_delivery_and_rejection_releases_it(
+    tmp_path: Path,
+) -> None:
+    """A failed delivery retries; success alone spends the probe, never real levels."""
+    state_dir = tmp_path / "state"
+
+    def probe() -> ch.Decision:
+        return ch.decide(
+            ch.DecideRequest(SESSION, 30, probe=True),
+            env={},
+            jobs_dir=tmp_path / "jobs",
+            state_dir=state_dir,
+        )
+
+    assert probe().fire
+    path = state_dir / f"{SESSION}.json"
+    state = json.loads(path.read_text())
+    assert state["probe_pending"] is True
+    assert "probe_fired" not in state
+    assert probe().reason == "probe-in-progress"
+    assert ch.release(SESSION, state_dir=state_dir, mode="probe") == 0
+    assert probe().fire
+    assert ch.release(SESSION, state_dir=state_dir, mode="probe-delivered") == 0
+    assert probe().reason == "probe-done"
+    state = json.loads(path.read_text())
+    assert state["probe_fired"] is True
+    assert "probe_pending" not in state
+    assert "last_fired" not in state
+    assert _decide(tmp_path, 30).fire
+
+
+@pytest.mark.parametrize(
+    "pending", [None, [], {}, {"at": "bad"}, {"at": "2026-10-02T00:00:00"}]
+)
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_t5_unknown_pending_age_is_stale_with_warning(
+    tmp_path: Path, pending: object, checkouts: tuple[Path, Path], handoff: Path
+) -> None:
+    """Malformed pending ages cannot disable handoff forever."""
+    assert _decide(tmp_path, 30).fire
+    path = tmp_path / "state" / f"{SESSION}.json"
+    state = json.loads(path.read_text())
+    state["launch_pending"] = pending
+    path.write_text(json.dumps(state))
+    decision = _decide(tmp_path, 35)
+    assert decision.fire
+    assert any(
+        "age unknown" in warning and "stale" in warning for warning in decision.warnings
+    )
+    assert (
+        ch.launch(
+            handoff,
+            SESSION,
+            dry_run=True,
+            deps=_deps(tmp_path, checkouts[1], [], runner=_Recorder(0)),
+        )
+        == 0
+    )
+
+
+@pytest.mark.parametrize("failure", ["lock", "corrupt"])
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_t5_launch_state_refusals_are_distinct_from_census(
+    tmp_path: Path,
+    checkouts: tuple[Path, Path],
+    handoff: Path,
+    caplog: pytest.LogCaptureFixture,
+    failure: str,
+) -> None:
+    """Real file corruption/lock contention names the affected state operation."""
+    path = tmp_path / "state" / f"{SESSION}.json"
+    path.parent.mkdir()
+    path.write_text("{" if failure == "corrupt" else "{}")
+    runner = _Recorder(0)
+    deps = ch.LaunchDeps(
+        state_dir=path.parent,
+        jobs_dir=tmp_path / "jobs",
+        cwd=checkouts[1],
+        processes=TREE,
+        self_pid=201,
+        runner=runner,
+        lock_timeout_s=_SHORT_LOCK_TIMEOUT_S,
+    )
+    lock_path = path.with_suffix(".json.lock")
+    with lock_path.open("a") as lock:
+        if failure == "lock":
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 2
+    assert ("state-locked" if failure == "lock" else "state-unreadable") in caplog.text
+    assert "census-unavailable" not in caplog.text
+    assert runner.calls == []

@@ -521,4 +521,40 @@ for (const failed of [
 }
 regressions.push("s5-failed-pending-read-retries");
 
+// T5: persistent recovery failures stop after three reads; one terminal ERROR.
+for (const failed of [
+  "throw",
+  { exitCode: 2, stdout: "", stderr: "unavailable" },
+  { exitCode: 0, stdout: "not JSON", stderr: "" },
+  answer({ action: "state-write-failed", reload: false }),
+] satisfies ProcessResponse[]) {
+  const { services, calls } = makeServices({ responses: Array(6).fill(failed) });
+  for (let attempt = 0; attempt < 3; attempt += 1) await prompt(services);
+  assert.equal(calls.process.length, 3);
+  assert.equal(lastStatus(calls), "session-start ERROR: pending rename failed: pending recovery failed after 3 attempts; reload to retry");
+  const statuses = calls.statuses.length;
+  for (let attempt = 0; attempt < 3; attempt += 1) await prompt(services);
+  assert.equal(calls.process.length, 3, "no fourth pending read in this module");
+  assert.equal(calls.statuses.length, statuses, "terminal error is not emitted again");
+  assert.equal(calls.statuses.filter((text) => text?.includes("after 3 attempts")).length, 1);
+  assert.equal(calls.runs.length, 0);
+  arms += 1;
+}
+regressions.push("t5-pending-recovery-stops-after-three-failures");
+
+// T5: the third read may still succeed; success remains cached.
+{
+  const name = `${PREFIX}.third-read-success`;
+  const { services, calls } = makeServices({ responses: ["throw", "throw",
+    answer({ action: "rename", reload: false, name }), ok] });
+  for (let attempt = 0; attempt < 3; attempt += 1) await prompt(services);
+  assert.equal(lastStatus(calls), "session-start ok (renamed)");
+  assert.deepEqual(calls.process.map((call) => call.argv[6]), ["pending", "pending", "pending", "renamed"]);
+  await prompt(services);
+  assert.equal(calls.process.length, 4);
+  assert.deepEqual(calls.runs, [{ command: "rename", args: name }]);
+  regressions.push("t5-third-pending-read-can-succeed");
+  arms += 1;
+}
+
 console.log(JSON.stringify({ arms, regressions }));

@@ -32,6 +32,7 @@ const SLUG_MAX_WORDS = 5;
 const SLUG_MAX_CHARS = 60;
 const PROMPT_MAX_CHARS = 2_000;
 const REASON_MAX_CHARS = 80;
+const PENDING_READ_MAX_ATTEMPTS = 3;
 
 /** Mirrors `StartDecision.to_json()` in `python/src/dotfiles_setup/session_start.py`. */
 const ACTIONS = [
@@ -50,6 +51,7 @@ type StartDecision = {
 type PendingName = { sessionId: string; prefix: string | null; name: string | null };
 const pending = new Map<string, PendingName>();
 const pendingChecked = new Set<string>();
+const pendingAttempts = new Map<string, number>();
 const renaming = new Set<string>();
 
 const toasted = new Set<string>();
@@ -189,19 +191,29 @@ function scheduleRename($: EngineInterface, claim: PendingName, text?: string): 
 
 async function recoverPending($: EngineInterface, sessionId: string): Promise<void> {
   if (pendingChecked.has(sessionId)) return;
-  const run = await python($, ["pending", "--session-id", sessionId]);
-  if (run.exitCode !== 0) throw new Error(`pending rc ${run.exitCode}`);
-  const decision = parseStart(run.stdout);
-  if (decision === null) throw new Error("pending output not JSON");
-  if (decision.action === "rename" && decision.name !== null) {
-    pending.set(sessionId, { sessionId, name: decision.name, prefix: null });
-  } else if (decision.prefix !== null) {
-    pending.set(sessionId, { sessionId, prefix: decision.prefix, name: null });
-  } else if (["invalid-session-id", "state-write-failed", "state-locked"].includes(decision.action)) {
-    throw new Error(decision.action);
+  const attempts = pendingAttempts.get(sessionId) ?? 0;
+  if (attempts >= PENDING_READ_MAX_ATTEMPTS) return;
+  pendingAttempts.set(sessionId, attempts + 1);
+  try {
+    const run = await python($, ["pending", "--session-id", sessionId]);
+    if (run.exitCode !== 0) throw new Error(`pending rc ${run.exitCode}`);
+    const decision = parseStart(run.stdout);
+    if (decision === null) throw new Error("pending output not JSON");
+    if (decision.action === "rename" && decision.name !== null) {
+      pending.set(sessionId, { sessionId, name: decision.name, prefix: null });
+    } else if (decision.prefix !== null) {
+      pending.set(sessionId, { sessionId, prefix: decision.prefix, name: null });
+    } else if (["invalid-session-id", "state-write-failed", "state-locked"].includes(decision.action)) {
+      throw new Error(decision.action);
+    }
+    // Only successful recovery is cached; failures get at most three reads.
+    pendingChecked.add(sessionId);
+  } catch (error: unknown) {
+    if (attempts + 1 >= PENDING_READ_MAX_ATTEMPTS) {
+      throw new Error("pending recovery failed after 3 attempts; reload to retry");
+    }
+    throw error;
   }
-  // A failed read must remain retryable on the next prompt.
-  pendingChecked.add(sessionId);
 }
 
 async function start($: EngineInterface, cwd: string): Promise<void> {

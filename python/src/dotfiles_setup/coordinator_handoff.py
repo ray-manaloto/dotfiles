@@ -48,6 +48,7 @@ from dotfiles_setup.session_common import (
     SHORT_ID_LEN,
     STATE_LOCK_TIMEOUT_S,
     StateLockedError,
+    StateUnreadableError,
     default_jobs_dir,
     job_record,
     main_checkout,
@@ -94,10 +95,12 @@ type DecisionReason = Literal[
     "already-launched",
     "launch-in-progress",
     "probe-done",
+    "probe-in-progress",
     "invalid-session-id",
     "invalid-percent",
     "state-write-failed",
     "state-locked",
+    "state-unreadable",
 ]
 
 STATE_SUBDIR = Path(".agent") / "state" / "coordinator-handoff"
@@ -228,7 +231,7 @@ class DecideRequest:
 
 
 def _launch_in_progress(state: Mapping[str, Any], warnings: list[str]) -> bool:
-    """A pending start blocks for 15 minutes; unreadable ages fail closed."""
+    """An unconfirmed start blocks for 15 minutes; unreadable ages are stale."""
     if "launch_pending" not in state:
         return False
     pending = state["launch_pending"]
@@ -242,24 +245,57 @@ def _launch_in_progress(state: Mapping[str, Any], warnings: list[str]) -> bool:
         except ValueError, TypeError:
             age = None
     if age is None:
-        warnings.append("launch_pending age unknown; treating as launch-in-progress")
-        return True
+        warnings.append("launch_pending age unknown; treating as stale and ignoring")
+        return False
     if age < LAUNCH_PENDING_TTL_S:
         return True
     warnings.append(f"stale launch_pending from {at} ignored (age {age:g}s)")
     return False
 
 
+def _started_pending(state: Mapping[str, Any]) -> dict[str, Any] | None:
+    pending = state.get("launch_pending")
+    if isinstance(pending, dict) and pending.get("started") is True:
+        return pending
+    return None
+
+
+def _started_path(path: Path) -> Path:
+    """Independent receipt survives failure to reacquire the session lock."""
+    return path.with_suffix(".started.json")
+
+
+def _read_launch_state(path: Path) -> dict[str, Any]:
+    """Recover a started receipt before any firing, relaunch or retirement."""
+    receipt = read_state(_started_path(path))
+    try:
+        state = read_state(path)
+    except StateUnreadableError:
+        if receipt.get("started") is not True or _recorded_runs(receipt) is None:
+            raise
+        logger.warning(
+            "coordinator-handoff: recovering unreadable state from started receipt"
+        )
+        state = {"census": receipt["census"]}
+    if receipt.get("started") is True and "launch" not in state:
+        state["launch_pending"] = receipt
+        if "census" not in state and "census" in receipt:
+            state["census"] = receipt["census"]
+    return state
+
+
 def _judge(
     state: dict[str, Any], request: DecideRequest, cfg: Config, warnings: list[str]
 ) -> tuple[bool, DecisionReason, float | None]:
     """Fire under the transaction lock, charging only the requested mode."""
-    if "launch" in state:
+    if "launch" in state or _started_pending(state) is not None:
         return False, "already-launched", None
     if _launch_in_progress(state, warnings):
         return False, "launch-in-progress", None
     if request.probe and state.get("probe_fired"):
         return False, "probe-done", None
+    if request.probe and state.get("probe_pending"):
+        return False, "probe-in-progress", None
     key = "dry_run_fired" if request.dry_run else "last_fired"
     last = None if request.probe else _last_fired(state, key)
     threshold = next_level(last, cfg)
@@ -269,7 +305,7 @@ def _judge(
     # threshold; never record a level that re-fires sooner.
     level = max(fired_level(request.percent, cfg), threshold)
     if request.probe:
-        state["probe_fired"] = True
+        state["probe_pending"] = True
     elif request.dry_run:
         state["dry_run_fired"] = level
     elif not request.no_commit:
@@ -318,13 +354,16 @@ def decide(
             )
         try:
             with state_lock(path, timeout_s=timeout_s):
-                state = read_state(path)
+                state = _read_launch_state(path)
                 state["last_seen"] = {"at": now_iso(), "percent": percent}
                 fire, reason, level = _judge(state, request, cfg, warnings)
                 write_state(path, state)
         except StateLockedError as exc:
             warnings.append(str(exc))
             fire, reason = False, "state-locked"
+        except StateUnreadableError as exc:
+            warnings.append(str(exc))
+            fire, reason = False, "state-unreadable"
         except OSError as exc:
             warnings.append(f"state write failed: {exc}")
             fire, reason = False, "state-write-failed"
@@ -353,23 +392,30 @@ def _rollback_fire(state: dict[str, Any], level: float | None) -> bool:
 
 def release(
     session_id: str,
-    level: float,
+    level: float | None = None,
     *,
     state_dir: Path,
+    mode: Literal["level", "probe", "probe-delivered"] = "level",
     timeout_s: float = STATE_LOCK_TIMEOUT_S,
 ) -> int:
     """Undo only this undelivered fire; never erase a newer fire or a launch."""
     if not valid_session_id(session_id):
         logger.error("coordinator-handoff release: invalid-session-id")
         return 2
-    if not math.isfinite(level) or not 0 < level <= _MAX_PCT:
+    if mode == "level" and (
+        level is None or not math.isfinite(level) or not 0 < level <= _MAX_PCT
+    ):
         logger.error("coordinator-handoff release: invalid-level")
         return 2
     path = state_dir / f"{session_id}.json"
     try:
         with state_lock(path, timeout_s=timeout_s):
-            state = read_state(path)
-            if "launch_pending" not in state and _rollback_fire(state, level):
+            state = _read_launch_state(path)
+            if mode != "level":
+                if state.pop("probe_pending", False) and mode == "probe-delivered":
+                    state["probe_fired"] = True
+                write_state(path, state)
+            elif "launch_pending" not in state and _rollback_fire(state, level):
                 write_state(path, state)
     except OSError:
         logger.exception("coordinator-handoff release failed")
@@ -417,10 +463,20 @@ class HeavyRun:
 
 
 def _log_path(command: str) -> str | None:
+    # Bash-tool wrappers redirect their snapshot prelude to /dev/null before eval.
+    # Only the user's final eval payload can supply the fallback redirect.
+    _, wrapper, payload = command.rpartition("eval '")
+    if wrapper:
+        try:
+            command = shlex.split("'" + payload)[0]
+        except ValueError, IndexError:
+            command = payload.rstrip("'")
     match = _REDIRECT_RE.search(command)
     if match is None:
         return None
     target = next(group for group in match.groups() if group is not None)
+    if target == "/dev/null":
+        return None
     return (f"unexpanded:{target}" if "$" in target else target) or None
 
 
@@ -600,7 +656,7 @@ def successor_brief(ctx: BriefContext) -> str:
             f"  - pid {run.pid}: {run.argv}  (log: {run.log_path or 'none'})"
             + (
                 " — no rc file — wait on pid exit"
-                if run.log_path and run.log_path.startswith("harness-output:")
+                if run.log_path is None or run.log_path.startswith("harness-output:")
                 else ""
             )
             for run in ctx.heavy_runs
@@ -656,6 +712,7 @@ resolved log's rc line) or adopt its result explicitly. A log marked \
 wait on a literal `$LOG` or an absent log.
    A log marked `harness-output:` has no rc file — wait on pid exit, then \
 review its output; do not bounded-wait on an rc line there.
+   With no log, wait on pid exit.
 4. Retire the old session ONLY through the gate — never a bare `claude stop` \
 on a coordinator: `mise run coordinator-handoff -- retire --old-session \
 {ctx.old_session_id} --state-dir {shlex.quote(str(ctx.state_dir))} \
@@ -715,15 +772,17 @@ def _gather(handoff: Path, deps: LaunchDeps) -> tuple[tuple[HeavyRun, ...], str]
             root_pid=deps.root_pid,
             runner=deps.runner,
         )
-        handoff_text = handoff.read_text(encoding="utf-8")
     except (
         CoordinatorHandoffError,
         reap.ReapError,
         OSError,
-        UnicodeError,
         subprocess.TimeoutExpired,
     ) as exc:
-        return str(exc)
+        return f"census-unavailable: {exc}"
+    try:
+        handoff_text = handoff.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return f"handoff-unreadable: {exc}"
     return runs, handoff_text
 
 
@@ -764,13 +823,14 @@ def launch(
     dry_run: bool,
     deps: LaunchDeps,
 ) -> int:
-    """Reserve a start, run unlocked with a bound, then promote or roll back.
+    """Reserve a start, run unlocked with a bound, then record its outcome.
 
-    rc 2: the handoff does not exist, the old session is not a coordinator, or
-    the census could not be taken (retire would be blind). Dry-run prints the
-    argv, cwd and brief and records and executes nothing. Otherwise the
-    rc 3: start failed (missing binary, timeout or nonzero rc). A successful
-    start returns 0 and only then records ``launch``.
+    rc 0: started and recorded (dry-run only prints, records/executes nothing).
+    rc 2: refused for invalid identity/handoff, existing/pending launch, or
+    unavailable worktree, census, lock or state. rc 3: start failed (missing
+    binary, timeout or nonzero rc); keep the fired level for the next step.
+    rc 4: successor STARTED but not recorded — do not relaunch. A durable
+    started receipt protects decide/launch/retire even if the session lock fails.
     """
     old_name = _launch_identity(handoff, old_session_id, deps.jobs_dir)
     if old_name is None:
@@ -779,15 +839,19 @@ def launch(
         checkout = main_checkout(
             Path.cwd() if deps.cwd is None else deps.cwd, runner=deps.runner
         )
+    except CoordinatorHandoffError, OSError, subprocess.TimeoutExpired:
+        logger.exception("coordinator-handoff launch: worktree-unavailable")
+        return 2
+    try:
         state_dir = deps.state_dir or checkout / STATE_SUBDIR
         path = state_dir / f"{old_session_id}.json"
         ctx = LaunchContext(handoff, old_session_id, old_name, checkout, state_dir)
         with state_lock(path, timeout_s=deps.lock_timeout_s):
-            state = read_state(path)
-            if "launch" in state:
-                record = state["launch"]
+            state = _read_launch_state(path)
+            if "launch" in state or _started_pending(state) is not None:
+                record = state.get("launch") or _started_pending(state)
                 successor = (
-                    record.get("successor", "unknown")
+                    record.get("successor", record.get("name", "unknown"))
                     if isinstance(record, dict)
                     else "unknown"
                 )
@@ -803,14 +867,20 @@ def launch(
                 logger.error("coordinator-handoff launch: launch-in-progress")
                 return 2
             prepared = _launch_locked(ctx, deps, state, dry_run=dry_run)
-    except CoordinatorHandoffError, OSError, subprocess.TimeoutExpired:
-        logger.exception("coordinator-handoff launch: census-unavailable")
-        return 2
+    except StateLockedError:
+        logger.exception("coordinator-handoff launch: state-locked")
+        prepared = 2
+    except StateUnreadableError:
+        logger.exception("coordinator-handoff launch: state-unreadable")
+        prepared = 2
+    except OSError:
+        logger.exception("coordinator-handoff launch: state-write-failed")
+        prepared = 2
     if isinstance(prepared, int):
         return prepared
-    argv, record, level = prepared
+    argv, record, runs = prepared
     # A slow external start must not monopolise the state transaction lock.
-    return _start_successor(ctx, deps, argv, record, level)
+    return _start_successor(ctx, deps, argv, record, runs)
 
 
 def _launch_locked(
@@ -819,13 +889,13 @@ def _launch_locked(
     state: dict[str, Any],
     *,
     dry_run: bool,
-) -> tuple[list[str], dict[str, str], float | None] | int:
+) -> tuple[list[str], dict[str, str], tuple[HeavyRun, ...]] | int:
     """Gather and reserve while locked; return the external call to run unlocked."""
     handoff, old_session_id = ctx.handoff, ctx.old_session_id
     checkout, state_dir = ctx.checkout, ctx.state_dir
     gathered = _gather(handoff, deps)
     if isinstance(gathered, str):
-        logger.error("coordinator-handoff launch: census-unavailable: %s", gathered)
+        logger.error("coordinator-handoff launch: %s", gathered)
         return 2
     runs, handoff_text = gathered
     name = successor_name(time.time_ns() if deps.now_ns is None else deps.now_ns)
@@ -857,7 +927,7 @@ def _launch_locked(
     }
     state["launch_pending"] = {"name": name, "at": record["at"]}
     write_state(path, state)
-    return argv, record, _last_fired(state)
+    return argv, record, runs
 
 
 def _start_successor(
@@ -865,9 +935,9 @@ def _start_successor(
     deps: LaunchDeps,
     argv: list[str],
     record: dict[str, str],
-    level: float | None,
+    runs: tuple[HeavyRun, ...],
 ) -> int:
-    """Promote only rc 0; every start failure removes the claim and restores fire."""
+    """Keep failed levels; preserve successful starts before trying promotion."""
     try:
         result = (deps.runner or subprocess.run)(
             argv,
@@ -885,6 +955,22 @@ def _start_successor(
         logger.exception("coordinator-handoff launch: start failed")
         started = False
     path = ctx.state_dir / f"{ctx.old_session_id}.json"
+    receipt = {
+        **record,
+        "name": record["successor"],
+        "started": True,
+        "census": [asdict(run) for run in runs],
+    }
+    if started:
+        try:
+            # Separate inode/lock: finalisation may time out on the main lock.
+            receipt_path = _started_path(path)
+            with state_lock(receipt_path, timeout_s=deps.lock_timeout_s):
+                write_state(receipt_path, receipt)
+        except OSError:
+            logger.exception(
+                "coordinator-handoff launch: cannot persist started receipt"
+            )
     try:
         with state_lock(path, timeout_s=deps.lock_timeout_s):
             state = read_state(path)
@@ -894,17 +980,32 @@ def _start_successor(
                 or pending.get("name") != record["successor"]
                 or pending.get("at") != record["at"]
             ):
+                if started:
+                    state["launch_pending"] = receipt
+                    write_state(path, state)
+                    logger.error(
+                        "coordinator-handoff launch: successor STARTED but not recorded"
+                        " — do not relaunch (pending claim changed)"
+                    )
+                    return 4
                 logger.error(
                     "coordinator-handoff launch: start failed: pending claim changed"
                 )
                 return 3
-            del state["launch_pending"]
             if started:
+                # Persist confirmation before the separately fallible promotion.
+                state["launch_pending"] = receipt
+                write_state(path, state)
                 state["launch"] = record
-            else:
-                _rollback_fire(state, level)
+            del state["launch_pending"]
             write_state(path, state)
     except OSError:
+        if started:
+            logger.exception(
+                "coordinator-handoff launch: successor STARTED but not recorded"
+                " — do not relaunch (cannot finalise state)"
+            )
+            return 4
         logger.exception(
             "coordinator-handoff launch: start failed: cannot finalise state"
         )
@@ -1000,16 +1101,18 @@ def retire(request: RetireRequest, deps: RetireDeps) -> int:
         )
         return 2
     try:
-        state = read_state(deps.state_dir / f"{old}.json")
+        state = _read_launch_state(deps.state_dir / f"{old}.json")
     except OSError:
         logger.exception("coordinator-handoff retire: unreadable state")
         return 2
     runs = _recorded_runs(state)
-    launch_record = state.get("launch")
+    launch_record = state.get("launch") or _started_pending(state)
     if (
         not isinstance(launch_record, dict)
-        or not isinstance(launch_record.get("successor"), str)
-        or not launch_record["successor"]
+        or not isinstance(
+            launch_record.get("successor", launch_record.get("name")), str
+        )
+        or not launch_record.get("successor", launch_record.get("name"))
         or runs is None
     ):
         logger.error(
@@ -1103,7 +1206,16 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
         "release", help="Restore an undelivered firing level"
     )
     release_parser.add_argument("--session-id", required=True)
-    release_parser.add_argument("--level", type=float, required=True)
+    release_modes = release_parser.add_mutually_exclusive_group(required=True)
+    release_modes.add_argument("--level", type=float)
+    release_modes.add_argument(
+        "--probe", action="store_true", help="Release a pending probe"
+    )
+    release_parser.add_argument(
+        "--delivered",
+        action="store_true",
+        help="Confirm a successfully delivered probe",
+    )
     name_parser = sub.add_parser(
         "name",
         help="Print a fresh <project>-<Chicago ISO ns>.<feature> session name "
@@ -1155,9 +1267,7 @@ def main(args: argparse.Namespace, _project_root: Path) -> int:
             getattr(args, "state_dir", None) or main_checkout(Path.cwd()) / STATE_SUBDIR
         )
     except CoordinatorHandoffError:
-        reason = (
-            "census-unavailable" if command == "launch" else "repository unavailable"
-        )
+        reason = "worktree-unavailable"
         logger.exception("coordinator-handoff %s: %s", command, reason)
         return 2
     jobs_dir = getattr(args, "jobs_dir", None) or default_jobs_dir()
@@ -1177,7 +1287,7 @@ def main(args: argparse.Namespace, _project_root: Path) -> int:
         sys.stdout.write(decision.to_json() + "\n")
         return 0
     if command == "release":
-        return release(args.session_id, args.level, state_dir=state_dir)
+        return _release_main(args, state_dir)
     if command == "launch":
         return launch(
             args.handoff,
@@ -1186,6 +1296,15 @@ def main(args: argparse.Namespace, _project_root: Path) -> int:
             deps=LaunchDeps(state_dir=state_dir, jobs_dir=jobs_dir),
         )
     return _retire_main(args, jobs_dir, state_dir)
+
+
+def _release_main(args: argparse.Namespace, state_dir: Path) -> int:
+    """The CLI keeps successful-probe confirmation distinct from rollback."""
+    if args.delivered and not args.probe:
+        logger.error("coordinator-handoff release: --delivered requires --probe")
+        return 2
+    mode = ("probe-delivered" if args.delivered else "probe") if args.probe else "level"
+    return release(args.session_id, args.level, state_dir=state_dir, mode=mode)
 
 
 def _retire_main(args: argparse.Namespace, jobs_dir: Path, state_dir: Path) -> int:

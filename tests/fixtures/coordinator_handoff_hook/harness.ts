@@ -36,6 +36,7 @@ type Options = {
   projectDir?: string | null;
   sessionId?: string;
   listThrows?: boolean;
+  deferRun?: boolean;
 };
 
 function makeServices(options: Options = {}) {
@@ -53,8 +54,11 @@ function makeServices(options: Options = {}) {
     runs: [] as { command: string; args?: string }[],
     roots: 0,
     sessionId,
+    now: 0,
+    resolveRun: null as (() => void) | null,
   };
   const services = {
+    clock: { now: async () => calls.now },
     env: {
       get: async (name: string) => (name in env ? env[name] : undefined),
     },
@@ -95,6 +99,7 @@ function makeServices(options: Options = {}) {
       run: async (input: { command: string; args?: string }) => {
         calls.runs.push(input);
         if (options.runRejects) throw new Error("scripted reject");
+        if (options.deferRun) await new Promise<void>((resolve) => { calls.resolveRun = resolve; });
         return {};
       },
     },
@@ -303,6 +308,7 @@ for (const percent of [23, 29.9]) {
     env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" },
     responses: [
       decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      ok,
       decision({ fire: false, reason: "probe-done", level: null, percent: 30 }),
       decision({ fire: false, reason: "probe-done", level: null, percent: 35 }),
     ],
@@ -311,8 +317,9 @@ for (const percent of [23, 29.9]) {
   await run(services, measured(30));
   await run(services, measured(35));
   assert.deepEqual(calls.runs, [{ command: "coordinator-handoff", args: "--probe" }]);
-  assert.equal(calls.process.length, 3);
-  assert.ok(calls.process.every((call) => call.argv.at(-1) === "--probe"));
+  assert.equal(calls.process.length, 4);
+  assert.ok(calls.process.filter((call) => call.argv[6] === "decide").every((call) => call.argv.at(-1) === "--probe"));
+  assert.deepEqual(calls.process[1].argv.slice(6), ["release", "--session-id", calls.sessionId, "--probe", "--delivered"]);
   assert.equal(lastStatus(calls), "handoff probe done");
   regressions.push("s1-probe-three-measurements-one-command");
   arms += 1;
@@ -552,14 +559,26 @@ for (const percent of [23, 29.9]) {
   arms += 1;
 }
 
-// S4: a first miss already at the limit is final, including later levels.
+// T5: a first miss at the limit expires at ten minutes, including later levels.
 {
   const { services, calls } = makeServices({ responses: [
     decision({ fire: false, reason: "not-coordinator", level: null, percent: 30 }),
+    decision({ fire: true, reason: "fire", level: 90, percent: 90 }),
   ] });
   for (const percent of [30, 35, 5, 90]) await run(services, measured(percent));
   assert.equal(calls.process.length, 1);
   assert.equal(calls.runs.length, 0);
+  calls.now = 599_999;
+  await run(services, measured(90));
+  assert.equal(calls.process.length, 1, "cached miss is valid until TTL");
+  calls.now = 600_000;
+  await run(services, measured(90));
+  assert.equal(calls.process.length, 2);
+  assert.equal(calls.runs.length, 1, "transient role miss recovers at TTL");
+  calls.now = 1_200_000;
+  await run(services, measured(5));
+  assert.equal(calls.process.length, 2, "positive cache never expires");
+  regressions.push("t5-negative-role-cache-expires-at-ten-minutes");
   arms += 1;
 }
 
@@ -572,6 +591,87 @@ for (const percent of [23, 29.9]) {
   assert.equal(lastStatus(calls), "handoff launch in progress");
   assert.equal(calls.runs.length, 0);
   regressions.push("s2-launch-in-progress-heartbeat");
+  arms += 1;
+}
+
+// T4: all probe-delivery failure routes release the probe, never real levels.
+for (const failure of ["reject", "missing", "list"] as const) {
+  const options: Options = {
+    env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" },
+    runRejects: failure === "reject",
+    listThrows: failure === "list",
+    commands: failure === "missing" ? [] : ["coordinator-handoff"],
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }), ok],
+  };
+  const { services, calls } = makeServices(options);
+  await run(services, measured(30));
+  assert.equal(lastStatus(calls), "handoff ERROR: probe delivery failed");
+  assert.deepEqual(calls.process[1].argv.slice(6), ["release", "--session-id", calls.sessionId, "--probe"]);
+  assert.ok(!calls.statuses.includes("handoff probe done"));
+  const retry = makeServices({
+    sessionId: calls.sessionId, env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" },
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }), ok],
+  });
+  await run(retry.services, measured(30));
+  assert.equal(retry.calls.runs.length, 1);
+  assert.equal(lastStatus(retry.calls), "handoff probe done");
+  arms += 1;
+}
+regressions.push("t4-failed-probe-releases-and-reports-failure");
+
+// T4: resolving command.run is required before confirming or displaying done.
+{
+  const { services, calls } = makeServices({
+    env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" }, deferRun: true,
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      decision({ fire: false, reason: "probe-in-progress", level: null, percent: 35 }), ok],
+  });
+  await run(services, measured(30));
+  assert.equal(lastStatus(calls), "handoff probe pending");
+  assert.equal(calls.process.length, 1);
+  await run(services, measured(35));
+  assert.equal(lastStatus(calls), "handoff probe pending");
+  assert.equal(calls.runs.length, 1);
+  calls.resolveRun?.();
+  await flush();
+  assert.equal(lastStatus(calls), "handoff probe done");
+  assert.equal(calls.process[2].argv.at(-1), "--delivered");
+  regressions.push("t4-probe-done-only-after-command-resolution");
+  arms += 1;
+}
+
+// T4: failed release cannot turn a rejected probe into a done heartbeat later.
+{
+  const { services, calls } = makeServices({
+    env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" }, runRejects: true,
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      { exitCode: 2, stdout: "", stderr: "state unavailable" },
+      decision({ fire: false, reason: "probe-in-progress", level: null, percent: 35 })],
+  });
+  await run(services, measured(30));
+  assert.match(lastStatus(calls) ?? "", /^handoff ERROR: probe delivery failed/);
+  await run(services, measured(35));
+  assert.equal(lastStatus(calls), "handoff ERROR: probe delivery failed");
+  assert.ok(!calls.statuses.includes("handoff probe done"));
+  regressions.push("t4-release-failure-never-reports-probe-done");
+  arms += 1;
+}
+
+// T4: successful delivery with failed persistence remains a confirmation ERROR.
+{
+  const { services, calls } = makeServices({
+    env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" },
+    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      { exitCode: 2, stdout: "", stderr: "state unavailable" },
+      decision({ fire: false, reason: "probe-in-progress", level: null, percent: 35 })],
+  });
+  await run(services, measured(30));
+  assert.equal(lastStatus(calls), "handoff ERROR: probe confirmation failed");
+  await run(services, measured(35));
+  assert.equal(lastStatus(calls), "handoff ERROR: probe confirmation failed");
+  assert.equal(calls.runs.length, 1);
+  assert.ok(!calls.statuses.includes("handoff probe done"));
+  regressions.push("t4-confirmation-failure-keeps-accurate-error");
   arms += 1;
 }
 

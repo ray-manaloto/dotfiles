@@ -46,6 +46,10 @@ class StateLockedError(OSError):
     """The bounded exclusive state lock could not be acquired."""
 
 
+class StateUnreadableError(OSError):
+    """Existing session state could not be read or decoded safely."""
+
+
 def valid_session_id(session_id: str) -> bool:
     """Whether the id can safely become a state-file name."""
     return bool(_SESSION_ID_RE.fullmatch(session_id))
@@ -92,12 +96,12 @@ def read_state(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return {}
-    except ValueError as exc:
+    except (OSError, ValueError) as exc:
         msg = f"unreadable state {path}: {exc}"
-        raise OSError(msg) from exc
+        raise StateUnreadableError(msg) from exc
     if not isinstance(data, dict):
         msg = f"state {path} is not a JSON object"
-        raise OSError(msg)
+        raise StateUnreadableError(msg)
     return data
 
 

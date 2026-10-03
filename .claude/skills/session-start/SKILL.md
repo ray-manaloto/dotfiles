@@ -31,7 +31,8 @@ included; `-p` and the SDK skip). Python decides, once per session id —
 A changed-module reload can re-fire `session.start`; `already-ran` queues no
 reload. The first `prompt.submit` also reads
 `session-start pending --session-id <id>` once after a reload to recover the persisted prefix, even when start did
-not re-fire. Failed pending reads are retried at the next prompt. Rejected
+not re-fire. Failed pending reads get at most three attempts per session in a
+module lifetime, then one terminal ERROR; reload the module to retry. Rejected
 naming stays pending; confirmed naming clears it.
 
 ## Reading the status line

@@ -13,10 +13,13 @@ session named `dotfiles-….coordinator` (bg job record, fail closed) crosses
 `DOTFILES_COORDINATOR_HANDOFF_STEP_PCT` (default 5) above it until launch.
 An existing launch record prevents every subsequent fire and second launch.
 The first measurement checks the role. A miss below the limit gets one re-check
-at the limit; a coordinator is cached for the module's lifetime. Lanes write no
+at the limit; a miss there expires after 10 minutes of module time. A coordinator
+is cached for the module's lifetime. Lanes write no
 handoff state. PROBE passes `--probe` and fires once per session; DRY_RUN passes
 `--dry-run` and fires once per preview level. Neither spends real levels.
-Failed real delivery releases the consumed level.
+Failed real delivery releases the consumed level. A probe stays pending until
+its command resolves; successful delivery confirms it, rejection releases it
+with `release --probe` and shows `handoff ERROR: probe delivery failed`.
 The judgement
 is `mise run coordinator-handoff -- decide`; the spec is
 `docs/specs/coordinator-auto-handoff-2026-10-02.md`.
@@ -64,10 +67,20 @@ checkout; the brief gives retire its exact `--state-dir`. rc 2 means refused
 (invalid id, missing handoff, not a coordinator, already launched, unavailable
 census/state, a start already in progress, or a 10 s lock timeout): record that
 in the handoff and stop. A pending start blocks another for 15 minutes; stale
-pending state is ignored with a warning. Only rc 0 records a successful launch.
+or unreadable-age pending state is ignored with a warning. Refusal reasons
+distinguish `state-locked`, `state-unreadable`, `state-write-failed`,
+`worktree-unavailable`, `handoff-unreadable`, and `census-unavailable` (process
+snapshot/tree failure; unavailable fd-1 logs use the redirect fallback).
+rc 0 means started and recorded (dry-run: nothing recorded or executed).
 rc 3 means start failed (missing executable, 60 s timeout or nonzero rc): pending
-state is removed and the real firing level restored so the hook can retry.
+state is removed, the fired level is kept, and the hook retries at the next step.
+rc 4 means successor STARTED but not recorded — do not relaunch. Its pending
+record is marked `started: true`; it blocks firing regardless of age and is
+accepted by retire. An independent started receipt preserves that confirmation
+if the session-state lock or promotion write fails.
 Harness logs marked `harness-output:` have no rc file; wait on pid exit.
+Redirect fallback skips the harness's final `eval` prelude; `/dev/null` is no
+log. With no log, wait on pid exit.
 
 ## 3. Go idle
 
