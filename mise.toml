@@ -155,16 +155,21 @@ pin = true
 # entry while ~/.config/mise/config.toml listed antigravity-cli), so it is repeated here. The
 # former `npm:@openai/codex` entry went with the shared.toml codex pin it disabled
 # (docs/specs/native-cli-devcontainer-2026-10-01.md). No repo config pins codex/claude at all.
-# A short name does NOT disable its full backend spec (4-arm probe, 2026-10-02:
-# docs/research/kb/reports/agents/session-audit-bugs-2026-10-01c.md B2), so every spelling is listed.
+# A short name does NOT disable its full backend spec (session-audit-bugs-2026-10-01c.md B2), and the
+# registry short names `agy`/`claude` are separate entries again (code-review-session-audit-20261001-000-
+# 2026-10-02.md #1; arm: an agy+claude+ruff pin lists all three under the old list, only ruff under this).
 disable_tools = [
   "antigravity-cli",
+  "agy",
   "aqua:google-antigravity/antigravity-cli",
   "codex",
   "aqua:openai/codex",
   "github:openai/codex",
   "npm:@openai/codex",
+  "claude",
   "claude-code",
+  "aqua:anthropics/claude-code",
+  "http:claude",
   "github:anthropics/claude-code",
   "npm:@anthropic-ai/claude-code",
 ]

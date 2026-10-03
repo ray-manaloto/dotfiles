@@ -255,7 +255,7 @@ dotfiles-setup verify run                       # if .devcontainer/ or contracts
 ```
 
 Run the lint above BEFORE `git commit`; don't let the pre-commit hook find it. `typos` rejects coined
-abbreviations — only the uppercase harness-evolution-ledger shorthand is allow-listed (`typos.toml`).
+abbreviations unless `typos.toml` allow-lists them (the uppercase harness-evolution-ledger shorthand is).
 
 Stage specific paths (never `git add .` — phantom `.agent/state/**` files;
 `.claude/rules/do-not.md`). Commit doc updates with the standard trailers.
