@@ -26,23 +26,41 @@ Create:
 - `tests/test_llvm_major.py` — unit tests (fetchers injected; no network).
 
 Modify:
-- `python/src/dotfiles_setup/main.py` — register subcommands `llvm-detect`, `llvm-parity`, `llvm-bump`.
+- `python/src/dotfiles_setup/main.py` — register subcommands `llvm-detect`, `llvm-parity`, `llvm-bump` in a NEW
+  `_add_llvm_subcommands` helper (`setup_parser` sits at ruff's PLR0915 ceiling, `main.py:1041`) plus handler-dict
+  entries (`_build_command_handlers`, dict at ~`:2903`). ALSO: the `apt-repo --llvm-version` default (`main.py:235`,
+  literal `"22"`) becomes `None`, resolved at run time to `pinned_major()` of `.devcontainer/mise-system.toml`; its
+  help text (`:236-238`) names no current major.
+- `python/src/dotfiles_setup/apt_repo.py` — docstrings/comments that state a current major or "-23 is a 404"
+  (`:11-14`, `:51-57`, `:66`) become major-neutral or are explicitly dated as historical.
 - `mise.toml` — tasks `llvm-detect`, `llvm-parity`, `llvm-bump` (thin `uv run --project python dotfiles-setup …`
   callers); refresh the `[tasks.apt-repo]` comment block so it names no current major (lines ~760-762 today).
 - `hk.pkl` — step `llvm_major_parity`, `check = "uv run --project python dotfiles-setup llvm-parity"`, shaped like
   `no_platform_literals`.
-- `.devcontainer/Dockerfile` — one `ARG LLVM_MAJOR=<P>` in the `devcontainer-base` stage; every suite name,
+- `.devcontainer/Dockerfile` — one `ARG LLVM_MAJOR=<P>` in the `devcontainer-base` stage, placed directly beside
+  `ARG LLVM_APT_SIGNING_FINGERPRINT` (~`:183`), i.e. BEFORE the stage `SHELL` re-assert at ~`:243` (hadolint 2.15
+  forgets the stage SHELL after a mid-stage ARG — `Dockerfile:239-243` — and the smoke RUN uses the `<<<` bashism).
+  Every LLVM site (:152-317) is inside that stage (`FROM … AS devcontainer-base` :33, next `FROM` :417), so the ARG
+  reaches all of them. Every suite name,
   `apt-cache policy clang-…`, `/usr/lib/llvm-…/bin` path and version assertion uses `${LLVM_MAJOR}`; prose comments
   that describe the CURRENT major become major-neutral (dated historical probe statements keep their numbers).
 - `.devcontainer/mise-system.toml` — 52 active pins + 6 commented pins regenerated at 23; `_.path`; major-neutral
   prose for current-state comments (lines ~50-60, 87-88, 173-217); the "Regenerate with" line names `mise run llvm-bump`.
 - `renovate.json` — the `apt.llvm.org` registryUrl suite (line ~79).
 - `python/src/dotfiles_setup/apt_pins.py` — the probe script's `llvm-toolchain-%s-22` (line ~145) takes the major
-  derived from the pins, not a literal.
-- `python/src/dotfiles_setup/image.py` — `_parse_apt_llvm_version` (lines ~51-70) locates the `apt:clang-<N>` key by
-  pattern instead of the literal `"apt:clang-22"`; refresh its LLVM-22 comments to neutral.
+  from the `clang-<N>` key inside the `pins` mapping it already receives. `probe_script(pins, fingerprint)` keeps its
+  name AND signature (`suites.toml:2358` requires the token `def probe_script(`; `tests/test_apt_pins.py:106` passes
+  `{"clang-22": "1:22"}`). A `pins` mapping with no or several `clang-<N>` keys raises.
+- `python/src/dotfiles_setup/image.py` — `_parse_apt_llvm_version` (lines ~51-70, messages at :64/:68) locates the
+  `apt:clang-<N>` key by pattern (`llvm_major.pinned_major` / `llvm_pins`) instead of the literal `"apt:clang-22"`; it
+  must work on BOTH the 22 and the 23 tree, because `resolve_expected_llvm_version_at_base` (~`:2097`) reads the
+  merge-base. The tier-3 libclc smoke root `/usr/lib/llvm-22` (`image.py:765`) becomes the glob `/usr/lib/llvm-*`
+  (same major-neutral shape as `:543`). Refresh LLVM-22 prose (`:533`, `:591`, `:607`, `:713-714`, `:734`, `:759-760`)
+  to neutral wording.
 - Tests that must keep passing or be updated: `tests/test_image_smoke.py` (fixture `apt:clang-22` at ~228 stays valid
-  under the pattern), `tests/test_apt_pins.py`, `tests/test_apt_repo.py` (fixtures may stay at 22 — they are fixtures).
+  under the pattern), `tests/test_apt_pins.py` (`:98`, `:106`), `tests/test_apt_repo.py`,
+  `tests/test_renovate_dryrun.py` (`:42`, `:99-101`), `tests/test_command_audit.py` (`:526`, `:531`). Fixtures may
+  stay at 22 — they are fixtures. `hk.pkl:218` is a dated incident comment and stays.
 
 Do NOT touch: `docs/research/**`, `.github/**`, any lockfile, anything under `.claude/`.
 
@@ -51,6 +69,10 @@ Do NOT touch: `docs/research/**`, `.github/**`, any lockfile, anything under `.c
 ```python
 # llvm_major.py
 Fetcher = Callable[[str], tuple[int, bytes]]   # (HTTP status, body); network errors RAISE
+# llvm_major owns its own status-aware default fetcher that does NOT follow redirects (a 3xx must surface as a
+# status, and suite_served raises on it). apt_repo's Fetcher is Callable[[str], bytes] and its default
+# (`_default_fetcher`, curl -fsSL) follows redirects and folds 404 into RuntimeError, so it must NOT be used for
+# the Release gate; pass apt_repo an adapter (status 200 → body, anything else → raise) when reading Packages.gz.
 
 @dataclass(frozen=True)
 class Detection:
@@ -72,9 +94,11 @@ def pinned_major(mise_system_text: str) -> int
     # N from the anchor key. Raises if there is no anchor or more than one, or if the anchor value's
     # epoch-stripped leading major != N.
 
-def codename_for_base_image(dockerfile_text: str, fetch: Fetcher) -> str
-    # BASE_IMAGE ARG "ubuntu:<YY.MM>@sha256:…" → the Dist whose Version starts with YY.MM in
-    # https://changelogs.ubuntu.com/meta-release (fall back to meta-release-development). Raises if absent.
+def codename_for_base_image(root: Path, fetch: Fetcher) -> str
+    # BASE_IMAGE "ubuntu:<YY.MM>@sha256:…" read from BOTH .devcontainer/Dockerfile (ARG, :14) and docker-bake.hcl
+    # (variable default, :80 — what CI actually builds from); RAISE if the two disagree. Then the Dist whose
+    # Version starts with YY.MM in https://changelogs.ubuntu.com/meta-release (fall back to
+    # meta-release-development). Raises if absent.
 
 def newest_ga_major(fetch_releases: Callable[[], list[dict]]) -> int
     # max major over llvm/llvm-project releases with prerelease == False, draft == False,
@@ -101,6 +125,9 @@ def parity_violations(root: Path) -> list[str]
     #   Dockerfile ARG LLVM_MAJOR default == P;
     #   Dockerfile has no literal /usr/lib/llvm-<digits>, llvm-toolchain-…-<digits>, clang-<digits> outside that ARG;
     #   mise-system.toml _.path contains exactly "/usr/lib/llvm-{P}/bin";
+    #   python/src/dotfiles_setup/{image,apt_pins,apt_repo,main}.py contain no LLVM-major literal in CODE
+    #     (string literals naming /usr/lib/llvm-<digits>, llvm-toolchain-…-<digits>, apt:clang-<digits>, or an
+    #     --llvm-version default); comments/docstrings are exempt;
     #   renovate.json has exactly one apt.llvm.org registryUrl and its suite == llvm-toolchain-<C>-{P}
     #     where <C> is the path segment of that same URL;
     #   commented apt.llvm.org pins in mise-system.toml carry -{P} too.
@@ -111,7 +138,8 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan
     # by non-digits (regex (?<!\d)P(?!\d)): clang-22→clang-23, libclang-cpp22→libclang-cpp23,
     # libllvm22→libllvm23; libc++1 / libomp5 / llvm-libunwind1 map to THEMSELVES. Active/commented
     # status is preserved per name.
-    # Every mapped name must exist in T's live Packages index (apt_repo) → else RAISE naming it.
+    # Read T's index for BOTH binary-amd64 and binary-arm64 (the image is dual-arch; mise-system.toml locks
+    # linux-arm64 too, ~:319). Every mapped name must exist in BOTH → else RAISE naming name + arch.
     # Any package in T's index that is not in the mapped set → RAISE naming it (the set is the COMPLETE
     #   suite by policy; a human decides activate vs comment).
     # Pin value = that package's single version in T's index; all must be identical, else RAISE.
@@ -162,8 +190,14 @@ Run, file-captured rc each (`mise run gate -- run <name>` where available):
    `mise run llvm-detect` → rc 0; `mise run llvm-parity` → rc 0.
 4. Parity fail arm: temporarily set `_.path` back to `llvm-22` → `mise run llvm-parity` rc 1 naming `_.path`; restore.
 5. `mise run lint` rc 0; `uv run --project python pytest tests/ -x -q` rc 0; `mise run verify` 0 failed.
-6. `git grep -nE '(llvm|clang|lldb|libclang-rt)-22|(cpp|llvm)22\b|toolchain-[^ ]*-22' -- . ':!docs' ':!tests' ':!*.md'`
-   → empty, except dated historical-probe comments the lane lists explicitly in its report (prints the command).
+6. `git grep -nE '[a-z+]-22([^0-9.]|$)|[a-z]22([^0-9.]|$)|"22"|version 22|\^22' -- . ':!docs' ':!tests' ':!*.md' ':!*.lock'`
+   → empty, except dated historical-probe comments and non-LLVM hits the lane lists one by one in its report with a
+   reason each (prints the command). Control arm: the same command on the PRE-change tree must hit `main.py:235`,
+   `image.py:765`, `flang-22`, `libomp-22-dev` and `libllvm22` — if it misses any, the pattern is broken.
+   (Armed by the architect on be45841a: all five hit. The known non-LLVM noise is hex digests —
+   `.github/workflows/image-analysis.yml:171`, `python/src/dotfiles_setup/skillopt_provenance.py:32`,
+   `skillopt/provenance/session-review-history.json` — list them with that reason.)
+7. Parity fail arms for the new python check: re-introduce `default="22"` in `main.py` → `llvm-parity` rc 1; restore.
 
 ## 6. Commit
 
@@ -194,5 +228,8 @@ commits; end each body with the attribution lines the coordinator supplies. Neve
 | 17 | E | rc releases are `prerelease=true`; 23.1.0 GA 2026-08-25; rc1 has a tag and no release object | sweep report E15-E16 |
 | 18 | E | The 58 pins (52 active + 6 commented, incl. 4 major-less names `libc++1`, `libc++abi1`, `libomp5`, `llvm-libunwind1`) equal the live `-22` amd64 index exactly (58 names, 1 version); the `-23` index carries exactly the same 58 names under the token mapping, 1 version. (A first comparison that dropped the major-less names showed them as "extra" in BOTH suites — that is the trap the mapping rule above closes.) | probe this session: python-gzip read of both `Packages.gz` vs `grep -E '^#? ?"apt:.*= "1:22'` (52 + 6) |
 | 18b | E | The plan's verification step 2 reproduces that equality through the real planner, not this ad-hoc probe | — (lane must run it) |
-| 19 | A | No other image-side consumer hardcodes 22 beyond rows 3-10. Grep-backed: `git grep` for `llvm-22|clang-22|…-22-dev|toolchain-…-22|LLVM.?22|version 22|^22` outside docs/md returned only those sites + tests + comments (this session) |
+| 19 | L | Rev 2 (row was REFUTED by premise-verifier): two more live literals exist — `image.py:765` (`find … /usr/lib/llvm-22`, tier-3 libclc smoke) and `main.py:235` (`--llvm-version default="22"`). Both are now in Files and in the parity check. No hits in `.github/**`, `docker-bake.hcl`, `python/verification/suites.toml`, `scripts/`, `home/`, `.claude/` | `docs/research/kb/reports/agents/premise-verifier-llvm-major-detect-bump-2026-10-02.md` |
+| 21 | L | Dockerfile and bake carry the same `BASE_IMAGE` and are kept "in lockstep" by convention | `.devcontainer/Dockerfile:14`, `docker-bake.hcl:78-81` |
+| 22 | E | conda-forge `include-what-you-use` latest = 0.26 (clang 22); upstream has a `clang_23` branch but no 0.27 release (newest release 0.26, 2026-03-22); control `repos/include-what-you-use/zzq-nonexist-k3` → 404 | probe this session (`api.anaconda.org`, `gh api`) |
+| 23 | A | **OPEN FORK for the coordinator — iwyu stays on clang 22 after the bump** (`"conda:include-what-you-use" = "latest"`, `mise-system.toml:74`; rationale at :58-60 says "matching clang-22"). Lane recommendation: accept the temporary mismatch (iwyu ships its own isolated clang 22 inside its conda env; `latest` picks up 0.27 when conda-forge publishes it) and rewrite :58-60 to say so; do NOT build iwyu from source (ruling 2: prebuilt only). Spec is NOT dispatched until this is ruled |
 | 20 | A | `gh api --paginate repos/llvm/llvm-project/releases` is within rate limits (core 4927 remaining at 01:50 UTC) |
