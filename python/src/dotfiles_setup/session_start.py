@@ -42,12 +42,15 @@ from typing import TYPE_CHECKING, Literal
 from dotfiles_setup import reap
 from dotfiles_setup.session_common import (
     PROJECT,
+    STATE_LOCK_TIMEOUT_S,
     StateLockedError,
     chicago_stamp,
     default_jobs_dir,
     job_record,
+    job_record_path,
     now_iso,
     read_state,
+    session_name,
     stamped_name,
     state_lock,
     valid_session_id,
@@ -131,6 +134,7 @@ class StartDeps:
     runner: Runner | None = None
     processes: tuple[reap.Process, ...] | None = None
     self_pid: int | None = None
+    lock_timeout_s: float = STATE_LOCK_TIMEOUT_S
 
 
 def user_name(session_id: str, deps: StartDeps) -> tuple[str | None, bool]:
@@ -272,7 +276,7 @@ def decide(request: StartRequest, deps: StartDeps) -> StartDecision:
         return _inert("invalid-session-id", request.session_id)
     path = deps.state_dir / f"{request.session_id}.json"
     try:
-        with state_lock(path):
+        with state_lock(path, timeout_s=deps.lock_timeout_s):
             state = read_state(path)
             if "action" in state:
                 return _repeat(request, state)
@@ -296,18 +300,34 @@ def decide(request: StartRequest, deps: StartDeps) -> StartDecision:
     )
 
 
-def mark_renamed(session_id: str, name: str, state_dir: Path) -> int:
-    """Record a resolved rename, preserving concurrent session bookkeeping."""
+def mark_renamed(
+    session_id: str,
+    name: str,
+    state_dir: Path,
+    *,
+    jobs_dir: Path | None = None,
+    timeout_s: float = STATE_LOCK_TIMEOUT_S,
+) -> int:
+    """Confirm an available job name before recording a resolved rename."""
     if not valid_session_id(session_id):
         logger.error("session-start renamed: invalid session id %r", session_id)
         return 2
     path = state_dir / f"{session_id}.json"
     try:
-        with state_lock(path):
+        with state_lock(path, timeout_s=timeout_s):
             state = read_state(path)
             if "action" not in state:
                 logger.error(
                     "session-start renamed: no decision recorded for %s", session_id
+                )
+                return 2
+            jobs = default_jobs_dir() if jobs_dir is None else jobs_dir
+            record_path = job_record_path(session_id, jobs)
+            if record_path.exists() and session_name(session_id, jobs) != name:
+                logger.error(
+                    "session-start renamed: job name mismatch or unreadable for %s; "
+                    "naming stays pending",
+                    session_id,
                 )
                 return 2
             state["renamed"] = {"at": now_iso(), "name": name}
@@ -318,12 +338,17 @@ def mark_renamed(session_id: str, name: str, state_dir: Path) -> int:
     return 0
 
 
-def pending(session_id: str, state_dir: Path) -> StartDecision:
+def pending(
+    session_id: str,
+    state_dir: Path,
+    *,
+    timeout_s: float = STATE_LOCK_TIMEOUT_S,
+) -> StartDecision:
     """Recover a pending rename after a plugin reload, without reloading again."""
     if not valid_session_id(session_id):
         return _inert("invalid-session-id", session_id)
     try:
-        with state_lock(state_dir / f"{session_id}.json"):
+        with state_lock(state_dir / f"{session_id}.json", timeout_s=timeout_s):
             state = read_state(state_dir / f"{session_id}.json")
     except StateLockedError as exc:
         return _inert("state-locked", session_id, (str(exc),))
@@ -346,7 +371,7 @@ def pending(session_id: str, state_dir: Path) -> StartDecision:
 
 
 def add_subcommands(parser: argparse.ArgumentParser) -> None:
-    """``session-start {decide,renamed}``."""
+    """``session-start {decide,renamed,pending}``."""
     sub = parser.add_subparsers(dest="session_start_command", required=True)
     decide_parser = sub.add_parser(
         "decide", help="JSON reload/naming decision for one new session (rc 0)"
@@ -362,7 +387,7 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
         help="A -p/SDK session: answer non-interactive and do nothing",
     )
     renamed_parser = sub.add_parser(
-        "renamed", help="Record that rename resolved successfully"
+        "renamed", help="Confirm the job name after rename resolves and record it"
     )
     renamed_parser.add_argument("--session-id", required=True)
     renamed_parser.add_argument("--name", required=True)
@@ -377,16 +402,22 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
             default=None,
             help="Override <project>/.agent/state/session-start",
         )
-    decide_parser.add_argument(
-        "--jobs-dir", type=Path, default=None, help="Override ~/.claude/jobs"
-    )
+    for child in (decide_parser, renamed_parser):
+        child.add_argument(
+            "--jobs-dir", type=Path, default=None, help="Override ~/.claude/jobs"
+        )
 
 
 def main(args: argparse.Namespace, project_root: Path) -> int:
     """Dispatch one parsed ``session-start`` invocation."""
     state_dir = args.state_dir or project_root / STATE_SUBDIR
     if args.session_start_command == "renamed":
-        return mark_renamed(args.session_id, args.name, state_dir)
+        return mark_renamed(
+            args.session_id,
+            args.name,
+            state_dir,
+            jobs_dir=args.jobs_dir or default_jobs_dir(),
+        )
     if args.session_start_command == "pending":
         sys.stdout.write(pending(args.session_id, state_dir).to_json() + "\n")
         return 0

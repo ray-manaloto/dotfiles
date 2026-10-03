@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).parent.parent
 HARNESS = REPO_ROOT / "tests" / "fixtures" / "session_start_hook" / "harness.ts"
 _BUN_TIMEOUT_S = 90
 #: Every arm the harness runs; a dropped block changes the count and fails here.
-_EXPECTED_ARMS = 24
+_EXPECTED_ARMS = 28
 _REGRESSIONS = [
     "r11-answered-object-text",
     "r11-unanswered-object-fallback",
@@ -20,6 +20,7 @@ _REGRESSIONS = [
     "r12-first-prompt-recovers-persisted-prefix",
     "r10-name-unknown-no-rename",
     "r12-repeat-start-recovers-unconfirmed-name",
+    "s5-failed-pending-read-retries",
 ]
 
 

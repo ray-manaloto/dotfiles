@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
@@ -34,6 +34,7 @@ COORDINATOR = "dotfiles-20261002T163103.123456789-05.coordinator"
 _NS = 1_000_000_000
 _LIVE_WAIT_S = 5.0
 _ZERO_TASKS = {"tasks": 0}
+_SHORT_LOCK_TIMEOUT_S = 0.05
 
 
 def _ns(moment: datetime, nanos: int) -> int:
@@ -62,13 +63,18 @@ def _job(
 
 
 def _decide(
-    tmp_path: Path, percent: float, env: dict[str, str] | None = None
+    tmp_path: Path,
+    percent: float,
+    env: dict[str, str] | None = None,
+    *,
+    timeout_s: float = sc.STATE_LOCK_TIMEOUT_S,
 ) -> ch.Decision:
     return ch.decide(
         ch.DecideRequest(SESSION, percent),
         env=env or {},
         jobs_dir=tmp_path / "jobs",
         state_dir=tmp_path / "state",
+        timeout_s=timeout_s,
     )
 
 
@@ -344,9 +350,7 @@ def test_census_records_outermost_heavy_runs_under_the_session_root() -> None:
     """One entry per logical run, its log; never the caller or an outsider."""
     runs = ch.census(TREE, self_pid=201, runner=_Recorder(0))
     assert runs == (
-        ch.HeavyRun(
-            300, "/bin/zsh -c mise run ship > logs/ship.log 2>&1", "logs/ship.log"
-        ),
+        ch.HeavyRun(300, "/bin/zsh -c mise run ship > logs/ship.log 2>&1", None),
         ch.HeavyRun(500, "mise run land -- 1571", None),
     )
 
@@ -499,7 +503,7 @@ def test_launch_dry_run_prints_argv_from_the_main_checkout(
     assert str(handoff.resolve()) in brief
     assert str(main / ".agent/plans/main-checkout-ship-queue.md") in brief
     assert "pid 300: /bin/zsh -c mise run ship > logs/ship.log 2>&1" in brief
-    assert "(log: logs/ship.log)" in brief
+    assert "(log: none)" in brief  # cwd unavailable: never wait on a relative path.
     assert "Keep X? (Recommended: yes)" in brief
     assert "never by sorting names" in brief
     assert "Ask Ray ONLY for human-intervention items" in brief
@@ -516,17 +520,19 @@ def test_launch_dry_run_prints_argv_from_the_main_checkout(
 def test_launch_records_the_census_then_runs_claude(
     tmp_path: Path, checkouts: tuple[Path, Path], handoff: Path
 ) -> None:
-    """State before signal; the rc is claude's."""
+    """A census is reserved before signal and launch is recorded on success."""
     main, lane = checkouts
-    runner = _Recorder(7)
+    runner = _Recorder(0)
     deps = _deps(tmp_path, lane, [], runner=runner)
-    assert ch.launch(handoff, SESSION, dry_run=False, deps=deps) == 7
+    assert ch.launch(handoff, SESSION, dry_run=False, deps=deps) == 0
     argv, kwargs = runner.calls[0]
     assert argv[:2] == ["claude", "--bg"]
     assert kwargs["cwd"] == main
+    assert kwargs["timeout"] == 60
     state = json.loads((tmp_path / "state" / f"{SESSION}.json").read_text())
     assert [run["pid"] for run in state["census"]] == [300, 500]
     assert state["launch"]["successor"] == argv[3]
+    assert "launch_pending" not in state
 
 
 def test_launch_refuses_a_non_coordinator(
@@ -886,10 +892,10 @@ def test_r5_decide_respects_an_external_lock_and_reports_the_bound(
     with (state_dir / f"{SESSION}.json.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         started = time.monotonic()
-        decision = _decide(tmp_path, 30)
+        decision = _decide(tmp_path, 30, timeout_s=_SHORT_LOCK_TIMEOUT_S)
         elapsed = time.monotonic() - started
     assert (decision.fire, decision.reason) == (False, "state-locked")
-    assert sc.STATE_LOCK_TIMEOUT_S <= elapsed < sc.STATE_LOCK_TIMEOUT_S + 5
+    assert _SHORT_LOCK_TIMEOUT_S <= elapsed < 1
     assert not (state_dir / f"{SESSION}.json").exists()
 
 
@@ -912,16 +918,36 @@ def test_r5_all_other_state_mutators_honor_an_external_lock(
     with path.with_suffix(".json.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if operation == "release":
-            rc = ch.release(SESSION, 30, state_dir=tmp_path / "state")
+            rc = ch.release(
+                SESSION,
+                30,
+                state_dir=tmp_path / "state",
+                timeout_s=_SHORT_LOCK_TIMEOUT_S,
+            )
         elif operation == "launch":
             rc = ch.launch(
                 handoff,
                 SESSION,
                 dry_run=True,
-                deps=_deps(tmp_path, checkouts[1], [], runner=_Recorder(0)),
+                deps=ch.LaunchDeps(
+                    state_dir=tmp_path / "state",
+                    jobs_dir=tmp_path / "jobs",
+                    cwd=checkouts[1],
+                    processes=TREE,
+                    self_pid=201,
+                    runner=_Recorder(0),
+                    out=lambda _text: None,
+                    lock_timeout_s=_SHORT_LOCK_TIMEOUT_S,
+                ),
             )
         else:
-            rc = ss.mark_renamed(SESSION, "confirmed", tmp_path / "state")
+            rc = ss.mark_renamed(
+                SESSION,
+                "confirmed",
+                tmp_path / "state",
+                jobs_dir=tmp_path / "jobs",
+                timeout_s=_SHORT_LOCK_TIMEOUT_S,
+            )
     assert rc == (1 if operation == "renamed" else 2)
     assert "state-locked" in caplog.text
     assert path.read_bytes() == before
@@ -1062,13 +1088,15 @@ def test_r8_all_heavy_task_and_mise_forms_are_in_the_census(
     )
 
 
-@pytest.mark.parametrize("owner", [300, 301])
-def test_r9_fd1_real_file_wins_over_unexpanded_redirect(
-    tmp_path: Path, owner: int
+def test_s3_wrapper_log_is_ignored_for_the_heavy_commands_fd1(
+    tmp_path: Path,
 ) -> None:
-    """Native lsof resolves the heavy process's stdout or its first descendant's."""
+    """The shell's harness output cannot mask its heavy child's redirected log."""
     log = tmp_path / "actual log.txt"
     log.touch()
+    wrapper_log = tmp_path / "tasks" / "shell.output"
+    wrapper_log.parent.mkdir()
+    wrapper_log.touch()
     calls: list[list[str]] = []
 
     def lsof(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -1076,7 +1104,7 @@ def test_r9_fd1_real_file_wins_over_unexpanded_redirect(
         assert kwargs["timeout"] == 10
         pid = int(argv[3])
         return subprocess.CompletedProcess(
-            argv, 0, f"p{pid}\nf1\nn{log}\n" if pid == owner else "", ""
+            argv, 0, f"p{pid}\nf1\nn{log if pid == 301 else wrapper_log}\n", ""
         )
 
     tree = (
@@ -1086,7 +1114,7 @@ def test_r9_fd1_real_file_wins_over_unexpanded_redirect(
     )
     runs = ch.census(tree, self_pid=201, runner=lsof)
     assert runs == (ch.HeavyRun(300, 'zsh -c mise run ship > "$LOG"', str(log)),)
-    assert calls[0] == ["lsof", "-a", "-p", "300", "-d", "1", "-Fn"]
+    assert calls == [["lsof", "-a", "-p", "301", "-d", "1", "-Fn"]]
 
 
 def test_r9_unresolved_variable_log_is_marked_and_never_a_wait_target() -> None:
@@ -1096,17 +1124,23 @@ def test_r9_unresolved_variable_log_is_marked_and_never_a_wait_target() -> None:
     assert runs[0].log_path == "unexpanded:$LOG"
 
 
-def test_r9_quoted_fallback_keeps_spaces_and_marks_variables() -> None:
+def test_r9_quoted_fallback_keeps_spaces_and_marks_variables(tmp_path: Path) -> None:
     """A fallback stays usable or explicitly unresolved, including quoted spaces."""
     tree = (
         *TREE[:4],
         _proc(300, 100, 'zsh -c mise run ship > "$LOG/ship run.txt"'),
         _proc(400, 100, 'zsh -c mise run land > "logs/land run.txt"'),
     )
-    runs = ch.census(tree, self_pid=201, runner=_Recorder(0))
+
+    def lsof(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            argv, 0, f"ncwd\nn{tmp_path}\n" if argv[5] == "cwd" else "", ""
+        )
+
+    runs = ch.census(tree, self_pid=201, runner=lsof)
     assert [run.log_path for run in runs] == [
         "unexpanded:$LOG/ship run.txt",
-        "logs/land run.txt",
+        str(tmp_path / "logs/land run.txt"),
     ]
 
 
@@ -1130,3 +1164,350 @@ def test_r14_unattended_docs_require_an_early_docs_branch_pr() -> None:
     assert "docs branch" in unattended
     assert "PR early" in unattended
     assert "ssh keepalive" in unattended
+
+
+# ── review round 2: each S-item has a baseline-breaking regression arm ────────
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_s1_probe_once_and_dry_run_steps_leave_real_levels_unspent(
+    tmp_path: Path,
+) -> None:
+    """Probe completion turns and repeated previews cannot consume real fires."""
+    jobs, state = tmp_path / "jobs", tmp_path / "state"
+
+    def preview(
+        percent: float, *, probe: bool = False, dry_run: bool = False
+    ) -> ch.Decision:
+        return ch.decide(
+            ch.DecideRequest(SESSION, percent, probe=probe, dry_run=dry_run),
+            env={},
+            jobs_dir=jobs,
+            state_dir=state,
+        )
+
+    assert not preview(29, probe=True).fire
+    assert preview(30, probe=True).fire
+    for percent in (30, 35, 90):
+        assert preview(percent, probe=True).reason == "probe-done"
+    assert preview(30, dry_run=True).fire
+    assert not preview(30, dry_run=True).fire
+    assert not preview(34, dry_run=True).fire
+    assert preview(35, dry_run=True).fire
+    assert not preview(35, dry_run=True).fire
+    stored = json.loads((state / f"{SESSION}.json").read_text())
+    assert stored["probe_fired"] is True
+    assert stored["dry_run_fired"] == 35
+    assert "last_fired" not in stored
+    assert "previous_fired" not in stored
+    assert _decide(tmp_path, 30).fire
+    assert not preview(35, dry_run=True).fire
+    assert preview(40, dry_run=True).fire
+    assert json.loads((state / f"{SESSION}.json").read_text())["last_fired"] == 30
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (None, "nonzero"),
+        (None, "missing"),
+        (None, "timeout"),
+        (30, "nonzero"),
+        (30, "missing"),
+        (30, "timeout"),
+    ],
+)
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_s2_failed_start_rolls_back_unlocked_and_can_retry(
+    tmp_path: Path,
+    checkouts: tuple[Path, Path],
+    handoff: Path,
+    caplog: pytest.LogCaptureFixture,
+    case: tuple[int | None, str],
+) -> None:
+    """A failed process start is rc 3 and restores the same delivery threshold."""
+    previous, failure = case
+    if previous is not None:
+        assert _decide(tmp_path, previous).fire
+    assert _decide(tmp_path, 45).fire
+    path = tmp_path / "state" / f"{SESSION}.json"
+    boundary = _Recorder(0)
+
+    def start(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if argv[0] != "claude":
+            return boundary(argv, **kwargs)
+        assert kwargs["timeout"] == 60
+        # Acquiring the real lock here proves it is not held over the start call.
+        with sc.state_lock(path, timeout_s=_SHORT_LOCK_TIMEOUT_S):
+            stored = sc.read_state(path)
+        assert "launch" not in stored
+        assert stored["launch_pending"]["name"] == argv[3]
+        assert (
+            _decide(tmp_path, 90, timeout_s=_SHORT_LOCK_TIMEOUT_S).reason
+            == "launch-in-progress"
+        )
+        if failure == "missing":
+            msg = "missing start executable"
+            raise FileNotFoundError(msg)
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(argv, 60)
+        return subprocess.CompletedProcess(argv, 7)
+
+    deps = ch.LaunchDeps(
+        state_dir=tmp_path / "state",
+        jobs_dir=tmp_path / "jobs",
+        cwd=checkouts[1],
+        processes=TREE,
+        self_pid=201,
+        runner=start,
+        out=lambda _text: None,
+        lock_timeout_s=_SHORT_LOCK_TIMEOUT_S,
+    )
+    assert ch.launch(handoff, SESSION, dry_run=False, deps=deps) == 3
+    stored = json.loads(path.read_text())
+    assert "launch_pending" not in stored
+    assert "launch" not in stored
+    assert stored.get("last_fired") == previous
+    assert "start failed" in caplog.text
+    if failure == "nonzero":
+        assert "claude --bg rc 7" in caplog.text
+    assert _decide(tmp_path, 45).fire
+    assert (
+        ch.launch(
+            handoff,
+            SESSION,
+            dry_run=False,
+            deps=_deps(tmp_path, checkouts[1], [], runner=_Recorder(0)),
+        )
+        == 0
+    )
+    assert "launch" in json.loads(path.read_text())
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_s2_pending_start_blocks_until_stale_then_warns(
+    tmp_path: Path,
+    checkouts: tuple[Path, Path],
+    handoff: Path,
+) -> None:
+    """Fresh pending state blocks both entry points; 15-minute-old state can retry."""
+    assert _decide(tmp_path, 30).fire
+    path = tmp_path / "state" / f"{SESSION}.json"
+    state = json.loads(path.read_text())
+    state["launch_pending"] = {"name": "pending", "at": sc.now_iso()}
+    path.write_text(json.dumps(state))
+    decision = _decide(tmp_path, 90)
+    assert (decision.fire, decision.reason) == (False, "launch-in-progress")
+    assert (
+        ch.launch(
+            handoff,
+            SESSION,
+            dry_run=True,
+            deps=_deps(tmp_path, checkouts[1], [], runner=_Recorder(0)),
+        )
+        == 2
+    )
+    state["launch_pending"]["at"] = (
+        datetime.fromisoformat(sc.now_iso()) - timedelta(minutes=15)
+    ).isoformat()
+    path.write_text(json.dumps(state))
+    retry = _decide(tmp_path, 90)
+    assert retry.fire
+    assert any("stale launch_pending" in warning for warning in retry.warnings)
+    assert (
+        ch.launch(
+            handoff,
+            SESSION,
+            dry_run=False,
+            deps=_deps(tmp_path, checkouts[1], [], runner=_Recorder(0)),
+        )
+        == 0
+    )
+    assert "launch_pending" not in json.loads(path.read_text())
+
+
+def test_s3_harness_output_is_marked_and_brief_waits_on_pid(tmp_path: Path) -> None:
+    """A command with only a harness output file must not promise an rc line."""
+    output = tmp_path / "tasks" / "heavy.output"
+    output.parent.mkdir()
+    output.touch()
+
+    def lsof(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert argv[3] == "301"
+        return subprocess.CompletedProcess(argv, 0, f"p301\nf1\nn{output}\n", "")
+
+    tree = (
+        *TREE[:4],
+        _proc(300, 100, "zsh -c mise run ship"),
+        _proc(301, 300, "mise run ship"),
+    )
+    runs = ch.census(tree, self_pid=201, runner=lsof)
+    assert runs[0].log_path == f"harness-output:{output}"
+    brief = ch.successor_brief(
+        ch.BriefContext(
+            old_name=COORDINATOR,
+            old_session_id=SESSION,
+            old_transcript=None,
+            handoff=tmp_path / "handoff.md",
+            ship_queue=tmp_path / "queue.md",
+            inbox=tmp_path / "inbox",
+            state_dir=tmp_path / "state",
+            heavy_runs=runs,
+        )
+    )
+    assert "no rc file — wait on pid exit" in brief
+
+
+def test_s3_relative_redirect_uses_the_heavy_commands_cwd(tmp_path: Path) -> None:
+    """Wrapper redirect syntax is resolved against the selected command's cwd."""
+    cwd = tmp_path / "command-cwd"
+    cwd.mkdir()
+    calls: list[list[str]] = []
+
+    def lsof(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        assert argv[3] == "301"
+        return subprocess.CompletedProcess(
+            argv, 0, f"p301\nfcwd\nn{cwd}\n" if argv[5] == "cwd" else "", ""
+        )
+
+    tree = (
+        *TREE[:4],
+        _proc(300, 100, 'zsh -c mise run ship > "logs/ship rc.log"'),
+        _proc(301, 300, "/usr/bin/mise run ship"),
+    )
+    runs = ch.census(tree, self_pid=201, runner=lsof)
+    assert runs[0].log_path == str(cwd / "logs/ship rc.log")
+    assert calls[-1] == ["lsof", "-a", "-p", "301", "-d", "cwd", "-Fn"]
+
+
+def test_s3_log_selection_is_depth_first_and_skips_nested_shells(
+    tmp_path: Path,
+) -> None:
+    """A shallower sibling cannot steal the first heavy command's log."""
+    log = tmp_path / "deep.log"
+    log.touch()
+
+    def lsof(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert argv[3] == "311"
+        return subprocess.CompletedProcess(argv, 0, f"n{log}\n", "")
+
+    tree = (
+        *TREE[:4],
+        _proc(300, 100, "zsh -c mise run ship"),
+        _proc(301, 300, "bash -c mise run ship"),
+        _proc(302, 300, "mise run land"),
+        _proc(311, 301, "mise run ship"),
+    )
+    runs = ch.census(tree, self_pid=201, runner=lsof)
+    assert runs == (ch.HeavyRun(300, "zsh -c mise run ship", str(log)),)
+
+
+@pytest.mark.parametrize("record", ["missing", "lane", "corrupt", "mismatch"])
+def test_s4_non_coordinator_creates_no_state_or_lock(
+    tmp_path: Path, record: str
+) -> None:
+    """Role misses do not leave state, locks or a directory in the main checkout."""
+    jobs = tmp_path / "jobs"
+    if record == "lane":
+        _job(jobs, name="dotfiles-lane.feature")
+    elif record == "mismatch":
+        _job(jobs, record_id=OTHER_SESSION)
+    elif record == "corrupt":
+        _job(jobs)
+        (jobs / SESSION[:8] / "state.json").write_text("{")
+    decision = _decide(tmp_path, 90)
+    assert (decision.fire, decision.reason) == (False, "not-coordinator")
+    assert not (tmp_path / "state").exists()
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_s5_non_utf8_handoff_refuses_with_code_2(
+    tmp_path: Path,
+    checkouts: tuple[Path, Path],
+    handoff: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Invalid handoff encoding is a refusal, never a traceback escaping the CLI."""
+    handoff.write_bytes(b"\xff\xfe")
+    runner = _Recorder(0)
+    assert (
+        ch.launch(
+            handoff,
+            SESSION,
+            dry_run=True,
+            deps=_deps(tmp_path, checkouts[1], [], runner=runner),
+        )
+        == 2
+    )
+    assert "census-unavailable" in caplog.text
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize("level", [float("nan"), float("inf"), -1, 0, 101])
+def test_s5_release_names_invalid_level(
+    tmp_path: Path,
+    level: float,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The release operator is given the invalid field's actual name."""
+    assert ch.release(SESSION, level, state_dir=tmp_path / "state") == 2
+    assert "invalid-level" in caplog.text
+    assert "invalid-percent" not in caplog.text
+    assert not (tmp_path / "state").exists()
+
+
+@pytest.mark.parametrize("tasks", [None, {"tasks": 2}])
+def test_s5_inflight_only_block_names_the_effective_override(
+    tmp_path: Path,
+    tasks: object,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Adopting pids cannot clear harness tasks when the recorded census is empty."""
+    _job(tmp_path / "jobs", in_flight=tasks)
+    _record_launch(tmp_path / "state", ())
+    assert _retire(tmp_path, ()) == 1
+    assert "--accept-inflight" in caplog.text
+    assert "--adopted" not in caplog.text
+
+
+def test_s5_skill_and_task_contracts_point_to_current_authority() -> None:
+    """The procedure points to the real census and preserves harness identity."""
+    root = Path(__file__).parent.parent
+    handoff_skill = (root / ".claude/skills/coordinator-handoff/SKILL.md").read_text()
+    assert "`HEAVY_COMMAND_RE`" in handoff_skill
+    assert "`--no-commit`" not in handoff_skill
+    start_skill = (root / ".claude/skills/session-start/SKILL.md").read_text()
+    assert "Claude ancestor" not in start_skill
+    assert "nearest harness process" in start_skill
+    task = (
+        (root / "mise.toml")
+        .read_text()
+        .split("[tasks.coordinator-handoff]", 1)[1]
+        .split("[tasks.", 1)[0]
+    )
+    assert "decide | release | name" in task
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_s5_git_failure_uses_census_unavailable(
+    tmp_path: Path,
+    handoff: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Main-checkout discovery failures carry the same documented census reason."""
+
+    def git(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert argv[0] == "git"
+        return subprocess.CompletedProcess(argv, 4, "", "git probe failed")
+
+    deps = ch.LaunchDeps(
+        state_dir=tmp_path / "state",
+        jobs_dir=tmp_path / "jobs",
+        cwd=tmp_path,
+        processes=TREE,
+        self_pid=201,
+        runner=git,
+    )
+    assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 2
+    assert "census-unavailable" in caplog.text

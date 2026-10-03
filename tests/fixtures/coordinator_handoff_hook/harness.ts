@@ -297,15 +297,24 @@ for (const percent of [23, 29.9]) {
   arms += 2;
 }
 
-// PROBE: the real command.run path, with `--probe` as the only argument.
+// S1: three at/above-limit measurements queue the real PROBE exactly once.
 {
   const { services, calls } = makeServices({
     env: { DOTFILES_COORDINATOR_HANDOFF_PROBE: "1" },
-    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 })],
+    responses: [
+      decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      decision({ fire: false, reason: "probe-done", level: null, percent: 30 }),
+      decision({ fire: false, reason: "probe-done", level: null, percent: 35 }),
+    ],
   });
   await run(services, measured(30));
+  await run(services, measured(30));
+  await run(services, measured(35));
   assert.deepEqual(calls.runs, [{ command: "coordinator-handoff", args: "--probe" }]);
-  assert.equal(calls.process[0].argv.at(-1), "--no-commit");
+  assert.equal(calls.process.length, 3);
+  assert.ok(calls.process.every((call) => call.argv.at(-1) === "--probe"));
+  assert.equal(lastStatus(calls), "handoff probe done");
+  regressions.push("s1-probe-three-measurements-one-command");
   arms += 1;
 }
 
@@ -313,7 +322,12 @@ for (const percent of [23, 29.9]) {
 {
   const { services, calls } = makeServices({
     env: { DOTFILES_COORDINATOR_HANDOFF_DRY_RUN: "1" },
-    responses: [decision({ fire: true, reason: "fire", level: 30, percent: 30 })],
+    responses: [
+      decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      decision({ fire: false, reason: "below-next-step", level: 35, percent: 30 }),
+      decision({ fire: true, reason: "fire", level: 35, percent: 35 }),
+      decision({ fire: false, reason: "below-next-step", level: 40, percent: 35 }),
+    ],
   });
   await run(services, measured(30));
   assert.equal(calls.runs.length, 0);
@@ -322,7 +336,14 @@ for (const percent of [23, 29.9]) {
   assert.match(calls.toasts[0], /DRY-RUN: would run \/coordinator-handoff /);
   assert.equal(calls.logs.length, 1);
   assert.equal(lastStatus(calls), "handoff DRY-RUN @30%");
-  assert.equal(calls.process[0].argv.at(-1), "--no-commit");
+  await run(services, measured(30));
+  await run(services, measured(35));
+  await run(services, measured(35));
+  assert.equal(calls.toasts.length, 2);
+  assert.equal(calls.logs.length, 2);
+  assert.equal(calls.runs.length, 0);
+  assert.ok(calls.process.every((call) => call.argv.at(-1) === "--dry-run"));
+  regressions.push("s1-dry-run-once-per-preview-level");
   arms += 1;
 }
 
@@ -412,16 +433,21 @@ for (const percent of [23, 29.9]) {
   arms += 1;
 }
 
-// R4: lane role is queried below limit once, then cached even above it.
+// S4: a below-limit lane miss gets one re-check, then stays cached.
 {
   const { services, calls } = makeServices({
-    responses: [decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 })],
+    responses: [
+      decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 }),
+      decision({ fire: false, reason: "not-coordinator", level: null, percent: 30 }),
+    ],
   });
   await run(services, measured(5));
+  await run(services, measured(29));
+  await run(services, measured(30));
   await run(services, measured(90));
-  assert.equal(calls.process.length, 1);
+  assert.equal(calls.process.length, 2);
   assert.equal(lastStatus(calls), "handoff n/a (not coordinator)");
-  regressions.push("r4-first-below-role-cache");
+  regressions.push("s4-lane-at-most-two-role-queries");
   arms += 1;
 }
 
@@ -486,9 +512,66 @@ for (const percent of [23, 29.9]) {
   const { services, calls } = makeServices({
     responses: [decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 })],
   });
-  await Promise.all([run(services, measured(5)), run(services, measured(90))]);
+  await Promise.all([run(services, measured(5)), run(services, measured(6))]);
   assert.equal(calls.process.length, 1);
   regressions.push("r4-concurrent-first-role-query");
+  arms += 1;
+}
+
+// S1: repeating an identical preview toast is deduplicated defensively.
+{
+  const { services, calls } = makeServices({
+    env: { DOTFILES_COORDINATOR_HANDOFF_DRY_RUN: "1" },
+    responses: [
+      decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+      decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+    ],
+  });
+  await run(services, measured(30));
+  await run(services, measured(30));
+  assert.equal(calls.toasts.length, 1);
+  assert.equal(calls.runs.length, 0);
+  regressions.push("s1-dry-run-toast-once");
+  arms += 1;
+}
+
+// S4: a transient job-record miss below the limit recovers at the limit.
+{
+  const { services, calls } = makeServices({ responses: [
+    decision({ fire: false, reason: "not-coordinator", level: null, percent: 5 }),
+    decision({ fire: true, reason: "fire", level: 30, percent: 30 }),
+  ] });
+  await run(services, measured(5));
+  await run(services, measured(29));
+  await run(services, measured(30));
+  assert.equal(calls.process.length, 2);
+  assert.equal(calls.runs.length, 1);
+  await run(services, measured(6));
+  assert.equal(calls.process.length, 2, "positive role stays cached below the limit");
+  regressions.push("s4-transient-miss-recovers-at-limit");
+  arms += 1;
+}
+
+// S4: a first miss already at the limit is final, including later levels.
+{
+  const { services, calls } = makeServices({ responses: [
+    decision({ fire: false, reason: "not-coordinator", level: null, percent: 30 }),
+  ] });
+  for (const percent of [30, 35, 5, 90]) await run(services, measured(percent));
+  assert.equal(calls.process.length, 1);
+  assert.equal(calls.runs.length, 0);
+  arms += 1;
+}
+
+// S2: pending launch is a quiet heartbeat, never a second submission.
+{
+  const { services, calls } = makeServices({ responses: [
+    decision({ fire: false, reason: "launch-in-progress", level: null, percent: 90 }),
+  ] });
+  await run(services, measured(90));
+  assert.equal(lastStatus(calls), "handoff launch in progress");
+  assert.equal(calls.runs.length, 0);
+  regressions.push("s2-launch-in-progress-heartbeat");
   arms += 1;
 }
 

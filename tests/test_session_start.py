@@ -16,6 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import reap
+from dotfiles_setup import session_common as sc
 from dotfiles_setup import session_start as ss
 from dotfiles_setup.main import setup_parser
 
@@ -59,7 +60,12 @@ def _job(jobs_dir: Path, name: str, *, name_source: str = "user") -> None:
 
 
 def _decide(
-    tmp_path: Path, cwd: Path, *, interactive: bool = True, session_id: str = SESSION
+    tmp_path: Path,
+    cwd: Path,
+    *,
+    interactive: bool = True,
+    session_id: str = SESSION,
+    timeout_s: float = sc.STATE_LOCK_TIMEOUT_S,
 ) -> ss.StartDecision:
     return ss.decide(
         ss.StartRequest(session_id=session_id, cwd=cwd, interactive=interactive),
@@ -69,6 +75,7 @@ def _decide(
             now_ns=NOW,
             processes=FOREGROUND,
             self_pid=201,
+            lock_timeout_s=timeout_s,
         ),
     )
 
@@ -216,15 +223,24 @@ def test_a_pending_defer_survives_a_reload_until_marked(
     pending = _decide(tmp_path, repo)
     assert (pending.action, pending.prefix) == ("already-ran", f"dotfiles-{STAMP}")
     name = f"dotfiles-{STAMP}.lock-refresh"
-    assert ss.mark_renamed(SESSION, name, tmp_path / "state") == 0
+    assert (
+        ss.mark_renamed(SESSION, name, tmp_path / "state", jobs_dir=tmp_path / "jobs")
+        == 0
+    )
     done = _decide(tmp_path, repo)
     assert (done.action, done.prefix) == ("already-ran", None)
 
 
 def test_mark_renamed_refuses_without_a_decision(tmp_path: Path) -> None:
     """Nothing to mark: rc 2, and an invalid id is refused too."""
-    assert ss.mark_renamed(SESSION, "x", tmp_path / "state") == 2
-    assert ss.mark_renamed("../x", "x", tmp_path / "state") == 2
+    assert (
+        ss.mark_renamed(SESSION, "x", tmp_path / "state", jobs_dir=tmp_path / "jobs")
+        == 2
+    )
+    assert (
+        ss.mark_renamed("../x", "x", tmp_path / "state", jobs_dir=tmp_path / "jobs")
+        == 2
+    )
 
 
 def test_non_interactive_is_a_no_op(tmp_path: Path, repo: Path) -> None:
@@ -293,8 +309,11 @@ def test_cli_decide_and_renamed(
             "n",
             "--state-dir",
             state,
+            "--jobs-dir",
+            str(tmp_path / "jobs"),
         ]
     )
+    _job(tmp_path / "jobs", "n", name_source="auto")
     assert ss.main(renamed_args, tmp_path) == 0
     non_interactive = setup_parser().parse_args(
         [
@@ -389,7 +408,7 @@ def test_r5_session_start_honors_the_same_external_state_lock(
     state_dir.mkdir()
     with (state_dir / f"{SESSION}.json.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        decision = _decide(tmp_path, repo)
+        decision = _decide(tmp_path, repo, timeout_s=0.05)
     assert (decision.action, decision.reload) == ("state-locked", False)
 
 
@@ -409,7 +428,15 @@ def test_r12_pending_recovers_across_reload_and_clears_only_after_confirmation(
     recovered = ss.pending(SESSION, tmp_path / "state")
     assert (recovered.reload, recovered.prefix) == (False, f"dotfiles-{STAMP}")
     assert ss.pending(SESSION, tmp_path / "state").prefix == recovered.prefix
-    assert ss.mark_renamed(SESSION, f"dotfiles-{STAMP}.task", tmp_path / "state") == 0
+    assert (
+        ss.mark_renamed(
+            SESSION,
+            f"dotfiles-{STAMP}.task",
+            tmp_path / "state",
+            jobs_dir=tmp_path / "jobs",
+        )
+        == 0
+    )
     assert ss.pending(SESSION, tmp_path / "state").prefix is None
 
 
@@ -425,5 +452,52 @@ def test_r12_known_rename_is_recoverable_until_confirmed(
         False,
         first.name,
     )
-    assert ss.mark_renamed(SESSION, f"dotfiles-{STAMP}.task", tmp_path / "state") == 0
+    assert (
+        ss.mark_renamed(
+            SESSION,
+            f"dotfiles-{STAMP}.task",
+            tmp_path / "state",
+            jobs_dir=tmp_path / "jobs",
+        )
+        == 0
+    )
     assert ss.pending(SESSION, tmp_path / "state").action == "already-ran"
+
+
+@pytest.mark.parametrize(
+    "record", ["missing", "matching", "different", "corrupt", "wrong-id"]
+)
+def test_s5_rename_confirmation_requires_matching_available_job(
+    tmp_path: Path,
+    repo: Path,
+    record: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A resolved command cannot erase pending naming when its job name disagrees."""
+    first = _decide(tmp_path, repo)
+    assert first.action == "defer"
+    name = f"dotfiles-{STAMP}.confirmed"
+    jobs, state_dir = tmp_path / "jobs", tmp_path / "state"
+    if record != "missing":
+        _job(jobs, name if record == "matching" else "old-name", name_source="auto")
+        job_path = jobs / SESSION[:8] / "state.json"
+        if record == "corrupt":
+            job_path.write_text("{")
+        elif record == "wrong-id":
+            job_path.write_text(
+                json.dumps({"sessionId": "another-session", "name": name})
+            )
+    state_path = state_dir / f"{SESSION}.json"
+    before = state_path.read_bytes()
+    rc = ss.mark_renamed(SESSION, name, state_dir, jobs_dir=jobs)
+    if record in {"missing", "matching"}:
+        assert rc == 0
+        assert ss.pending(SESSION, state_dir).prefix is None
+    else:
+        assert rc == 2
+        assert "job name mismatch" in caplog.text
+        assert state_path.read_bytes() == before
+        assert ss.pending(SESSION, state_dir).prefix == first.prefix
+        _job(jobs, name, name_source="auto")
+        assert ss.mark_renamed(SESSION, name, state_dir, jobs_dir=jobs) == 0
+        assert ss.pending(SESSION, state_dir).prefix is None

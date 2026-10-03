@@ -12,8 +12,11 @@ session named `dotfiles-….coordinator` (bg job record, fail closed) crosses
 `DOTFILES_COORDINATOR_HANDOFF_PCT` (default 30) and again every
 `DOTFILES_COORDINATOR_HANDOFF_STEP_PCT` (default 5) above it until launch.
 An existing launch record prevents every subsequent fire and second launch.
-The first measurement caches the role; lanes make no further Python calls.
-DRY_RUN/PROBE pass `--no-commit`; failed delivery releases the consumed level.
+The first measurement checks the role. A miss below the limit gets one re-check
+at the limit; a coordinator is cached for the module's lifetime. Lanes write no
+handoff state. PROBE passes `--probe` and fires once per session; DRY_RUN passes
+`--dry-run` and fires once per preview level. Neither spends real levels.
+Failed real delivery releases the consumed level.
 The judgement
 is `mise run coordinator-handoff -- decide`; the spec is
 `docs/specs/coordinator-auto-handoff-2026-10-02.md`.
@@ -52,14 +55,19 @@ mise run coordinator-handoff -- launch \
   --handoff docs/handoffs/session-<YYYY-MM-DD><letter>.md --old-session <id>
 ```
 
-It records the census of this session's live heavy runs (ship, land, sync,
-verify-local, bounded-wait, kb-ship, kb-land), then starts
+It records the census of this session's live heavy runs, as defined by
+`HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts
 `claude --bg -n dotfiles-<Chicago ISO ns>.coordinator` from the main checkout
 with a brief carrying the transcript path, the handoff, the ship queue, the
 census and the queued questions. State lives in the CWD repository's main
 checkout; the brief gives retire its exact `--state-dir`. rc 2 means refused
 (invalid id, missing handoff, not a coordinator, already launched, unavailable
-census/state or a 10 s lock timeout): record that in the handoff and stop.
+census/state, a start already in progress, or a 10 s lock timeout): record that
+in the handoff and stop. A pending start blocks another for 15 minutes; stale
+pending state is ignored with a warning. Only rc 0 records a successful launch.
+rc 3 means start failed (missing executable, 60 s timeout or nonzero rc): pending
+state is removed and the real firing level restored so the hook can retry.
+Harness logs marked `harness-output:` have no rc file; wait on pid exit.
 
 ## 3. Go idle
 

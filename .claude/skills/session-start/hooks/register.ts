@@ -189,7 +189,6 @@ function scheduleRename($: EngineInterface, claim: PendingName, text?: string): 
 
 async function recoverPending($: EngineInterface, sessionId: string): Promise<void> {
   if (pendingChecked.has(sessionId)) return;
-  pendingChecked.add(sessionId);
   const run = await python($, ["pending", "--session-id", sessionId]);
   if (run.exitCode !== 0) throw new Error(`pending rc ${run.exitCode}`);
   const decision = parseStart(run.stdout);
@@ -201,6 +200,8 @@ async function recoverPending($: EngineInterface, sessionId: string): Promise<vo
   } else if (["invalid-session-id", "state-write-failed", "state-locked"].includes(decision.action)) {
     throw new Error(decision.action);
   }
+  // A failed read must remain retryable on the next prompt.
+  pendingChecked.add(sessionId);
 }
 
 async function start($: EngineInterface, cwd: string): Promise<void> {
@@ -211,7 +212,9 @@ async function start($: EngineInterface, cwd: string): Promise<void> {
     return;
   }
   // A repeat with no prefix can still have an unconfirmed branch rename.
-  if (decision.action !== "already-ran" || decision.prefix !== null) pendingChecked.add(sessionId);
+  if (["keep", "rename", "defer", "nonconforming", "unknown"].includes(decision.action) || decision.prefix !== null) {
+    pendingChecked.add(sessionId);
+  }
   applyStart($, sessionId, decision);
   if (decision.reload) {
     queue($, "reload-skills");

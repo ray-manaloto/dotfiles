@@ -11,15 +11,20 @@ REPO_ROOT = Path(__file__).parent.parent
 HARNESS = REPO_ROOT / "tests" / "fixtures" / "coordinator_handoff_hook" / "harness.ts"
 _BUN_TIMEOUT_S = 90
 #: Every arm the harness runs; a dropped block changes the count and fails here.
-_EXPECTED_ARMS = 30
+_EXPECTED_ARMS = 34
 _REGRESSIONS = [
-    "r4-first-below-role-cache",
+    "s1-probe-three-measurements-one-command",
+    "s1-dry-run-once-per-preview-level",
+    "s4-lane-at-most-two-role-queries",
     "r4-role-cache-keyed-by-session",
     "r4-event-getter-fail-open",
     "r3-list-failure-releases-level",
     "r3-release-failure-visible",
     "r1-already-launched-heartbeat",
     "r4-concurrent-first-role-query",
+    "s1-dry-run-toast-once",
+    "s4-transient-miss-recovers-at-limit",
+    "s2-launch-in-progress-heartbeat",
 ]
 
 

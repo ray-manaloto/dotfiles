@@ -59,11 +59,16 @@ def read_json(path: Path) -> object:
         return None
 
 
+def job_record_path(session_id: str, jobs_dir: Path) -> Path:
+    """The harness job path; callers validate the full id before using it."""
+    return jobs_dir / session_id[:SHORT_ID_LEN] / "state.json"
+
+
 def job_record(session_id: str, jobs_dir: Path) -> dict[str, Any] | None:
     """Only a record carrying the exact full session id is trusted."""
     if not valid_session_id(session_id):
         return None
-    data = read_json(jobs_dir / session_id[:SHORT_ID_LEN] / "state.json")
+    data = read_json(job_record_path(session_id, jobs_dir))
     return (
         data if isinstance(data, dict) and data.get("sessionId") == session_id else None
     )

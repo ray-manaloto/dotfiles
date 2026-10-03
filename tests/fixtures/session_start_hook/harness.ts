@@ -497,4 +497,28 @@ const regressions: string[] = [];
   arms += 1;
 }
 
+// S5: failed recovery is retried; only a successful pending read is cached.
+for (const failed of [
+  "throw",
+  { exitCode: 2, stdout: "", stderr: "unavailable" },
+  { exitCode: 0, stdout: "not JSON", stderr: "" },
+  answer({ action: "state-locked", reload: false }),
+] satisfies ProcessResponse[]) {
+  const name = `${PREFIX}.recovered-after-read-failure`;
+  const { services, calls } = makeServices({ responses: [
+    failed, answer({ action: "rename", reload: false, name }), ok,
+  ] });
+  await prompt(services);
+  assert.match(lastStatus(calls) ?? "", /^session-start ERROR: pending rename failed:/);
+  assert.equal(calls.runs.length, 0);
+  await prompt(services);
+  assert.deepEqual(calls.process.map((call) => call.argv[6]), ["pending", "pending", "renamed"]);
+  assert.deepEqual(calls.runs, [{ command: "rename", args: name }]);
+  assert.equal(lastStatus(calls), "session-start ok (renamed)");
+  await prompt(services);
+  assert.equal(calls.process.length, 3, "successful read is cached");
+  arms += 1;
+}
+regressions.push("s5-failed-pending-read-retries");
+
 console.log(JSON.stringify({ arms, regressions }));

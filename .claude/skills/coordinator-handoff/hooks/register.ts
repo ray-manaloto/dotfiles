@@ -29,6 +29,7 @@ const REASON_MAX_CHARS = 80;
 /** Mirrors `Decision.to_json()` in `python/src/dotfiles_setup/coordinator_handoff.py`. */
 const REASONS = [
   "fire", "not-coordinator", "below-limit", "below-next-step", "already-launched",
+  "launch-in-progress", "probe-done",
   "invalid-session-id", "invalid-percent", "state-write-failed", "state-locked",
 ] as const; // Mirrors Python DecisionReason (Literal).
 type DecisionReason = (typeof REASONS)[number];
@@ -42,7 +43,7 @@ type Decision = {
 
 /** One toast per distinct reason: a repeating failure must not flood the bar. */
 const toasted = new Set<string>();
-const roles = new Map<string, "coordinator" | "not">();
+const roles = new Map<string, "coordinator" | "not-below-limit" | "not">();
 const measuring = new Map<string, Promise<void>>();
 
 function toastOnce($: EngineInterface, text: string): void {
@@ -103,7 +104,7 @@ async function decide(
   $: EngineInterface,
   sessionId: string,
   percent: number,
-  noCommit: boolean,
+  mode: "real" | "probe" | "dry-run",
 ): Promise<Decision | string> {
   let run: { exitCode: number; stdout: string; stderr: string };
   try {
@@ -121,7 +122,7 @@ async function decide(
         sessionId,
         "--percent",
         String(percent),
-        ...(noCommit ? ["--no-commit"] : []),
+        ...(mode === "real" ? [] : [`--${mode}`]),
       ],
       { cwd: projectDir, env: await decisionEnv($), timeoutMs: DECIDE_TIMEOUT_MS },
     );
@@ -153,6 +154,10 @@ function belowStatus($: EngineInterface, decision: Decision, percent: number): v
     $.ui.status(`handoff ${percent}%/${decision.level ?? "?"}%`);
   } else if (decision.reason === "already-launched") {
     $.ui.status("handoff already launched");
+  } else if (decision.reason === "launch-in-progress") {
+    $.ui.status("handoff launch in progress");
+  } else if (decision.reason === "probe-done") {
+    $.ui.status("handoff probe done");
   } else {
     fail($, decision.reason);
   }
@@ -188,6 +193,10 @@ async function measure($: EngineInterface, sessionId: string, percent: number): 
     return;
   }
   const limit = parseLimit(await $.env.get("DOTFILES_COORDINATOR_HANDOFF_PCT"));
+  if (roles.get(sessionId) === "not-below-limit" && percent < limit) {
+    $.ui.status("handoff n/a (not coordinator)");
+    return;
+  }
   if (roles.get(sessionId) === "coordinator" && percent < limit) {
     // Once the role is known, below the limit needs no process.
     $.ui.status(`handoff ${percent}%/${limit}%`);
@@ -195,14 +204,18 @@ async function measure($: EngineInterface, sessionId: string, percent: number): 
   }
   const probe = (await $.env.get("DOTFILES_COORDINATOR_HANDOFF_PROBE")) === "1";
   const dryRun = (await $.env.get("DOTFILES_COORDINATOR_HANDOFF_DRY_RUN")) === "1";
-  const noCommit = probe || dryRun;
-  const decision = await decide($, sessionId, percent, noCommit);
+  // DRY_RUN wins when both are set: it never submits a command.
+  const mode = dryRun ? "dry-run" : probe ? "probe" : "real";
+  const noCommit = mode !== "real";
+  const decision = await decide($, sessionId, percent, mode);
   if (typeof decision === "string") {
     fail($, decision);
     return;
   }
-  if (decision.reason === "not-coordinator") roles.set(sessionId, "not");
-  else if (["fire", "below-limit", "below-next-step", "already-launched"].includes(decision.reason)) {
+  if (decision.reason === "not-coordinator") {
+    // A transient first miss below the limit gets exactly one re-check at it.
+    roles.set(sessionId, percent < limit ? "not-below-limit" : "not");
+  } else if (["fire", "below-limit", "below-next-step", "already-launched", "launch-in-progress", "probe-done"].includes(decision.reason)) {
     roles.set(sessionId, "coordinator");
   }
   const level = decision.level ?? percent;
@@ -216,7 +229,7 @@ async function measure($: EngineInterface, sessionId: string, percent: number): 
     if (dryRun) {
       const line = `coordinator-handoff DRY-RUN: would run /${SKILL} ${args} (context ${percent}%, level ${level}%)`;
       $.ui.status(`handoff DRY-RUN @${level}%`);
-      $.ui.toast(line);
+      toastOnce($, line);
       $.ui.log(line);
       return;
     }

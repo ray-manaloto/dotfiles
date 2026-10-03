@@ -38,6 +38,7 @@ import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -45,6 +46,7 @@ from dotfiles_setup import reap
 from dotfiles_setup.session_common import (
     PROJECT,
     SHORT_ID_LEN,
+    STATE_LOCK_TIMEOUT_S,
     StateLockedError,
     default_jobs_dir,
     job_record,
@@ -79,7 +81,10 @@ _MAX_PCT = 100.0
 #: Absorbs float noise in ``(percent - limit) / step`` so 35.0 at step 5 is k=1.
 _LEVEL_EPSILON = 1e-9
 STOP_TIMEOUT_S = 60
+LAUNCH_TIMEOUT_S = 60
+LAUNCH_PENDING_TTL_S = 15 * 60
 _LSOF_TIMEOUT_S = 10
+_SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 
 type DecisionReason = Literal[
     "fire",
@@ -87,6 +92,8 @@ type DecisionReason = Literal[
     "below-limit",
     "below-next-step",
     "already-launched",
+    "launch-in-progress",
+    "probe-done",
     "invalid-session-id",
     "invalid-percent",
     "state-write-failed",
@@ -202,46 +209,73 @@ def fired_level(percent: float, cfg: Config) -> float:
     return cfg.limit_pct + steps * cfg.step_pct
 
 
-def _last_fired(state: Mapping[str, Any]) -> float | None:
-    value = state.get("last_fired")
+def _last_fired(state: Mapping[str, Any], key: str = "last_fired") -> float | None:
+    value = state.get(key)
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     return float(value) if math.isfinite(value) else None
 
 
-def _judge(
-    state: dict[str, Any],
-    percent: float,
-    cfg: Config,
-    name: str | None,
-    *,
-    no_commit: bool,
-) -> tuple[bool, DecisionReason, float | None]:
-    """``(fire, reason, level)``; a fire records ``last_fired`` into ``state``."""
-    if not is_coordinator(name):
-        return False, "not-coordinator", None
-    if "launch" in state:
-        return False, "already-launched", None
-    last = _last_fired(state)
-    threshold = next_level(last, cfg)
-    if percent < threshold:
-        return False, ("below-limit" if last is None else "below-next-step"), threshold
-    # max(): a limit/step change between fires can place fired_level under the
-    # threshold; never record a level that re-fires sooner.
-    level = max(fired_level(percent, cfg), threshold)
-    if not no_commit:
-        state["previous_fired"] = last
-        state["last_fired"] = level
-    return True, "fire", level
-
-
 @dataclass(frozen=True)
 class DecideRequest:
-    """One measurement and whether it can consume a firing level."""
+    """One measurement; preview modes have independent firing bookkeeping."""
 
     session_id: str
     percent: float
     no_commit: bool = False
+    probe: bool = False
+    dry_run: bool = False
+
+
+def _launch_in_progress(state: Mapping[str, Any], warnings: list[str]) -> bool:
+    """A pending start blocks for 15 minutes; unreadable ages fail closed."""
+    if "launch_pending" not in state:
+        return False
+    pending = state["launch_pending"]
+    at = pending.get("at") if isinstance(pending, dict) else None
+    age = None
+    if isinstance(at, str):
+        try:
+            age = (
+                datetime.fromisoformat(now_iso()) - datetime.fromisoformat(at)
+            ).total_seconds()
+        except ValueError, TypeError:
+            age = None
+    if age is None:
+        warnings.append("launch_pending age unknown; treating as launch-in-progress")
+        return True
+    if age < LAUNCH_PENDING_TTL_S:
+        return True
+    warnings.append(f"stale launch_pending from {at} ignored (age {age:g}s)")
+    return False
+
+
+def _judge(
+    state: dict[str, Any], request: DecideRequest, cfg: Config, warnings: list[str]
+) -> tuple[bool, DecisionReason, float | None]:
+    """Fire under the transaction lock, charging only the requested mode."""
+    if "launch" in state:
+        return False, "already-launched", None
+    if _launch_in_progress(state, warnings):
+        return False, "launch-in-progress", None
+    if request.probe and state.get("probe_fired"):
+        return False, "probe-done", None
+    key = "dry_run_fired" if request.dry_run else "last_fired"
+    last = None if request.probe else _last_fired(state, key)
+    threshold = next_level(last, cfg)
+    if request.percent < threshold:
+        return False, ("below-limit" if last is None else "below-next-step"), threshold
+    # max(): a limit/step change between fires can place fired_level under the
+    # threshold; never record a level that re-fires sooner.
+    level = max(fired_level(request.percent, cfg), threshold)
+    if request.probe:
+        state["probe_fired"] = True
+    elif request.dry_run:
+        state["dry_run_fired"] = level
+    elif not request.no_commit:
+        state["previous_fired"] = last
+        state["last_fired"] = level
+    return True, "fire", level
 
 
 def decide(
@@ -250,10 +284,11 @@ def decide(
     env: Mapping[str, str],
     jobs_dir: Path,
     state_dir: Path,
+    timeout_s: float = STATE_LOCK_TIMEOUT_S,
 ) -> Decision:
     """Fire once at the limit, then once per step above it — coordinators only.
 
-    ``last_seen`` is written on every call so a reader can tell "never
+    ``last_seen`` is written on every coordinator call so a reader can tell "never
     measured" from "measured, below". On a fire, ``last_fired`` is persisted
     BEFORE returning; when that write fails the answer is ``fire: False``.
     """
@@ -271,13 +306,21 @@ def decide(
     else:
         path = state_dir / f"{session_id}.json"
         name = session_name(session_id, jobs_dir)
+        if not is_coordinator(name):
+            return Decision(
+                fire=False,
+                reason="not-coordinator",
+                level=None,
+                session_id=session_id,
+                name=name,
+                percent=percent,
+                warnings=tuple(warnings),
+            )
         try:
-            with state_lock(path):
+            with state_lock(path, timeout_s=timeout_s):
                 state = read_state(path)
                 state["last_seen"] = {"at": now_iso(), "percent": percent}
-                fire, reason, level = _judge(
-                    state, percent, cfg, name, no_commit=request.no_commit
-                )
+                fire, reason, level = _judge(state, request, cfg, warnings)
                 write_state(path, state)
         except StateLockedError as exc:
             warnings.append(str(exc))
@@ -296,23 +339,37 @@ def decide(
     )
 
 
-def release(session_id: str, level: float, *, state_dir: Path) -> int:
+def _rollback_fire(state: dict[str, Any], level: float | None) -> bool:
+    """Restore the preceding level only if this exact real fire is still current."""
+    if level is None or "launch" in state or _last_fired(state) != level:
+        return False
+    previous = state.pop("previous_fired", None)
+    if previous is None:
+        state.pop("last_fired", None)
+    else:
+        state["last_fired"] = previous
+    return True
+
+
+def release(
+    session_id: str,
+    level: float,
+    *,
+    state_dir: Path,
+    timeout_s: float = STATE_LOCK_TIMEOUT_S,
+) -> int:
     """Undo only this undelivered fire; never erase a newer fire or a launch."""
-    if not valid_session_id(session_id) or not math.isfinite(level):
-        logger.error(
-            "coordinator-handoff release: invalid-session-id or invalid-percent"
-        )
+    if not valid_session_id(session_id):
+        logger.error("coordinator-handoff release: invalid-session-id")
+        return 2
+    if not math.isfinite(level) or not 0 < level <= _MAX_PCT:
+        logger.error("coordinator-handoff release: invalid-level")
         return 2
     path = state_dir / f"{session_id}.json"
     try:
-        with state_lock(path):
+        with state_lock(path, timeout_s=timeout_s):
             state = read_state(path)
-            if "launch" not in state and _last_fired(state) == level:
-                previous = state.pop("previous_fired", None)
-                if previous is None:
-                    state.pop("last_fired", None)
-                else:
-                    state["last_fired"] = previous
+            if "launch_pending" not in state and _rollback_fire(state, level):
                 write_state(path, state)
     except OSError:
         logger.exception("coordinator-handoff release failed")
@@ -386,8 +443,92 @@ def stdout_log(pid: int, *, runner: Runner | None = None) -> str | None:
         return None
     for line in result.stdout.splitlines():
         if line.startswith("n") and Path(line[1:]).is_file():
-            return line[1:]
+            path = Path(line[1:])
+            if "tasks" in path.parts and path.suffix == ".output":
+                return f"harness-output:{path}"
+            return str(path)
     return None
+
+
+def _heavy_log_process(
+    pid: int, by_pid: Mapping[int, reap.Process]
+) -> reap.Process | None:
+    """First non-shell heavy command in the subtree, self-first depth-first."""
+    children: dict[int, list[int]] = {}
+    for process in by_pid.values():
+        children.setdefault(process.ppid, []).append(process.pid)
+    stack = [pid]
+    seen: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if current in seen or current not in by_pid:
+            continue
+        seen.add(current)
+        process = by_pid[current]
+        try:
+            argv = shlex.split(process.command)
+        except ValueError:
+            argv = []
+        if (
+            argv
+            and Path(argv[0]).name not in _SHELLS
+            and HEAVY_COMMAND_RE.search(process.command)
+        ):
+            return process
+        stack.extend(sorted(children.get(current, ()), reverse=True))
+    return None
+
+
+def _process_cwd(pid: int, runner: Runner | None) -> Path | None:
+    """Read the selected process's cwd, never the census caller's cwd."""
+    try:
+        result = (runner or subprocess.run)(
+            ["lsof", "-a", "-p", str(pid), "-d", "cwd", "-Fn"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_LSOF_TIMEOUT_S,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return None
+    if result.returncode == 0:
+        for line in result.stdout.splitlines():
+            if (
+                line.startswith("n")
+                and Path(line[1:]).is_absolute()
+                and Path(line[1:]).is_dir()
+            ):
+                return Path(line[1:])
+    return None
+
+
+def _run_log(
+    pid: int, by_pid: Mapping[int, reap.Process], runner: Runner | None
+) -> str | None:
+    """Use the command's fd 1, then resolve redirect text against its cwd."""
+    process = _heavy_log_process(pid, by_pid)
+    if process is not None:
+        log = stdout_log(process.pid, runner=runner)
+        if log is not None:
+            return log
+    # The outer shell can carry redirect syntax that is absent from the command's argv.
+    owner = process or by_pid[pid]
+    fallback = _log_path(owner.command) or _log_path(by_pid[pid].command)
+    if (
+        fallback is None
+        or fallback.startswith("unexpanded:")
+        or Path(fallback).is_absolute()
+    ):
+        return fallback
+    cwd = _process_cwd(owner.pid, runner)
+    if cwd is None:
+        logger.warning(
+            "coordinator-handoff census: relative log %r unresolved for pid %d",
+            fallback,
+            owner.pid,
+        )
+        return None
+    return str((cwd / fallback).resolve())
 
 
 def census(
@@ -428,12 +569,7 @@ def census(
         if any(ancestor in heavy for ancestor in ancestors):
             continue
         command = by_pid[pid].command
-        log = stdout_log(pid, runner=runner)
-        if log is None:
-            descendants = reap.descendant_pids(processes, pid)
-            if descendants:
-                log = stdout_log(descendants[0], runner=runner)
-        runs.append(HeavyRun(pid, command, log or _log_path(command)))
+        runs.append(HeavyRun(pid, command, _run_log(pid, by_pid, runner)))
     return tuple(runs)
 
 
@@ -462,6 +598,11 @@ def successor_brief(ctx: BriefContext) -> str:
     if ctx.heavy_runs:
         run_lines = "\n".join(
             f"  - pid {run.pid}: {run.argv}  (log: {run.log_path or 'none'})"
+            + (
+                " — no rc file — wait on pid exit"
+                if run.log_path and run.log_path.startswith("harness-output:")
+                else ""
+            )
             for run in ctx.heavy_runs
         )
     else:
@@ -513,6 +654,8 @@ in the handoff AND in `task_plan.md` (you are the coordinator; it is yours).
 resolved log's rc line) or adopt its result explicitly. A log marked \
 `unexpanded:` is unresolved redirect text: find its real path first; never \
 wait on a literal `$LOG` or an absent log.
+   A log marked `harness-output:` has no rc file — wait on pid exit, then \
+review its output; do not bounded-wait on an rc line there.
 4. Retire the old session ONLY through the gate — never a bare `claude stop` \
 on a coordinator: `mise run coordinator-handoff -- retire --old-session \
 {ctx.old_session_id} --state-dir {shlex.quote(str(ctx.state_dir))} \
@@ -555,6 +698,7 @@ class LaunchDeps:
     now_ns: int | None = None
     runner: Runner | None = None
     out: Callable[[str], object] | None = None
+    lock_timeout_s: float = STATE_LOCK_TIMEOUT_S
 
 
 def _write(deps: LaunchDeps, text: str) -> None:
@@ -576,6 +720,7 @@ def _gather(handoff: Path, deps: LaunchDeps) -> tuple[tuple[HeavyRun, ...], str]
         CoordinatorHandoffError,
         reap.ReapError,
         OSError,
+        UnicodeError,
         subprocess.TimeoutExpired,
     ) as exc:
         return str(exc)
@@ -593,6 +738,25 @@ class LaunchContext:
     state_dir: Path
 
 
+def _launch_identity(handoff: Path, old_session_id: str, jobs_dir: Path) -> str | None:
+    """Validate the old session and handoff before touching launch state."""
+    if not valid_session_id(old_session_id):
+        logger.error("coordinator-handoff launch: invalid-session-id")
+        return None
+    if not handoff.is_file():
+        logger.error("coordinator-handoff launch: handoff %s does not exist", handoff)
+        return None
+    name = session_name(old_session_id, jobs_dir)
+    if not is_coordinator(name):
+        logger.error(
+            "coordinator-handoff launch: session %s is not a coordinator (name %r)",
+            old_session_id,
+            name,
+        )
+        return None
+    return name
+
+
 def launch(
     handoff: Path,
     old_session_id: str,
@@ -600,26 +764,16 @@ def launch(
     dry_run: bool,
     deps: LaunchDeps,
 ) -> int:
-    """Record the census, then start the successor from the main checkout.
+    """Reserve a start, run unlocked with a bound, then promote or roll back.
 
     rc 2: the handoff does not exist, the old session is not a coordinator, or
     the census could not be taken (retire would be blind). Dry-run prints the
     argv, cwd and brief and records and executes nothing. Otherwise the
-    ``claude --bg`` rc.
+    rc 3: start failed (missing binary, timeout or nonzero rc). A successful
+    start returns 0 and only then records ``launch``.
     """
-    if not valid_session_id(old_session_id):
-        logger.error("coordinator-handoff launch: invalid-session-id")
-        return 2
-    if not handoff.is_file():
-        logger.error("coordinator-handoff launch: handoff %s does not exist", handoff)
-        return 2
-    old_name = session_name(old_session_id, deps.jobs_dir)
-    if old_name is None or not is_coordinator(old_name):
-        logger.error(
-            "coordinator-handoff launch: session %s is not a coordinator (name %r)",
-            old_session_id,
-            old_name,
-        )
+    old_name = _launch_identity(handoff, old_session_id, deps.jobs_dir)
+    if old_name is None:
         return 2
     try:
         checkout = main_checkout(
@@ -627,7 +781,8 @@ def launch(
         )
         state_dir = deps.state_dir or checkout / STATE_SUBDIR
         path = state_dir / f"{old_session_id}.json"
-        with state_lock(path):
+        ctx = LaunchContext(handoff, old_session_id, old_name, checkout, state_dir)
+        with state_lock(path, timeout_s=deps.lock_timeout_s):
             state = read_state(path)
             if "launch" in state:
                 record = state["launch"]
@@ -640,15 +795,22 @@ def launch(
                     "coordinator-handoff launch: already launched %s", successor
                 )
                 return 2
-            return _launch_locked(
-                LaunchContext(handoff, old_session_id, old_name, checkout, state_dir),
-                deps,
-                state,
-                dry_run=dry_run,
-            )
+            warnings: list[str] = []
+            pending = _launch_in_progress(state, warnings)
+            for warning in warnings:
+                logger.warning("coordinator-handoff launch: %s", warning)
+            if pending:
+                logger.error("coordinator-handoff launch: launch-in-progress")
+                return 2
+            prepared = _launch_locked(ctx, deps, state, dry_run=dry_run)
     except CoordinatorHandoffError, OSError, subprocess.TimeoutExpired:
-        logger.exception("coordinator-handoff launch refused")
+        logger.exception("coordinator-handoff launch: census-unavailable")
         return 2
+    if isinstance(prepared, int):
+        return prepared
+    argv, record, level = prepared
+    # A slow external start must not monopolise the state transaction lock.
+    return _start_successor(ctx, deps, argv, record, level)
 
 
 def _launch_locked(
@@ -657,8 +819,8 @@ def _launch_locked(
     state: dict[str, Any],
     *,
     dry_run: bool,
-) -> int:
-    """Gather and signal while holding the launch-record transaction lock."""
+) -> tuple[list[str], dict[str, str], float | None] | int:
+    """Gather and reserve while locked; return the external call to run unlocked."""
     handoff, old_session_id = ctx.handoff, ctx.old_session_id
     checkout, state_dir = ctx.checkout, ctx.state_dir
     gathered = _gather(handoff, deps)
@@ -687,15 +849,67 @@ def _launch_locked(
         return 0
     path = state_dir / f"{old_session_id}.json"
     state["census"] = [asdict(run) for run in runs]
-    state["launch"] = {
+    record = {
         "at": now_iso(),
         "successor": name,
         "handoff": str(handoff.resolve()),
         "cwd": str(checkout),
     }
-    write_state(path, state)  # state before signal
-    runner = deps.runner or subprocess.run
-    return runner(argv, cwd=checkout, check=False).returncode
+    state["launch_pending"] = {"name": name, "at": record["at"]}
+    write_state(path, state)
+    return argv, record, _last_fired(state)
+
+
+def _start_successor(
+    ctx: LaunchContext,
+    deps: LaunchDeps,
+    argv: list[str],
+    record: dict[str, str],
+    level: float | None,
+) -> int:
+    """Promote only rc 0; every start failure removes the claim and restores fire."""
+    try:
+        result = (deps.runner or subprocess.run)(
+            argv,
+            cwd=ctx.checkout,
+            check=False,
+            timeout=LAUNCH_TIMEOUT_S,
+        )
+        started = result.returncode == 0
+        if not started:
+            logger.error(
+                "coordinator-handoff launch: start failed: claude --bg rc %d",
+                result.returncode,
+            )
+    except OSError, subprocess.TimeoutExpired:
+        logger.exception("coordinator-handoff launch: start failed")
+        started = False
+    path = ctx.state_dir / f"{ctx.old_session_id}.json"
+    try:
+        with state_lock(path, timeout_s=deps.lock_timeout_s):
+            state = read_state(path)
+            pending = state.get("launch_pending")
+            if (
+                not isinstance(pending, dict)
+                or pending.get("name") != record["successor"]
+                or pending.get("at") != record["at"]
+            ):
+                logger.error(
+                    "coordinator-handoff launch: start failed: pending claim changed"
+                )
+                return 3
+            del state["launch_pending"]
+            if started:
+                state["launch"] = record
+            else:
+                _rollback_fire(state, level)
+            write_state(path, state)
+    except OSError:
+        logger.exception(
+            "coordinator-handoff launch: start failed: cannot finalise state"
+        )
+        return 3
+    return 0 if started else 3
 
 
 # ── retire ───────────────────────────────────────────────────────────────────
@@ -818,11 +1032,19 @@ def retire(request: RetireRequest, deps: RetireDeps) -> int:
             run.argv,
         )
     in_flight = in_flight_tasks(deps.jobs_dir, old)
-    if _in_flight_blocks(request, in_flight) or blocking:
+    inflight_blocks = _in_flight_blocks(request, in_flight)
+    if inflight_blocks or blocking:
+        remedies: list[str] = []
+        if blocking:
+            remedies.append("wait for each run or pass --adopted PID")
+        if inflight_blocks:
+            remedies.append(
+                "confirm harness tasks may die, then pass --accept-inflight"
+            )
         logger.error(
-            "coordinator-handoff retire: refusing to stop %s — wait for each run "
-            "or pass --adopted PID",
+            "coordinator-handoff retire: refusing to stop %s — %s",
             old,
+            "; ".join(remedies),
         )
         return 1
     short_id = old[:SHORT_ID_LEN]
@@ -861,10 +1083,21 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
     )
     decide_parser.add_argument("--session-id", required=True)
     decide_parser.add_argument("--percent", type=float, required=True)
-    decide_parser.add_argument(
+    modes = decide_parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--no-commit",
         action="store_true",
         help="Report without consuming a firing level",
+    )
+    modes.add_argument(
+        "--probe",
+        action="store_true",
+        help="Fire at most once per session without spending real levels",
+    )
+    modes.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Fire once per preview level without spending real levels",
     )
     release_parser = sub.add_parser(
         "release", help="Restore an undelivered firing level"
@@ -922,12 +1155,21 @@ def main(args: argparse.Namespace, _project_root: Path) -> int:
             getattr(args, "state_dir", None) or main_checkout(Path.cwd()) / STATE_SUBDIR
         )
     except CoordinatorHandoffError:
-        logger.exception("coordinator-handoff %s: repository unavailable", command)
+        reason = (
+            "census-unavailable" if command == "launch" else "repository unavailable"
+        )
+        logger.exception("coordinator-handoff %s: %s", command, reason)
         return 2
     jobs_dir = getattr(args, "jobs_dir", None) or default_jobs_dir()
     if command == "decide":
         decision = decide(
-            DecideRequest(args.session_id, args.percent, no_commit=args.no_commit),
+            DecideRequest(
+                args.session_id,
+                args.percent,
+                no_commit=args.no_commit,
+                probe=args.probe,
+                dry_run=args.dry_run,
+            ),
             env=os.environ,
             jobs_dir=jobs_dir,
             state_dir=state_dir,

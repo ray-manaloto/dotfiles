@@ -14,7 +14,9 @@ included; `-p` and the SDK skip). Python decides, once per session id —
 
 1. Queue a known `/rename` BEFORE `/reload-skills`, then `/reload-plugins --force`:
    a bg spare's skills/plugins can predate the claim. Record `renamed` and show
-   success only after `/rename` resolves; rejection leaves naming pending.
+   success after `/rename` resolves and Python confirms the job record's name
+   when one exists (foreground: resolution suffices). Rejection or a mismatched
+   job name leaves naming pending.
 2. Name the session `<project>-<yyyyMMdd'T'HHmmss.SSSSSSSSSX>.<feature>`
    (America/Chicago; `dotfiles` here, `kb` in the knowledge-base):
 
@@ -29,7 +31,8 @@ included; `-p` and the SDK skip). Python decides, once per session id —
 A changed-module reload can re-fire `session.start`; `already-ran` queues no
 reload. The first `prompt.submit` also reads
 `session-start pending --session-id <id>` once after a reload to recover the persisted prefix, even when start did
-not re-fire. Rejected naming stays pending; successful naming clears it.
+not re-fire. Failed pending reads are retried at the next prompt. Rejected
+naming stays pending; confirmed naming clears it.
 
 ## Reading the status line
 
@@ -45,7 +48,7 @@ Function-hook failures are otherwise silent, so a missing entry means the hook
 did not run.
 
 A user name comes from a matching bg job record with `nameSource: "user"`, or
-`-n`/`--name` in the nearest Claude ancestor's argv (reap/session-orphans).
+`-n`/`--name` in the nearest harness process's argv (reap/session-orphans).
 Harness-generated job names do not count. Missing spare records fail closed;
 foreground argv without `-n` can follow branch/prompt naming. The hook handles
 both string and `{isAnswered, text}` completion results; vendor types need a
