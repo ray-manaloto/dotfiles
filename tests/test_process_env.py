@@ -344,7 +344,8 @@ def test_mise_and_pre_push_wiring_use_the_public_boundary() -> None:
     hk = (root / "hk.pkl").read_text(encoding="utf-8")
     assert "[tasks.test-hook-isolated]" in mise
     assert (
-        "uv run --project python dotfiles-setup process git-isolated -- "
+        "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- "
+        "dotfiles-setup process git-isolated -- "
         "uv run --project python pytest tests/ -x -q"
     ) in mise
     assert (

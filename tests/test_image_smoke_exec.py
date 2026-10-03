@@ -43,6 +43,10 @@ from dotfiles_setup.image import (
 from dotfiles_setup.platform_target import expected_uname_machine, normalize_arch
 
 pytestmark = pytest.mark.image_exec
+# ONE xdist worker for the whole module (pytest.ini runs `-n auto --dist
+# loadgroup`): its module-scoped fixtures exist to SHARE expensive real runs,
+# and spread across workers each worker would repeat them.
+pytestmark = [pytestmark, pytest.mark.xdist_group(name="image_smoke_exec")]
 
 # The local devcontainer base — the same tag `mise run sync` converges onto and
 # `scripts/devcontainer-smoke.sh` runs against.

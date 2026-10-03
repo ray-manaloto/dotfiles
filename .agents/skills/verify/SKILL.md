@@ -28,7 +28,7 @@ probe writes to a file and reads the recorded `rc` — never a piped tail.
 | surface | drive it | expect |
 |---|---|---|
 | guard: zsh `=`-separator | `jq -cn --arg c '<CMD>' '{tool_name:"Bash",tool_input:{command:$c}}' \| bash scripts/pretooluse-guard.sh` for `echo ====`, `for f in a; do echo ====; done`, `(echo ====)` · and `echo '===='`, `echo $(( 1 == 1 ))`, `echo x\ ====` | the first three deny (`zsh_equals_separator`); the last three print nothing |
-| graphify PreToolUse nudge | `printf '{"session_id":"<a new uuidgen UUID>","tool_name":"Grep","tool_input":{"pattern":"x"},"cwd":"%s"}' "$PWD" \| CLAUDE_PROJECT_DIR=$PWD bash scripts/graphify-hook-guard.sh search`, twice · then, with the SAME `session_id`, `… graphify-hook-guard.sh read` (READ mode — `search` ignores `file_path`) with a `Read` payload whose `tool_input.file_path` is a file edited since the graph build | first call prints the factual nudge (no `MANDATORY`); repeat 0 bytes; the stale-file Read still prints its notice with `mise run graphify-rebuild` |
+| graphify PreToolUse nudge | `printf '{"session_id":"<a new uuidgen UUID>","tool_name":"Grep","tool_input":{"pattern":"x"},"cwd":"%s"}' "$PWD" \| CLAUDE_PROJECT_DIR=$PWD /bin/bash scripts/pretooluse-guard.sh`, twice · then, with the SAME `session_id`, a `Read` payload (`tool_name` `Read` selects READ mode) whose `tool_input.file_path` is a file edited since the graph build | first call prints the factual nudge (no `MANDATORY`); repeat 0 bytes; the stale-file Read still prints its notice with `mise run graphify-rebuild` |
 | promote eligibility | `uv run --project python dotfiles-setup image verify-promote-eligibility --image-ref ghcr.io/ray-manaloto/dotfiles-devcontainer:pr-<N>` | stdout `eligible=`/`status=`; `already_current` exits 0 with `eligible=false`; `stale`/`unprovable` exit 1 |
 | dual-arch containers | per arch (arm64: `MISE_ENV=arm64` plus the gitignored `mise.arm64.local.toml` from `mise.local.toml.example`): `mise run verify-arch`, `mise run verify-ssh-inbound`, `mise run sync -- --check`; `docker image inspect --platform <triple> ghcr.io/ray-manaloto/dotfiles-devcontainer:dev` | `R3 container is <triple> <uname>` on all three signals; R1 rc=0; both published triples present under local `:dev`. Full proof: `MISE_ENV=arm64 mise run verify-local` — never concurrently with the amd64 one (shared `/tmp` paths) |
 | hook selfcheck | `uv run --project python dotfiles-setup hook selfcheck` (it is NOT a mise task; `ship` runs this exact argv) | `hook-selfcheck: OK — all wired host-side hooks pass` |
@@ -61,8 +61,8 @@ grep -c DISAGREEMENT "$S/report.txt"; grep -c unattested_plan "$S/report.txt"
 
 - A hook payload fixture must carry `tool_input`: graphify's hook-guard decides from it, and a payload without one
   prints nothing even on the first call — a probe that can only say "silent" (measured 2026-09-28).
-- `scripts/graphify-hook-guard.sh` is not executable; `.claude/settings.json` runs it as `bash <path>`, so probe it the
-  same way (running it directly is rc=126, a probe error, not a hook failure).
+- `scripts/pretooluse-guard.sh` is not executable; `.claude/settings.json` runs it as `/bin/bash <path>`, so probe it
+  the same way (running it directly is rc=126, a probe error, not a hook failure).
 - `sync --check` rc=1 `OUTDATED` is a FAILED check by default — a genuinely outdated overlay prints the same line. Only
   treat it as #1432 (fail-safe bookkeeping) after showing that signature: every id under `containers` in
   `~/.local/state/dotfiles/sync-*.json` names NO image in `docker images -a --no-trunc`, and each running container's

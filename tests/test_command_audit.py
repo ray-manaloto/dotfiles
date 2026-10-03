@@ -5,8 +5,9 @@ Covers transcript discovery (env-aware, never hardcoded), defensive JSONL
 parsing, attempt-to-result pairing (a denied Bash call is recorded exactly like
 an executed one — only the result tells them apart), the
 bypass/blocked/pre_rule/mise/diagnostic/one_off classifier (incl. cd-prefix
-compound unwrapping), grouping, report rendering, and the ``--output`` path the
-SessionEnd hook uses to refresh the report once per session.
+compound unwrapping), grouping, report rendering, the ``--output`` path, and
+the single-instance lock that replaced the retired SessionEnd hook's unbounded
+concurrency.
 """
 
 from __future__ import annotations
@@ -381,7 +382,7 @@ def test_render_report_no_one_offs() -> None:
     assert "_None — no un-wrapped one-off commands found._" in report
 
 
-# ------------------------------------------- --output (the SessionEnd hook path)
+# ------------------------------------------------------------- --output
 
 
 def _seed_transcript(tmp_path: Path, project: Path, *commands: str) -> Path:
@@ -424,6 +425,44 @@ def test_main_output_writes_file_instead_of_stdout(
     assert "# Command audit" not in out  # the body went to the file, not stdout
 
 
+def test_a_second_concurrent_audit_exits_without_scanning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Seven concurrent scans ran on 2026-10-02; a second one now exits at once."""
+    project = tmp_path / "repo"
+    project.mkdir()
+    monkeypatch.setenv(
+        "CLAUDE_CONFIG_DIR", str(_seed_transcript(tmp_path, project, "git commit -m x"))
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import time\n"
+                "from dotfiles_setup import host_lock\n"
+                "with host_lock.held(host_lock.COMMAND_AUDIT, 'first audit'):\n"
+                "    print('held', flush=True)\n"
+                "    time.sleep(30)\n"
+            ),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        assert ca.command_audit_main(project, output=Path("r.md")) == 0
+    finally:
+        holder.kill()
+        holder.wait()
+    assert "skipped" in capsys.readouterr().out
+    assert not (project / "r.md").exists()
+    # Control arm: the same call with the holder gone scans and writes.
+    assert ca.command_audit_main(project, output=Path("r.md")) == 0
+    assert "# Command audit" in (project / "r.md").read_text()
+
+
 def test_main_without_output_prints_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -450,12 +489,8 @@ def test_main_no_transcripts_leaves_existing_report_intact(
     assert "no transcripts" in capsys.readouterr().out
 
 
-def test_cli_accepts_the_session_end_output_flag() -> None:
-    """The flag the SessionEnd hook passes must exist on the REAL CLI.
-
-    The wiring check asserts settings.json names `--output`; this asserts
-    argparse actually accepts it, so the hook cannot fail only at runtime.
-    """
+def test_cli_accepts_the_output_flag() -> None:
+    """The documented `--output` flag must exist on the REAL CLI."""
     res = subprocess.run(
         [
             "uv",

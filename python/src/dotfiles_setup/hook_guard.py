@@ -1,8 +1,10 @@
 # Copyright (c) 2026 Raymond Manaloto
 """PreToolUse Bash guard: canonical mise tasks over one-off commands.
 
-``dotfiles-setup hook pretooluse`` is the single project PreToolUse hook
-(wired in ``.claude/settings.json``). It reads the hook JSON from stdin
+The policy half of the single project PreToolUse hook: ``.claude/settings.json``
+-> ``scripts/pretooluse-guard.sh`` -> ``dotfiles_setup.hook_dispatch``, which
+calls :func:`decide_payload` (``dotfiles-setup hook pretooluse`` remains as a
+standalone entry). It reads the hook JSON from stdin
 and either allows the Bash call (silent exit 0) or denies it with a
 redirect reason via the documented JSON contract
 (``permissionDecision: "deny"`` — deterministic, applies even in
@@ -1030,6 +1032,17 @@ def _read_payload() -> tuple[str, dict[str, object], dict[str, object]]:
         ``tool_input`` object.
     """
     raw = sys.stdin.read() if not sys.stdin.isatty() else ""
+    return parse_payload(raw)
+
+
+def parse_payload(raw: str) -> tuple[str, dict[str, object], dict[str, object]]:
+    """Tool name, tool input and root payload from a hook's stdin text.
+
+    Shared by :func:`pretooluse_main` and the merged per-tool-call hook
+    (:mod:`dotfiles_setup.hook_dispatch`), which must read stdin once and hand
+    the same text to graphify. An empty ``raw`` falls back to the legacy
+    ``CLAUDE_TOOL_INPUT`` variable.
+    """
     if raw:
         try:
             payload = json.loads(raw)
@@ -1094,16 +1107,21 @@ def pretooluse_main() -> int:
     tool_name, tool_input, _ = _read_payload()
     reason = decide_payload(tool_name, tool_input)
     if reason is not None:
-        sys.stdout.write(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                }
-            )
-            + "\n"
-        )
+        sys.stdout.write(deny_output(reason))
     return 0
+
+
+def deny_output(reason: str) -> str:
+    """The PreToolUse hook output that denies the pending call for ``reason``."""
+    return (
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+        + "\n"
+    )

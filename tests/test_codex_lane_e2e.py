@@ -53,6 +53,10 @@ from dotfiles_setup import codex_verdict as cv
 from dotfiles_setup import dag_tick
 
 pytestmark = pytest.mark.codex_exec
+# ONE xdist worker for the whole module (pytest.ini runs `-n auto --dist
+# loadgroup`): its module-scoped fixtures exist to SHARE expensive real runs,
+# and spread across workers each worker would repeat them.
+pytestmark = [pytestmark, pytest.mark.xdist_group(name="codex_lane_e2e")]
 
 NODE_ID = "e2e-node"
 

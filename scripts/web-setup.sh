@@ -4,7 +4,7 @@
 # WHY THIS EXISTS
 #   Claude Code on the web boots from Anthropic's Ubuntu 24.04 image, which has
 #   no mise and no Python >=3.14. This repo's PreToolUse guard
-#   (`uv run --project python dotfiles-setup hook pretooluse`) needs Python
+#   (`python -m dotfiles_setup.hook_dispatch`, via uv as a fallback) needs Python
 #   >=3.14; when it is absent the guard errors on startup and the harness fails
 #   closed, blocking EVERY Bash call — the "web brick". Full analysis:
 #   docs/research/runs/research-20260709-r2-web-env/report.md. This script installs

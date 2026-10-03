@@ -147,6 +147,15 @@ def _prune(state_dir: Path) -> None:
             continue
 
 
+def was_seen(repo_root: Path, session_id: str, agent_id: str = "") -> bool:
+    """Whether :func:`already_seen` has recorded this session, WITHOUT recording.
+
+    Lets a caller skip work whose only possible output is the reminder this
+    session already got (``graphify_hook.nudge`` skips a whole graphify spawn).
+    """
+    return bool(session_id) and _marker(repo_root, _key(session_id, agent_id)).exists()
+
+
 def already_seen(repo_root: Path, session_id: str, agent_id: str = "") -> bool:
     """Whether this session was already told, recording it when it was not.
 

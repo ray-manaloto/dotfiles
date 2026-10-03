@@ -117,14 +117,14 @@ Moved out of the rule 2026-08-31; the rule keeps the one-line summary and the
 fail-open caveat, which are the parts that change a decision at the call site.
 
 1. **PreToolUse hook (hard deny)** — `.claude/settings.json` wires every Bash
-   call through `dotfiles-setup hook pretooluse` (`hook_guard.py`): a match is
+   call through `scripts/pretooluse-guard.sh` -> `hook_dispatch` -> `hook_guard.py`: a match is
    DENIED with the redirect reason fed back (JSON `permissionDecision: "deny"`;
    deterministic, applies even in bypassPermissions mode). Rules tested in
    `tests/test_hook_guard.py`.
 2. **ship/land `hook-selfcheck` gate** — `mise run ship` / `land` run
    `dotfiles-setup hook selfcheck` (`hook_selfcheck.py`) as an always-run gate
-   driving the WIRED guard end-to-end: settings.json wiring + the five-tool
-   matcher, **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real
+   driving the WIRED guard end-to-end: settings.json wiring + the eight-tool
+   matcher (guard + graphify nudge, one hook), **every hook command anchored to `$CLAUDE_PROJECT_DIR`**, the real
    wrapper denying from **both** the project root and a foreign cwd (#343), and
    `bash -n` on the scripts. A hook regression fails a PR like lint/pytest.
 3. **The rule + skills** — `pr-workflow` and `devcontainer-sync` name the
@@ -135,13 +135,16 @@ fail-open caveat, which are the parts that change a decision at the call site.
    cover, so the layers above get refined over time. The *inverse* of Claude
    Code's `fewer-permission-prompts` skill (same transcript mine, opposite
    verdict). Review the report, then add a `mise run` task (+ a `_RULES`
-   redirect for a known-bad shape) for the top culprits. Ongoing: a **`SessionEnd`
-   hook** runs it per session (`--output .agent/command-audit.md`). `SessionEnd`
-   and not `Stop` — it fires once at termination and *cannot block*, while `Stop`
-   fires every turn and can block, and a transcript scan belongs on neither.
-   **Local-only by nature** (it reads `~/.claude` transcripts), so it is a hook
-   and never a GHA job — a CI runner has no transcripts. Report kept out of git
-   by `.gitignore`.
+   redirect for a known-bad shape) for the top culprits. **On demand**
+   (`mise run command-audit -- --output .agent/command-audit.md`). Until
+   2026-10-02 a **`SessionEnd` hook** ran it per session; that hook was the
+   largest attributable host load — seven concurrent ~814 MB scans, four orphaned
+   past SessionEnd's 60 s cap
+   (`docs/research/kb/reports/agents/host-load-review-2026-10-02.md`) — so it was
+   retired, and a second concurrent run now exits on a host-wide single-instance
+   lock (`host_lock.COMMAND_AUDIT`). **Local-only by nature** (it reads
+   `~/.claude` transcripts), so never a GHA job — a CI runner has no
+   transcripts. Report kept out of git by `.gitignore`.
 5. **Contracts** — `workflow.mise-tasks-enforcement`, `.hook-selfcheck-wiring`
    and `.command-audit-wiring` in suites.toml assert the whole chain exists
    (settings.json → wrapper → CLI → module → tests), so nothing drifts out.

@@ -50,8 +50,9 @@ Design notes (deep-research verified, 2026-07-07 —
   CI. The local ``:dev`` base is built from the merge-base and cannot be
   made current for the branch (base builds are CI-only; a chezmoi/tool
   bump can even make the stale base's ``onCreate`` fail outright). Per
-  ``verify-before-advancing.md``, ship then runs lint/pytest/verify
-  locally, skips the impossible local container convergence, and still
+  ``verify-before-advancing.md``, ship then runs lint/verify locally
+  (pytest too, unless the pre-push hook runs it), skips the impossible
+  local container convergence, and still
   gates on CI's base-build + smoke via the watched PR checks
   (``watch_pr_checks``). CI is the validator — not a zero-skip
   violation. This closes the ship deadlock for base-tool bumps (a
@@ -66,7 +67,8 @@ Design notes (deep-research verified, 2026-07-07 —
   auto-merge race), reporting the PR's cumulative historical diff
   instead of what the eventual squash-merge commit actually changes —
   a false main-CI expectation on an otherwise-clean merge.
-- Gate order is cheap-first: lint → pytest → verify → conditional
+- Gate order is cheap-first: lint → pytest (dropped when the hk pre-push
+  hook runs the suite, :func:`pre_push_runs_suite`) → verify → conditional
   (pin-actions / lint-docs) → full sync last.
 
 Everything long-running streams to the terminal (never wait blind);
@@ -82,14 +84,11 @@ import os
 import subprocess
 import sys
 import time
-from typing import TYPE_CHECKING
+from pathlib import Path
 
-from dotfiles_setup import child_env, process_env
+from dotfiles_setup import child_env, hk_hooks, host_lock, process_env
 from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 _PROBE_TIMEOUT_S = 120.0
 
@@ -321,11 +320,70 @@ def changed_paths_vs_main(workspace: Path) -> list[str]:
     return sorted(merged)
 
 
-def gate_matrix(paths: list[str]) -> list[Gate]:
+#: hk's documented off-switches (hk docs: ``HK_SKIP_STEPS``/``hk.skipSteps``,
+#: ``HK_SKIP_HOOKS``/``HK_SKIP_HOOK``/``hk.skipHook``). Any of them may stop the
+#: pre-push suite from running, so ship then keeps its own pytest gate.
+_HK_SKIP_ENV = ("HK_SKIP_STEPS", "HK_SKIP_HOOKS", "HK_SKIP_HOOK")
+_HK_SKIP_GIT_CONFIG = ("hk.skipSteps", "hk.skipHook")
+#: hk's user rc files, in its discovery order (hk docs "hkrc"); their
+#: ``skip_steps``/``skip_hooks`` are UNIONED with the switches above.
+_HKRC_PATHS = (".hkrc.pkl", "~/.hkrc.pkl", "~/.config/hk/config.pkl")
+_HKRC_SKIP_KEYS = ("skip_steps", "skip_hooks")
+
+
+def _hkrc_may_skip(workspace: Path) -> bool:
+    """Whether any hk user rc mentions a skip list (conservative: by name)."""
+    for raw in _HKRC_PATHS:
+        path = Path(raw).expanduser() if raw.startswith("~") else workspace / raw
+        try:
+            text = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if any(key in text for key in _HKRC_SKIP_KEYS):
+            return True
+    return False
+
+
+def pre_push_runs_suite(workspace: Path) -> bool:
+    """Whether ``git push`` from ``workspace`` will run the pytest suite itself.
+
+    True only when an enabled hk ``pre-push`` hook is installed for this
+    checkout (git's own effective answer, :func:`hk_hooks.event_has_hk_hook`)
+    and none of hk's skip switches is set — environment, git config, or an hk
+    user rc — and the global hook's own ``HK=0`` off-switch is not set.
+    hk.pkl's ``pre-push`` ``test`` step runs the WHOLE suite
+    (``test-hook-isolated``) and a failure there makes ``git push`` fail, which
+    ship already treats as fatal before it opens a PR or arms auto-merge.
+
+    Any doubt answers False — a second suite is slow, a missing one is a hole.
+    """
+    if os.environ.get("HK") == "0" or any(os.environ.get(n) for n in _HK_SKIP_ENV):
+        return False
+    if _hkrc_may_skip(workspace):
+        return False
+    for key in _HK_SKIP_GIT_CONFIG:
+        configured = _run(
+            ["git", "-C", str(workspace), "config", "--get-all", key],
+            timeout=_PROBE_TIMEOUT_S,
+        )
+        if configured.returncode != 1:  # 1 = unset; 0 = set; else unreadable
+            return False
+    try:
+        return hk_hooks.event_has_hk_hook(workspace, "pre-push")
+    except hk_hooks.HookConfigUnreadableError:
+        return False
+
+
+def gate_matrix(paths: list[str], *, suite_at_push: bool = False) -> list[Gate]:
     """The ordered, path-aware gate list for ship — cheap gates first.
 
     Always: lint, pytest, verify contracts, hook-selfcheck (the wired
-    host-side hooks, end-to-end). Conditional per
+    host-side hooks, end-to-end). The one exception is pytest, dropped when
+    ``suite_at_push`` (see :func:`pre_push_runs_suite`): the push ship
+    performs right after the gates runs the same suite in hk's ``pre-push``
+    ``test`` step, so running it here too cost a second ~365 s serial suite per
+    ship (host-load review, 2026-10-02). ADR-0001 forbids the other fix,
+    skipping the hook step locally with ``HK_SKIP_STEPS``. Conditional per
     verify-before-advancing: pin-actions on .github changes, lint-docs on
     agent-doc changes, verify-apt-pins on apt-pin inputs
     (:func:`changes_apt_pin_inputs`). The full-sync hard gate runs LAST (most expensive)
@@ -334,12 +392,15 @@ def gate_matrix(paths: list[str]) -> list[Gate]:
     which the local base cannot validate the branch and container validation
     defers to CI (module docstring). No *operator* override either way.
     """
-    gates = [
-        Gate("lint", ("mise", "run", "lint")),
-        Gate(
-            "pytest",
-            ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
-        ),
+    gates = [Gate("lint", ("mise", "run", "lint"))]
+    if not suite_at_push:
+        gates.append(
+            Gate(
+                "pytest",
+                ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
+            )
+        )
+    gates += [
         Gate(
             "verify-contracts",
             ("uv", "run", "--project", "python", "dotfiles-setup", "verify", "run"),
@@ -607,6 +668,45 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
     return int(json.loads(view.stdout)["number"])
 
 
+def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+    """Run ship's gate matrix, then push — one heavy-gate lock around both.
+
+    One heavy run at a time host-wide: the gates AND the push hold the lock,
+    because the push's hk pre-push hook runs the whole suite and re-enters this
+    lock as a descendant. When that hook will run the suite, ship's own pytest
+    gate is dropped (:func:`pre_push_runs_suite`) — one suite per ship — and a
+    failing test fails ``git push``, so ship stops before the PR and before
+    auto-merge is armed. Returns False after printing the failure.
+    """
+    try:
+        with host_lock.held(host_lock.HEAVY_GATE, f"ship {branch} ({workspace})"):
+            return _gates_then_push(workspace, branch, paths)
+    except host_lock.HostLockTimeoutError as exc:
+        sys.stdout.write(f"FAIL  ship: {exc}\n")
+        return False
+
+
+def _gates_then_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+    """The body :func:`_gate_and_push` runs while holding the heavy-gate lock."""
+    # Decided AFTER the (possibly long) lock wait, so it describes the hook
+    # state at push time.
+    suite_at_push = pre_push_runs_suite(workspace)
+    if suite_at_push:
+        sys.stdout.write(
+            "==> pytest runs ONCE, in the hk pre-push hook during `git push` "
+            "(a failure there fails the push, and ship stops before the PR)\n"
+        )
+    if not run_gates(workspace, gate_matrix(paths, suite_at_push=suite_at_push)):
+        return False
+    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
+    if push_rc != 0:
+        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
+        # The pre-push hook runs the test suite, so a failing test lands here.
+        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
+        return False
+    return True
+
+
 def ship_main(workspace: Path, *, title: str | None = None) -> int:
     """Gates → push → open PR → enable native auto-merge → return.
 
@@ -638,13 +738,7 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
             "base-build + smoke gate the PR (watched below). "
             "See verify-before-advancing.md.\n"
         )
-    if not run_gates(workspace, gate_matrix(paths)):
-        return 1
-
-    push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
-    if push_rc != 0:
-        why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
-        sys.stdout.write(f"FAIL  ship: git push rc={push_rc}{why}\n")
+    if not _gate_and_push(workspace, branch, paths):
         return 1
 
     number = _open_or_update_pr(workspace, title)

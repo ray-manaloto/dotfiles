@@ -51,14 +51,16 @@ denials, and **0** were bypasses:
 ``dotfiles-setup command-audit`` (→ ``mise run command-audit``) renders a
 frequency-ranked markdown report grouped by command+subcommand.
 
-The loop is RECURRING, not remember-to-run: a ``SessionEnd`` hook in
-``.claude/settings.json`` refreshes ``.agent/command-audit.md`` via ``--output``
-once per session. SessionEnd (not ``Stop``) is the right event — it fires once
-per session at termination and *cannot block*, whereas ``Stop`` fires every
-turn and can block (exit 2 continues the conversation), which would put a
-transcript scan on the per-turn path and risk a stop-loop. The scan is local by
-nature (it reads ``~/.claude`` transcripts), so this is a local hook and never
-a CI job — a GHA runner has no transcripts to read.
+The loop runs ON DEMAND (``mise run command-audit -- --output
+.agent/command-audit.md``). It used to run from a ``SessionEnd`` hook on every
+session end; on 2026-10-02 seven of those scans ran at once (each reading the
+50 latest sessions plus every nested transcript, ~814 MB), four of them orphaned
+past SessionEnd's 60 s cap, and they were the largest attributable host load
+(``docs/research/kb/reports/agents/host-load-review-2026-10-02.md``). A second
+concurrent run now exits at once on the ``host_lock.COMMAND_AUDIT`` lock instead
+of scanning the same corpus twice. The scan is local by nature (it reads
+``~/.claude`` transcripts), so it is never a CI job — a GHA runner has no
+transcripts to read.
 """
 
 from __future__ import annotations
@@ -72,7 +74,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import hook_guard
+from dotfiles_setup import hook_guard, host_lock
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -764,9 +766,9 @@ def render_report(result: AuditResult, *, fail_open_log: Path | None = None) -> 
 def write_report(text: str, project_root: Path, output: Path) -> Path:
     """Write ``text`` to ``output`` (relative paths resolve against the repo).
 
-    Python owns the path resolution + parent creation so the SessionEnd hook
-    stays a pure invocation with no shell redirect (zero-bash-logic), and so
-    the destination does not depend on the hook's cwd.
+    Python owns the path resolution + parent creation so the caller stays a
+    pure invocation with no shell redirect (zero-bash-logic), and so the
+    destination does not depend on the caller's cwd.
     """
     dest = output if output.is_absolute() else project_root / output
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -782,13 +784,25 @@ def command_audit_main(
 ) -> int:
     """Scan this project's recent transcripts; report to stdout or ``output``.
 
-    ``--output`` is what the SessionEnd hook (``.claude/settings.json``) uses to
-    refresh ``.agent/command-audit.md`` once per session, making the refine loop
-    recurring instead of remember-to-run. The no-transcripts branch deliberately
-    leaves any existing report untouched rather than clobbering it with a
-    notice — and it cannot fire from the hook anyway, since a SessionEnd
-    implies this project has a transcript.
+    Single-instance: when another command-audit already holds the host-wide
+    ``COMMAND_AUDIT`` lock this returns 0 at once, naming the holder, rather
+    than reading the same transcripts a second time. ``--output`` writes the
+    report (``.agent/command-audit.md`` by convention). The no-transcripts
+    branch deliberately leaves any existing report untouched rather than
+    clobbering it with a notice.
     """
+    try:
+        with host_lock.held(
+            host_lock.COMMAND_AUDIT, f"command-audit ({project_root})", wait_s=0
+        ):
+            return _command_audit(project_root, limit=limit, output=output)
+    except host_lock.HostLockTimeoutError as exc:
+        sys.stdout.write(f"command-audit: skipped — {exc}\n")
+        return 0
+
+
+def _command_audit(project_root: Path, *, limit: int, output: Path | None) -> int:
+    """The scan itself, run under the single-instance lock."""
     base = transcripts_base()
     transcripts = project_transcripts(base, project_root, limit=limit)
     if not transcripts:

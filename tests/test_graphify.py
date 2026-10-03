@@ -48,14 +48,13 @@ from dotfiles_setup.graphify import (
     graphify_health_main,
     graphify_main,
     graphify_rebuild_main,
-    hook_guard_main,
     prs,
     prs_main,
     query,
-    rewrite_hook_nudge,
     update,
 )
 from dotfiles_setup.graphify_currency import locked_version
+from dotfiles_setup.graphify_hook import hook_guard_main, rewrite_hook_nudge
 
 # Read from the lock, not hard-coded: a hard-coded copy needed an edit on every
 # bump (three today) while guarding nothing the receipt check below does not.
@@ -899,7 +898,7 @@ def test_hook_guard_main_rewrites_and_prints(
         args: list[str], *, cwd: Path, stdin: str | None = None
     ) -> subprocess.CompletedProcess[str]:
         _ = cwd, stdin
-        assert args == ["graphify", "hook-guard", "search"]
+        assert args[1:] == ["hook-guard", "search"]
         return subprocess.CompletedProcess(
             args,
             0,
@@ -907,7 +906,7 @@ def test_hook_guard_main_rewrites_and_prints(
             stderr="",
         )
 
-    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("dotfiles_setup.graphify_hook._run", fake_run)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     rc = hook_guard_main(tmp_path, "search")
@@ -962,7 +961,7 @@ def _drive_hook(
             assert stdin == _payload  # the hook payload reaches graphify
             return subprocess.CompletedProcess(args, 0, stdout=_stdout, stderr="")
 
-        monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+        monkeypatch.setattr("dotfiles_setup.graphify_hook._run", fake_run)
         monkeypatch.setattr("sys.stdin", io.StringIO(payload))
         hook_guard_main(tmp_path, kind)
         outs.append(capsys.readouterr().out)
@@ -1030,7 +1029,7 @@ def test_hook_guard_main_fails_open_on_nonzero_rc(
         _ = cwd, args, stdin
         return subprocess.CompletedProcess(args, 1, stdout="", stderr="boom")
 
-    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("dotfiles_setup.graphify_hook._run", fake_run)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "read") == 0
@@ -1047,7 +1046,7 @@ def test_hook_guard_main_fails_open_on_missing_binary(
         message = "graphify not found"
         raise FileNotFoundError(message)
 
-    monkeypatch.setattr("dotfiles_setup.graphify._run", fake_run)
+    monkeypatch.setattr("dotfiles_setup.graphify_hook._run", fake_run)
     monkeypatch.setattr("sys.stdin", io.StringIO(""))
 
     assert hook_guard_main(tmp_path, "search") == 0

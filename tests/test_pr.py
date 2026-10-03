@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from typing import TYPE_CHECKING
 
 import pytest
-from dotfiles_setup import pr, process_env
+from dotfiles_setup import host_lock, pr, process_env
 
 if TYPE_CHECKING:
     from dotfiles_setup.sync import SyncOptions
@@ -94,6 +94,157 @@ def test_hook_selfcheck_is_an_unconditional_gate() -> None:
             "hook",
             "selfcheck",
         )
+
+
+def test_gate_matrix_drops_pytest_only_when_the_push_runs_the_suite() -> None:
+    """One suite per ship: the pre-push hook's run replaces ship's own."""
+    at_push = [g.name for g in pr.gate_matrix(["README.md"], suite_at_push=True)]
+    assert "pytest" not in at_push
+    assert at_push[:3] == ["lint", "verify-contracts", "hook-selfcheck"]
+    # Control arm: without a suite at push, pytest stays the second gate.
+    assert [g.name for g in pr.gate_matrix(["README.md"])][1] == "pytest"
+
+
+def _hook_repo(tmp_path: Path, *, pre_push: bool) -> Path:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    if pre_push:
+        for key, value in (
+            ("hook.hk-pre-push.event", "pre-push"),
+            ("hook.hk-pre-push.command", "hk run pre-push"),
+        ):
+            subprocess.run(["git", "-C", str(repo), "config", key, value], check=True)
+    return repo
+
+
+def test_pre_push_runs_suite_reads_the_installed_hook(tmp_path: Path) -> None:
+    assert pr.pre_push_runs_suite(_hook_repo(tmp_path, pre_push=True))
+
+
+def test_pre_push_runs_suite_is_false_without_the_hook(tmp_path: Path) -> None:
+    assert not pr.pre_push_runs_suite(_hook_repo(tmp_path, pre_push=False))
+
+
+@pytest.mark.parametrize("name", ["HK_SKIP_STEPS", "HK_SKIP_HOOKS", "HK_SKIP_HOOK"])
+def test_pre_push_runs_suite_is_false_under_an_hk_skip_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    repo = _hook_repo(tmp_path, pre_push=True)
+    monkeypatch.setenv(name, "test")
+    assert not pr.pre_push_runs_suite(repo)
+
+
+def test_pre_push_runs_suite_is_false_under_the_global_hooks_hk_0(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The installed global hook runs `test "${HK:-1}" = "0" || … hk run`."""
+    repo = _hook_repo(tmp_path, pre_push=True)
+    monkeypatch.setenv("HK", "0")
+    assert not pr.pre_push_runs_suite(repo)
+    monkeypatch.setenv("HK", "1")
+    assert pr.pre_push_runs_suite(repo)  # control: only "0" switches it off
+
+
+def test_pre_push_runs_suite_is_false_when_an_hkrc_names_a_skip_list(
+    tmp_path: Path,
+) -> None:
+    """Hk unions an hkrc's skip_steps/skip_hooks with every other switch."""
+    repo = _hook_repo(tmp_path, pre_push=True)
+    (repo / ".hkrc.pkl").write_text('skip_steps = List("test")\n')
+    assert not pr.pre_push_runs_suite(repo)
+
+
+@pytest.mark.parametrize("key", ["hk.skipSteps", "hk.skipHook"])
+def test_pre_push_runs_suite_is_false_under_an_hk_skip_git_config(
+    tmp_path: Path, key: str
+) -> None:
+    repo = _hook_repo(tmp_path, pre_push=True)
+    subprocess.run(["git", "-C", str(repo), "config", key, "test"], check=True)
+    assert not pr.pre_push_runs_suite(repo)
+
+
+def test_ship_with_suite_at_push_stops_on_a_failed_push_before_the_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing pre-push suite fails the push: no PR, auto-merge never armed."""
+    matrices: list[bool] = []
+    reached: list[str] = []
+    monkeypatch.setattr(pr, "_ship_preflight", lambda _w: ("feat/x", ["a.py"]))
+    monkeypatch.setattr(pr, "pre_push_runs_suite", lambda _w: True)
+
+    def matrix(_paths: list[str], *, suite_at_push: bool = False) -> list[pr.Gate]:
+        matrices.append(suite_at_push)
+        return []
+
+    monkeypatch.setattr(pr, "gate_matrix", matrix)
+    monkeypatch.setattr(process_env, "run_with_fnox", lambda *_a, **_k: 1)
+    monkeypatch.setattr(
+        pr, "_open_or_update_pr", lambda *_a, **_k: reached.append("pr") or 42
+    )
+    monkeypatch.setattr(
+        pr, "enable_auto_merge", lambda *_a, **_k: reached.append("arm") or True
+    )
+    assert pr.ship_main(_WORKSPACE) == 1
+    assert matrices == [True]
+    assert reached == []
+
+
+def test_ship_holds_the_heavy_gate_lock_through_gates_and_push(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gates and push run as the lock holder (the pre-push suite re-enters)."""
+    seen: list[str] = []
+    monkeypatch.setattr(pr, "_ship_preflight", lambda _w: ("feat/x", ["a.py"]))
+    monkeypatch.setattr(pr, "pre_push_runs_suite", lambda _w: True)
+    monkeypatch.setattr(pr, "gate_matrix", lambda *_a, **_k: [])
+
+    def push(*_a: object, **_k: object) -> int:
+        seen.append(host_lock.read_holder(host_lock.HEAVY_GATE))
+        seen.append(os.environ.get(host_lock.holder_env_name(host_lock.HEAVY_GATE), ""))
+        return 1
+
+    monkeypatch.setattr(process_env, "run_with_fnox", push)
+    assert pr.ship_main(_WORKSPACE) == 1
+    record, exported = seen
+    assert record.startswith(f"{os.getpid()}\tship feat/x")
+    assert exported == str(os.getpid())
+
+
+def test_ship_fails_when_the_heavy_gate_lock_stays_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pushed: list[int] = []
+    monkeypatch.setattr(pr, "_ship_preflight", lambda _w: ("feat/x", ["a.py"]))
+    monkeypatch.setattr(pr, "pre_push_runs_suite", lambda _w: True)
+    monkeypatch.setattr(pr, "gate_matrix", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        process_env, "run_with_fnox", lambda *_a, **_k: pushed.append(1) or 0
+    )
+    monkeypatch.setenv(host_lock.WAIT_ENV, "0.2")
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, time\n"
+                "from dotfiles_setup import host_lock\n"
+                "with host_lock.held(host_lock.HEAVY_GATE, 'other'):\n"
+                "    print('held', flush=True)\n"
+                "    time.sleep(30)\n"
+            ),
+        ],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None
+        assert holder.stdout.readline().strip() == "held"
+        assert pr.ship_main(_WORKSPACE) == 1
+    finally:
+        holder.kill()
+        holder.wait()
+    assert pushed == []
 
 
 def test_gate_matrix_gha_adds_pin_actions() -> None:
@@ -495,7 +646,7 @@ def test_ship_bounds_fnox_to_git_push_and_keeps_local_gates_uncredentialed(
     monkeypatch.setattr(
         pr,
         "gate_matrix",
-        lambda _paths: [pr.Gate("unit", ("mise", "run", "test"))],
+        lambda _paths, **_kwargs: [pr.Gate("unit", ("mise", "run", "test"))],
     )
 
     def local_stream(cmd: list[str], **_kwargs: object) -> int:

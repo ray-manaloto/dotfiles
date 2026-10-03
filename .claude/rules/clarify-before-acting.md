@@ -62,7 +62,7 @@ possibly partial answer that must be interpreted before work continues.
 ## The gate and its boundary
 
 `.claude/settings.json` wires `PreToolUse` matcher
-**`Bash|AskUserQuestion|Edit|Write|NotebookEdit`** to
+**`Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob`** to
 `scripts/pretooluse-guard.sh`. `dotfiles_setup.ask_quality` denies tool-based
 questions missing the recommendation, `PRO:`/`CON:`, or citation. The deny
 prevents the call and returns its reason to the model; selfcheck exercises both
@@ -75,7 +75,7 @@ pool (`$CC/sub-agents.md:379-384`); project settings reload without restart
 (`$CC/hooks.md:1744-1745`). Timeout scope and behavior are documented at
 `$CC/settings-reference.md:2759-2774` and `$CC/tools-reference.md:125-137`.
 
-⚠️ **The five-tool matcher above is an exact-string list, not a regular
+⚠️ **The eight-tool matcher above is an exact-string list, not a regular
 expression.** Matcher evaluation depends on the characters in the value
 (`$CC/hooks.md:285-297`): `*`/empty matches all; a value of only letters,
 digits, `_`, `-`, spaces, `,` and the alternation bar is a list of **exact**

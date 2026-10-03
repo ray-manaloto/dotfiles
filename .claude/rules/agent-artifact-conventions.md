@@ -23,7 +23,7 @@ reduce durability.
 | `.agent/notepad.md` | Session-review's narrative notepad corpus |
 | `.agent/plans/` | Our handoffs and grilling outcomes |
 | `.agent/logs/` | Execution logs and pipeline traces |
-| `.agent/command-audit.md` | SessionEnd one-off-command report |
+| `.agent/command-audit.md` | On-demand one-off-command report |
 | `.agent/kb/raw/` | Raw fetched sources backing a report |
 | `.agent/kb/structured/` | Structured local extraction artifacts |
 | `.agent/instructions-loaded/` | InstructionsLoaded observer state |

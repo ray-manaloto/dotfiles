@@ -198,6 +198,7 @@ dev = [
     # `uv run --project python` so hk uses pyproject.toml config with no
     # builtin-step rule dropouts (see Issue #45). Unpinned → `uv lock`
     # resolves latest; bump via `uv lock --upgrade-package ruff --upgrade-package ty`.
+    "pytest-xdist>=3.8.0",
     "ruff",
     "ty",
 ]
