@@ -249,8 +249,9 @@ Run, file-captured rc each (`mise run gate -- run <name>` where available):
    naming `_.path`; restore, then re-run → rc 0.
 5. `mise run lint` rc 0; `uv run --project python pytest tests/ -x -q` rc 0; `mise run verify` 0 failed.
 6. `git grep -nE '[a-z+]-22([^0-9.]|$)|[a-z]22([^0-9.]|$)|"22"|version 22|\^22' -- . ':!docs' ':!tests' ':!*.md' ':!*.lock'`
-   → hits ONLY in the parity-checked sites (54 of the 58 `mise-system.toml` pin lines — the four major-less names
-   don't match — plus `_.path` and `renovate.json`'s registryUrl; the Dockerfile `ARG LLVM_MAJOR=22` line doesn't
+   → hits ONLY in the parity-checked sites (53 of the 58 `mise-system.toml` pin lines — the four major-less names
+   don't match, and neither does `apt:libclang1-22`, whose `1` before `-22` is outside `[a-z+]`; the planner and
+   parity cover all 58 — corrected after the implementer's dissent, architect re-count = 53 — plus `_.path` and `renovate.json`'s registryUrl; the Dockerfile `ARG LLVM_MAJOR=22` line doesn't
    match the pattern either, and parity covers it), plus dated historical-probe comments and non-LLVM hits
    that the lane lists one by one in its report, with a reason each (prints the command). Control arm: the same command on the PRE-change tree must hit `main.py:235`,
    `image.py:765`, `flang-22`, `libomp-22-dev` and `libllvm22` — if it misses any, the pattern is broken.
