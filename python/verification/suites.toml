@@ -1321,7 +1321,23 @@ paths = [
     "tests/test_ask_quality.py",
     ".claude/rules/clarify-before-acting.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob"'], "python/src/dotfiles_setup/ask_quality.py" = ['RECOMMENDED_MARKER = "(Recommended)"', 'NO_EVIDENCE_ESCAPE = "[no prior evidence]"', "def find_violations(", "_CITATION_RE = re.compile("],"python/src/dotfiles_setup/hook_guard.py" = ['if tool_name == "AskUserQuestion":', "return ask_quality.decide(tool_input)", "def decide_payload("], "python/src/dotfiles_setup/hook_selfcheck.py" = ['"Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit"', "def check_ask_quality_endtoend(", "def _ask_payload("], "tests/test_ask_quality.py" = ["def test_uncited_ask_is_denied(", "def test_compliant_ask_is_allowed(", "def test_cli_denies_a_noncompliant_ask(", "def test_cli_allows_a_compliant_ask(", "def test_dispatch_still_denies_a_guarded_bash_command("], ".claude/rules/clarify-before-acting.md" = ["`Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob`", "[no prior evidence]", "python/src/dotfiles_setup/ask_quality.py"] }
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree"'], "python/src/dotfiles_setup/ask_quality.py" = ['RECOMMENDED_MARKER = "(Recommended)"', 'NO_EVIDENCE_ESCAPE = "[no prior evidence]"', "def find_violations(", "_CITATION_RE = re.compile("],"python/src/dotfiles_setup/hook_guard.py" = ['if tool_name == "AskUserQuestion":', "return ask_quality.decide(tool_input)", "def decide_payload("], "python/src/dotfiles_setup/hook_selfcheck.py" = ['"Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit"', "def check_ask_quality_endtoend(", "def _ask_payload("], "tests/test_ask_quality.py" = ["def test_uncited_ask_is_denied(", "def test_compliant_ask_is_allowed(", "def test_cli_denies_a_noncompliant_ask(", "def test_cli_allows_a_compliant_ask(", "def test_dispatch_still_denies_a_guarded_bash_command("], ".claude/rules/clarify-before-acting.md" = ["`Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree`", "[no prior evidence]", "python/src/dotfiles_setup/ask_quality.py"] }
+
+[[suite]]
+name = "workflow.worktree-guard-wiring"
+description = "#1606: EnterWorktree paths must reach the dedicated guard through the merged dispatcher; matcher wiring and real-wrapper deny/allow probes must remain present."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    ".claude/settings.json",
+    "python/src/dotfiles_setup/worktree_guard.py",
+    "python/src/dotfiles_setup/hook_dispatch.py",
+    "python/src/dotfiles_setup/hook_selfcheck.py",
+    "tests/test_worktree_guard.py",
+]
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree"'], "python/src/dotfiles_setup/worktree_guard.py" = ['def handles(', 'def decide(', '["git", "rev-parse", "--git-common-dir"]', 'target != allowed and target.is_relative_to(allowed)'], "python/src/dotfiles_setup/hook_dispatch.py" = ['if tool_name == "EnterWorktree":', 'reason = worktree_guard.decide(tool_input, project_root)'], "python/src/dotfiles_setup/hook_selfcheck.py" = ['_WORKTREE_TOOLS = ("EnterWorktree",)', '(*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS, *_WORKTREE_TOOLS)', 'def check_worktree_guard_endtoend(', 'failures.extend(check_worktree_guard_endtoend(project_root, wrapper))'], "tests/test_worktree_guard.py" = ['def test_dispatch_routes_enterworktree(', 'def test_denies_paths_outside_main_worktree_directory(', 'def test_allows_name_and_canonical_path_from_main_or_linked_worktree(', 'def test_resolves_symlinks_before_containment_check('] }
 
 [[suite]]
 name = "workflow.mise-tasks-enforcement"
@@ -2572,7 +2588,7 @@ paths = [
     "tests/test_branch_guard.py",
     ".claude/rules/do-not.md",
 ]
-per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob"'], "python/src/dotfiles_setup/hook_guard.py" = ["if branch_guard.handles(tool_name):", "policy_reason = branch_guard.decide(tool_input)"], "python/src/dotfiles_setup/branch_guard.py" = ["def decide(", "def handles(", "if is_ignored(target, root):", "while not probe.is_dir():", '_FALLBACK_DEFAULTS = ("main", "master")'], "tests/test_branch_guard.py" = ["def test_denies_a_new_untracked_file_on_default_branch(", "def test_allows_same_file_on_a_feature_branch(", "def test_allows_gitignored_paths_on_default_branch(", "def test_allows_paths_outside_any_repo(", "def test_dispatch_routes_edit_to_the_branch_guard("], ".claude/rules/do-not.md" = ["Branch FIRST", "denying `Edit`/`Write`/`NotebookEdit` on a repo file"] }
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree"'], "python/src/dotfiles_setup/hook_guard.py" = ["if branch_guard.handles(tool_name):", "policy_reason = branch_guard.decide(tool_input)"], "python/src/dotfiles_setup/branch_guard.py" = ["def decide(", "def handles(", "if is_ignored(target, root):", "while not probe.is_dir():", '_FALLBACK_DEFAULTS = ("main", "master")'], "tests/test_branch_guard.py" = ["def test_denies_a_new_untracked_file_on_default_branch(", "def test_allows_same_file_on_a_feature_branch(", "def test_allows_gitignored_paths_on_default_branch(", "def test_allows_paths_outside_any_repo(", "def test_dispatch_routes_edit_to_the_branch_guard("], ".claude/rules/do-not.md" = ["Branch FIRST", "denying `Edit`/`Write`/`NotebookEdit` on a repo file"] }
 
 [[suite]]
 name = "workflow.classifier-axis-enforcement"

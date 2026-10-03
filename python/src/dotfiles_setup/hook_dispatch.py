@@ -27,7 +27,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dotfiles_setup import graphify_hook, hook_guard
+from dotfiles_setup import graphify_hook, hook_guard, worktree_guard
 
 __all__ = ["GRAPHIFY_KINDS", "GUARDED_TOOLS", "dispatch", "main"]
 
@@ -50,6 +50,10 @@ def dispatch(project_root: Path, raw: str) -> str:
     # An absent tool_name is the legacy Bash shape (hook_guard.decide_payload).
     if not tool_name or tool_name in GUARDED_TOOLS:
         reason = hook_guard.decide_payload(tool_name, tool_input)
+        if reason is not None:
+            return hook_guard.deny_output(reason)
+    if tool_name == "EnterWorktree":
+        reason = worktree_guard.decide(tool_input, project_root)
         if reason is not None:
             return hook_guard.deny_output(reason)
     kind = GRAPHIFY_KINDS.get(tool_name)

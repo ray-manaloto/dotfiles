@@ -84,6 +84,8 @@ then lanes in the order that minimises rebases.
 
 ## 5. Pick the mechanism, then launch
 
+The coordinator's own edits use `EnterWorktree name=` from the main checkout.
+
 Most coordinator context goes on results flowing back, so choose by what
 returns:
 

@@ -9,7 +9,8 @@ hook pretooluse``. This module closes that gap. It:
 - asserts ``.claude/settings.json`` wires the project hooks
   (:data:`_SETTINGS_WIRING`): the ONE merged PreToolUse hook (the deny guard
   for ``Bash``, ``AskUserQuestion``, ``Edit``, ``Write`` and ``NotebookEdit``
-  plus graphify's nudge for ``Grep``, ``Read`` and ``Glob``), the SessionStart
+  plus the ``EnterWorktree`` path guard and graphify's nudge for ``Grep``,
+  ``Read`` and ``Glob``), the SessionStart
   web-setup bootstrap, the InstructionsLoaded observer, and the PostToolUse
   mise-config-context dispatcher, plus the unscoped SubagentStart contract and
   its parent-side PostToolUse/``Agent`` half — five events in all;
@@ -98,6 +99,8 @@ SUBAGENT_CONTRACT_MODE = "subagent-contract"
 #: The tools the deny guard decides on, then the ones only graphify nudges.
 _GUARDED_TOOLS = ("Bash", "AskUserQuestion", "Edit", "Write", "NotebookEdit")
 _GRAPHIFY_TOOLS = ("Grep", "Read", "Glob")
+# EnterWorktree routes separately: it needs the wrapper's project-root anchor.
+_WORKTREE_TOOLS = ("EnterWorktree",)
 _SUBAGENT_CONTRACT_COMMAND = (
     f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
 )
@@ -111,7 +114,7 @@ _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...
     (
         "PreToolUse",
         (f"{_SYSTEM_BASH} ", PRETOOLUSE_WRAPPER),
-        (*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS),
+        (*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS, *_WORKTREE_TOOLS),
     ),
     (
         "SessionStart",
@@ -392,6 +395,7 @@ def check_pretooluse_endtoend(project_root: Path) -> list[str]:
             f"stdout={graphify_only.stdout.strip()!r}"
         )
     failures.extend(check_ask_quality_endtoend(project_root, wrapper))
+    failures.extend(check_worktree_guard_endtoend(project_root, wrapper))
     failures.extend(check_offroot_arm(project_root, wrapper))
     return failures
 
@@ -462,6 +466,57 @@ def check_ask_quality_endtoend(project_root: Path, wrapper: str) -> list[str]:
         failures.append(
             "pretooluse wrapper was not silent on a COMPLIANT AskUserQuestion — "
             f"the gate denies every ask: {allowed.stdout.strip()!r}"
+        )
+    return failures
+
+
+def check_worktree_guard_endtoend(project_root: Path, wrapper: str) -> list[str]:
+    """Drive EnterWorktree through the REAL wrapper (external deny + name allow).
+
+    Matcher membership alone cannot detect a dispatcher that ignores the tool.
+    The project anchor is explicit even when selfcheck runs in a linked worktree.
+    """
+    failures: list[str] = []
+    env = {**os.environ, "CLAUDE_PROJECT_DIR": str(project_root)}
+    with tempfile.TemporaryDirectory(prefix="dotfiles-worktree-guard-") as tmp:
+        denied = _run(
+            [_SYSTEM_BASH, wrapper],
+            stdin=json.dumps(
+                {"tool_name": "EnterWorktree", "tool_input": {"path": tmp}}
+            ),
+            cwd=project_root,
+            env=env,
+        )
+    if denied.returncode != 0:
+        failures.append(
+            f"pretooluse wrapper exited {denied.returncode} on an external "
+            f"EnterWorktree path (must exit 0): {denied.stderr.strip()}"
+        )
+    elif '"permissionDecision": "deny"' not in denied.stdout:
+        failures.append(
+            "pretooluse wrapper did not DENY an external EnterWorktree path — "
+            f"the #1606 guard is not reachable. stdout={denied.stdout.strip()!r}"
+        )
+    elif "#1606" not in denied.stdout or "EnterWorktree name=" not in denied.stdout:
+        failures.append("pretooluse EnterWorktree deny lost its #1606 name= redirect")
+
+    allowed = _run(
+        [_SYSTEM_BASH, wrapper],
+        stdin=json.dumps(
+            {"tool_name": "EnterWorktree", "tool_input": {"name": "selfcheck"}}
+        ),
+        cwd=project_root,
+        env=env,
+    )
+    if allowed.returncode != 0:
+        failures.append(
+            f"pretooluse wrapper exited {allowed.returncode} on EnterWorktree "
+            f"name=: {allowed.stderr.strip()}"
+        )
+    elif allowed.stdout.strip():
+        failures.append(
+            "pretooluse wrapper was not silent on EnterWorktree name=: "
+            f"{allowed.stdout.strip()!r}"
         )
     return failures
 

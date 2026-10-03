@@ -79,7 +79,9 @@ def test_graphify_tools_are_nudged_never_decided(
     assert graphify_calls == [kind]
 
 
-@pytest.mark.parametrize("tool", ["Edit", "Write", "NotebookEdit", "AskUserQuestion"])
+@pytest.mark.parametrize(
+    "tool", ["Edit", "Write", "NotebookEdit", "AskUserQuestion", "EnterWorktree"]
+)
 def test_guard_only_tools_never_spawn_graphify(
     tmp_path: Path, graphify_calls: list[str], tool: str
 ) -> None:
