@@ -1,0 +1,108 @@
+# Saved GitHub searches — local config files in git worktrees (2026-10-03)
+#
+# Re-runnable record of every GitHub search behind the worktree-local-config research
+# (coordinator 28f1a8f7 fork, 2026-10-03; findings in root findings.md and the coordinator's
+# report docs/research/kb/reports/agents/worktree-local-config-2026-10-03.md when persisted).
+#
+# FORMAT: same DRAFT schema as orchestration-2026-10-02.toml (docs/specs/research-watch-2026-09-30.md
+# §3.1 rev 2): [[watch]] tables move into watches.toml unchanged when N1 `github-watch` lands;
+# measured results live in [[result]] keyed by watch_id (strip/relocate when merging).
+# control_absent must contain {nonce}, rendered FRESH per run and never written back.
+# A 403 is a rate limit, never zero. Discussions: anthropics/claude-code has has_discussions=false
+# (search returns 0 by construction); openai/codex and jdx/mise have discussions enabled.
+
+schema_version = 1
+
+[[watch]]
+id       = "wtcfg-issues-cc-settings-local-worktree"
+kind     = "issues"
+origin   = "topic:worktree-local-config"
+question = "Does Claude Code apply .claude/settings.local.json (and other project-local config) in git worktrees?"
+cadence  = "weekly"
+tags     = ["worktree", "settings.local.json", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code settings.local.json worktree', 'repo:anthropics/claude-code worktree local settings not applied']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "wtcfg-issues-cc-worktreeinclude"
+kind     = "issues"
+origin   = "topic:worktree-local-config"
+question = "What is open/fixed for .worktreeinclude and project config reaching worktrees?"
+cadence  = "weekly"
+tags     = ["worktree", "worktreeinclude", "anthropics/claude-code"]
+queries  = ['repo:anthropics/claude-code worktreeinclude']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "wtcfg-issues-codex-worktree-project-config"
+kind     = "issues"
+origin   = "topic:worktree-local-config"
+question = "Does codex load project .codex/ layers (config.toml, hooks.json) inside a git worktree?"
+cadence  = "weekly"
+tags     = ["worktree", "codex-config", "openai/codex"]
+queries  = ['repo:openai/codex worktree "config.toml" project', 'repo:openai/codex worktree trust', 'repo:openai/codex "project_root_markers"']
+control_hit    = 'repo:openai/codex sandbox'
+control_absent = 'repo:openai/codex "{nonce}"'
+
+[[watch]]
+id       = "wtcfg-prs-codex-worktree-trust"
+kind     = "issues"
+origin   = "topic:worktree-local-config"
+question = "Which codex PRs changed worktree trust / project-root resolution?"
+cadence  = "weekly"
+tags     = ["worktree", "trust", "openai/codex"]
+queries  = ['repo:openai/codex worktree is:pr trust']
+control_hit    = 'repo:openai/codex sandbox'
+control_absent = 'repo:openai/codex "{nonce}"'
+
+[[watch]]
+id       = "wtcfg-discussions-codex-mise-worktree"
+kind     = "discussions"
+origin   = "topic:worktree-local-config"
+question = "Community discussion of worktree config for codex and mise"
+cadence  = "monthly"
+tags     = ["worktree", "openai/codex", "jdx/mise"]
+queries  = ['repo:openai/codex worktree config', 'repo:jdx/mise worktree', 'repo:jdx/mise mise.local.toml worktree']
+control_hit    = 'repo:openai/codex config'
+control_absent = 'repo:openai/codex {nonce}'
+
+[[result]]
+watch_id = "_controls"
+date_run = "2026-10-03T20:20:00Z"
+must_hit_cc_hooks = 8921
+must_hit_codex_sandbox = 5349
+must_hit_codex_discussions_config = 138
+known_absent_fresh_nonce = 0
+verdict = "discriminates (must-hit>0, absent=0 on issues and discussions)"
+
+[[result]]
+watch_id = "wtcfg-issues-cc-settings-local-worktree"
+date_run = "2026-10-03T20:20:00Z"
+total    = 217
+relevant = ["#98640 open (2.1.286: worktree session loads settings.local.json from BOTH worktree and main checkout; warning mislabels file)", "#84027 open (harness writes settings.local.json inside isolated worktrees -> dirty -> never auto-cleaned)", "#83953 open (project-scope hooks don't reach worktrees: branch-local when tracked, absent when gitignored)", "#28041 open (--worktree: .claude/ subdirs not copied)", "#95240 open"]
+
+[[result]]
+watch_id = "wtcfg-issues-cc-worktreeinclude"
+date_run = "2026-10-03T20:20:00Z"
+total    = 25
+relevant = ["#83953 open", "#79424 open (**/ patterns match nothing)", "#28041 open", "#71913 closed"]
+
+[[result]]
+watch_id = "wtcfg-issues-codex-worktree-project-config"
+date_run = "2026-10-03T20:20:00Z"
+total    = 487
+relevant = ["#27133 open (project .codex/hooks.json silently ignored inside a git worktree; still on 0.157.1)", "#37391 open (git presence changes project-local config trust)", "#43239 open", "#13025 open"]
+
+[[result]]
+watch_id = "wtcfg-prs-codex-worktree-trust"
+date_run = "2026-10-03T20:20:00Z"
+total    = 9
+relevant = ["#2585 MERGED 2025-08-22 (worktree trust resolves against the main repo root)", "#47620 MERGED 2026-09-23 (portable project trust lookup incl. linked worktrees)", "#2566 closed unmerged"]
+
+[[result]]
+watch_id = "wtcfg-discussions-codex-mise-worktree"
+date_run = "2026-10-03T20:20:00Z"
+counts   = { codex_worktree_config = 11, mise_worktree = 13, mise_local_toml_worktree = 1 }
+relevant = ["jdx/mise #11276 monorepo_root in git worktree", "jdx/mise #4853 generate pre-commit vs worktrees"]
