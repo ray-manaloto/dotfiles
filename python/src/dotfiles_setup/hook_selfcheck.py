@@ -481,8 +481,12 @@ def _worktree_fixture(tmp: Path, env: dict[str, str]) -> tuple[Path, Path, Path]
     The fixture's git ignores global/system config and hooks: a host-wide hook
     (hk's ``hook.hk-*`` in ``~/.gitconfig``) must not be able to reject the
     fixture commit and turn both arms red for a reason unrelated to the guard.
+    Nor may a template hook (``GIT_TEMPLATE_DIR``'s ``hooks/post-checkout``,
+    which ``worktree add`` runs): init copies no template, and EVERY call
+    points ``core.hooksPath`` at nothing.
     """
-    env = {**env, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+    env = {k: v for k, v in env.items() if k != "GIT_TEMPLATE_DIR"}
+    env |= {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     main = tmp / "repo"
     managed = main / ".claude" / "worktrees" / "lane"
     sibling = tmp / "repo.worktrees" / "lane"
@@ -490,13 +494,13 @@ def _worktree_fixture(tmp: Path, env: dict[str, str]) -> tuple[Path, Path, Path]
     cfg = ["-c", "user.name=selfcheck", "-c", "user.email=selfcheck@invalid"]
     cfg += ["-c", "commit.gpgsign=false", "-c", f"core.hooksPath={os.devnull}"]
     for args in (
-        ["init", "-b", "main"],
-        [*cfg, "commit", "--allow-empty", "-m", "x"],
+        ["init", "--template=", "-b", "main"],
+        ["commit", "--allow-empty", "-m", "x"],
         ["worktree", "add", "-b", "managed", str(managed)],
         ["worktree", "add", "-b", "sibling", str(sibling)],
     ):
         subprocess.run(
-            ["git", *args],
+            ["git", *cfg, *args],
             cwd=main,
             env=env,
             capture_output=True,

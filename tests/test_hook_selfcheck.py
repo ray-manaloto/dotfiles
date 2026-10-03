@@ -555,6 +555,42 @@ def test_worktree_guard_endtoend_ignores_host_git_hooks(
     assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
 
 
+def test_worktree_guard_endtoend_ignores_template_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``GIT_TEMPLATE_DIR`` post-checkout that rejects must not reach it.
+
+    ``git rev-parse --local-env-vars`` does not list ``GIT_TEMPLATE_DIR``, so
+    the git-local scrub keeps it; ``init`` would copy the hook and every
+    ``worktree add`` would run it. Control arm: the same template really does
+    fail a plain ``git worktree add``.
+    """
+    template = tmp_path / "template"
+    (template / "hooks").mkdir(parents=True)
+    post_checkout = template / "hooks" / "post-checkout"
+    post_checkout.write_text("#!/bin/sh\necho template-hook-rejected >&2\nexit 1\n")
+    post_checkout.chmod(0o755)
+    monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template))
+
+    control = tmp_path / "control"
+    control.mkdir()
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"]):
+        subprocess.run(["git", *args], cwd=control, check=True, timeout=10)
+    rejected = subprocess.run(
+        ["git", "worktree", "add", "-b", "lane", str(tmp_path / "lane")],
+        cwd=control,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+    assert "template-hook-rejected" in rejected.stderr
+
+    wrapper = str(_REPO / hook_selfcheck.PRETOOLUSE_WRAPPER)
+    assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
+
+
 def test_missing_instructions_loaded_fails(tmp_path: Path) -> None:
     """#917: the InstructionsLoaded observer hook must stay wired.
 
