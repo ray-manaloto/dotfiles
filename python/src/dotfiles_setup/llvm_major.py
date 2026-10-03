@@ -33,6 +33,8 @@ ReleaseFetcher = Callable[[], list[dict]]
 _SYSTEM = ".devcontainer/mise-system.toml"
 _DOCKER = ".devcontainer/Dockerfile"
 _IWYU_URL = "https://api.anaconda.org/package/conda-forge/include-what-you-use/files"
+_IWYU_TOOL = "conda:include-what-you-use"
+_LIBLLVM = re.compile(r"^libllvm(\d+)\b")
 _ANCHOR = re.compile(r"^clang-(\d+)$")
 _PIN = re.compile(
     r'^(?P<prefix>[ \t]*(?P<comment>#[ \t]*)?)"apt:(?P<name>[^"]+)"'
@@ -69,6 +71,7 @@ class BumpPlan:
     pins: dict[str, tuple[str, bool]]
     before: dict[str, str]
     after: dict[str, str]
+    iwyu_pin: str | None = None
 
     def render(self) -> str:
         """Show the inventory and unified diffs without changing any file."""
@@ -80,6 +83,11 @@ class BumpPlan:
                 f"{len(self.pins) - active} commented), amd64 + arm64"
             ),
             f"versions: {sorted({version for version, _ in self.pins.values()})}",
+            (
+                f"IWYU pin: {self.iwyu_pin}"
+                if self.iwyu_pin is not None
+                else "IWYU pin: not planned (explicit control; gates skipped)"
+            ),
             "pin set:",
             *[
                 f'{"" if active else "# "}"apt:{name}" = "{version}"'
@@ -273,48 +281,86 @@ def _iwyu_build_key(file: dict) -> tuple[tuple[int, ...], int]:
     return tuple(map(int, segments)), int(file["attrs"]["build_number"])
 
 
-def iwyu_ready(major: int, fetch: Fetcher) -> bool:
-    """Require newest builds on both arches to agree on one libllvm major."""
+def _libllvm_major(deps: list[str], site: str) -> int:
+    """Require exactly one libllvm dependency in API or lock metadata."""
+    majors = [int(match.group(1)) for dep in deps if (match := _LIBLLVM.match(dep))]
+    if len(majors) != 1:
+        msg = f"{site} needs exactly one libllvm<N> dependency"
+        raise ValueError(msg)
+    return majors[0]
+
+
+def _iwyu_newest_major(builds: list[dict], subdir: str) -> int:
+    """Validate tied newest builds within one version and architecture."""
+    newest_key = max(map(_iwyu_build_key, builds))
+    majors = {
+        _libllvm_major(build["attrs"].get("depends", []), f"newest IWYU {subdir} build")
+        for build in builds
+        if _iwyu_build_key(build) == newest_key
+    }
+    if len(majors) != 1:
+        msg = (
+            f"ambiguous newest IWYU {subdir} builds have "
+            f"libllvm majors {sorted(majors)}"
+        )
+        raise ValueError(msg)
+    return majors.pop()
+
+
+def iwyu_versions_for(major: int, fetch: Fetcher) -> list[str]:
+    """Return numerically sorted versions supporting the major on both arches."""
     files = json.loads(_body(_IWYU_URL, fetch))
     if not isinstance(files, list):
         msg = "IWYU files response must be a JSON list"
         raise TypeError(msg)
-    targets = []
-    for subdir in ("linux-64", "linux-aarch64"):
-        builds = [
-            file
-            for file in files
-            if "main" in file.get("labels", [])
-            and file.get("attrs", {}).get("subdir") == subdir
-        ]
-        if not builds:
-            msg = f"IWYU has no main-label files for {subdir}"
-            raise ValueError(msg)
-        newest_key = max(map(_iwyu_build_key, builds))
-        majors = set()
-        for build in builds:
-            if _iwyu_build_key(build) != newest_key:
-                continue
-            llvm = {
-                int(match.group(1))
-                for dep in build["attrs"].get("depends", [])
-                if (match := re.match(r"^libllvm(\d+)\b", dep))
-            }
-            if len(llvm) != 1:
-                msg = (
-                    f"newest IWYU {subdir} build needs exactly one "
-                    "libllvm<N> dependency"
-                )
-                raise ValueError(msg)
-            majors.update(llvm)
-        if len(majors) != 1:
-            msg = (
-                f"ambiguous newest IWYU {subdir} builds have "
-                f"libllvm majors {sorted(majors)}"
-            )
-            raise ValueError(msg)
-        targets.append(majors == {major})
-    return all(targets)
+    subdirs = ("linux-64", "linux-aarch64")
+    versions: dict[str, dict[str, list[dict]]] = {}
+    for file in files:
+        subdir = file.get("attrs", {}).get("subdir")
+        if "main" in file.get("labels", []) and subdir in subdirs:
+            versions.setdefault(file["version"], {}).setdefault(subdir, []).append(file)
+    usable = {
+        version: builds
+        for version, builds in versions.items()
+        if all(subdir in builds for subdir in subdirs)
+    }
+    if not usable:
+        msg = "IWYU has no usable main-label versions for linux-64 and linux-aarch64"
+        raise ValueError(msg)
+    matching = []
+    for version, builds in usable.items():
+        targets = [_iwyu_newest_major(builds[subdir], subdir) for subdir in subdirs]
+        if targets == [major, major]:
+            matching.append(version)
+    return sorted(matching, key=lambda version: tuple(map(int, version.split("."))))
+
+
+def iwyu_ready(major: int, fetch: Fetcher) -> bool:
+    """Accept any version whose newest Linux builds both target the major."""
+    return bool(iwyu_versions_for(major, fetch))
+
+
+def iwyu_pin_for(major: int, fetch: Fetcher) -> str:
+    """Select the newest compatible version, refusing an unsupported major."""
+    versions = iwyu_versions_for(major, fetch)
+    if not versions:
+        msg = f"IWYU has no dual-arch version targeting libllvm{major}"
+        raise ValueError(msg)
+    return versions[-1]
+
+
+def iwyu_lock_state(lock_text: str) -> tuple[str, dict[str, int]]:
+    """Read IWYU's locked version and the two published Linux libllvm majors."""
+    tool = tomllib.loads(lock_text)["tools"][_IWYU_TOOL][0]
+    version = tool["version"]
+    if not isinstance(version, str):
+        msg = "IWYU lock version must be a string"
+        raise TypeError(msg)
+    majors = {
+        platform: _libllvm_major(tool[f"platforms.{platform}"]["conda_deps"], platform)
+        for platform in ("linux-x64", "linux-arm64")
+    }
+    return version, majors
 
 
 def trunk_major(codename: str, fetch: Fetcher) -> int:
@@ -353,7 +399,8 @@ def _target_reason(
     if held is not None:
         reason = (
             f"{held} GA+served, held: IWYU (conda-forge include-what-you-use "
-            f"newest linux builds do not both target libllvm{held})"
+            f"has no version whose newest builds on both Linux architectures "
+            f"target libllvm{held})"
         )
     elif served[newest]:
         reason = f"M={newest} served"
@@ -492,12 +539,42 @@ def _config_violations(root: Path, text: str, major: int) -> list[str]:
     return violations
 
 
-def parity_violations(root: Path) -> list[str]:
+def _iwyu_pin_violations(pin: object) -> list[str]:
+    """Classify a drifting or table-form IWYU pin independently of its lock."""
+    if not isinstance(pin, str) or re.fullmatch(r"\d+(?:\.\d+)+", pin) is None:
+        return ["IWYU pin must be a plain exact version (digits and dots)"]
+    return []
+
+
+def _iwyu_lock_violations(root: Path, pin: object, major: int) -> list[str]:
+    """Classify a stale or off-major lock without any network access."""
+    try:
+        version, majors = iwyu_lock_state(
+            (root / ".devcontainer/mise-system.lock").read_text()
+        )
+    except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+        return [f"IWYU lock invalid: {exc} — run `mise run lock-image`"]
+    if version != pin or any(value != major for value in majors.values()):
+        targets = "/".join(f"libllvm{value}" for value in sorted(set(majors.values())))
+        return [
+            (
+                f"IWYU lock stale or off-major: lock {version}/{targets}, "
+                f"toml {pin}, apt {major} — run `mise run lock-image`"
+            )
+        ]
+    return []
+
+
+def parity_violations(root: Path, *, include_iwyu_lock: bool = True) -> list[str]:
     """Check every LLVM consumer offline against the bootstrap pin anchor."""
     try:
         text = (root / _SYSTEM).read_text()
         major = pinned_major(text)
         violations = _config_violations(root, text, major)
+        pin = tomllib.loads(text).get("tools", {}).get(_IWYU_TOOL)
+        violations.extend(_iwyu_pin_violations(pin))
+        if include_iwyu_lock:
+            violations.extend(_iwyu_lock_violations(root, pin, major))
         for name in ("image", "apt_pins", "apt_repo", "main"):
             violations.extend(
                 _python_violations(root / f"python/src/dotfiles_setup/{name}.py")
@@ -558,7 +635,9 @@ def _rewrite_once(
     return rewritten
 
 
-def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
+def plan_bump(
+    root: Path, detection: Detection, fetch: Fetcher, *, explicit_control: bool = False
+) -> BumpPlan:
     """Require parity, validate both inventories, and count every planned rewrite."""
     if violations := parity_violations(root):
         msg = "cannot plan from an inconsistent tree: " + "; ".join(violations)
@@ -603,6 +682,15 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
         system,
         "_.path",
     )
+    iwyu_pin = None
+    if not explicit_control:
+        iwyu_pin = iwyu_pin_for(target, fetch)
+        system = _rewrite_once(
+            r'(?m)^("conda:include-what-you-use"[ \t]*=[ \t]*)"[^"]+"',
+            lambda match: f'{match[1]}"{iwyu_pin}"',
+            system,
+            "IWYU pin",
+        )
     docker = _rewrite_once(
         r"(?m)^(ARG LLVM_MAJOR=)\d+(\s*)$",
         rf"\g<1>{target}\g<2>",
@@ -632,12 +720,13 @@ def plan_bump(root: Path, detection: Detection, fetch: Fetcher) -> BumpPlan:
         pins,
         before,
         {_SYSTEM: system, _DOCKER: docker, "renovate.json": renovate},
+        iwyu_pin,
     )
 
 
-def parity_main(root: Path) -> int:
+def parity_main(root: Path, *, include_iwyu_lock: bool = True) -> int:
     """Print every violation and return the offline parity gate's exit code."""
-    violations = parity_violations(root)
+    violations = parity_violations(root, include_iwyu_lock=include_iwyu_lock)
     sys.stdout.write(
         "\n".join(violations) + "\n" if violations else "LLVM parity clean\n"
     )
@@ -648,6 +737,7 @@ def detect_main(
     root: Path,
     *,
     json_output: bool = False,
+    markdown: bool = False,
     fetch: Fetcher = default_fetcher,
     releases: ReleaseFetcher = fetch_releases,
 ) -> int:
@@ -664,11 +754,31 @@ def detect_main(
     ) as exc:
         sys.stderr.write(f"LLVM detection failed: {exc}\n")
         return 1
-    sys.stdout.write(
-        json.dumps(asdict(detection), indent=2) + "\n"
-        if json_output
-        else detection.reason + "\n"
-    )
+    data = asdict(detection)
+    if markdown:
+        report = (
+            "# LLVM major currency\n\n"
+            + "\n".join(
+                f"- {label}: {data[key]}"
+                for key, label in (
+                    ("pinned", "Pinned"),
+                    ("newest_ga", "Newest GA"),
+                    ("served", "Served"),
+                    ("iwyu_ready", "IWYU ready"),
+                    ("target", "Target"),
+                    ("held_on", "Held on"),
+                    ("reason", "Reason"),
+                )
+            )
+            + "\n"
+        )
+    else:
+        report = (
+            json.dumps(data, indent=2) + "\n"
+            if json_output
+            else detection.reason + "\n"
+        )
+    sys.stdout.write(report)
     if detection.target > detection.pinned:
         return 3
     return 4 if detection.held_on is not None else 0
@@ -707,13 +817,13 @@ def _bump(
     if violations := parity_violations(root):
         msg = "cannot plan from an inconsistent tree: " + "; ".join(violations)
         raise ValueError(msg)
-    plan = plan_bump(root, detection, fetch)
+    plan = plan_bump(root, detection, fetch, explicit_control=major is not None)
     sys.stdout.write(plan.render())
     if dry_run:
         return 0
     plan.write(root)
-    sys.stdout.write("Next: mise run lock-image (refresh the locked IWYU build).\n")
-    return parity_main(root)
+    sys.stdout.write("Next: mise run lock-image (IWYU lock is now stale by design)\n")
+    return parity_main(root, include_iwyu_lock=False)
 
 
 def bump_main(

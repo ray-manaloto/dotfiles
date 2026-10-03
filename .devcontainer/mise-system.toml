@@ -50,10 +50,11 @@ cargo-binstall = "latest"
 # prefix per tool, duplicating libLLVM; apt shares one runtime across the tools.
 # mise has no prebuilt LLVM backend that avoids this duplication, so apt is the
 # native system-tools install. include-what-you-use stays conda: a major bump
-# is gated on conda-forge IWYU targeting that clang on both Linux architectures
-# (llvm_major.iwyu_ready). After a real bump, run mise run lock-image to refresh
-# the locked IWYU build. cppcheck has no libLLVM dependency; cmake/ninja serve
-# the p2996 stage and stay conda too.
+# is gated on conda-forge IWYU targeting that clang on both Linux architectures.
+# Its exact pin is derived by llvm_major.iwyu_pin_for and parity-held to the apt
+# major. llvm-bump moves both pins; full parity stays red until mise run lock-image
+# regenerates the stale IWYU lock. cppcheck has no libLLVM dependency;
+# cmake/ninja serve the p2996 stage and stay conda too.
 "conda:cmake" = "latest"
 # #698/D31/#841: conda-forge gxx fills arm64's modern-GCC slot because kayari
 # gcc-latest is permanently x86_64-only. Pinned exact (was "latest", already
@@ -66,7 +67,7 @@ cargo-binstall = "latest"
 "conda:bear" = "latest"
 "conda:ccache" = "latest"
 "conda:cppcheck" = "latest"
-"conda:include-what-you-use" = "latest"
+"conda:include-what-you-use" = "0.26"
 # `.gdb-post-link.sh` ships in conda-forge gdb's `bin/` as standard conda-build
 # packaging convention (recipe `post-link.sh` → `${PREFIX}/bin/.<pkg>-post-link.sh`).
 # Its body is fully guarded by `if [[ $(uname) == "Darwin" ]]` (macOS gdb

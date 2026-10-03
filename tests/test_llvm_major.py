@@ -21,7 +21,9 @@ SYSTEM = ".devcontainer/mise-system.toml"
 DOCKER = ".devcontainer/Dockerfile"
 VERSION = "1:22.1.8~++20260804082631+ca7933e47d3a-1~exp1~20260804082728.35"
 NEXT_VERSION = VERSION.replace("22.1.8", "23.1.0")
-PIN_TEXT = f"""[bootstrap.packages]
+PIN_TEXT = f"""[tools]
+"conda:include-what-you-use" = "0.26"
+[bootstrap.packages]
 "apt:clang-22" = "{VERSION}"
 "apt:libclang-cpp22" = "{VERSION}"
 "apt:libllvm22" = "{VERSION}"
@@ -36,11 +38,29 @@ _.path = ["/usr/lib/llvm-22/bin"]
 """
 
 
+def lock_text(version: str = "0.26", major: int = 22) -> str:
+    """Independently encode the real lock's quoted platform key shape."""
+    return f"""[[tools."conda:include-what-you-use"]]
+version = "{version}"
+[tools."conda:include-what-you-use"."platforms.linux-x64"]
+conda_deps = ["libllvm{major}-{major}.1.8-build_3"]
+[tools."conda:include-what-you-use"."platforms.linux-arm64"]
+conda_deps = ["libllvm{major}-{major}.1.8-build_3"]
+[tools."conda:include-what-you-use"."platforms.linux-x64-musl"]
+conda_deps = []
+[tools."conda:include-what-you-use"."platforms.linux-arm64-baseline"]
+conda_deps = []
+[tools."conda:include-what-you-use"."platforms.linux-x64-musl-baseline"]
+conda_deps = []
+"""
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """Prepare a small independent repository with every parity consumer."""
     files = {
         SYSTEM: PIN_TEXT,
+        ".devcontainer/mise-system.lock": lock_text(),
         DOCKER: "ARG BASE_IMAGE=ubuntu:26.04@sha256:abc\nARG LLVM_MAJOR=22\n",
         "docker-bake.hcl": (
             'variable "BASE_IMAGE" {\n default = "ubuntu:26.04@sha256:abc"\n}\n'
@@ -315,7 +335,9 @@ def test_iwyu_numeric_version_and_build() -> None:
         for major, version, build in [(22, "0.9", 9), (22, "0.26", 0), (23, "0.26", 1)]
     ]
     assert llvm_major.iwyu_ready(23, lambda _: (200, json.dumps(files).encode()))
-    assert not llvm_major.iwyu_ready(22, lambda _: (200, json.dumps(files).encode()))
+    assert llvm_major.iwyu_versions_for(
+        22, lambda _: (200, json.dumps(files).encode())
+    ) == ["0.9"]
 
 
 @pytest.mark.parametrize("subdir", ["linux-64", "linux-aarch64"])
@@ -482,14 +504,17 @@ def test_plan_preserves_status_and_majorless_names(repo: Path) -> None:
         "llvm-libunwind1",
         "clang-23-doc",
     }
-    plan = llvm_major.plan_bump(repo, detection, plan_network(names))
+    plan = llvm_major.plan_bump(
+        repo, detection, plan_network(names), explicit_control=True
+    )
     assert set(plan.pins) == names
     assert plan.pins["clang-23-doc"] == ("1:23.1.0", False)
     assert plan.pins["libomp5"] == ("1:23.1.0", True)
     assert set(plan.after) == {SYSTEM, DOCKER, "renovate.json"}
     assert (repo / SYSTEM).read_text() == PIN_TEXT
     plan.write(repo)
-    assert llvm_major.parity_violations(repo) == []
+    assert llvm_major.parity_violations(repo, include_iwyu_lock=False) == []
+    assert "IWYU lock stale or off-major" in llvm_major.parity_violations(repo)[0]
     assert '"apt:curl" = "8.0"' in (repo / SYSTEM).read_text()
 
 
@@ -545,7 +570,12 @@ def test_plan_rejects_duplicate_rewrite_targets(repo: Path, site: str) -> None:
     )
     names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
     with pytest.raises(ValueError, match="expected exactly one rewrite, got 2"):
-        llvm_major.plan_bump(repo, detection, plan_network(names, version=NEXT_VERSION))
+        llvm_major.plan_bump(
+            repo,
+            detection,
+            plan_network(names, version=NEXT_VERSION),
+            explicit_control=True,
+        )
     assert tree_bytes(repo) == before
 
 
@@ -564,7 +594,12 @@ def test_plan_rejects_missing_textual_path_target(repo: Path) -> None:
     with pytest.raises(
         ValueError, match=r"_.path: expected exactly one rewrite, got 0"
     ):
-        llvm_major.plan_bump(repo, detection, plan_network(names, version=NEXT_VERSION))
+        llvm_major.plan_bump(
+            repo,
+            detection,
+            plan_network(names, version=NEXT_VERSION),
+            explicit_control=True,
+        )
     assert tree_bytes(repo) == before
 
 
@@ -579,13 +614,16 @@ def test_plan_arg_accepts_parity_whitespace(repo: Path, space: str) -> None:
     )
     names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
     plan = llvm_major.plan_bump(
-        repo, detection, plan_network(names, version=NEXT_VERSION)
+        repo,
+        detection,
+        plan_network(names, version=NEXT_VERSION),
+        explicit_control=True,
     )
     assert plan.after[DOCKER] == file.read_text().replace(
         "LLVM_MAJOR=22", "LLVM_MAJOR=23"
     )
     plan.write(repo)
-    assert llvm_major.parity_violations(repo) == []
+    assert llvm_major.parity_violations(repo, include_iwyu_lock=False) == []
 
 
 @pytest.mark.parametrize("fault", ["missing", "extra", "version"])
@@ -628,9 +666,10 @@ def test_cli_detect(
     monkeypatch.setattr(
         llvm_major,
         "detect_main",
-        lambda root, *, json_output: handler(
+        lambda root, *, json_output, markdown: handler(
             root,
             json_output=json_output,
+            markdown=markdown,
             fetch=network(served, ready=ready, trunk=ga + 1),
             releases=releases(ga),
         ),
@@ -713,7 +752,9 @@ def test_explicit_dry_run_skips_gates(
         llvm_major.bump_main(repo, dry_run=True, major=23, fetch=plan_network(names))
         == 0
     )
-    assert "8 pins (7 active, 1 commented), amd64 + arm64" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "8 pins (7 active, 1 commented), amd64 + arm64" in output
+    assert "IWYU pin: not planned (explicit control; gates skipped)" in output
     assert (repo / SYSTEM).read_text() == PIN_TEXT
     assert llvm_major.bump_main(repo, major=23) == 1
     assert "only with --dry-run" in capsys.readouterr().err
@@ -751,7 +792,9 @@ def test_plan_rejects_foreign_write(repo: Path) -> None:
     detection = llvm_major.Detection(
         "resolute", 22, 23, 23, {}, 24, {}, None, "control"
     )
-    plan = llvm_major.plan_bump(repo, detection, plan_network(names))
+    plan = llvm_major.plan_bump(
+        repo, detection, plan_network(names), explicit_control=True
+    )
     (repo / DOCKER).write_text("foreign edit\n")
     with pytest.raises(RuntimeError, match="changed after planning"):
         plan.write(repo)
@@ -768,3 +811,263 @@ def test_default_fetcher_preserves_redirect(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(subprocess, "run", run)
     assert llvm_major.default_fetcher("https://example.test") == (301, b"redirect")
+
+
+@pytest.fixture
+def saved_iwyu_files() -> list[dict]:
+    """Use complete primary metadata, including older amd64-only versions."""
+    return json.loads(
+        (
+            ROOT
+            / "docs/research/kb/raw/llvm-23-lane-2026-10-02"
+            / "conda-forge-include-what-you-use-files-2026-10-03.json"
+        ).read_text()
+    )
+
+
+def files_fetcher(files: list[dict]) -> llvm_major.Fetcher:
+    """Return response bytes through the injected network boundary."""
+    payload = json.dumps(files).encode()
+    return lambda _: (200, payload)
+
+
+def test_iwyu_pin_holds_when_new_major_arrives(saved_iwyu_files: list[dict]) -> None:
+    """The coordinator's future-release arm keeps the pinned-major version."""
+    files = saved_iwyu_files + [
+        iwyu_file(arch, 23, version="0.27") for arch in ("linux-64", "linux-aarch64")
+    ]
+    assert llvm_major.iwyu_pin_for(22, files_fetcher(files)) == "0.26"
+    assert llvm_major.iwyu_versions_for(23, files_fetcher(files)) == ["0.27"]
+    assert llvm_major.iwyu_versions_for(23, files_fetcher(saved_iwyu_files)) == []
+    with pytest.raises(ValueError, match="no dual-arch version"):
+        llvm_major.iwyu_pin_for(23, files_fetcher(saved_iwyu_files))
+
+
+def test_iwyu_readiness_survives_later_major(saved_iwyu_files: list[dict]) -> None:
+    """A later LLVM release cannot erase a usable older-major IWYU version."""
+    files = saved_iwyu_files + [
+        iwyu_file(arch, major, version=version)
+        for arch in ("linux-64", "linux-aarch64")
+        for major, version in ((23, "0.27"), (24, "0.28"))
+    ]
+    assert llvm_major.iwyu_ready(23, files_fetcher(files))
+    assert llvm_major.iwyu_versions_for(23, files_fetcher(files)) == ["0.27"]
+    assert llvm_major.iwyu_versions_for(24, files_fetcher(files)) == ["0.28"]
+
+
+@pytest.mark.parametrize("major", [13, 14, 15, 16])
+def test_iwyu_older_single_arch_versions_skipped(
+    saved_iwyu_files: list[dict], major: int
+) -> None:
+    assert llvm_major.iwyu_versions_for(major, files_fetcher(saved_iwyu_files)) == []
+    assert llvm_major.iwyu_pin_for(22, files_fetcher(saved_iwyu_files)) == "0.26"
+
+
+def test_iwyu_versions_sort_numerically() -> None:
+    files = [
+        iwyu_file(arch, 22, version=version)
+        for arch in ("linux-64", "linux-aarch64")
+        for version in ("0.9", "0.26", "0.10")
+    ]
+    assert llvm_major.iwyu_versions_for(22, files_fetcher(files)) == [
+        "0.9",
+        "0.10",
+        "0.26",
+    ]
+    assert llvm_major.iwyu_pin_for(22, files_fetcher(files)) == "0.26"
+
+
+def test_incomplete_version_skips_build_validation(
+    saved_iwyu_files: list[dict],
+) -> None:
+    incomplete = iwyu_file("linux-64", 22, version="0.30")
+    incomplete["attrs"].pop("build_number")
+    incomplete["attrs"]["depends"] = []
+    assert (
+        llvm_major.iwyu_pin_for(22, files_fetcher([*saved_iwyu_files, incomplete]))
+        == "0.26"
+    )
+
+
+@pytest.mark.parametrize(
+    "deps", [[], ["libllvm22 >=0", "libllvm23 >=0"], ["libllvm22 >=0", "libllvm22 >=0"]]
+)
+def test_iwyu_build_requires_one_dependency(deps: list[str]) -> None:
+    files = [iwyu_file(arch, 22) for arch in ("linux-64", "linux-aarch64")]
+    files[0]["attrs"]["depends"] = deps
+    with pytest.raises(ValueError, match="exactly one"):
+        llvm_major.iwyu_versions_for(22, files_fetcher(files))
+
+
+def test_real_iwyu_lock_state() -> None:
+    assert llvm_major.iwyu_lock_state(
+        (ROOT / ".devcontainer/mise-system.lock").read_text()
+    ) == ("0.26", {"linux-x64": 22, "linux-arm64": 22})
+
+
+@pytest.mark.parametrize("platform", ["linux-x64", "linux-arm64"])
+@pytest.mark.parametrize("fault", ["missing", "no-dep", "two-deps"])
+def test_iwyu_lock_rejects_missing_or_invalid_platform(
+    platform: str, fault: str
+) -> None:
+    text = lock_text()
+    if fault == "missing":
+        text = text.replace(
+            f'"platforms.{platform}"', f'"platforms.{platform}-ignored"'
+        )
+    else:
+        header = f'[tools."conda:include-what-you-use"."platforms.{platform}"]\n'
+        original = header + 'conda_deps = ["libllvm22-22.1.8-build_3"]'
+        deps = (
+            "[]"
+            if fault == "no-dep"
+            else '["libllvm22-22.1.8-build_3", "libllvm23-23.1.0-build_0"]'
+        )
+        text = text.replace(
+            original,
+            header + f"conda_deps = {deps}",
+        )
+    with pytest.raises((KeyError, ValueError)):
+        llvm_major.iwyu_lock_state(text)
+
+
+@pytest.mark.parametrize("pin", ['"latest"', '{ version = "0.26" }', '"0"', '"0.26.*"'])
+def test_iwyu_pin_parity(repo: Path, pin: str) -> None:
+    file = repo / SYSTEM
+    file.write_text(
+        file.read_text().replace(
+            '"conda:include-what-you-use" = "0.26"',
+            f'"conda:include-what-you-use" = {pin}',
+        )
+    )
+    assert any(
+        "IWYU pin" in violation for violation in llvm_major.parity_violations(repo)
+    )
+    assert any(
+        "IWYU pin" in violation
+        for violation in llvm_major.parity_violations(repo, include_iwyu_lock=False)
+    )
+
+
+@pytest.mark.parametrize(
+    ("version", "major"), [("0.26", 23), ("0.27", 22), ("0.26", 22)]
+)
+def test_iwyu_lock_parity(repo: Path, version: str, major: int) -> None:
+    (repo / ".devcontainer/mise-system.lock").write_text(lock_text(version, major))
+    violations = llvm_major.parity_violations(repo)
+    if version == "0.26" and major == 22:
+        assert violations == []
+    else:
+        assert len(violations) == 1
+        assert "IWYU lock stale or off-major" in violations[0]
+        assert "toml 0.26, apt 22" in violations[0]
+        assert "mise run lock-image" in violations[0]
+        assert llvm_major.parity_violations(repo, include_iwyu_lock=False) == []
+
+
+@pytest.mark.parametrize("platform", ["linux-x64", "linux-arm64"])
+def test_iwyu_lock_parity_checks_each_platform(repo: Path, platform: str) -> None:
+    text = lock_text()
+    header = f'[tools."conda:include-what-you-use"."platforms.{platform}"]\n'
+    text = text.replace(
+        header + 'conda_deps = ["libllvm22-22.1.8-build_3"]',
+        header + 'conda_deps = ["libllvm23-23.1.0-build_0"]',
+    )
+    (repo / ".devcontainer/mise-system.lock").write_text(text)
+    assert "IWYU lock stale or off-major" in llvm_major.parity_violations(repo)[0]
+
+
+def detected_bump_fetcher() -> llvm_major.Fetcher:
+    """Serve detection and complete target indexes at the network boundary."""
+    gates = network({22, 23})
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    indexes = plan_network(names, version=NEXT_VERSION)
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        if "anaconda" in url:
+            return files_fetcher(
+                [
+                    iwyu_file(arch, 23, version="0.27")
+                    for arch in ("linux-64", "linux-aarch64")
+                ]
+            )(url)
+        if "llvm-toolchain-resolute-23/" in url and not url.endswith("Release"):
+            return indexes(url)
+        return gates(url)
+
+    return fetch
+
+
+def test_detected_bump_moves_iwyu_and_defers_only_lock(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old_lock = (repo / ".devcontainer/mise-system.lock").read_bytes()
+    assert (
+        llvm_major.bump_main(repo, fetch=detected_bump_fetcher(), releases=releases(23))
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert '"conda:include-what-you-use" = "0.27"' in (repo / SYSTEM).read_text()
+    assert (repo / SYSTEM).read_text().count('"conda:include-what-you-use"') == 1
+    assert "IWYU pin: 0.27" in output
+    assert "Next: mise run lock-image (IWYU lock is now stale by design)" in output
+    assert (repo / ".devcontainer/mise-system.lock").read_bytes() == old_lock
+    assert llvm_major.parity_violations(repo, include_iwyu_lock=False) == []
+    assert llvm_major.parity_main(repo) == 1
+    assert "IWYU lock stale or off-major" in capsys.readouterr().out
+    (repo / ".devcontainer/mise-system.lock").write_text(lock_text("0.27", 23))
+    assert llvm_major.parity_violations(repo) == []
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_detected_bump_counts_iwyu_rewrite(repo: Path, *, duplicate: bool) -> None:
+    file = repo / SYSTEM
+    if duplicate:
+        file.write_text(file.read_text() + '\n"conda:include-what-you-use" = "0.26"\n')
+    else:
+        file.write_text(
+            file.read_text().replace(
+                '"conda:include-what-you-use"', "'conda:include-what-you-use'"
+            )
+        )
+    assert llvm_major.parity_violations(repo) == []
+    before = tree_bytes(repo)
+    detection = llvm_major.detect(repo, detected_bump_fetcher(), releases(23))
+    with pytest.raises(
+        ValueError,
+        match=f"IWYU pin: expected exactly one rewrite, got {2 if duplicate else 0}",
+    ):
+        llvm_major.plan_bump(repo, detection, detected_bump_fetcher())
+    assert tree_bytes(repo) == before
+
+
+def test_cli_detect_markdown_held(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Use real parser/dispatch while injecting only subprocess responses."""
+    fetch = network({22, 23}, ready=22)
+
+    def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "gh":
+            body = json.dumps([releases(23)()]).encode()
+        else:
+            status, payload = fetch(argv[-1])
+            body = payload + f"\n{status}".encode()
+        return subprocess.CompletedProcess(argv, 0, body, b"")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    args = main.setup_parser().parse_args(["llvm-detect", "--markdown"])
+    with pytest.raises(SystemExit) as result:
+        main.run_command(args, repo)
+    assert result.value.code == 4
+    report = capsys.readouterr().out
+    for field in (
+        "Pinned: 22",
+        "Newest GA: 23",
+        "Served:",
+        "IWYU ready:",
+        "Target: 22",
+        "Held on: 23",
+        "23 GA+served, held: IWYU",
+    ):
+        assert field in report

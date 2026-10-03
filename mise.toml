@@ -799,6 +799,10 @@ run = 'uv run --project python dotfiles-setup llvm-detect'
 description = "Check LLVM consumers offline against the bootstrap clang pin"
 run = 'uv run --project python dotfiles-setup llvm-parity'
 
+[tasks.standing-issue]
+description = "Upsert or close an exact-title standing GitHub issue"
+run = 'uv run --project python dotfiles-setup standing-issue'
+
 [tasks.llvm-bump]
 description = "Plan or write an LLVM major bump gated on dual-arch IWYU readiness"
 run = 'uv run --project python dotfiles-setup llvm-bump'

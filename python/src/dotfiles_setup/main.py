@@ -176,6 +176,7 @@ from dotfiles_setup.session_start import (
 from dotfiles_setup.session_start import main as session_start_main
 from dotfiles_setup.session_state import main as session_state_main
 from dotfiles_setup.skills_mirror import skills_mirror_main
+from dotfiles_setup.standing_issue import standing_issue_main
 from dotfiles_setup.sync import SyncOptions, sync_main
 from dotfiles_setup.token_audit import preflight_main, token_audit_main
 from dotfiles_setup.verify import main as verify_main
@@ -279,7 +280,12 @@ def _add_llvm_subcommands(subparsers: _SubParsers) -> None:
     detector = subparsers.add_parser(
         "llvm-detect", help="Detect the newest ready LLVM major"
     )
-    detector.add_argument("--json", action="store_true", help="Print Detection as JSON")
+    output = detector.add_mutually_exclusive_group()
+    output.add_argument("--json", action="store_true", help="Print Detection as JSON")
+    output.add_argument(
+        "--markdown", action="store_true", help="Print a standing report"
+    )
+    _add_standing_issue_subcommand(subparsers)
     subparsers.add_parser(
         "llvm-parity", help="Check LLVM consumers against the pins offline"
     )
@@ -290,6 +296,19 @@ def _add_llvm_subcommands(subparsers: _SubParsers) -> None:
         "--dry-run", action="store_true", help="Print the plan without writing"
     )
     bump.add_argument("--major", type=int, help="Plan-only control; requires --dry-run")
+
+
+def _add_standing_issue_subcommand(subparsers: _SubParsers) -> None:
+    """Register the thin CLI for exact-title standing report updates."""
+    issue = subparsers.add_parser(
+        "standing-issue", help="Upsert or close a standing issue"
+    )
+    issue.add_argument("--repo", required=True)
+    issue.add_argument("--title", required=True)
+    operation = issue.add_mutually_exclusive_group(required=True)
+    operation.add_argument("--body-file", type=Path)
+    operation.add_argument("--close", action="store_true")
+    issue.add_argument("--close-comment")
 
 
 def _add_platform_subcommands(subparsers: _SubParsers) -> None:
@@ -3086,7 +3105,17 @@ def _build_command_handlers(
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args, project_root)),
         "llvm-detect": lambda: sys.exit(
-            llvm_major.detect_main(project_root, json_output=args.json)
+            llvm_major.detect_main(
+                project_root, json_output=args.json, markdown=args.markdown
+            )
+        ),
+        "standing-issue": lambda: sys.exit(
+            standing_issue_main(
+                repo=args.repo,
+                title=args.title,
+                body_file=args.body_file,
+                close_comment=args.close_comment,
+            )
         ),
         "llvm-parity": lambda: sys.exit(llvm_major.parity_main(project_root)),
         "llvm-bump": lambda: sys.exit(
