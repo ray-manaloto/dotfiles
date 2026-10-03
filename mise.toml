@@ -42,7 +42,7 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 # the devcontainer security boundary, not an optional interactive convenience.
 doppler = "3.76.6"
 colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
-lima = "2.2.0"
+lima = "2.2.1"
 "github:agent-sh/agnix" = "0.56.1"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
