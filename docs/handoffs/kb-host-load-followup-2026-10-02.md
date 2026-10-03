@@ -31,15 +31,16 @@ twice (#838) while a dotfiles ship ran.
 `CONCURRENT_SAFE` batch is one heavy run, not four), and in the KB `test` task
 when invoked directly. Do not take it per gate inside the batch: the batch's
 workers are threads of ONE process, so under the re-entry rule a second thread
-sees its own pid recorded and re-enters — then the first thread to finish
-RELEASES the lock while the others still run (an early release, not a deadlock;
+sees its own pid recorded and re-enters — then the thread that ACQUIRED it
+releases the lock when it finishes, while the others still run (an early release, not a deadlock;
 cold review 2026-10-02, finding 14). Also pass the locked descriptor to each gate
 child (`pass_fds`) so a killed parent does not free the lock while its child
 still runs (dotfiles `gate_result._run_declared`).
 
 **Arms to reproduce (dotfiles measured all four, `tests/test_host_lock.py`):**
 A holds, B prints "waiting … held by A" and runs after A releases; `kill -9` of
-the holder releases at once; a busy lock with a 0.3 s bound times out without
+a holder with no child sharing the fd releases at once (a child handed the fd
+via `pass_fds` keeps it held — armed both ways in dotfiles); a busy lock with a 0.3 s bound times out without
 running the block; a child WITH the holder export re-enters (rc 0) while the same
 child with it stripped times out (rc 124). Add one cross-repo arm: hold via
 `dotfiles-setup heavy-gate run -- sleep 30` and show a KB gate run waits.

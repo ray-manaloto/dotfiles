@@ -102,7 +102,7 @@ _SUBAGENT_CONTRACT_COMMAND = (
     f"python -m dotfiles_setup.hook_selfcheck {SUBAGENT_CONTRACT_MODE}"
 )
 _SETTINGS_WIRING: tuple[tuple[str, tuple[str, ...], tuple[str, ...] | None], ...] = (
-    # All five matcher tools are required, not just the two the guard started
+    # All five guarded tools are required, not just the two the guard started
     # with. The three file-modifying ones route to `branch_guard` (#400); with
     # only ("Bash", "AskUserQuestion") required, narrowing the live matcher
     # back would silently kill the write-time default-branch gate while ship

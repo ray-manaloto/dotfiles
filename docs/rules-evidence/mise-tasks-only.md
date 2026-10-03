@@ -117,7 +117,7 @@ Moved out of the rule 2026-08-31; the rule keeps the one-line summary and the
 fail-open caveat, which are the parts that change a decision at the call site.
 
 1. **PreToolUse hook (hard deny)** — `.claude/settings.json` wires every Bash
-   call through `dotfiles-setup hook pretooluse` (`hook_guard.py`): a match is
+   call through `scripts/pretooluse-guard.sh` -> `hook_dispatch` -> `hook_guard.py`: a match is
    DENIED with the redirect reason fed back (JSON `permissionDecision: "deny"`;
    deterministic, applies even in bypassPermissions mode). Rules tested in
    `tests/test_hook_guard.py`.
