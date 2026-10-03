@@ -1699,6 +1699,12 @@ description = "Coordinator auto-handoff: decide | release | name | launch the su
 # the old coordinator owns a live heavy run or in-flight harness tasks.
 run = 'uv run --project python dotfiles-setup coordinator-handoff'
 
+[tasks.handoff-inbox]
+description = "Sanctioned main-checkout writes from any worktree: inbox append|list|read; newest-coordinator plan-apply|queue-append|inbox-edit"
+# Thin caller; python/src/dotfiles_setup/handoff_inbox.py. The route lanes and
+# isolated coordinators use instead of a Bash write (Ray ruling b, 2026-10-03).
+run = 'uv run --project python dotfiles-setup coordinator-handoff inbox'
+
 [tasks.session-start]
 description = "Once-per-session reload + naming decision behind the session-start mod"
 # Thin caller; python/src/dotfiles_setup/session_start.py. Driven by the

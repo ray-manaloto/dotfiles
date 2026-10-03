@@ -313,6 +313,10 @@ def _content_blocks(obj: dict[str, object]) -> object:
     return message.get("content") if isinstance(message, dict) else None
 
 
+#: The str result of a Bash command that ran and exited non-zero.
+_EXIT_CODE_RESULT = re.compile(r"Error: Exit code \d+(?:\n|$)")
+
+
 def _executed_ids(objs: Iterable[dict[str, object]]) -> set[str]:
     """The ``tool_use`` ids whose result proves the command actually ran.
 
@@ -326,6 +330,16 @@ def _executed_ids(objs: Iterable[dict[str, object]]) -> set[str]:
     the reason. Each line holds exactly one ``tool_result`` block (6,822/6,822
     probed), so the line-level ``toolUseResult`` maps to it unambiguously.
 
+    A command that ran and exited non-zero is the exception to "a str means
+    refused": its result is the bare str ``"Error: Exit code <n>"``, then a
+    newline and the output.
+    Re-probed 2026-10-03 over 196 transcripts: every guard, permission and
+    isolation refusal carries a different prefix (``PreToolUse:``, ``This
+    session is isolated``, ``Permission to use``, ``Blocked:`` ...), so the
+    exit-code prefix is matched exactly. Without it every non-zero-exit
+    bypass -- e.g. a zsh ``echo ====`` that always exits 1 -- read as
+    ``blocked`` and the bypass alarm could only say "working" (RO-F1).
+
     An id absent from the returned set is treated as NOT executed — a result
     can be missing for the final in-flight call of a session. That direction is
     deliberate: proof-of-execution is required to cry bypass, so an unknown
@@ -334,7 +348,10 @@ def _executed_ids(objs: Iterable[dict[str, object]]) -> set[str]:
     ids: set[str] = set()
     for obj in objs:
         result = obj.get("toolUseResult")
-        if not (isinstance(result, dict) and "stdout" in result):
+        ran = (isinstance(result, dict) and "stdout" in result) or (
+            isinstance(result, str) and _EXIT_CODE_RESULT.match(result) is not None
+        )
+        if not ran:
             continue
         content = _content_blocks(obj)
         if not isinstance(content, list):

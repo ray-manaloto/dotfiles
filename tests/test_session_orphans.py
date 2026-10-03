@@ -134,6 +134,47 @@ def test_harness_command_text_without_required_parent_blocks() -> None:
     assert {item.pid for item in plan.other} == {600, 610, 620, 630}
 
 
+STATUSLINE_ROWS = (
+    "  700   100       00:01 S    /bin/bash /Users/alice/.claude/statusline.sh\n"
+    "  701   700       00:01 S    /bin/bash /Users/alice/.claude/statusline.sh\n"
+    "  702   701       00:00 S    date +%s\n"
+    "  703   702       00:00 S    (rustup)\n"
+    "  704   100       00:01 S    bash /Users/alice/.claude/subagent-statusline.sh\n"
+    "  705   701       00:00 S    cat\n"
+    "  706   100       00:00 S    (bash)\n"
+    "  707   706       00:00 S    (date)\n"
+    "  708   100       00:00 S    (caffeinate)\n"
+)
+
+
+def test_status_line_refresh_is_harness_not_other() -> None:
+    """DE-F4: the measured status-line tree must not block a handoff census."""
+    processes = reap.parse_processes(HEALTHY_PS_TREE + STATUSLINE_ROWS)
+
+    plan = session_orphans.build_plan(processes, root_pid=100, self_pid=201)
+
+    assert {item.process.pid for item in plan.harness} >= set(range(700, 709))
+    assert not plan.other
+
+
+def test_status_line_shapes_without_a_harness_parent_block() -> None:
+    """The same command text under real work, or orphaned, stays OTHER."""
+    rows = (
+        "  800   100       05:00 S    zsh -c active-work\n"
+        "  801   800       00:01 S    /bin/bash /Users/alice/.claude/statusline.sh\n"
+        "  802   800       00:00 S    date +%s\n"
+        "  803   800       00:00 S    (rustup)\n"
+        "  804   800       00:00 S    cat\n"
+        "  805   800       00:00 S    (bash)\n"
+        "  806   100       00:00 S    (zsh)\n"
+    )
+    processes = reap.parse_processes(HEALTHY_PS_TREE + rows)
+
+    plan = session_orphans.build_plan(processes, root_pid=100, self_pid=201)
+
+    assert {item.pid for item in plan.other} == set(range(800, 807))
+
+
 def test_wait_loop_only_admits_a_direct_typed_sleep_child() -> None:
     unsafe_rows = """\
   340   330       03:00 S    mise run ship

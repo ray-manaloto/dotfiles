@@ -745,7 +745,7 @@ def test_cli_name_prints_a_conforming_coordinator_name(
     args = setup_parser().parse_args(["coordinator-handoff", "name"])
     assert ch.main(args, tmp_path) == 0
     name = capsys.readouterr().out.strip()
-    assert ch.COORDINATOR_NAME_RE.fullmatch(name)
+    assert sc.COORDINATOR_NAME_RE.fullmatch(name)
     assert name.startswith("dotfiles-")
 
 
@@ -778,7 +778,7 @@ def test_cli_name_emits_lane_names_in_the_same_convention(
     name = capsys.readouterr().out.strip()
     assert name.startswith("kb-")
     assert name.endswith(".lane-x")
-    assert not ch.COORDINATOR_NAME_RE.fullmatch(name)
+    assert not sc.COORDINATOR_NAME_RE.fullmatch(name)
 
 
 @pytest.mark.usefixtures("coordinator_jobs")

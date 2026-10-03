@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
@@ -87,20 +88,25 @@ def _assistant_bash(cmd: str, uid: str = "tu1", ts: str = _LIVE_TS) -> str:
     )
 
 
-def _result(uid: str, *, executed: bool) -> str:
+def _result(uid: str, *, executed: bool | Literal["nonzero"]) -> str:
     """A tool_result line: dict-with-stdout when it ran, bare str when refused.
 
     Mirrors the real shapes probed 2026-07-14 — a refused call carries the
     guard's reason as a plain string, an executed one a stdout-bearing dict.
+    ``"nonzero"`` is the third real shape (re-probed 2026-10-03): a command
+    that RAN and exited non-zero is also a bare str, prefixed ``Error: Exit
+    code <n>``.
     """
+    if executed == "nonzero":
+        payload: object = "Error: Exit code 1\n(eval):1: ===== not found"
+    elif executed:
+        payload = {"stdout": "out", "stderr": "", "interrupted": False}
+    else:
+        payload = "Error: Use `mise run ship` — …"
     return json.dumps(
         {
             "type": "user",
-            "toolUseResult": (
-                {"stdout": "out", "stderr": "", "interrupted": False}
-                if executed
-                else "Error: Use `mise run ship` — …"
-            ),
+            "toolUseResult": payload,
             "message": {
                 "content": [{"type": "tool_result", "tool_use_id": uid}],
             },
@@ -186,6 +192,30 @@ def test_iter_bash_commands_pairs_results_to_attempts(tmp_path: Path) -> None:
         "gh pr create --fill": False,
         "git status": False,
     }
+
+
+def test_nonzero_exit_counts_as_executed_bypass(tmp_path: Path) -> None:
+    """RO-F1: a command that ran and exited non-zero is a bypass, not a block.
+
+    The zsh ``echo ======`` separator always exits 1, so before the fix every
+    evasion of ``zsh_equals_separator`` was filed as ``blocked``. The refused
+    arm, a real guard-deny string, must stay ``blocked``.
+    """
+    after_v10 = "2026-10-02T17:45:08Z"
+    command = "cat f; echo ======; grep -n x f"
+    f = tmp_path / "t.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _assistant_bash(command, uid="ran", ts=after_v10),
+                _assistant_bash(command + " ", uid="refused", ts=after_v10),
+                _result("ran", executed="nonzero"),
+                _result("refused", executed=False),
+            ]
+        )
+    )
+    got = {c.command: ca.classify(c) for c in ca.iter_bash_commands([f])}
+    assert got == {command: "bypass", command + " ": "blocked"}
 
 
 # ------------------------------------------------------------- classification

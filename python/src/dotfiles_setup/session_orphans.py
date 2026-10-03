@@ -60,6 +60,10 @@ class ShapedProcess:
     shape_name: str
 
 
+_STATUSLINE = re.compile(
+    r"^(?:/[^\s]+/)?bash /Users/[^/\s]+/\.claude/(?:subagent-)?statusline\.sh$"
+)
+
 # Each pattern is a full command line, not a substring allowlist. The launcher
 # and its server are the measured PDF MCP pair; the server additionally needs
 # an already-admitted HARNESS parent so an unrelated node process cannot pass.
@@ -83,6 +87,44 @@ HARNESS_CHILD_SHAPES = (
         "caffeinate inhibitor",
         re.compile(r"^(?:/[^\s]+/)?caffeinate -i -t 300$"),
         HarnessParentRequirement.SESSION_ROOT,
+    ),
+    # The harness's statusLine / subagentStatusLine refresh, measured live
+    # 2026-10-03 (900 census samples): the script under the session root, its
+    # own bash subshells, `payload=$(cat)` and `date +%s`. A just-forked child
+    # shows as `(<comm>)` until it execs -- `(bash)` / `(caffeinate)` under the
+    # session root are the script and the inhibitor being spawned, and
+    # `(rustup)`, `(date)`, `(mise)` appear below the script -- so a placeholder
+    # is admitted only as one of those two spawns or below an admitted parent
+    # (DE-F4; it blocked a census in session 998ab91b).
+    HarnessChildShape(
+        "status-line script",
+        _STATUSLINE,
+        HarnessParentRequirement.SESSION_ROOT,
+    ),
+    HarnessChildShape(
+        "status-line subshell",
+        _STATUSLINE,
+        HarnessParentRequirement.HARNESS,
+    ),
+    HarnessChildShape(
+        "status-line clock",
+        re.compile(r"^(?:/[^\s]+/)?date \+%s$"),
+        HarnessParentRequirement.HARNESS,
+    ),
+    HarnessChildShape(
+        "status-line payload read",
+        re.compile(r"^(?:/[^\s]+/)?cat$"),
+        HarnessParentRequirement.HARNESS,
+    ),
+    HarnessChildShape(
+        "harness spawn before exec",
+        re.compile(r"^\((?:bash|caffeinate)\)$"),
+        HarnessParentRequirement.SESSION_ROOT,
+    ),
+    HarnessChildShape(
+        "forked child before exec",
+        re.compile(r"^\([A-Za-z0-9._-]+\)$"),
+        HarnessParentRequirement.HARNESS,
     ),
 )
 

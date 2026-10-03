@@ -36,6 +36,12 @@ _NS_PER_S = 1_000_000_000
 _SECONDS_PER_HOUR = 3600
 _SECONDS_PER_MINUTE = 60
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,}$")
+#: A dotfiles coordinator's job-record name. Shared by coordinator_handoff and
+#: handoff_inbox, which must not import each other.
+COORDINATOR_NAME_RE = re.compile(r"^dotfiles-.+\.coordinator$")
+#: The main checkout's gitignored coordination files (relative to its root).
+SHIP_QUEUE = Path(".agent") / "plans" / "main-checkout-ship-queue.md"
+HANDOFF_INBOX = Path(".agent") / "plans" / "handoff-inbox"
 
 
 class SessionError(RuntimeError):
@@ -83,6 +89,11 @@ def session_name(session_id: str, jobs_dir: Path) -> str | None:
     record = job_record(session_id, jobs_dir)
     name = None if record is None else record.get("name")
     return name if isinstance(name, str) else None
+
+
+def is_coordinator(name: str | None) -> bool:
+    """Whether a job-record name is a dotfiles coordinator's."""
+    return name is not None and COORDINATOR_NAME_RE.fullmatch(name) is not None
 
 
 def default_jobs_dir() -> Path:

@@ -185,6 +185,69 @@ def test_session_list_uses_native_filters_and_verifies_returned_rows(
     )
 
 
+def _git(*args: str) -> None:
+    subprocess.run(["git", *args], check=True, capture_output=True, text=True)
+
+
+def test_linked_worktree_lists_under_the_main_checkout_project(
+    tmp_path: Path,
+) -> None:
+    """DE-F1: from a linked worktree, ``--project`` is the MAIN checkout's name.
+
+    AgentsView files a worktree session under the main checkout's project, so
+    the worktree basename found nothing and the pass was UNVERIFIABLE. Real
+    git, a real ``git worktree add``.
+    """
+    main_repo = tmp_path / "mainrepo"
+    lane = tmp_path / "lane-wt"
+    _git("init", "-q", "-b", "main", str(main_repo))
+    _git(
+        "-C",
+        str(main_repo),
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t.invalid",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+    )
+    _git("-C", str(main_repo), "worktree", "add", "-q", "-b", "lane", str(lane))
+    calls: list[tuple[str, ...]] = []
+    payloads = iter(
+        [
+            {
+                "sessions": [
+                    {"session_id": "s", "agent": "claude", "project": "mainrepo"}
+                ]
+            },
+            {"tool_calls": [], "count": 0},
+        ]
+    )
+
+    def runner(
+        command: Sequence[str], timeout_s: float
+    ) -> subprocess.CompletedProcess[str]:
+        del timeout_s
+        calls.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, json.dumps(next(payloads)), "")
+
+    rc = agentsview_pass.main(
+        lane,
+        agentsview_pass.PassRequest(skill_path=_skill(tmp_path)),
+        runner=runner,
+    )
+
+    assert rc == 0
+    assert calls[0][5:7] == ("--project", "mainrepo")
+
+
+def test_project_name_of_a_non_git_root_is_its_own_name(tmp_path: Path) -> None:
+    assert agentsview_pass.project_name(tmp_path) == tmp_path.name
+
+
 @pytest.mark.parametrize(
     "row",
     [
