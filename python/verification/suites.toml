@@ -2975,6 +2975,18 @@ per_path_lines = { "mise.toml" = [
 ] }
 
 [[suite]]
+name = "config.mise-worktree-ceiling"
+description = "#1614: the tracked .miserc.toml must stop mise's upward config walk at this checkout's parent, so a Claude Code worktree at <main>/.claude/worktrees/<x> stops loading the main checkout's mise.toml, mise.local.toml and conf.d (the leak made every ship from .claude/worktrees fail tests/test_session_review.py and injected foreign env and tasks). Pinned as a WHOLE line, not a substring: a commented-out copy must not satisfy it. This contract catches removal and rewording only; whether the line still WORKS (template render, exact-ancestor matching) is tests/test_miserc_ceiling.py's job. Known gaps: (a) branches without the line leak until rebased; (b) `mise -C <wt>` from outside leaks, and `MISE_CEILING_PATHS` covers it. Gap (b) is tracked as #1627."
+category = "config"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [".miserc.toml"]
+lines = [
+    'ceiling_paths = ["{{ config_root | dirname }}"]',
+]
+
+[[suite]]
 name = "workflow.function-hook-build-gates"
 description = "#1026 prefactor: Claude Code function-hook modules must stay gated before #1029 adds the first production plugin. The hk step covers production plugin manifests/modules plus the one fixture subtree, invokes the public CLI, and the CLI dispatches to Python gate logic. Tests derive plugins from the tree, arm the exact fixture exclusion and production hk globs, keep one deliberately broken fixture per gate, and bind the generated declarations plus strict tsconfig. The escape-hatch gate additionally binds BOTH halves of its invariant \u2014 the set and the call site that reads it \u2014 because a module can declare the set and never consult it, which a membership-only assertion passes while the session lockout returns. The suite asserts this chain exists; real validate/tsc/regeneration execution remains hk/pytest's job because verification suites are static."
 category = "workflow"
