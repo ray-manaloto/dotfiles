@@ -6,12 +6,12 @@
 complement: what a repository *offers*, so a declaration can be written from
 evidence instead of memory.
 
-Why this exists (#251): the LLVM package names are not guessable, and every
+Historical example (#251, probed 2026-07-15): LLVM names are not guessable; every
 hand-written guess so far has been wrong. Issue #251's own plan proposed
 `apt:mlir-22`, which does not exist (`libmlir-22`, `libmlir-22-dev`,
 `mlir-22-tools` do); OpenMP ships as `libomp-22-dev`, matching no substring of
 "openmp"; and the development channel is the *unnumbered* suite, so the
-plausible `llvm-toolchain-resolute-23` is a 404.
+then-plausible `llvm-toolchain-resolute-23` returned 404.
 
 Why not the obvious alternatives (`.claude/rules/use-tool-builtins.md`):
 
@@ -63,7 +63,7 @@ def llvm_suite(dist: str, version: int | str) -> str:
 
     Args:
         dist: Ubuntu codename, e.g. `resolute` for 26.04.
-        version: A major version (`21`, `22`) or :data:`LLVM_DEV` for the
+        version: A major version or :data:`LLVM_DEV` for the
             unnumbered development/trunk suite.
 
     Takes a *version*, never a channel label. apt.llvm.org's "stable /
@@ -126,7 +126,7 @@ def _default_fetcher(url: str) -> bytes:
 
     `-f` turns an HTTP 404 into a non-zero exit, so a suite apt.llvm.org has
     not published — the documented failure mode in #251, and the real
-    behaviour of `llvm-toolchain-<dist>-23` — fails loudly here instead of
+    historical behaviour of an unpublished numbered suite — fails loudly here instead of
     parsing as an empty package set.
 
     Raises:

@@ -95,7 +95,9 @@ def test_probe_script_simulates_every_pin_in_one_transaction() -> None:
     A per-package loop would pass on a set that conflicts as a group, so the
     single transaction is the point, not an optimisation.
     """
-    script = apt_pins.probe_script({"curl": "1.0", "zsh": "2.0"}, "ABCD1234")
+    script = apt_pins.probe_script(
+        {"clang-22": "1:22", "curl": "1.0", "zsh": "2.0"}, "ABCD1234"
+    )
     assert script.count("apt-get install --simulate") == 1
     assert "curl=1.0 zsh=2.0" in script
     assert "APT_PINS_OK" in script

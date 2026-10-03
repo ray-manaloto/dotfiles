@@ -18,7 +18,7 @@ import zlib
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from dotfiles_setup import _project_root
+from dotfiles_setup import _project_root, llvm_major
 from dotfiles_setup.image_manifest import (
     docker_inspector,
     parse_matrix,
@@ -49,23 +49,19 @@ _LLVM_VERSION_RE = re.compile(r"(?:\d+:)?(\d+\.\d+\.\d+)")
 
 
 def _parse_apt_llvm_version(config_text: str) -> str:
-    """Extract the LLVM release (``MAJOR.MINOR.PATCH``) from ``apt:clang-22``.
+    """Extract the LLVM release (``MAJOR.MINOR.PATCH``) from the clang anchor.
 
     The whole apt.llvm.org suite shares one version string, so the pinned
-    ``clang-22`` package in ``[bootstrap.packages]`` is the natural anchor for
+    ``clang-<N>`` package in ``[bootstrap.packages]`` is the natural anchor for
     "what LLVM release is this image". Fails loud if the pin is absent or
     unparsable — a silently-empty version would leave the runtime version
     guard dormant, reintroducing the false-positive it exists to catch.
     """
-    data = tomllib.loads(config_text)
-    packages = data.get("bootstrap", {}).get("packages", {})
-    pin = packages.get("apt:clang-22")
-    if not isinstance(pin, str):
-        msg = "mise-system.toml [bootstrap.packages] lacks a string 'apt:clang-22' pin"
-        raise TypeError(msg)
+    major = llvm_major.pinned_major(config_text)
+    pin, _ = llvm_major.llvm_pins(config_text)[f"clang-{major}"]
     match = _LLVM_VERSION_RE.match(pin)
     if match is None:
-        msg = f"could not parse an LLVM release from apt:clang-22 pin {pin!r}"
+        msg = f"could not parse an LLVM release from clang anchor pin {pin!r}"
         raise ValueError(msg)
     return match.group(1)
 
@@ -530,7 +526,7 @@ _TIER1_CORE_BODY = (
 # constant (like _TIER1_PYTHON_DEFAULT) so its FAIL direction is control-armable
 # in a unit test with a stubbed clang++ — a version guard verified only on a
 # right answer is a probe that can only pass. The image ships several clang++
-# (apt LLVM-22 at /usr/lib/llvm-22/bin, the clang-p2996 reflection build at
+# (apt LLVM at its versioned bin directory, the clang-p2996 reflection build at
 # /opt/clang-p2996/bin, plus conda's); the sanitizer + openmp + lld probes below
 # all invoke BARE clang++, so pin which one that resolves to (the apt LLVM
 # build) and — when the release is injected — that its --version reports it.
@@ -588,7 +584,7 @@ else
   /tmp/san-tsan >/dev/null
 fi
 clang++ -fsanitize=fuzzer-no-link -c /tmp/sanitizer.cpp -o /tmp/san-fuzz.o
-echo "=== openmp compile+link+run (#294: libomp-22-dev) ==="
+echo "=== openmp compile+link+run (#294: libomp development package) ==="
 # Proves the OpenMP runtime is actually linkable+runnable, not merely that the
 # libomp package installed. Runs even under emulation (like asan/ubsan): OpenMP
 # threading works under Rosetta/QEMU; only TSan's shadow memory does not.
@@ -604,7 +600,7 @@ int main() {
 }
 CPP
 clang++ -fopenmp /tmp/omp.cpp -o /tmp/omp \
-  || { echo "FAIL: clang++ -fopenmp link failed (libomp-22-dev missing?)"; exit 1; }
+  || { echo "FAIL: clang++ -fopenmp link failed (libomp missing?)"; exit 1; }
 /tmp/omp >/dev/null || { echo "FAIL: openmp binary did not run"; exit 1; }
 echo "OK: openmp -fopenmp compiles, links, runs"
 echo "=== lld linker (#294: -fuse-ld=lld) ==="
@@ -709,9 +705,9 @@ fi
 /tmp/refl-clang || { echo "FAIL: clang-p2996 reflection binary did not run"; exit 1; }
 echo "=== llvm utility version smoke (#294) ==="
 # The core LLVM binaries all embed the release in --version. opt/llc/llvm-cov/
-# llvm-profdata/llvm-symbolizer ship in the `llvm-22` package (verified from the
-# .deb: /usr/lib/llvm-22/bin/*); llvm-bolt in `bolt-22`; mlir-opt in
-# `mlir-22-tools`. Match the bare release substring (format-robust across all
+# llvm-profdata/llvm-symbolizer ship in the `llvm-<N>` package (verified from the
+# .deb: /usr/lib/llvm-<N>/bin/*); llvm-bolt in `bolt-<N>`; mlir-opt in
+# `mlir-<N>-tools`. Match the bare release substring (format-robust across all
 # banners). `case` glob, never `cmd | grep -q` — the latter SIGPIPEs (141) under
 # pipefail (hk no_grep_q_under_pipefail).
 if [ -n "$EXPECTED_LLVM_VERSION" ]; then
@@ -731,7 +727,7 @@ if [ -n "$EXPECTED_LLVM_VERSION" ]; then
 else
   echo "SKIP: no expected LLVM version injected (utility version guard dormant)"
 fi
-echo "=== flang fortran compile+run (#294: flang-22) ==="
+echo "=== flang fortran compile+run (#294: flang) ==="
 # Binary name varies across LLVM releases (flang | flang-new); accept either.
 flang_bin=$(command -v flang 2>/dev/null || command -v flang-new 2>/dev/null || true)
 [ -n "$flang_bin" ] || { echo "FAIL: flang/flang-new not on PATH"; exit 1; }
@@ -756,13 +752,13 @@ F90
   || { echo "FAIL: flang compile/link failed"; exit 1; }
 /tmp/flang-hello >/dev/null || { echo "FAIL: flang binary did not run"; exit 1; }
 echo "OK: flang compiles + runs a Fortran program"
-echo "=== libclc bitcode presence (#294: libclc-22) ==="
-# libclc-22 ships its OpenCL *.bc bitcode under /usr/lib/clc (verified from the
+echo "=== libclc bitcode presence (#294: libclc) ==="
+# libclc ships its OpenCL *.bc bitcode under /usr/lib/clc (verified from the
 # .deb); the extra roots tolerate a future relocation. The trailing `|| true` is
 # load-bearing: `find` exits NON-ZERO if any start dir is absent, and under
 # `set -e` a bare `var=$(find ...)` would then abort the script BEFORE this
 # check runs (a probe that dies at its own setup — probes-need-a-control-arm).
-clc_bc=$(find /usr/lib/clc /usr/lib/clang /usr/lib/llvm-22 \
+clc_bc=$(find /usr/lib/clc /usr/lib/clang /usr/lib/llvm-* \
   -name '*.bc' 2>/dev/null | head -n1 || true)
 [ -n "$clc_bc" ] || { echo "FAIL: no libclc bitcode (*.bc) found in image"; exit 1; }
 echo "OK: libclc bitcode present ($clc_bc)"
@@ -969,7 +965,7 @@ def build_smoke_script(
     runs (it proves the toolchain); the RUN is skipped under emulation, where
     TSan's shadow-memory layout is incompatible with Rosetta/QEMU.
 
-    ``expected_llvm_version`` (#294 — apt LLVM-22 runtime coverage) is the
+    ``expected_llvm_version`` (#294 — apt LLVM runtime coverage) is the
     release the default-clang identity gate and the ``opt``/``llvm-bolt``/
     ``mlir-opt``/``flang`` ``--version`` guards assert. Unset leaves those
     guards dormant (unit-test friendly).

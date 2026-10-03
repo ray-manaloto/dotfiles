@@ -282,6 +282,10 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python dotfiles-setup platform-literals"
   }
 
+  ["llvm_major_parity"] {
+    check = "uv run --project python dotfiles-setup llvm-parity"
+  }
+
   // Classifier axis enumeration (#601 close-out). DERIVES each registered
   // classifier's real axis set from its own code — the classifier's params
   // plus every subject field any predicate it calls reads, transitively — and

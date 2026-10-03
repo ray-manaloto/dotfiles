@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from kb_setup import evals
 
-from dotfiles_setup import image_lock, native_clis_container
+from dotfiles_setup import _project_root, image_lock, llvm_major, native_clis_container
 from dotfiles_setup.agentsview_pass import PassRequest
 from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
@@ -240,11 +240,10 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
     )
     apt_repo_parser.add_argument(
         "--llvm-version",
-        default="22",
+        default=None,
         help="apt.llvm.org major to enumerate, or 'dev' for the unnumbered "
-        "development/trunk suite (2026-07-15: 21 stable, 22 qualification, "
-        "dev == 23). Takes a version, not a channel label -- the labels "
-        "shift every release cycle. (default: %(default)s)",
+        "development/trunk suite. Defaults to the bootstrap clang pin. "
+        "Takes a version, not a channel label; labels shift every release cycle.",
     )
     apt_repo_parser.add_argument(
         "--dist", default="resolute", help="Ubuntu codename (default: %(default)s)"
@@ -272,6 +271,25 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
         action="store_true",
         help="Drop Section: libs packages (they arrive via Depends:)",
     )
+    _add_llvm_subcommands(subparsers)
+
+
+def _add_llvm_subcommands(subparsers: _SubParsers) -> None:
+    """Register LLVM selection, offline parity, and gated bump planning."""
+    detector = subparsers.add_parser(
+        "llvm-detect", help="Detect the newest ready LLVM major"
+    )
+    detector.add_argument("--json", action="store_true", help="Print Detection as JSON")
+    subparsers.add_parser(
+        "llvm-parity", help="Check LLVM consumers against the pins offline"
+    )
+    bump = subparsers.add_parser(
+        "llvm-bump", help="Plan or write an IWYU-ready LLVM bump"
+    )
+    bump.add_argument(
+        "--dry-run", action="store_true", help="Print the plan without writing"
+    )
+    bump.add_argument("--major", type=int, help="Plan-only control; requires --dry-run")
 
 
 def _add_platform_subcommands(subparsers: _SubParsers) -> None:
@@ -2718,9 +2736,12 @@ def handle_apt_repo(args: argparse.Namespace) -> int:
             return 2
         query = RepoQuery(repo=args.repo, suite=args.suite, arch=args.arch)
     else:
-        version: int | str = (
-            LLVM_DEV if args.llvm_version == LLVM_DEV else int(args.llvm_version)
-        )
+        selected = args.llvm_version
+        if selected is None:
+            selected = llvm_major.pinned_major(
+                (_project_root() / ".devcontainer/mise-system.toml").read_text()
+            )
+        version: int | str = LLVM_DEV if selected == LLVM_DEV else int(selected)
         query = RepoQuery.for_llvm(version, dist=args.dist, arch=args.arch)
     return apt_repo_main(
         query,
@@ -3064,6 +3085,13 @@ def _build_command_handlers(
         "eval": lambda: handle_eval(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args)),
+        "llvm-detect": lambda: sys.exit(
+            llvm_major.detect_main(project_root, json_output=args.json)
+        ),
+        "llvm-parity": lambda: sys.exit(llvm_major.parity_main(project_root)),
+        "llvm-bump": lambda: sys.exit(
+            llvm_major.bump_main(project_root, dry_run=args.dry_run, major=args.major)
+        ),
         "apt-pins": lambda: sys.exit(
             apt_pins_main(project_root, json_output=args.json)
         ),
