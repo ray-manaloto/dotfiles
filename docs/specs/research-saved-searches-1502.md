@@ -234,6 +234,22 @@ Failure and limit handling:
 - The first full collection after a top-window run shows `n/a (first full collection)` instead of diffing.
 - `collect = "all"` on any other kind or role is a load error (rc 2).
 
+Rev 2.4 — Ray's 1000-cap ruling, 2026-10-03, option "(a+) fallback + strict". Source:
+`docs/research/kb/reports/agents/proposals-code-search-1000-cap-2026-10-03.md`.
+
+- **Default over the cap.** A watch with `collect` unset (the default `all`) whose `total_count` exceeds 1000 on any
+  page falls back to a labelled TOP WINDOW, built from page 1's already-fetched items cut to `limit`. That run has:
+  - `status = ok` and `complete` unset;
+  - `count = total_count`;
+  - `reason = "over the 1000-result cap: top N of M, not all collected — narrow the query to collect all"`.
+
+  It makes no extra calls and exits rc 0. The row renders `(top N of M)`.
+- **Explicit `all` over the cap.** A watch with an EXPLICIT `collect = "all"` stays strict: `uncollectable`, rc 1.
+- **Window after a full collection.** If the previous run was `complete` and this run is a window, NEW and GONE are
+  both `n/a (window after full collection)`. Without this, a window would list every other previous URL as GONE.
+- **Narrowing.** The three broadest orchestration watches (41664, 23616 and 23264 hits) are narrowed with
+  `path:`/`filename:` qualifiers and their counts re-recorded (Ray: "Yes, in 1502").
+
 ### 4.5 Workflow wiring (`research-sweep-run.js`)
 - `meta.phases`: add `{ title: 'Save', detail: 'research-fanout manifests → docs/research/saved-searches/<slug>.toml via one workflow-built `mise run research-saved-search -- record` (haiku); never changes status (#1502)' }` immediately BEFORE Retrospect.
 - `ROUTE.saveSearches = { model: 'haiku' }` (general-purpose: it must create a file; Explore may not).

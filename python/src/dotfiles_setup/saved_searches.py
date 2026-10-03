@@ -575,24 +575,42 @@ def _canonical(url: str) -> str:
 def _collect_all(
     query: str, watch: Watch, boundaries: _ProbeBoundaries, timeout: float
 ) -> _Answer:
-    """Page through EVERY hit (up to the REST cap) so NEW means new to the index.
+    """Collect every hit within the REST cap; defaults fall back above it.
 
     Code search ranks by best match and has no date sort or qualifier
     (`sort=indexed` is ignored; measured 2026-10-03, research report
     saved-searches-newer-examples-research-2026-10-03.md), so a top-N window
     diffs a RANKING: a new example ranked 50th never shows as NEW. One failed,
     limited or timed-out page fails the whole run — a partial set would report
-    false GONE rows. The count is the number of keys collected; `total_count`
-    moved 125 -> 141 between two calls seconds apart, so it is not used.
+    false GONE rows. A total above the cap on any page keeps explicit `all`
+    uncollectable; an unset `collect` returns page 1's first `limit` items as a
+    labelled, incomplete top window with that page's total count, without extra
+    calls. A full collection counts the keys collected instead: `total_count`
+    moved 125 -> 141 between two calls seconds apart.
     """
     seen: dict[str, dict[str, object]] = {}
+    first_page_items: tuple[dict[str, object], ...] = ()
     for page in range(1, _RESULT_CAP // _PAGE_SIZE + 1):
         answer = _direct(query, watch, boundaries, timeout, page=page)
         if answer.status != RerunStatus.ok:
             return answer
+        if page == 1:
+            first_page_items = answer.items
         # Every page, not just the first: a total that grows past the cap mid-run
         # would otherwise end as a "complete" set missing hits (codex lens P2).
         if answer.count > _RESULT_CAP:
+            if isinstance(watch.collect, UnsetType):
+                window = first_page_items[: _given(watch.limit, 10)]
+                return _Answer(
+                    answer.count,
+                    RerunStatus.ok,
+                    window,
+                    answer.rc,
+                    reason=f"over the {_RESULT_CAP}-result cap: "
+                    f"top {len(window)} of {answer.count}, not all collected — "
+                    "narrow the query to collect all",
+                    complete=False,
+                )
             return _Answer(
                 -1,
                 RerunStatus.uncollectable,
@@ -965,6 +983,17 @@ def _row(run: WatchRun, before: _Previous | None) -> list[str]:
     )
     if not answered:
         return [run.id, run.kind, run.query, counts, status, "n/a", "n/a"]
+    if before is not None and before.complete and not complete:
+        # A top window cannot establish which hits from the full set vanished.
+        return [
+            run.id,
+            run.kind,
+            run.query,
+            counts,
+            status,
+            "n/a (window after full collection)",
+            "n/a (window after full collection)",
+        ]
     if complete and before is not None and not before.complete:
         # The previous run saw only a top-N window: every hit outside it would
         # read as NEW. The NEXT full collection diffs set against set.

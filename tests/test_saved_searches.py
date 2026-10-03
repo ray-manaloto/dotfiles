@@ -1332,11 +1332,126 @@ def test_collect_all_reports_a_low_ranked_new_example(
     assert row.endswith("| https://github.com/o/r999/blob/HEAD/f.rs |  |")
 
 
-def test_collect_all_over_the_cap_is_uncollectable(tmp_path: Path) -> None:
-    """More than 1000 hits cannot be collected: one call, then `uncollectable`.
+def test_default_all_over_cap_falls_back_to_top_window(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Default `all` above the cap keeps page 1's top 10 with rc 0 and a label.
 
-    FAIL arm: delete the `> _RESULT_CAP` guard — ten pages run and a partial set
-    reads as ok.
+    FAIL arm: delete the default fallback branch — `uncollectable` returns rc 1.
+    """
+    path = tmp_path / "search.toml"
+    _write(
+        path,
+        [
+            {"id": "query", "kind": "code", "queries": [_QUERY]},
+            {"id": "hit", "kind": "code", "queries": [_HIT_SHAPE], "role": "must-hit"},
+        ],
+    )
+    runner = _Runner(
+        {
+            _HEALTH: {"count": 1},
+            _HIT_SHAPE: {"count": 1},
+            _QUERY: _paged(_items(100), count=1500),
+        }
+    )
+    assert _rerun(tmp_path, path, runner, _Timing()) == 0
+    row = _rows(_snapshot(tmp_path))["query"]
+    assert (row["status"], row["count"]) == ("ok", 1500)
+    assert "complete" not in row
+    assert row["urls"] == [
+        f"https://github.com/o/r{index}/blob/HEAD/f.rs" for index in range(10)
+    ]
+    assert row["reason"] == (
+        "over the 1000-result cap: top 10 of 1500, not all collected — "
+        "narrow the query to collect all"
+    )
+    assert len(_search_calls(runner, _QUERY)) == 1
+    line = _query_line(capsys.readouterr().out)
+    assert "(top 10 of 1500)" in line
+    assert "1000-result cap" in line
+
+
+def test_cap_crossed_mid_collection_falls_back_not_complete(tmp_path: Path) -> None:
+    """A default collection crossing the cap on page 2 keeps only page 1's window.
+
+    FAIL arm: drop the per-page cap recheck, or build the window from page 2.
+    """
+    path = tmp_path / "search.toml"
+    _write(
+        path,
+        [
+            {"id": "query", "kind": "code", "queries": [_QUERY]},
+            {"id": "hit", "kind": "code", "queries": [_HIT_SHAPE], "role": "must-hit"},
+        ],
+    )
+    runner = _Runner(
+        {
+            _HEALTH: {"count": 1},
+            _HIT_SHAPE: {"count": 1},
+            _QUERY: {
+                "pages": [
+                    {"count": 900, "items": _items(100)},
+                    {"count": 1100, "items": _items(100, 100)},
+                ]
+            },
+        }
+    )
+    assert _rerun(tmp_path, path, runner, _Timing()) == 0
+    row = _rows(_snapshot(tmp_path))["query"]
+    assert (row["status"], row["count"]) == ("ok", 1100)
+    assert "complete" not in row
+    assert row["urls"] == [
+        f"https://github.com/o/r{index}/blob/HEAD/f.rs" for index in range(10)
+    ]
+    assert row["reason"] == (
+        "over the 1000-result cap: top 10 of 1100, not all collected — "
+        "narrow the query to collect all"
+    )
+    assert len(_search_calls(runner, _QUERY)) == 2
+
+
+def test_window_after_full_collection_does_not_diff(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A default full collection followed by a cap window cannot report NEW/GONE.
+
+    FAIL arm: remove only the window-after-full guard — 131 URLs read as GONE.
+    """
+    path = tmp_path / "search.toml"
+    _write(
+        path,
+        [
+            {"id": "query", "kind": "code", "queries": [_QUERY]},
+            {"id": "hit", "kind": "code", "queries": [_HIT_SHAPE], "role": "must-hit"},
+        ],
+    )
+    timing = _Timing()
+    runner = _Runner(
+        {
+            _HEALTH: {"count": 1},
+            _HIT_SHAPE: {"count": 1},
+            _QUERY: _paged(_items(100), _items(41, 100)),
+        }
+    )
+    assert _rerun(tmp_path, path, runner, timing) == 0
+    first = _rows(_snapshot(tmp_path))["query"]
+    assert (first["count"], first["complete"]) == (141, True)
+    assert len(cast("list[str]", first["urls"])) == 141
+    capsys.readouterr()
+    timing.now += 2
+    runner.replies[_QUERY] = _paged(_items(100), count=1500)
+    assert _rerun(tmp_path, path, runner, timing) == 0
+    row = _rows(_snapshot(tmp_path))["query"]
+    assert (row["status"], row["count"]) == ("ok", 1500)
+    assert "complete" not in row
+    window = "n/a (window after full collection)"
+    assert _query_line(capsys.readouterr().out).endswith(f"| {window} | {window} |")
+
+
+def test_collect_all_over_the_cap_is_uncollectable(tmp_path: Path) -> None:
+    """EXPLICIT `collect = "all"` above 1000 stays strict: one call, `uncollectable`.
+
+    FAIL arm: make the fallback ignore explicitness — the run returns rc 0.
     """
     path = tmp_path / "search.toml"
     _write(path, _all_watch())
