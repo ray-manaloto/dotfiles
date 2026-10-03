@@ -24,6 +24,14 @@ Notes / residue:
   coordinator-handoff state lives in the main checkout — consistent within each mod (session ids are unique); noted, not a defect.
 - Workspace trust did not block the detached scratch worktree (F ran).
 
+## `/verify` (repo skill) — task surfaces, 2026-10-02 ~21:56 CDT
+
+`mise run coordinator-handoff -- decide` against temp jobs/state dirs: 29% → `below-limit` (fire false); 30% → `fire` level 30;
+33% → `below-next-step` (next 35); 35% → `fire` level 35; a lane-named session at 90% → `not-coordinator` and NO state file
+written (only the coordinator's `<id>.json` + `.lock` exist). `retire --dry-run` with no launch record → rc 2 `no (valid) launch
+record`. `name --feature verify-probe` → `dotfiles-20261002T215629.487941000-05.verify-probe`. `mise run session-start -- --help`
+rc 0. `dotfiles-setup hook selfcheck` → all 7 PASS, `hook-selfcheck: OK`. All rc as expected.
+
 ## GitHub repos touched
 
 _None._
