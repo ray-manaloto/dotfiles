@@ -1,0 +1,97 @@
+# Saved GitHub searches — closing a session without losing background work (2026-10-03)
+#
+# From docs/research/kb/reports/agents/session-close-background-work-handover-2026-10-03.md
+# (Recommendation). DRAFT [[watch]] schema as orchestration-2026-10-02.toml. Run with
+# `gh api -X GET search/issues -f sort=updated -f q='<query> updated:>=$DATE'`
+# (never `gh search issues --repo`, which returns 0 silently here). Must-hit: SubagentHandback >= 2.
+# Also scan release notes: see the report's release-note jq filter.
+
+schema_version = 1
+
+[[watch]]
+id       = "close-stop-vs-subagent"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue "claude stop" subagent']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-handback"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue SubagentHandback']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-exit-handoff"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue "DISABLE_BG_EXIT_HANDOFF" OR "carry over" background']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-subagentstop-gaps"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue SubagentStop TaskStop']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-idle-notify"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue notify_when_idle']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-revive"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue "claimed-spare" OR "claude stop" revive OR cron']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-print-drain"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:anthropics/claude-code is:issue CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "close-ours"
+kind     = "issues"
+origin   = "topic:session-close-background-work"
+question = "Can a closing coordinator/watcher/lane drain or hand its background work (subagents, bash, workflows, codex lanes) to a successor?"
+cadence  = "weekly"
+tags     = ["orchestration", "session-lifecycle"]
+queries  = ['repo:ray-manaloto/dotfiles coordinator-handoff retire']
+control_hit    = 'repo:anthropics/claude-code SubagentHandback'
+control_absent = 'repo:ray-manaloto/dotfiles "{nonce}"'

@@ -1,0 +1,199 @@
+# Saved GitHub searches — role-addressed session messaging (2026-10-03)
+#
+# Re-runnable record of the searches proposed in
+# docs/research/kb/reports/agents/role-addressed-session-messaging-2026-10-03.md (Recommendation).
+# Same DRAFT [[watch]] schema as orchestration-2026-10-02.toml (see its header); measured
+# results live in [[result]] keyed by watch_id. Tune with is:open / created:>YYYY-MM-DD.
+# Cross-repo rows tokenise loosely: read the top 10, never trust the count.
+
+schema_version = 1
+
+[[watch]]
+id       = "role-cc-session-name-alias"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:anthropics/claude-code SendMessage session name']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "role-cc-listagents"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:anthropics/claude-code ListAgents']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "role-cc-crosssession-rename"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:anthropics/claude-code cross-session rename name']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "role-cc-sendmessage-dropped"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:anthropics/claude-code SendMessage silently']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id       = "role-mam-project-mailbox"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:Dicklesworthstone/mcp_agent_mail_rust project mailbox']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:Dicklesworthstone/mcp_agent_mail_rust "{nonce}"'
+
+[[watch]]
+id       = "role-mam-identity"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:Dicklesworthstone/mcp_agent_mail_rust identity']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:Dicklesworthstone/mcp_agent_mail_rust "{nonce}"'
+
+[[watch]]
+id       = "role-peers-claims"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['repo:jamditis/claude-peers-mcp claim']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = 'repo:jamditis/claude-peers-mcp "{nonce}"'
+
+[[watch]]
+id       = "role-xrepo-coordinator-successor"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['"claude code" coordinator successor session']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = '"{nonce}" "claude code"'
+
+[[watch]]
+id       = "role-xrepo-role-registry-agent"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['"role registry" agent session']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = '"{nonce}" "claude code"'
+
+[[watch]]
+id       = "role-xrepo-agent-lease-heartbeat"
+kind     = "issues"
+origin   = "topic:role-addressed-messaging"
+question = "How do multi-session agent setups address a ROLE (coordinator/watcher/lane) instead of a session id across succession?"
+cadence  = "weekly"
+tags     = ["orchestration", "role-registry"]
+queries  = ['agent lease heartbeat coordinator']
+control_hit    = 'repo:anthropics/claude-code hooks'
+control_absent = '"{nonce}" "claude code"'
+
+[[result]]
+watch_id  = "role-cc-session-name-alias"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 493
+top_hits  = "#99049, #97220"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-cc-listagents"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 231
+top_hits  = "#98981, #93619"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-cc-crosssession-rename"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 160
+top_hits  = "#86531, #88992"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-cc-sendmessage-dropped"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 366
+top_hits  = "#96849"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-mam-project-mailbox"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 120
+top_hits  = "rust#282"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-mam-identity"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 93
+top_hits  = "rust#332"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-peers-claims"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 30
+top_hits  = "#99"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-xrepo-coordinator-successor"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 2488
+top_hits  = "edisonshen/fleet#332"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-xrepo-role-registry-agent"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 10252
+top_hits  = "jdylanmc/cmux-maestro#113"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
+
+[[result]]
+watch_id  = "role-xrepo-agent-lease-heartbeat"
+date_run  = "2026-10-03"
+endpoint  = "GET search/issues"
+total_count = 4095
+top_hits  = "david-rzepa/zzzops#504"
+controls  = "control_hit=8922, fresh known-absent=0 (armed once)"
