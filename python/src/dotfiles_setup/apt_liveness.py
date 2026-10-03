@@ -12,6 +12,7 @@ from __future__ import annotations
 import gzip
 import subprocess
 import sys
+import zlib
 from dataclasses import dataclass
 from http import HTTPStatus
 from pathlib import Path
@@ -66,7 +67,11 @@ def _index_versions(
         if status != HTTPStatus.OK:
             msg = f"{url}: HTTP {status}, expected 200"
             raise RuntimeError(msg)
-        packages = apt_repo.parse_packages(gzip.decompress(raw))
+        try:
+            packages = apt_repo.parse_packages(gzip.decompress(raw))
+        except (OSError, EOFError, zlib.error, KeyError, ValueError, TypeError) as exc:
+            msg = f"{url}: invalid Packages index: {exc}"
+            raise ValueError(msg) from exc
         if not packages or any(not package.version for package in packages):
             msg = f"{url}: empty or malformed Packages index"
             raise ValueError(msg)
@@ -143,7 +148,16 @@ def render_report(text: str, findings: list[Finding], *, markdown: bool) -> str:
         )
     else:
         lines.append("All exact pins are published in the live index for each arch.")
-    lines.extend(["", "Installability is checked separately by verify-apt-pins."])
+    lines.extend(
+        [
+            "",
+            (
+                "Index presence is not installability. "
+                "verify-apt-pins checks installability of active pins "
+                "on one platform only."
+            ),
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 

@@ -75,7 +75,7 @@
       "matchDatasources": [
         "deb"
       ],
-      "matchCurrentValue": "!/~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
+      "matchCurrentValue": "!/^\\d+:\\d+(?:\\.\\d+)*~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
       "registryUrls": [
         "https://archive.ubuntu.com/ubuntu?suite=resolute&components=main&binaryArch=amd64",
         "https://archive.ubuntu.com/ubuntu?suite=resolute-updates&components=main&binaryArch=amd64",
@@ -113,14 +113,14 @@
       "groupName": "image python"
     },
     {
-      "description": "LLVM exact snapshots get their own green automerging PR: docs/research/kb/reports/agents/llvm-apt-pin-churn-research-2026-10-03.md Q2 found grouped apt repairs blocked by unrelated reds. Precedent: the formerly packageRules[9] clang-p2996 rule, which stays last. Inherits the global one-hour minimumReleaseAge; no update-type restriction.",
+      "description": "LLVM exact snapshots get their own green automerging PR: docs/research/kb/reports/agents/llvm-apt-pin-churn-research-2026-10-03.md Q2 found grouped apt repairs blocked by unrelated reds. Precedent: the formerly packageRules[9] clang-p2996 rule, which stays last. minimumReleaseAge provides no soak: the deb datasource emits no releaseTimestamp and timestamp-optional proceeds when it is missing; no update-type restriction.",
       "matchDatasources": [
         "deb"
       ],
       "matchFileNames": [
         ".devcontainer/mise-system.toml"
       ],
-      "matchCurrentValue": "/~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
+      "matchCurrentValue": "/^\\d+:\\d+(?:\\.\\d+)*~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
       "groupName": "apt.llvm.org LLVM debs",
       "automerge": true,
       "automergeType": "pr",
@@ -237,7 +237,7 @@
     },
     {
       "customType": "regex",
-      "description": "#251/#288: EVERY pinned apt package in mise-system.toml [bootstrap.packages] - the 52 LLVM entries from apt.llvm.org and the 14 Ubuntu-archive entries. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end (2026-07-15 LLVM, 2026-07-16 Ubuntu): extract yields depName/currentValue/replaceString, lookup resolves with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. The value regex anchors on a LEADING DIGIT, which matches every deb version (incl. the `1:` epoch forms `1:22.1.8~++...` and `1:1.3.dfsg+really1.3.1-1ubuntu3`) while never matching \"latest\" - a negative lookahead is NOT an option here, because Renovate compiles regexes with RE2, which has no lookaround. Capture llvmMajor from snapshot currentValue, including the four major-less names, and render the LLVM suite natively with registryUrlTemplate. Ubuntu values use the release URL fallback and the scoped apt-ubuntu-pockets rule overrides it with all three pocket URLs; registryStrategy='merge' is unchanged.",
+      "description": "#251/#288: EVERY pinned apt package in mise-system.toml [bootstrap.packages] - the 58 LLVM entries (52 active + 6 commented) from apt.llvm.org and the 14 Ubuntu entries. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end (2026-07-15 LLVM, 2026-07-16 Ubuntu): extract yields depName/currentValue/replaceString, lookup resolves with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. The value regex anchors on a LEADING DIGIT, which matches every deb version (incl. the `1:` epoch forms `1:22.1.8~++...` and `1:1.3.dfsg+really1.3.1-1ubuntu3`) while never matching \"latest\" - a negative lookahead is NOT an option here, because Renovate compiles regexes with RE2, which has no lookaround. Capture llvmMajor from snapshot currentValue, including the four major-less names, and render the LLVM suite natively with registryUrlTemplate. Ubuntu values use the release URL fallback and the scoped apt-ubuntu-pockets rule overrides it with all three pocket URLs; registryStrategy='merge' is unchanged.",
       "managerFilePatterns": [
         "/^\\.devcontainer/mise-system\\.toml$/"
       ],

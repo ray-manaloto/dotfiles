@@ -74,7 +74,14 @@ def repo(tmp_path: Path) -> Path:
                     ]
                     if manager.get("datasourceTemplate") == "deb"
                 ],
-                "packageRules": [],
+                "packageRules": [
+                    rule
+                    for rule in json.loads((ROOT / "renovate.json").read_text())[
+                        "packageRules"
+                    ]
+                    if "apt-ubuntu-pockets" in rule.get("description", "")
+                    or rule.get("groupName") == "apt.llvm.org LLVM debs"
+                ],
             }
         ),
     }
@@ -456,6 +463,74 @@ def test_actual_tree_parity() -> None:
     assert llvm_major.parity_violations(ROOT) == []
 
 
+@pytest.mark.parametrize("fault", ["delete", "release", "updates", "security", "extra"])
+def test_ubuntu_pocket_parity_requires_exact_urls(repo: Path, fault: str) -> None:
+    """All three canonical amd64 main pockets are required together."""
+    assert llvm_major.parity_violations(repo) == []
+    file = repo / "renovate.json"
+    config = json.loads(file.read_text())
+    rule = config["packageRules"][0]
+    if fault == "delete":
+        config["packageRules"].remove(rule)
+    elif fault == "extra":
+        rule["registryUrls"].append(rule["registryUrls"][0])
+    else:
+        index = ["release", "updates", "security"].index(fault)
+        rule["registryUrls"][index] = rule["registryUrls"][index].replace(
+            "components=main", "components=universe"
+        )
+    file.write_text(json.dumps(config))
+    assert any("Ubuntu pockets" in item for item in llvm_major.parity_violations(repo))
+
+
+def test_ubuntu_pocket_parity_derives_codename_from_template(repo: Path) -> None:
+    """A different valid template codename must bind its own three pockets."""
+    file = repo / "renovate.json"
+    file.write_text(file.read_text().replace("resolute", "future"))
+    assert llvm_major.parity_violations(repo) == []
+    config = json.loads(file.read_text())
+    config["packageRules"][0]["registryUrls"][1] = config["packageRules"][0][
+        "registryUrls"
+    ][1].replace("future", "resolute")
+    file.write_text(json.dumps(config))
+    assert any("Ubuntu pockets" in item for item in llvm_major.parity_violations(repo))
+
+
+@pytest.mark.parametrize("encoding", ["group", "negation", "capture"])
+def test_snapshot_signature_parity_refuses_drift(repo: Path, encoding: str) -> None:
+    """Parity rejects each stale encoding of the canonical snapshot signature."""
+    file = repo / "renovate.json"
+    config = json.loads(file.read_text())
+    if encoding == "capture":
+        manager = config["customManagers"][0]
+        manager["matchStrings"][0] = manager["matchStrings"][0].replace(
+            r"\d+:", r"(?:\d+:)?", 1
+        )
+    else:
+        rule = config["packageRules"][1 if encoding == "group" else 0]
+        rule["matchCurrentValue"] = (
+            "!" if encoding == "negation" else ""
+        ) + r"/~\+\+\d{14}\+[0-9a-f]+-1~exp1~/"
+    file.write_text(json.dumps(config))
+    assert llvm_major.parity_violations(repo)
+
+
+@pytest.mark.parametrize("first_comment", [False, True])
+@pytest.mark.parametrize("second_comment", [False, True])
+def test_bootstrap_pins_rejects_duplicate_names_with_both_lines(
+    *, first_comment: bool, second_comment: bool
+) -> None:
+    """Active and commented duplicates must never collapse into one dict entry."""
+    text = (
+        '# header\n[env]\nvalue = "before"\n[bootstrap.packages]\n'
+        f'{"# " if first_comment else ""}"apt:curl" = "1"\n'
+        "\n"
+        f'{"# " if second_comment else ""}"apt:curl" = "2"\n'
+    )
+    with pytest.raises(ValueError, match=r"duplicate.*curl.*lines 5 and 7"):
+        llvm_major.bootstrap_pins(text)
+
+
 @pytest.mark.parametrize("fault", ["capture", "override", "duplicate", "literal"])
 def test_native_registry_parity_refuses_drift(repo: Path, fault: str) -> None:
     """Require a version-major capture and protection from URL overrides."""
@@ -605,7 +680,12 @@ def test_plan_rejects_duplicate_rewrite_targets(repo: Path, site: str) -> None:
         "resolute", 22, 23, 23, {}, 24, {}, None, "control"
     )
     names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
-    with pytest.raises(ValueError, match="expected exactly one rewrite, got 2"):
+    message = (
+        "duplicate apt package 'clang-22-doc' on lines 11 and 13"
+        if site == "pin"
+        else "expected exactly one rewrite, got 2"
+    )
+    with pytest.raises(ValueError, match=message):
         llvm_major.plan_bump(
             repo,
             detection,

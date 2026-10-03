@@ -239,3 +239,38 @@ def test_actual_tree_inventory() -> None:
     assert sum(active for _, active in pins.values()) == 66
     assert len(llvm) == 58
     assert sum(active for _, active in llvm.values()) == 52
+
+
+def test_report_limits_installability_claim() -> None:
+    report = apt_liveness.render_report(TEXT, [], markdown=True)
+    assert "Index presence is not installability." in report
+    assert (
+        "verify-apt-pins checks installability of active pins on one platform only"
+        in report
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        gzip.compress(paragraph("clang-22", VERSION).encode())[:-4],
+        b"\x1f\x8b\x08\x00" + b"\x00" * 6 + b"\x07" + b"\x00" * 8,
+        b"bad gzip",
+        gzip.compress(b"Package: broken\n\n"),
+    ],
+    ids=["truncated-gzip", "corrupt-deflate", "bad-gzip-header", "missing-version"],
+)
+def test_cli_malformed_index_fails_cleanly_with_url(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], raw: bytes
+) -> None:
+    (tmp_path / ".devcontainer").mkdir()
+    for name in (".devcontainer/Dockerfile", "docker-bake.hcl"):
+        (tmp_path / name).write_text((ROOT / name).read_text())
+    (tmp_path / ".devcontainer/mise-system.toml").write_text(TEXT)
+    fetch, seen = network(malformed=raw)
+    assert apt_liveness.apt_liveness_main(tmp_path, fetch=fetch) == 1
+    output = capsys.readouterr()
+    assert "apt pin liveness failed:" in output.err
+    assert seen[-1] in output.err
+    assert "Traceback" not in output.err
+    assert output.out == ""

@@ -42,6 +42,7 @@ _PIN = re.compile(
     re.MULTILINE,
 )
 _APT_LLVM_VERSION = re.compile(r"^\d+:\d+(?:\.\d+)*~\+\+\d{14}\+[0-9a-f]+-1~exp1~")
+_PACKAGE_SECTION = re.compile(r"(?ms)^\[bootstrap\.packages\]\s*\n(.*?)(?=^\[|\Z)")
 _LITERAL = re.compile(
     r"/usr/lib/llvm-\d+\b|llvm-toolchain-[\w%{}.-]+-\d+\b|"
     r"(?:apt:)?clang-\d+\b"
@@ -150,7 +151,7 @@ def fetch_releases() -> list[dict]:
 
 def _package_section(text: str) -> str:
     """Limit pin matching to the declared bootstrap package table."""
-    match = re.search(r"(?ms)^\[bootstrap\.packages\]\s*\n(.*?)(?=^\[|\Z)", text)
+    match = _PACKAGE_SECTION.search(text)
     return match.group(1) if match else ""
 
 
@@ -193,11 +194,21 @@ def llvm_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]:
 
 
 def bootstrap_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]:
-    """Return every active/commented apt pin in the bootstrap package table."""
-    return {
-        match["name"]: (match["version"], not bool(match["comment"]))
-        for match in _PIN.finditer(_package_section(mise_system_text))
-    }
+    """Return all apt pins, rejecting active/commented duplicates with line numbers."""
+    section = _PACKAGE_SECTION.search(mise_system_text)
+    if section is None:
+        return {}
+    pins: dict[str, tuple[str, bool]] = {}
+    lines: dict[str, int] = {}
+    for match in _PIN.finditer(section[1]):
+        name = match["name"]
+        line = mise_system_text.count("\n", 0, section.start(1) + match.start()) + 1
+        if name in pins:
+            msg = f"duplicate apt package {name!r} on lines {lines[name]} and {line}"
+            raise ValueError(msg)
+        pins[name] = (match["version"], not bool(match["comment"]))
+        lines[name] = line
+    return pins
 
 
 def pinned_major(mise_system_text: str) -> int:
@@ -538,10 +549,14 @@ def _renovate_violations(text: str, codename: str | None = None) -> list[str]:
         return [
             "renovate.json suite template must follow llvmMajor and the base codename"
         ]
+    # The quote before currentValue anchors this capture at the value's start;
+    # Renovate's file-level regex cannot use ^ to anchor an individual value.
+    snapshot = _APT_LLVM_VERSION.pattern.removeprefix("^").replace(
+        r"\d+:\d+", r"\d+:(?<llvmMajor>\d+)", 1
+    )
     pattern = (
         r'"apt:(?<depName>[a-z0-9.+-]+)"\s*=\s*"'
-        r"(?<currentValue>(?:\d+:(?<llvmMajor>\d+)(?:\.\d+)*"
-        r'~\+\+\d{14}\+[0-9a-f]+-1~exp1~[^"]*|[0-9][^"]*))"'
+        rf'(?<currentValue>(?:{snapshot}[^"]*|[0-9][^"]*))"'
     )
     if (
         manager.get("matchStrings") != [pattern]
@@ -550,15 +565,39 @@ def _renovate_violations(text: str, codename: str | None = None) -> list[str]:
         return [
             "renovate.json LLVM version-major capture must preserve snapshot routing"
         ]
-    overrides = [
-        rule for rule in config.get("packageRules", []) if rule.get("registryUrls")
+    selector = f"/{_APT_LLVM_VERSION.pattern}/"
+    rules = config.get("packageRules", [])
+    groups = [
+        rule for rule in rules if rule.get("groupName") == "apt.llvm.org LLVM debs"
     ]
-    if any(
-        rule.get("matchCurrentValue") != r"!/~\+\+\d{14}\+[0-9a-f]+-1~exp1~/"
+    violations = []
+    if len(groups) != 1 or groups[0].get("matchCurrentValue") != selector:
+        violations.append("renovate.json LLVM group must match the snapshot signature")
+    overrides = [rule for rule in rules if rule.get("registryUrls")]
+    if any(rule.get("matchCurrentValue") != f"!{selector}" for rule in overrides):
+        violations.append(
+            "renovate.json registryUrls overrides must exclude LLVM snapshots"
+        )
+    pockets = [
+        rule
         for rule in overrides
-    ):
-        return ["renovate.json registryUrls overrides must exclude LLVM snapshots"]
-    return []
+        if rule.get("matchDatasources") == ["deb"]
+        and rule.get("matchCurrentValue") == f"!{selector}"
+    ]
+    urls = [
+        f"https://{host}.ubuntu.com/ubuntu?suite={match['dist']}{pocket}"
+        "&components=main&binaryArch=amd64"
+        for host, pocket in (
+            ("archive", ""),
+            ("archive", "-updates"),
+            ("security", "-security"),
+        )
+    ]
+    if len(pockets) != 1 or pockets[0].get("registryUrls") != urls:
+        violations.append(
+            "renovate.json Ubuntu pockets must contain exactly the three canonical URLs"
+        )
+    return violations
 
 
 def _config_violations(root: Path, text: str, major: int) -> list[str]:
