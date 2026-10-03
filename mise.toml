@@ -155,7 +155,24 @@ pin = true
 # entry while ~/.config/mise/config.toml listed antigravity-cli), so it is repeated here. The
 # former `npm:@openai/codex` entry went with the shared.toml codex pin it disabled
 # (docs/specs/native-cli-devcontainer-2026-10-01.md). No repo config pins codex/claude at all.
-disable_tools = ["antigravity-cli"]
+# A short name does NOT disable its full backend spec (session-audit-bugs-2026-10-01c.md B2), and the
+# registry short names `agy`/`claude` are separate entries again (code-review-session-audit-20261001-000-
+# 2026-10-02.md #1; arm: an agy+claude+ruff pin lists all three under the old list, only ruff under this).
+disable_tools = [
+  "antigravity-cli",
+  "agy",
+  "aqua:google-antigravity/antigravity-cli",
+  "codex",
+  "aqua:openai/codex",
+  "github:openai/codex",
+  "npm:@openai/codex",
+  "claude",
+  "claude-code",
+  "aqua:anthropics/claude-code",
+  "http:claude",
+  "github:anthropics/claude-code",
+  "npm:@anthropic-ai/claude-code",
+]
 
 [settings.status]
 show_tools = true
@@ -977,7 +994,7 @@ description = "Report Mend-hosted Renovate install + privileges + open update PR
 run = 'uv run --project python dotfiles-setup renovate-status'
 
 [tasks.ship]
-description = "Gate matrix → push → open/update PR → watch checks to verified green"
+description = "Gate matrix → push → open/update PR → arm native auto-merge and return (body = --fill; edit with gh pr edit --body-file)"
 # Thin caller per zero-bash-logic; orchestration in
 # python/src/dotfiles_setup/pr.py. Requires committed work on a feature
 # branch (refuses main / dirty tree). Devcontainer-surface diffs trigger

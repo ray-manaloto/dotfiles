@@ -4,8 +4,9 @@
 > scoped, this rule loaded only after the wrong invocation. Archaeology:
 > `docs/rules-evidence/ai-cli-invocation.md`.
 
-Invoke every AI CLI through `mise exec --` and re-probe its help before copying flags. For codex that
-resolves the host's NATIVE install (root `mise.toml` disables the npm pin), not a stale PATH entry.
+Invoke codex and opencode through `mise exec --`, agy by its absolute native path (below), and re-probe
+each CLI's help before copying flags. For codex `mise exec` resolves the host's NATIVE install (root
+`mise.toml` disables the npm pin), not a stale PATH entry.
 Wrong flags are version-sensitive and may waste a lane before anyone notices.
 Team work goes through `mise run sdlc-team`; single-role lanes use the `codex-{sol,astra}-*`
 wrappers; `mise run codex-lane` is only the DAG review-node producer. The class fix that
@@ -43,7 +44,7 @@ Sandbox: `sdlc-team` passes no `-s` (the machine's `danger-full-access` is the a
 This is the canonical argv block. Until the class fix, the 12 codex wrappers still carry their own
 (sonnet, background launch, `$LOG.rc` completion file); keep them consistent with this block.
 
-## Codex facts (probed at 0.152.1; the host now runs native 0.156.x — re-probe before relying)
+## Codex facts (probed at 0.152.1; host runs native 0.160.0 as of 2026-10-02 — re-probe before relying)
 
 - `codex exec --full-auto` does not exist. `codex exec --help` contains zero
   `--full-auto` matches and two `workspace-write` matches.
@@ -64,8 +65,9 @@ contract.
 ## Gemini and OpenCode traps
 
 Invoke agy by its NATIVE path, `"$HOME/.local/bin/agy"` (Ray, 2026-10-01: native installer only,
-self-updating via `agy update`; every mise name for it is in `disable_tools`). A leftover mise copy
-can sit AHEAD of it on PATH, so never rely on bare `agy` or `mise exec -- agy`.
+self-updating via `agy update` (codex: `codex update`, claude: `claude update`); every mise name for it
+is in `disable_tools`). A leftover mise copy can sit AHEAD of it on PATH, so never rely on bare `agy`
+or `mise exec -- agy`.
 
 `agy --print --output-format …` fails rc=2 (`--print took "--output-format" as its prompt`); a stdin-only
 prompt is rejected (`flag needs an argument: -print`), and `--print -` takes `-` as the prompt (re-probed 2026-09-25, agy 1.2.11).
@@ -96,7 +98,7 @@ to invent; grep the `$CC/` corpus for it before citing it.
 ## Re-probe rule
 
 The invariant is **wrong flags fail or misbehave silently enough to waste the
-lane**. Before changing any invocation, run the pinned CLI's own help:
+lane**. Before changing any invocation, run the installed CLI's own help:
 
 ```text
 mise exec -- codex exec --help
