@@ -60,7 +60,7 @@ def _full_settings() -> dict:
         "hooks": {
             "PreToolUse": [
                 _hook(
-                    "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob",
+                    "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
                     f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
                 )
             ],
@@ -289,7 +289,7 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
     settings = _full_settings()
     settings["hooks"]["PreToolUse"] = [
         _hook(
-            "Bash|AskUserQuestion|Write|NotebookEdit|Grep|Read|Glob",
+            "Bash|AskUserQuestion|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
             f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
         )
     ]
@@ -299,7 +299,7 @@ def test_a_substring_matcher_does_not_satisfy_a_required_token(
     # 'Edit', so an unscoped positive assertion here could be satisfied by a
     # DIFFERENT row's failure and never actually prove PreToolUse was flagged.
     assert any("'Edit'" in f for f in pretooluse_failures)
-    # …and only that one: the seven tokens actually present must not be
+    # …and only that one: the eight tokens actually present must not be
     # flagged, or the test would pass for the wrong reason. This scoping only
     # narrows what the negative assertion scans — it makes the assertion
     # EASIER to satisfy (weaker), guarding against a future false RED, not
@@ -320,7 +320,7 @@ def _full_settings_with_graphify_pretooluse() -> dict:
     settings = _full_settings()
     settings["hooks"]["PreToolUse"] = [
         _hook(
-            "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob",
+            "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
             f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
         ),
         _hook("Bash|Grep", f"/bin/bash {_ANCHOR}/scripts/sibling-hook.sh search"),
@@ -349,7 +349,7 @@ def test_sibling_entry_matcher_does_not_satisfy_the_owning_entry(
     """
     settings = _full_settings_with_graphify_pretooluse()
     settings["hooks"]["PreToolUse"][0] = _hook(
-        "AskUserQuestion|Edit|Write|NotebookEdit",
+        "AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
         f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh",
     )
     failures = _wiring(tmp_path, settings)
@@ -369,7 +369,10 @@ def _full_settings_with_pretooluse_matcher_split_across_two_owners() -> dict:
     guard_command = f"/bin/bash {_ANCHOR}/scripts/pretooluse-guard.sh"
     settings["hooks"]["PreToolUse"] = [
         _hook("Bash", guard_command),
-        _hook("AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob", guard_command),
+        _hook(
+            "AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
+            guard_command,
+        ),
     ]
     return settings
 
@@ -378,10 +381,10 @@ def test_matcher_tokens_split_across_two_owning_entries_fails(tmp_path: Path) ->
     """C1/C7: no SINGLE entry may satisfy the row by pooling with a sibling.
 
     Both entries here carry the guard's exact command, so round 2's per-owner
-    union would combine `Bash` from one with the other seven tokens from the
-    other and report fully wired. Neither entry alone carries all eight
+    union would combine `Bash` from one with the other eight tokens from the
+    other and report fully wired. Neither entry alone carries all nine
     required matcher tokens, so this must fail — the control arm is
-    `test_synthetic_full_settings_passes`, where the SAME eight tokens live on
+    `test_synthetic_full_settings_passes`, where the SAME nine tokens live on
     ONE entry and the row passes cleanly.
     """
     failures = _wiring(
@@ -490,6 +493,102 @@ def test_pretooluse_dropping_a_graphify_tool_fails(tmp_path: Path, tool: str) ->
     entry["matcher"] = "|".join(t for t in entry["matcher"].split("|") if t != tool)
     failures = _wiring(tmp_path, settings)
     assert any("PreToolUse" in f and f"'{tool}'" in f for f in failures), failures
+
+
+def test_pretooluse_dropping_enterworktree_fails(tmp_path: Path) -> None:
+    """Dropping just EnterWorktree must fail the owning matcher check."""
+    settings = _full_settings()
+    entry = settings["hooks"]["PreToolUse"][0]
+    entry["matcher"] = entry["matcher"].replace("|EnterWorktree", "")
+    failures = _wiring(tmp_path, settings)
+    assert len(failures) == 1, failures
+    assert "PreToolUse" in failures[0]
+    assert "'EnterWorktree'" in failures[0]
+
+
+def test_worktree_guard_endtoend_passes_on_real_repo() -> None:
+    """Pin both EnterWorktree arms through the wrapper, not just the matcher."""
+    wrapper = str(_REPO / hook_selfcheck.PRETOOLUSE_WRAPPER)
+    assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
+
+
+def test_worktree_guard_endtoend_ignores_host_git_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host-wide REJECTING pre-commit must not reach the selfcheck's fixture.
+
+    The hostile config is both ``GIT_CONFIG_GLOBAL`` and ``$HOME/.gitconfig``,
+    so stripping every ``GIT_*`` variable (falling back to HOME) and keeping
+    the inherited global config both let it run. Control arm: the same config
+    really does reject a commit in an ordinary repo.
+    """
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    pre_commit = hooks / "pre-commit"
+    pre_commit.write_text("#!/bin/sh\necho host-hook-rejected >&2\nexit 1\n")
+    pre_commit.chmod(0o755)
+    home = tmp_path / "home"
+    home.mkdir()
+    hostile = home / ".gitconfig"
+    hostile.write_text(
+        "[user]\n\tname = T\n\temail = t@example.com\n"
+        f"[core]\n\thooksPath = {hooks}\n"
+        '[hook "reject"]\n\tcommand = exit 1\n\tevent = pre-commit\n'
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(hostile))
+
+    control = tmp_path / "control"
+    control.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=control, check=True, timeout=10)
+    rejected = subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "x"],
+        cwd=control,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+
+    wrapper = str(_REPO / hook_selfcheck.PRETOOLUSE_WRAPPER)
+    assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
+
+
+def test_worktree_guard_endtoend_ignores_template_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``GIT_TEMPLATE_DIR`` post-checkout that rejects must not reach it.
+
+    ``git rev-parse --local-env-vars`` does not list ``GIT_TEMPLATE_DIR``, so
+    the git-local scrub keeps it; ``init`` would copy the hook and every
+    ``worktree add`` would run it. Control arm: the same template really does
+    fail a plain ``git worktree add``.
+    """
+    template = tmp_path / "template"
+    (template / "hooks").mkdir(parents=True)
+    post_checkout = template / "hooks" / "post-checkout"
+    post_checkout.write_text("#!/bin/sh\necho template-hook-rejected >&2\nexit 1\n")
+    post_checkout.chmod(0o755)
+    monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template))
+
+    control = tmp_path / "control"
+    control.mkdir()
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "x"]):
+        subprocess.run(["git", *args], cwd=control, check=True, timeout=10)
+    rejected = subprocess.run(
+        ["git", "worktree", "add", "-b", "lane", str(tmp_path / "lane")],
+        cwd=control,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert rejected.returncode != 0, rejected.stdout + rejected.stderr
+    assert "template-hook-rejected" in rejected.stderr
+
+    wrapper = str(_REPO / hook_selfcheck.PRETOOLUSE_WRAPPER)
+    assert hook_selfcheck.check_worktree_guard_endtoend(_REPO, wrapper) == []
 
 
 def test_missing_instructions_loaded_fails(tmp_path: Path) -> None:

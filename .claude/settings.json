@@ -69,7 +69,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob",
+        "matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree",
         "hooks": [
           {
             "type": "command",

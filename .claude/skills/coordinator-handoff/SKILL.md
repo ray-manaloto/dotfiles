@@ -43,8 +43,18 @@ Run `.claude/skills/session-handoff/SKILL.md` in full, under its
   AskUserQuestion, never a stall. The successor puts them to Ray.
 - Nothing flagged as questionable is committed or posted.
 - Write the tracked copy `docs/handoffs/session-<YYYY-MM-DD><letter>.md` on a
-  `docs/handoff-<YYYY-MM-DD><letter>` branch and ship it early as a PR with
-  `mise run ship` from the main checkout, launched as a harness background run
+  `docs/handoff-<YYYY-MM-DD><letter>` branch in a worktree created from the
+  main checkout with `EnterWorktree name=handoff-<YYYY-MM-DD><letter>`
+  (lands at `<main>/.claude/worktrees/…`), never `../dotfiles.worktrees/`.
+  Re-enter that existing registered worktree with
+  `EnterWorktree path=<main>/.claude/worktrees/<name>`.
+  Ship the docs-only handoff branch early as a PR with `mise run ship` from
+  the handoff worktree itself: the ship preflight (`pr._ship_preflight`) refuses
+  a linked worktree only when `needs_full_sync` is true, so a docs-only change
+  ships from it.
+  Before any main-checkout ship, use `ExitWorktree` with `keep` to leave the
+  isolated session; never redirect Bash into main while in EnterWorktree.
+  Launch ship as a harness background run
   with a file-captured rc (its push carries the ssh keepalive). If another
   ship holds the host slot, push the branch now and put its ship at the head
   of the queue.
@@ -55,8 +65,11 @@ Run `.claude/skills/session-handoff/SKILL.md` in full, under its
 
 ```bash
 mise run coordinator-handoff -- launch \
-  --handoff docs/handoffs/session-<YYYY-MM-DD><letter>.md --old-session <id>
+  --handoff <main>/.claude/worktrees/<name>/docs/handoffs/session-<YYYY-MM-DD><letter>.md --old-session <id>
 ```
+
+`--handoff` must be an **absolute path**; a relative path from a worktree
+returned rc 2 on 2026-10-03.
 
 It records the census of this session's live heavy runs, as defined by
 `HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts
