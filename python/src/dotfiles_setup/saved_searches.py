@@ -590,7 +590,9 @@ def _collect_all(
         answer = _direct(query, watch, boundaries, timeout, page=page)
         if answer.status != RerunStatus.ok:
             return answer
-        if page == 1 and answer.count > _RESULT_CAP:
+        # Every page, not just the first: a total that grows past the cap mid-run
+        # would otherwise end as a "complete" set missing hits (codex lens P2).
+        if answer.count > _RESULT_CAP:
             return _Answer(
                 -1,
                 RerunStatus.uncollectable,
@@ -818,7 +820,8 @@ def _run_other(
                 runner=boundaries.runner,
             )[0]
             status = _FANOUT_STATUS[result.status]
-            count = len(result.items)
+            # a failed or skipped fetch has no count: -1, never a measured 0
+            count = -1 if status == RerunStatus.error else len(result.items)
             urls = [item.url for item in result.items]
             reason = (
                 None
@@ -901,7 +904,9 @@ def _previous(
             raise _invalid(path, "<snapshot>", "snapshot") from None
         if snapshot.file == str(file) and when < now:
             candidates.append((when, path, snapshot))
-    # oldest first, so a newer snapshot's entry overwrites an older one per key
+    # Oldest first, so a newer snapshot's entry overwrites an older one per key.
+    # Only ANSWERED runs overwrite: a failed run between {A} and {A,B} would
+    # otherwise become the previous run and hide B as NEW for good (codex lens P2).
     for _, _, snapshot in sorted(candidates, key=lambda item: item[0]):
         chosen.update(
             (
@@ -909,6 +914,7 @@ def _previous(
                 _Previous(run.count, tuple(run.urls), run.status, run.complete is True),
             )
             for run in snapshot.watches
+            if str(run.status) in _COMPARABLE
         )
     if not candidates:
         return "baseline", chosen

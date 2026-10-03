@@ -64,6 +64,9 @@ class _Runner:
             )
         if "-i" not in argv:
             payload = self.plain[argv[2]]
+            if payload is None:
+                # a gh failure at the process boundary
+                return subprocess.CompletedProcess(argv, 1, b"", b"HTTP 502")
             return subprocess.CompletedProcess(
                 argv, 0, json.dumps(payload).encode(), b""
             )
@@ -1147,6 +1150,34 @@ def test_repo_fanout_uses_returned_items(
     assert _rows(_snapshot(tmp_path))["issue"]["count"] == 1
 
 
+def test_failed_fanout_rerun_counts_minus_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed repo-scoped fetch records count -1, not a measured drop to 0.
+
+    FAIL arm: set `count = len(result.items)` unconditionally in `_run_other`
+    (codex lens P2, 2026-10-03).
+    """
+    tool = tmp_path / "gh"
+    tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    tool.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    path = tmp_path / "search.toml"
+    _write(
+        path,
+        [{"id": "issue", "kind": "issues", "repo": "a/b", "queries": ["term"]}],
+    )
+    runner = _Runner(plain={"/search/issues?q=repo:a/b+term&per_page=10": None})
+    assert (
+        main(
+            ["rerun", str(path)], tmp_path, runner=runner, timing=_Timing().boundaries()
+        )
+        == 1
+    )
+    row = _rows(_snapshot(tmp_path))["issue"]
+    assert (row["status"], row["count"]) == ("error", -1)
+
+
 def test_draft_issues_use_total_count_and_controls(tmp_path: Path) -> None:
     """Draft issues preserve total_count rather than the truncated item count.
 
@@ -1417,6 +1448,57 @@ def test_first_full_collection_does_not_diff_a_top_window(
     assert _rerun(tmp_path, path, runner, _Timing()) == 0
     first = "n/a (first full collection)"
     assert _query_line(capsys.readouterr().out).endswith(f"| {first} | {first} |")
+
+
+def test_collect_all_cap_rechecked_on_every_page(tmp_path: Path) -> None:
+    """A total that grows past 1000 after page 1 is `uncollectable`, not complete.
+
+    FAIL arm: guard the cap with `page == 1 and` again (codex lens P2).
+    """
+    path = tmp_path / "search.toml"
+    _write(path, _all_watch())
+    runner = _Runner(
+        {
+            _HEALTH: {"count": 1},
+            _HIT_SHAPE: {"count": 1},
+            _QUERY: {
+                "pages": [
+                    {"count": 900, "items": _items(100)},
+                    {"count": 1200, "items": _items(100, 100)},
+                ]
+            },
+        }
+    )
+    assert _rerun(tmp_path, path, runner, _Timing()) == 1
+    row = _rows(_snapshot(tmp_path))["query"]
+    assert (row["status"], row["urls"]) == ("uncollectable", [])
+    assert len(_search_calls(runner, _QUERY)) == 2
+
+
+def test_failed_rerun_keeps_last_answered_baseline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """{A} ok, then a failure, then {A,B}: B is NEW against {A}, not hidden.
+
+    FAIL arm: drop the `if str(run.status) in _COMPARABLE` filter in `_previous`
+    (codex lens P2).
+    """
+    path = tmp_path / "search.toml"
+    _write(path, _all_watch())
+    timing = _Timing()
+    runner = _Runner(
+        {_HEALTH: {"count": 1}, _HIT_SHAPE: {"count": 1}, _QUERY: _paged(_items(1))}
+    )
+    assert _rerun(tmp_path, path, runner, timing) == 0
+    timing.now += 2
+    runner.replies[_QUERY] = {"http": 500, "body": {"message": "boom"}}
+    assert _rerun(tmp_path, path, runner, timing) == 1
+    timing.now += 2
+    runner.replies[_QUERY] = _paged(_items(2))
+    capsys.readouterr()
+    assert _rerun(tmp_path, path, runner, timing) == 0
+    row = _query_line(capsys.readouterr().out)
+    assert row.endswith("| https://github.com/o/r1/blob/HEAD/f.rs |  |")
 
 
 def test_code_query_defaults_to_collect_all(tmp_path: Path) -> None:
