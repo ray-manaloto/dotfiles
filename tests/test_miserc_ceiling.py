@@ -54,8 +54,9 @@ def test_worktree_does_not_inherit_main_checkout_config(
     inherited = _task_info(worktree, main, "ceiling-from-main")
     assert inherited.returncode != 0, inherited.stdout
     own = _task_info(worktree, main, "ceiling-from-wt")
+    # A render failure is caught here, not by stderr: mise reads .miserc.toml
+    # before its logger starts, so the render warning is never printed.
     assert own.returncode == 0, own.stderr
-    assert "Failed to render template in miserc" not in own.stderr
 
 
 def test_worktree_without_the_line_inherits_main_config(
@@ -81,3 +82,5 @@ def test_ceiling_works_from_a_worktree_subdirectory(
     subdirectory.mkdir()
     inherited = _task_info(subdirectory, main, "ceiling-from-main")
     assert inherited.returncode != 0, inherited.stdout
+    own = _task_info(subdirectory, main, "ceiling-from-wt")
+    assert own.returncode == 0, own.stderr
