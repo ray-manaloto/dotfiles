@@ -202,6 +202,48 @@ jobs:
           path: /tmp/llvm-currency.md
           if-no-files-found: ignore
 
+  apt-pin-liveness:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install mise (all tools)
+        uses: $/.github/actions/setup-mise
+      - name: Check apt pin publication
+        id: check
+        run: |
+          set -uo pipefail
+          rc=0
+          mise run apt-liveness -- --markdown > /tmp/apt-pin-liveness.md || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          case "$rc" in 0|3) ;; *) exit "$rc";; esac
+      - name: Upsert the apt publication report issue
+        if: steps.check.outputs.rc == '3'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run standing-issue -- --repo "$REPO" --title "apt pin liveness (daily)" --body-file /tmp/apt-pin-liveness.md
+      - name: Close the apt publication report issue
+        if: steps.check.outputs.rc == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run standing-issue -- --repo "$REPO" --title "apt pin liveness (daily)" --close --close-comment "All exact pins are published in the live index for each arch."
+      - name: Upload apt publication report artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apt-pin-liveness-report
+          path: /tmp/apt-pin-liveness.md
+          if-no-files-found: ignore
+
   tool-currency:
     # Never on pull_request — this job mutates a standing issue with
     # `issues: write` (`gh issue create`/`edit`/`close`); an ungated

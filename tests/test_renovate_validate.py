@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import renovate_validate
+from dotfiles_setup import llvm_major, renovate_validate
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -208,6 +208,34 @@ def test_cli_wires_end_to_end() -> None:
 def test_canary_config_is_serialisable() -> None:
     """The canary is written as JSON; a non-serialisable value would crash."""
     json.dumps(renovate_validate.RE2_CANARY_CONFIG)
+
+
+def test_llvm_group_is_snapshot_only_and_keeps_clang_last() -> None:
+    """Keep Ubuntu epochs in the image group and inherit LLVM's release age."""
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    rules = config["packageRules"]
+    group = rules[-2]
+    assert group["groupName"] == "apt.llvm.org LLVM debs"
+    assert rules[-1]["matchDepNames"] == ["bloomberg/clang-p2996"]
+    assert group["matchDatasources"] == ["deb"]
+    assert group["matchFileNames"] == [".devcontainer/mise-system.toml"]
+    assert group["automerge"] is True
+    assert group["automergeType"] == "pr"
+    assert group["platformAutomerge"] is True
+    assert "matchUpdateTypes" not in group
+    assert "registryUrls" not in group
+    assert group.get("minimumReleaseAge", config["minimumReleaseAge"]) == "1 hour"
+    expression = re.compile(group["matchCurrentValue"][1:-1])
+    text = (REPO_ROOT / ".devcontainer/mise-system.toml").read_text()
+    pins = llvm_major.bootstrap_pins(text)
+    matched = {
+        name for name, (version, _) in pins.items() if expression.search(version)
+    }
+    assert len(matched) == 58
+    assert len(set(pins) - matched) == 14
+    assert {"libc++1", "libc++abi1", "libomp5", "llvm-libunwind1"} <= matched
+    assert "zlib1g-dev" not in matched
+    assert matched == set(llvm_major.llvm_pins(text))
 
 
 def test_validator_routes_through_the_repo_pinned_renovate(

@@ -795,6 +795,10 @@ run = 'uv run --project python dotfiles-setup apt-repo'
 description = "Detect the newest GA LLVM major served for the base and ready in IWYU"
 run = 'uv run --project python dotfiles-setup llvm-detect'
 
+[tasks.apt-liveness]
+description = "Check exact apt pin publication on both architectures without docker"
+run = 'uv run --project python dotfiles-setup apt-liveness'
+
 [tasks.llvm-parity]
 description = "Check LLVM consumers offline against the bootstrap clang pin"
 run = 'uv run --project python dotfiles-setup llvm-parity'

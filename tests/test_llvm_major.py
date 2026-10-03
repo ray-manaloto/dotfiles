@@ -68,16 +68,17 @@ def repo(tmp_path: Path) -> Path:
         "renovate.json": json.dumps(
             {
                 "customManagers": [
-                    {
-                        "registryUrls": [
-                            "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22&components=main&binaryArch=amd64"
-                        ]
-                    }
-                ]
+                    manager
+                    for manager in json.loads((ROOT / "renovate.json").read_text())[
+                        "customManagers"
+                    ]
+                    if manager.get("datasourceTemplate") == "deb"
+                ],
+                "packageRules": [],
             }
         ),
     }
-    for name in ("image", "apt_pins", "apt_repo", "main"):
+    for name in ("image", "apt_pins", "apt_repo", "apt_liveness", "main"):
         files[f"python/src/dotfiles_setup/{name}.py"] = (
             '"""Historical clang-19 example."""\n# /usr/lib/llvm-19/bin\n'
         )
@@ -422,7 +423,7 @@ def test_iwyu_ignores_unrelated_files() -> None:
     [
         (DOCKER, "LLVM_MAJOR=22", "LLVM_MAJOR=23", "ARG LLVM_MAJOR"),
         (SYSTEM, "/usr/lib/llvm-22/bin", "/usr/lib/llvm-23/bin", "_.path"),
-        ("renovate.json", "resolute-22", "resolute-23", "renovate.json suite"),
+        ("renovate.json", "{{{llvmMajor}}}", "23", "renovate.json suite"),
         (DOCKER, "ARG LLVM_MAJOR=22", "ARG LLVM_MAJOR=22\nRUN clang-23", "literal"),
         (
             "python/src/dotfiles_setup/main.py",
@@ -453,6 +454,49 @@ def test_parity_single_fault(
 def test_actual_tree_parity() -> None:
     """The real consumers are checked, including f-string shell scripts."""
     assert llvm_major.parity_violations(ROOT) == []
+
+
+@pytest.mark.parametrize("fault", ["capture", "override", "duplicate", "literal"])
+def test_native_registry_parity_refuses_drift(repo: Path, fault: str) -> None:
+    """Require a version-major capture and protection from URL overrides."""
+    file = repo / "renovate.json"
+    config = json.loads(file.read_text())
+    manager = config["customManagers"][0]
+    if fault == "capture":
+        manager["matchStrings"][0] = manager["matchStrings"][0].replace(
+            "llvmMajor", "unused"
+        )
+    elif fault == "override":
+        config["packageRules"] = [
+            {"matchDatasources": ["deb"], "registryUrls": ["https://example.com"]}
+        ]
+    elif fault == "duplicate":
+        config["customManagers"].append(manager.copy())
+    else:
+        manager["registryUrls"] = [
+            "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22"
+        ]
+    file.write_text(json.dumps(config))
+    assert any("renovate.json" in item for item in llvm_major.parity_violations(repo))
+
+
+def test_apt_liveness_literals_are_in_parity_scope(repo: Path) -> None:
+    """The new consumer cannot silently acquire a frozen LLVM major."""
+    file = repo / "python/src/dotfiles_setup/apt_liveness.py"
+    file.write_text('query = "llvm-toolchain-resolute-22"\n')
+    assert any("literal" in item for item in llvm_major.parity_violations(repo))
+
+
+def test_native_registry_plan_rejects_wrong_base_codename(repo: Path) -> None:
+    """Native major following must not permit a suite on the wrong Ubuntu base."""
+    detection = llvm_major.Detection("future", 22, 23, 23, {}, 24, {}, None, "control")
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    before = tree_bytes(repo)
+    with pytest.raises(ValueError, match="registry suite contradicts plan codename"):
+        llvm_major.plan_bump(
+            repo, detection, plan_network(names), explicit_control=True
+        )
+    assert tree_bytes(repo) == before
 
 
 def test_commented_pin_parity(repo: Path) -> None:
@@ -490,7 +534,7 @@ def plan_network(
 
 
 def test_plan_preserves_status_and_majorless_names(repo: Path) -> None:
-    """A future bump changes only pins/path/ARG/registry suite and stays clean."""
+    """A future bump changes pins/path/ARG while the native URL stays clean."""
     detection = llvm_major.Detection(
         "resolute", 22, 23, 23, {}, 24, {}, None, "control"
     )
@@ -511,6 +555,7 @@ def test_plan_preserves_status_and_majorless_names(repo: Path) -> None:
     assert plan.pins["clang-23-doc"] == ("1:23.1.0", False)
     assert plan.pins["libomp5"] == ("1:23.1.0", True)
     assert set(plan.after) == {SYSTEM, DOCKER, "renovate.json"}
+    assert plan.after["renovate.json"] == plan.before["renovate.json"]
     assert (repo / SYSTEM).read_text() == PIN_TEXT
     plan.write(repo)
     assert llvm_major.parity_violations(repo, include_iwyu_lock=False) == []
@@ -541,7 +586,7 @@ def test_plan_rejects_existing_parity_violation(repo: Path) -> None:
     assert tree_bytes(repo) == before
 
 
-@pytest.mark.parametrize("site", ["_.path", "pin", "registryUrl", "suite"])
+@pytest.mark.parametrize("site", ["_.path", "pin"])
 def test_plan_rejects_duplicate_rewrite_targets(repo: Path, site: str) -> None:
     """Parity-clean duplicate textual targets cannot produce a writable plan."""
     if site == "_.path":
@@ -554,15 +599,6 @@ def test_plan_rejects_duplicate_rewrite_targets(repo: Path, site: str) -> None:
                 "[env]", f'  # "apt:clang-22-doc" = "{VERSION}"\n[env]'
             )
         )
-    else:
-        file = repo / "renovate.json"
-        config = json.loads(file.read_text())
-        urls = config["customManagers"][0]["registryUrls"]
-        if site == "registryUrl":
-            config["note"] = urls[0]
-        else:
-            urls[0] += "&note=llvm-toolchain-resolute-22"
-        file.write_text(json.dumps(config))
     assert llvm_major.parity_violations(repo) == []
     before = tree_bytes(repo)
     detection = llvm_major.Detection(

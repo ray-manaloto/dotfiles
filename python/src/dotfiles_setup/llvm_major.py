@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 from dotfiles_setup import apt_repo
 from dotfiles_setup.p2996_hash import _extract_bake_variable
@@ -186,9 +186,17 @@ def llvm_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]:
     """Validate parity, then return active/commented apt.llvm.org snapshot pins."""
     pinned_major(mise_system_text)
     return {
+        name: pin
+        for name, pin in bootstrap_pins(mise_system_text).items()
+        if _APT_LLVM_VERSION.match(pin[0])
+    }
+
+
+def bootstrap_pins(mise_system_text: str) -> dict[str, tuple[str, bool]]:
+    """Return every active/commented apt pin in the bootstrap package table."""
+    return {
         match["name"]: (match["version"], not bool(match["comment"]))
         for match in _PIN.finditer(_package_section(mise_system_text))
-        if _APT_LLVM_VERSION.match(match["version"])
     }
 
 
@@ -504,6 +512,55 @@ def _registry_urls(text: str) -> list[str]:
     return visit(json.loads(text))
 
 
+def _renovate_violations(text: str, codename: str | None = None) -> list[str]:
+    """Bind the native capture/template route and exclude LLVM URL overrides."""
+    config = json.loads(text)
+    managers = [
+        manager
+        for manager in config.get("customManagers", [])
+        if "apt.llvm.org" in manager.get("registryUrlTemplate", "")
+    ]
+    if len(managers) != 1 or _registry_urls(text):
+        return [
+            "renovate.json needs exactly one LLVM registryUrlTemplate, no literal URL"
+        ]
+    manager = managers[0]
+    template = manager["registryUrlTemplate"]
+    match = re.fullmatch(
+        r"\{\{#if llvmMajor\}\}https://apt\.llvm\.org/(?P<dist>[a-z]+)"
+        r"\?suite=llvm-toolchain-(?P=dist)-\{\{\{llvmMajor\}\}\}"
+        r"&components=main&binaryArch=amd64\{\{else\}\}"
+        r"https://archive\.ubuntu\.com/ubuntu\?suite=(?P=dist)"
+        r"&components=main&binaryArch=amd64\{\{/if\}\}",
+        template,
+    )
+    if match is None or (codename is not None and match["dist"] != codename):
+        return [
+            "renovate.json suite template must follow llvmMajor and the base codename"
+        ]
+    pattern = (
+        r'"apt:(?<depName>[a-z0-9.+-]+)"\s*=\s*"'
+        r"(?<currentValue>(?:\d+:(?<llvmMajor>\d+)(?:\.\d+)*"
+        r'~\+\+\d{14}\+[0-9a-f]+-1~exp1~[^"]*|[0-9][^"]*))"'
+    )
+    if (
+        manager.get("matchStrings") != [pattern]
+        or manager.get("datasourceTemplate") != "deb"
+    ):
+        return [
+            "renovate.json LLVM version-major capture must preserve snapshot routing"
+        ]
+    overrides = [
+        rule for rule in config.get("packageRules", []) if rule.get("registryUrls")
+    ]
+    if any(
+        rule.get("matchCurrentValue") != r"!/~\+\+\d{14}\+[0-9a-f]+-1~exp1~/"
+        for rule in overrides
+    ):
+        return ["renovate.json registryUrls overrides must exclude LLVM snapshots"]
+    return []
+
+
 def _config_violations(root: Path, text: str, major: int) -> list[str]:
     """Check the parameter default, path, Renovate suite and commented pins."""
     violations = []
@@ -524,18 +581,7 @@ def _config_violations(root: Path, text: str, major: int) -> list[str]:
         violations.append(
             f"mise-system.toml _.path must contain exactly /usr/lib/llvm-{major}/bin"
         )
-    urls = _registry_urls((root / "renovate.json").read_text())
-    if len(urls) != 1:
-        violations.append(
-            "renovate.json must have exactly one apt.llvm.org registryUrl"
-        )
-    else:
-        url = urlsplit(urls[0])
-        codename = url.path.strip("/")
-        if parse_qs(url.query).get("suite") != [f"llvm-toolchain-{codename}-{major}"]:
-            violations.append(
-                f"renovate.json suite must equal llvm-toolchain-{codename}-{major}"
-            )
+    violations.extend(_renovate_violations((root / "renovate.json").read_text()))
     return violations
 
 
@@ -575,7 +621,7 @@ def parity_violations(root: Path, *, include_iwyu_lock: bool = True) -> list[str
         violations.extend(_iwyu_pin_violations(pin))
         if include_iwyu_lock:
             violations.extend(_iwyu_lock_violations(root, pin, major))
-        for name in ("image", "apt_pins", "apt_repo", "main"):
+        for name in ("image", "apt_pins", "apt_repo", "apt_liveness", "main"):
             violations.extend(
                 _python_violations(root / f"python/src/dotfiles_setup/{name}.py")
             )
@@ -697,29 +743,14 @@ def plan_bump(
         before[_DOCKER],
         "ARG LLVM_MAJOR",
     )
-    urls = _registry_urls(before["renovate.json"])
-    if len(urls) != 1:
-        msg = "cannot plan without exactly one apt.llvm.org registryUrl"
+    if violations := _renovate_violations(before["renovate.json"], detection.codename):
+        msg = "registry suite contradicts plan codename: " + "; ".join(violations)
         raise ValueError(msg)
-    url = urls[0]
-    suite = f"llvm-toolchain-{detection.codename}-{pinned}"
-    if parse_qs(urlsplit(url).query).get("suite") != [suite]:
-        msg = f"registry suite contradicts plan codename/pins: expected {suite}"
-        raise ValueError(msg)
-    next_url = _rewrite_once(
-        re.escape(suite),
-        f"llvm-toolchain-{detection.codename}-{target}",
-        url,
-        "renovate suite",
-    )
-    renovate = _rewrite_once(
-        re.escape(url), next_url, before["renovate.json"], "renovate registryUrl"
-    )
     return BumpPlan(
         detection,
         pins,
         before,
-        {_SYSTEM: system, _DOCKER: docker, "renovate.json": renovate},
+        {_SYSTEM: system, _DOCKER: docker, "renovate.json": before["renovate.json"]},
         iwyu_pin,
     )
 

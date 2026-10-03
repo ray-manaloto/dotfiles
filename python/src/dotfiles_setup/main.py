@@ -19,6 +19,7 @@ from dotfiles_setup import image_lock, llvm_major, native_clis_container
 from dotfiles_setup.agentsview_pass import PassRequest
 from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
+from dotfiles_setup.apt_liveness import apt_liveness_main
 from dotfiles_setup.apt_pins import apt_pins_main
 from dotfiles_setup.apt_repo import LLVM_DEV, RepoQuery, apt_repo_main
 from dotfiles_setup.audit import DevEnvironmentAuditor, ToolManager
@@ -273,6 +274,12 @@ def _add_apt_repo_subcommand(subparsers: _SubParsers) -> None:
         help="Drop Section: libs packages (they arrive via Depends:)",
     )
     _add_llvm_subcommands(subparsers)
+    liveness = subparsers.add_parser(
+        "apt-liveness", help="Check exact apt pin publication on both arches"
+    )
+    liveness.add_argument(
+        "--markdown", action="store_true", help="Print an issue report"
+    )
 
 
 def _add_llvm_subcommands(subparsers: _SubParsers) -> None:
@@ -3104,6 +3111,9 @@ def _build_command_handlers(
         "eval": lambda: handle_eval(project_root),
         "gcc-sha": lambda: sys.exit(gcc_sha_main(project_root, check=args.check)),
         "apt-repo": lambda: sys.exit(handle_apt_repo(args, project_root)),
+        "apt-liveness": lambda: sys.exit(
+            apt_liveness_main(project_root, markdown=args.markdown)
+        ),
         "llvm-detect": lambda: sys.exit(
             llvm_major.detect_main(
                 project_root, json_output=args.json, markdown=args.markdown
