@@ -1,4 +1,15 @@
-# Spec (DRAFT for Ray's design ruling) — IWYU built from source in content-hashed stages, incl. a p2996-linked IWYU
+# Spec — IWYU built from source in content-hashed stages, incl. a p2996-linked IWYU
+
+> **RULED (Ray, 2026-10-03, relayed by coordinator dotfiles-20261003T113006.726261000-05.coordinator): all four §0
+> recommendations ACCEPTED.**
+> - Q1: build the p2996-linked IWYU (`clang_21`, against `/opt/clang-p2996`, in its own step in the p2996-hash section;
+>   branch derived from `LLVMVersion.cmake`; fail loud on mismatch).
+> - Q2: the apt-linked IWYU at `/opt/iwyu/bin` goes first on PATH; the p2996 one is used by full path.
+> - Q3: retire the conda IWYU and fix2's conda pin/lock parity in that PR; readiness = `gh api branches/clang_<M>` 200.
+> - Q4: a SEPARATE PR after the detector PR, which keeps its conda gate until then.
+>
+> Next: the SLOT-gated configure-only cmake probe on the published `:p2996-<hash>` export (§5.2, queued by the
+> coordinator), then §6/§7 and a premise-verifier pass before dispatch.
 
 Ruling: Ray, 2026-10-03, IWYU option (b): "build IWYU from source, from a pinned clang_23 SHA, in a
 content-hashed image stage". Then: "did you research if we need a special iwyu build for the p2996 llvm compiler and
