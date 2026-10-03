@@ -1325,7 +1325,7 @@ per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion
 
 [[suite]]
 name = "workflow.worktree-guard-wiring"
-description = "#1606: EnterWorktree paths must reach the dedicated guard through the merged dispatcher; matcher wiring and real-wrapper deny/allow probes must remain present."
+description = "#1606: EnterWorktree paths must resolve from payload cwd to existing registered managed worktrees and reach the dedicated guard through the merged dispatcher; matcher wiring and real-wrapper deny/allow probes must remain present."
 category = "workflow"
 check_type = "static"
 handler = "require_tokens"
@@ -1336,8 +1336,9 @@ paths = [
     "python/src/dotfiles_setup/hook_dispatch.py",
     "python/src/dotfiles_setup/hook_selfcheck.py",
     "tests/test_worktree_guard.py",
+    "tests/test_hook_dispatch.py",
 ]
-per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree"'], "python/src/dotfiles_setup/worktree_guard.py" = ['def handles(', 'def decide(', '["git", "rev-parse", "--git-common-dir"]', 'target != allowed and target.is_relative_to(allowed)'], "python/src/dotfiles_setup/hook_dispatch.py" = ['if tool_name == "EnterWorktree":', 'reason = worktree_guard.decide(tool_input, project_root)'], "python/src/dotfiles_setup/hook_selfcheck.py" = ['_WORKTREE_TOOLS = ("EnterWorktree",)', '(*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS, *_WORKTREE_TOOLS)', 'def check_worktree_guard_endtoend(', 'failures.extend(check_worktree_guard_endtoend(project_root, wrapper))'], "tests/test_worktree_guard.py" = ['def test_dispatch_routes_enterworktree(', 'def test_denies_paths_outside_main_worktree_directory(', 'def test_allows_name_and_canonical_path_from_main_or_linked_worktree(', 'def test_resolves_symlinks_before_containment_check('] }
+per_path_tokens = { ".claude/settings.json" = ['"matcher": "Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree"'], "python/src/dotfiles_setup/worktree_guard.py" = ['def handles(', 'def decide(', '["git", "rev-parse", "--git-common-dir"]', 'target != allowed and target.is_relative_to(allowed)', '["git", "worktree", "list", "--porcelain", "-z"]', 'target.is_dir()', 'anchor = (cwd if cwd is not None else project_dir).resolve()'], "python/src/dotfiles_setup/hook_dispatch.py" = ['if worktree_guard.handles(tool_name):', 'cwd = payload.get("cwd")', 'reason = worktree_guard.decide(tool_input, project_root, session_cwd)'], "python/src/dotfiles_setup/hook_selfcheck.py" = ['_WORKTREE_TOOLS = ("EnterWorktree",)', '(*_GUARDED_TOOLS, *_GRAPHIFY_TOOLS, *_WORKTREE_TOOLS)', 'def check_worktree_guard_endtoend(', 'failures.extend(check_worktree_guard_endtoend(project_root, wrapper))'], "tests/test_worktree_guard.py" = ['def test_dispatch_routes_enterworktree(', 'def test_denies_paths_outside_main_worktree_directory(', 'def test_allows_name_and_canonical_path_from_main_or_linked_worktree(', 'def test_resolves_symlinks_before_containment_check(', 'def test_denies_nonexistent_path_inside_managed_directory(', 'def test_denies_existing_unregistered_directory('], "tests/test_hook_dispatch.py" = ['def test_enterworktree_relative_sibling_uses_payload_cwd(', 'def test_enterworktree_relative_path_from_subdirectory_is_denied('] }
 
 [[suite]]
 name = "workflow.mise-tasks-enforcement"

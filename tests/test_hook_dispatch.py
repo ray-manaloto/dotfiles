@@ -34,6 +34,76 @@ def _payload(tool: str, **tool_input: str) -> str:
 
 
 @pytest.fixture
+def worktree_session(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A real main checkout and two registered managed worktrees (P2/P3)."""
+    main = tmp_path / "repo"
+    main.mkdir()
+    commands = [
+        ["init", "-b", "main"],
+        ["config", "user.name", "Hook Dispatch Test"],
+        ["config", "user.email", "hook@example.invalid"],
+        ["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"],
+    ]
+    a = main / ".claude" / "worktrees" / "a"
+    b = main / ".claude" / "worktrees" / "b"
+    commands.extend(
+        [["worktree", "add", "-b", "a", str(a)], ["worktree", "add", "-b", "b", str(b)]]
+    )
+    for args in commands:
+        subprocess.run(
+            ["git", *args], cwd=main, capture_output=True, check=True, timeout=10
+        )
+    return main, a, b
+
+
+def test_enterworktree_relative_sibling_uses_payload_cwd(
+    worktree_session: tuple[Path, Path, Path],
+) -> None:
+    """P2: project stays main; ../a from managed b enters registered a."""
+    main, _, b = worktree_session
+    raw = json.dumps(
+        {"tool_name": "EnterWorktree", "tool_input": {"path": "../a"}, "cwd": str(b)}
+    )
+    assert hook_dispatch.dispatch(main, raw) == ""
+
+
+def test_enterworktree_relative_path_from_subdirectory_is_denied(
+    worktree_session: tuple[Path, Path, Path],
+) -> None:
+    """P3: main/python/.claude/worktrees/a does not resolve to managed a."""
+    main, _, _ = worktree_session
+    cwd = main / "python"
+    cwd.mkdir()
+    raw = json.dumps(
+        {
+            "tool_name": "EnterWorktree",
+            "tool_input": {"path": ".claude/worktrees/a"},
+            "cwd": str(cwd),
+        }
+    )
+    decision = json.loads(hook_dispatch.dispatch(main, raw))["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert (
+        str(cwd / ".claude" / "worktrees" / "a") in decision["permissionDecisionReason"]
+    )
+
+
+@pytest.mark.parametrize("cwd", [None, "", 1])
+def test_enterworktree_without_valid_cwd_falls_back_to_project_root(
+    worktree_session: tuple[Path, Path, Path], cwd: object
+) -> None:
+    main, _, _ = worktree_session
+    raw = json.dumps(
+        {
+            "tool_name": "EnterWorktree",
+            "tool_input": {"path": ".claude/worktrees/a"},
+            "cwd": cwd,
+        }
+    )
+    assert hook_dispatch.dispatch(main, raw) == ""
+
+
+@pytest.fixture
 def graphify_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Replace graphify's subprocess (the boundary) and record each kind asked."""
     kinds: list[str] = []

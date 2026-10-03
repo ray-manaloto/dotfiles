@@ -46,9 +46,14 @@ Run `.claude/skills/session-handoff/SKILL.md` in full, under its
   `docs/handoff-<YYYY-MM-DD><letter>` branch in a worktree created from the
   main checkout with `EnterWorktree name=handoff-<YYYY-MM-DD><letter>`
   (lands at `<main>/.claude/worktrees/…`), never `../dotfiles.worktrees/`.
-  Re-enter with `EnterWorktree path=<main>/.claude/worktrees/<name>`.
-  Ship it early as a PR with
-  `mise run ship` from the main checkout, launched as a harness background run
+  Re-enter that existing registered worktree with
+  `EnterWorktree path=<main>/.claude/worktrees/<name>`.
+  Ship the docs-only handoff branch early as a PR with `mise run ship` from
+  the handoff worktree itself: `python/src/dotfiles_setup/pr.py:598-626` permits
+  linked-worktree ship when the change does not need a full sync.
+  Before any main-checkout ship, use `ExitWorktree` with `keep` to leave the
+  isolated session; never redirect Bash into main while in EnterWorktree.
+  Launch ship as a harness background run
   with a file-captured rc (its push carries the ssh keepalive). If another
   ship holds the host slot, push the branch now and put its ship at the head
   of the queue.

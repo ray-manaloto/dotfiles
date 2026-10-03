@@ -46,14 +46,16 @@ GRAPHIFY_KINDS: dict[str, str] = {
 
 def dispatch(project_root: Path, raw: str) -> str:
     """The hook output for one PreToolUse payload (``""`` allows silently)."""
-    tool_name, tool_input, _ = hook_guard.parse_payload(raw)
+    tool_name, tool_input, payload = hook_guard.parse_payload(raw)
     # An absent tool_name is the legacy Bash shape (hook_guard.decide_payload).
     if not tool_name or tool_name in GUARDED_TOOLS:
         reason = hook_guard.decide_payload(tool_name, tool_input)
         if reason is not None:
             return hook_guard.deny_output(reason)
-    if tool_name == "EnterWorktree":
-        reason = worktree_guard.decide(tool_input, project_root)
+    if worktree_guard.handles(tool_name):
+        cwd = payload.get("cwd")
+        session_cwd = Path(cwd) if isinstance(cwd, str) and cwd else None
+        reason = worktree_guard.decide(tool_input, project_root, session_cwd)
         if reason is not None:
             return hook_guard.deny_output(reason)
     kind = GRAPHIFY_KINDS.get(tool_name)

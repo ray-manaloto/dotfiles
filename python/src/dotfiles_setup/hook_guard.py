@@ -31,8 +31,8 @@ rather than a second hook script, because a new ``scripts/*.sh`` would need
 its own ``bash_budget`` allowlist entry to carry logic that belongs in
 ``python/`` anyway (``.claude/rules/zero-bash-logic.md``). The settings.json
 matcher is ``Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWorktree``
-and dispatch is on
-``tool_name``: the three file-modifying tools route to
+and :mod:`dotfiles_setup.hook_dispatch` routes EnterWorktree to its dedicated guard.
+This module dispatches on ``tool_name``: the three file-modifying tools route to
 :mod:`dotfiles_setup.branch_guard` (the write-time default-branch gate, #400).
 """
 

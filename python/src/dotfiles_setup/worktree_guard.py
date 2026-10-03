@@ -1,9 +1,8 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Redirect EnterWorktree paths that would park background sessions (#1606).
+"""Restrict EnterWorktree paths to existing managed worktrees (#1606).
 
 Native ``name=`` creation uses the main checkout's ``.claude/worktrees/``.
-Permission allow rules cannot suppress the relocation prompt for external
-paths (``$CC/worktrees.md``), so the existing PreToolUse hook denies them.
+The PreToolUse hook applies this location policy in every permission mode.
 Only stdlib imports: git runs only when deciding an EnterWorktree path.
 """
 
@@ -18,40 +17,71 @@ def handles(tool_name: str) -> bool:
     return tool_name == "EnterWorktree"
 
 
-def decide(tool_input: dict[str, object], project_dir: Path) -> str | None:
-    """Deny paths outside the main worktree directory; fail open without git."""
+def _deny_reason(target: Path, main: Path | None = None) -> str:
+    checkout = str(main) if main is not None else "<main>"
+    allowed = f"{checkout}/.claude/worktrees"
+    return (
+        f"#1606: EnterWorktree path={target} must be an existing worktree under "
+        f"{allowed}/, strictly inside that directory and registered with this repo. "
+        "This location policy applies in every permission mode. "
+        f"For NEW worktrees, from the main checkout ({checkout}), use "
+        "`EnterWorktree name=<name>`. From inside a worktree session, use "
+        f"`EnterWorktree path={allowed}/<name>` for an existing registered worktree, "
+        "or ExitWorktree (keep) before creating a NEW worktree with name=."
+    )
+
+
+def decide(
+    tool_input: dict[str, object], project_dir: Path, cwd: Path | None = None
+) -> str | None:
+    """Require an existing managed worktree; deny paths we cannot verify."""
     path = tool_input.get("path")
     if not isinstance(path, str) or not path:
         return None
+    target = Path(path)
     try:
+        anchor = (cwd if cwd is not None else project_dir).resolve()
         proc = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            cwd=project_dir,
+            cwd=anchor,
             capture_output=True,
             text=True,
             check=False,
             timeout=5,
         )
         if proc.returncode != 0 or not proc.stdout.strip():
-            return None
+            return _deny_reason(target)
         common_dir = Path(proc.stdout.strip())
         if not common_dir.is_absolute():
-            common_dir = project_dir / common_dir
+            common_dir = anchor / common_dir
         main = common_dir.resolve().parent
-        target = Path(path)
         if not target.is_absolute():
-            target = project_dir / target
+            target = anchor / target
         target = target.resolve()
     except OSError, ValueError, subprocess.SubprocessError:
-        return None
+        return _deny_reason(target)
 
     allowed = main / ".claude" / "worktrees"
     if target != allowed and target.is_relative_to(allowed):
-        return None
-    return (
-        f"#1606: EnterWorktree path={target} must be strictly inside {allowed}/. "
-        "External paths raise a permission prompt that parks --bg coordinators. "
-        f"From the main checkout ({main}), use `EnterWorktree name=<name>`. "
-        "From inside a worktree session, only "
-        f"`EnterWorktree path={allowed}/<name>` works."
-    )
+        try:
+            proc = subprocess.run(
+                ["git", "worktree", "list", "--porcelain", "-z"],
+                cwd=anchor,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            if (
+                target.is_dir()
+                and proc.returncode == 0
+                and any(
+                    Path(record.removeprefix("worktree ")).resolve() == target
+                    for record in proc.stdout.split("\0")
+                    if record.startswith("worktree ")
+                )
+            ):
+                return None
+        except OSError, ValueError, subprocess.SubprocessError:
+            pass
+    return _deny_reason(target, main)

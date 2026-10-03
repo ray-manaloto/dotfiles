@@ -74,15 +74,10 @@ def test_denies_paths_outside_main_worktree_directory(
 def test_allows_name_and_canonical_path_from_main_or_linked_worktree(
     worktrees: tuple[Path, Path, Path], session: int
 ) -> None:
-    main, _, _ = worktrees
+    _, _, canonical = worktrees
     project_dir = worktrees[session]
     assert worktree_guard.decide({"name": "foo"}, project_dir) is None
-    assert (
-        worktree_guard.decide(
-            {"path": str(main / ".claude" / "worktrees" / "foo")}, project_dir
-        )
-        is None
-    )
+    assert worktree_guard.decide({"path": str(canonical)}, project_dir) is None
 
 
 def test_resolves_relative_paths_against_project_dir(
@@ -90,10 +85,73 @@ def test_resolves_relative_paths_against_project_dir(
 ) -> None:
     main, _, canonical = worktrees
     # Main's --git-common-dir is relative (.git), unlike the linked worktree's.
-    assert worktree_guard.decide({"path": ".claude/worktrees/foo"}, main) is None
-    assert worktree_guard.decide({"path": "../foo"}, canonical) is None
+    assert worktree_guard.decide({"path": ".claude/worktrees/lane"}, main) is None
+    assert worktree_guard.decide({"path": "../lane"}, canonical) is None
     assert worktree_guard.decide({"path": "../repo.worktrees/foo"}, main) is not None
     assert worktree_guard.decide({"path": "../../../escape"}, canonical) is not None
+
+
+@pytest.mark.parametrize("session", [0, 1, 2])
+def test_denies_nonexistent_path_inside_managed_directory(
+    worktrees: tuple[Path, Path, Path], session: int
+) -> None:
+    main, _, _ = worktrees
+    target = main / ".claude" / "worktrees" / "does-not-exist"
+    assert not target.exists()
+    reason = worktree_guard.decide({"path": str(target)}, worktrees[session])
+    assert reason is not None
+    assert f"an existing worktree under {target.parent}/" in reason
+    assert "NEW worktrees" in reason
+    assert "EnterWorktree name=<name>" in reason
+
+
+def test_denies_existing_unregistered_directory(
+    worktrees: tuple[Path, Path, Path],
+) -> None:
+    main, _, canonical = worktrees
+    target = canonical.parent / "unregistered"
+    target.mkdir()
+    assert worktree_guard.decide({"path": str(target)}, main) is not None
+
+
+def test_denies_missing_registered_worktree(
+    worktrees: tuple[Path, Path, Path],
+) -> None:
+    main, _, canonical = worktrees
+    canonical.rename(canonical.with_name("moved"))
+    # Git still lists the original path until worktree repair/prune.
+    assert worktree_guard.decide({"path": str(canonical)}, main) is not None
+
+
+def test_repo_anchor_follows_cwd_in_another_repo(
+    worktrees: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    main, _, canonical = worktrees
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-b", "main")
+    reason = worktree_guard.decide({"path": str(canonical)}, main, cwd=other)
+    assert reason is not None
+    assert f"an existing worktree under {other}/.claude/worktrees/" in reason
+
+
+@pytest.mark.parametrize("mode", ["default", "auto", "bypassPermissions"])
+def test_location_policy_is_uniform_across_permission_modes(
+    worktrees: tuple[Path, Path, Path], mode: str
+) -> None:
+    main, sibling, _ = worktrees
+    raw = json.dumps(
+        {
+            "tool_name": "EnterWorktree",
+            "tool_input": {"path": str(sibling)},
+            "permission_mode": mode,
+        }
+    )
+    reason = json.loads(hook_dispatch.dispatch(main, raw))["hookSpecificOutput"][
+        "permissionDecisionReason"
+    ]
+    assert "This location policy applies in every permission mode." in reason
+    assert "raise a permission prompt" not in reason
 
 
 def test_resolves_symlinks_before_containment_check(
@@ -135,20 +193,24 @@ def test_dispatch_routes_enterworktree(
         assert hook_dispatch.dispatch(main, raw) == ""
 
 
-def test_nonrepo_fails_open(tmp_path: Path) -> None:
-    assert worktree_guard.decide({"path": str(tmp_path / "x")}, tmp_path) is None
+def test_nonrepo_denies_unverifiable_path(tmp_path: Path) -> None:
+    assert worktree_guard.decide({"path": str(tmp_path / "x")}, tmp_path) is not None
 
 
-def test_missing_git_fails_open(
+def test_missing_git_denies_unverifiable_path(
     worktrees: tuple[Path, Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     main, sibling, _ = worktrees
     monkeypatch.setenv("PATH", str(main / "no-binaries"))
-    assert worktree_guard.decide({"path": str(sibling)}, main) is None
+    assert worktree_guard.decide({"path": str(sibling)}, main) is not None
 
 
-@pytest.mark.parametrize("path", [None, "", 1, "bad\0path"])
+@pytest.mark.parametrize("path", [None, "", 1])
 def test_malformed_path_fails_open(
     worktrees: tuple[Path, Path, Path], path: object
 ) -> None:
     assert worktree_guard.decide({"path": path}, worktrees[0]) is None
+
+
+def test_invalid_string_path_is_denied(worktrees: tuple[Path, Path, Path]) -> None:
+    assert worktree_guard.decide({"path": "bad\0path"}, worktrees[0]) is not None
