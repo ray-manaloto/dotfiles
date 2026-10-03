@@ -4718,9 +4718,9 @@ url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854961"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-arm64-musl"]
-checksum = "sha256:d279c5e36af85d712a906284af0d2dd43d4baee8a36e2139f072c891fbeacfd9"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854959"
+checksum = "sha256:b1e422c4cf5de788553f612b3952deadd6cb7669b35659197af14c4b1f763fab"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854961"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64"]
@@ -4736,15 +4736,15 @@ url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64-musl"]
-checksum = "sha256:6ae4389db2e140734af826963e677a6a78dca9690bb089127aef50d8f9edbadb"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854967"
+checksum = "sha256:629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:6ae4389db2e140734af826963e677a6a78dca9690bb089127aef50d8f9edbadb"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854967"
+checksum = "sha256:629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.macos-arm64"]
@@ -6455,6 +6455,54 @@ url = "https://github.com/lima-vm/lima/releases/download/v2.2.0/lima-2.2.0-Windo
 url_api = "https://api.github.com/repos/lima-vm/lima/releases/assets/484814002"
 provenance = "github-attestations"
 
+[[tools.node]]
+version = "24.21.0"
+backend = "core:node"
+
+[tools.node."platforms.linux-arm64"]
+checksum = "sha256:724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz"
+
+[tools.node."platforms.linux-arm64-musl"]
+checksum = "sha256:3048b0811e158ca0d8672b59c839861763e144492980d8d29b369dfee45747e4"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-arm64-musl.tar.gz"
+
+[tools.node."platforms.linux-x64"]
+checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
+
+[tools.node."platforms.linux-x64-baseline"]
+checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
+
+[tools.node."platforms.linux-x64-musl"]
+checksum = "sha256:01a713e34da98e7b4d2a3191ee7ca3f93dd0384d1a2ef23c379b2161ee6e133a"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-x64-musl.tar.gz"
+
+[tools.node."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:01a713e34da98e7b4d2a3191ee7ca3f93dd0384d1a2ef23c379b2161ee6e133a"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-x64-musl.tar.gz"
+
+[tools.node."platforms.macos-arm64"]
+checksum = "sha256:bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz"
+
+[tools.node."platforms.macos-x64"]
+checksum = "sha256:1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+
+[tools.node."platforms.macos-x64-baseline"]
+checksum = "sha256:1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+
+[tools.node."platforms.windows-x64"]
+checksum = "sha256:158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
+
+[tools.node."platforms.windows-x64-baseline"]
+checksum = "sha256:158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
+
 [[tools."npm:@contextlint/cli"]]
 version = "1.1.1"
 backend = "npm:@contextlint/cli"
@@ -6517,9 +6565,9 @@ url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601904056"
 
 [tools.opencode."platforms.linux-arm64-musl"]
-checksum = "sha256:eaf0692e4b60dca382a126ca607d617be7b6eaf82d318a828f2b6eb1eacea99a"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-arm64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601904034"
+checksum = "sha256:bbdb3f00c2c51e42e315525233151309724226a8776da8e9145e3b0fa3d5310f"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601904056"
 
 [tools.opencode."platforms.linux-x64"]
 checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
@@ -6532,14 +6580,14 @@ url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
 
 [tools.opencode."platforms.linux-x64-musl"]
-checksum = "sha256:9dd4470885d07205e31b702465564aaee97be26ee3dc192ec6702a15e7a21272"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903962"
+checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
 
 [tools.opencode."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:9dd4470885d07205e31b702465564aaee97be26ee3dc192ec6702a15e7a21272"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903962"
+checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
 
 [tools.opencode."platforms.macos-arm64"]
 checksum = "sha256:8522b70f545184b3a8d97c5ca4f814093b2476d72aebfda8c48bcd072ec31d1b"
@@ -6711,6 +6759,9 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-arm64-musl"]
+checksum = "sha256:7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067643"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64"]
@@ -6726,9 +6777,15 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-arm64"]
