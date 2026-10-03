@@ -7,8 +7,21 @@ bootstrap macos launchd-agents apply` — never implicitly, `.claude/rules/
 do-not.md`) fires `mise run dag-tick` every 60s. Each tick takes a read-only
 census of this repo's background Claude Code agents, classifies every node
 ALIVE/DEAD/WEDGED/DONE/NEEDS_HUMAN, and recovers: `claude respawn` for a
-DEAD node, `claude stop` for a DONE node whose process is still lingering.
-A NEEDS_HUMAN node is never touched — see the escalation bullet below.
+DEAD node. A NEEDS_HUMAN node is never touched — see the escalation bullet
+below.
+
+⚠️ **This tick never STOPS a node (2026-10-03).** It used to `claude stop` a
+DONE node whose process was still alive. `done` is also the state of a session
+that finished its turn and is waiting for its next message, which is exactly
+what a coordinator or a lane waiting for a GO looks like. The stop removed
+the process, and with it the inbox socket, so peers saw "not reachable" and
+nothing woke it: the 2026-10-03 coordinator was stopped three times, the last
+for 12 hours. Every `dag-tick: STOP` line in the launchd log matched a
+`bg settled <id> (killed)` line in `~/.claude/daemon.log`, in order
+(`docs/research/kb/reports/agents/session-autostart-2026-10-03.md`). The
+harness supervisor already stops an idle unattached process on its own
+(1 h, or 8 h for a Remote-Control-bridged session; `$CC/agent-view.md` "The
+supervisor process"), so DONE is no action here. Do not reintroduce a stop.
 
 **Slice 1 deliberately ships WITHOUT automated stall recovery.** WEDGED is
 classify-and-log ONLY — a `tempo:"active"` node whose `state.json` has gone
@@ -283,7 +296,6 @@ class ActionKind(enum.Enum):
     """What :func:`plan` decided to do about one classified node."""
 
     RESPAWN = "respawn"
-    STOP = "stop"
     LOG = "log"
 
 
@@ -678,31 +690,6 @@ def _reply_queued_reason() -> str:
     )
 
 
-def _stop_reason() -> str:
-    """The exact wording for a terminal node whose process is still alive.
-
-    ⚠️ **The qualifier is load-bearing, exactly as it is in
-    :func:`_needs_human_reason`.** This reason used to be the bare
-    *"terminal state but the process is still running"*, which stated the
-    classification snapshot as though it were the fact at stop time — and
-    #604 is precisely that gap: the snapshot can be a tick (60s) old, and
-    a human reply can make the node non-terminal inside it.
-
-    :func:`execute_stop` now re-applies :func:`is_terminal` immediately
-    before the stop, so the qualifier says both halves: the re-check
-    happens, AND a read-to-stop window survives it. Naming the residual is
-    the honest form — a check-then-act against a file another process may
-    write cannot be made race-free without a lock the harness does not
-    expose, and an unqualified "verified terminal" would tell an operator
-    the stop is safe when it is only much safer.
-    """
-    return (
-        "terminal state but the process is still running; re-checked "
-        "immediately before the stop (a read-to-stop window remains, "
-        "irreducible without a lock the harness does not expose)"
-    )
-
-
 def plan(
     classified_nodes: Sequence[ClassifiedNode], *, max_age_s: float
 ) -> list[Action]:
@@ -720,11 +707,10 @@ def plan(
     unknown-age DEAD node is not the crash-mid-activity case this watchdog
     exists to recover, and an unknown age must never resurrect something
     that might have been dead for weeks.
-    DONE with a still-live pid -> stop (a lingering process past settle),
-    subject to the fresh terminal+pid re-check in :func:`execute_stop` —
-    this arm plans from a snapshot a human can invalidate (#604);
     WEDGED -> a log-only action, since automated stall recovery is #590;
-    ALIVE, or DONE with no live pid, -> no action.
+    ALIVE or DONE (live pid or not) -> no action. DONE is never stopped: an
+    idle session waiting for its next message also reads DONE, and stopping
+    it removes its inbox (see the module docstring, 2026-10-03).
     """
     actions: list[Action] = []
     for classified in classified_nodes:
@@ -753,14 +739,6 @@ def plan(
                         "not terminal and the process is not alive",
                     )
                 )
-        elif classified.node_class is NodeClass.DONE and classified.pid_alive:
-            actions.append(
-                Action(
-                    ActionKind.STOP,
-                    classified.node_id,
-                    _stop_reason(),
-                )
-            )
         elif classified.node_class is NodeClass.WEDGED:
             actions.append(
                 Action(
@@ -953,9 +931,8 @@ def background_pid_alive(
 def node_from_state(node_id: str, data: Mapping[str, object]) -> Node:
     """Build a :class:`Node` from one parsed `state.json`, defensively.
 
-    Shared by :func:`classify_background_rows` (the census path),
-    :func:`execute_respawn`'s fresh escalation re-check and
-    :func:`execute_stop`'s fresh terminal re-check, so no two of them can
+    Shared by :func:`classify_background_rows` (the census path) and
+    :func:`execute_respawn`'s fresh escalation re-check, so no two of them can
     disagree about what the same file says — the #601 v4 review's HIGH
     finding was exactly a disagreement of that shape, where only one of the
     two looked at `needs` at all.
@@ -1294,108 +1271,6 @@ def execute_respawn(
     return f"dag-tick: RESPAWN {node_id} (requested; outcome observed next tick)"
 
 
-def execute_stop(
-    node_id: str,
-    ctx: TickContext,
-    *,
-    is_alive: Callable[[int], bool] | None = None,
-    proc_start: Callable[[int], str | None] | None = None,
-) -> str:
-    """Stop one DONE-but-still-alive node, after a fresh TERMINAL + PID re-check.
-
-    Classification can be up to one tick (60s) stale, so both facts are
-    re-read right before acting. If the pid has already gone since
-    classification (settled on its own, or something else already reaped
-    it), SKIP rather than issue a stop that would log a false FAILED line
-    against a process that no longer exists.
-
-    ⚠️ **The terminal re-check is #604, and it is the exact mirror of the
-    #601 v4 finding one function up.** Actions execute from the
-    CLASSIFICATION snapshot, and this function used to re-read only the
-    roster — so a node planned DONE -> STOP that stopped being terminal in
-    between was stopped anyway. Both routes out of terminal are reachable
-    by a human in that window: a delivered reply flips the ledger to
-    `done + active`, and a reply whose delivery failed persists a
-    `queuedPrompt` — and :func:`is_terminal` denies both. `claude stop` is
-    live-proven to stop mid-activity (`docs/receipts/565.md`), so the
-    unguarded path could terminate work a human had just resumed and
-    persist `stopped` over it. Reproduced read-only in the #601 v5 review:
-    a planned STOP against a freshly `done + active` state still issued
-    `['claude', 'stop', 'done1']`.
-
-    Reuses :func:`node_from_state` and :func:`is_terminal` so this
-    re-check and the census path cannot disagree about the same file —
-    that disagreement *was* the #601 defect, where only one of the two
-    looked at `needs` at all.
-
-    An unreadable `state.json` SKIPs, the same ruling
-    :func:`execute_respawn` carries — one rule across both actions rather
-    than two opposite readings of the same anomaly, since a node
-    classified DONE necessarily HAD a readable one. State the consequence
-    rather than glossing it: **it is not retried.** A node whose
-    `state.json` stays unreadable classifies conservative-ALIVE next tick
-    (:func:`classify_background_rows`), which `plan` maps to no action at
-    all, so this function is never reached for it again and the process
-    lingers **silently**. The asymmetry with respawn is worth naming and
-    is not lopsided: refusing to STOP leaves a process running, refusing
-    to RESPAWN leaves a node unrecovered, and both are quiet.
-
-    ⚠️ **ORDERING: BOTH reads happen first, THEN both decisions, then the
-    stop** — carried over from :func:`execute_respawn`, whose docstring
-    records the two rounds it took to learn that the window is closed not
-    by a check's existence but by its DISTANCE from the action. A roster
-    read is real file I/O; leaving one between the terminal check and
-    `subprocess.run` would reopen exactly the window this adds a check to
-    narrow.
-
-    **It narrows the window; it does not close it.** Check-then-act
-    against a file another process may write is irreducibly racy without a
-    shared lock, a CAS, or a "stop only if still terminal" primitive the
-    harness does not expose. That residual is stated in the operator-facing
-    reason :func:`plan` attaches to the STOP action rather than papered
-    over with a guarantee this code cannot make.
-    """
-    # BOTH reads first, THEN both decisions, then the stop — so neither
-    # guard has file I/O sitting between it and the action it protects.
-    # See the ordering note in the docstring, and `execute_respawn`'s,
-    # which records the two rounds that established it.
-    fresh_data, _ = load_state_json(ctx.jobs_dir, node_id)
-    roster = read_roster(ctx.daemon_dir)
-    if fresh_data is None:
-        return (
-            f"dag-tick: SKIP stop {node_id} — state.json unreadable at "
-            "execution; cannot prove it is still terminal (not retried — it "
-            "classifies conservative-ALIVE next tick, so the process is left "
-            "running and unreported)"
-        )
-    fresh = node_from_state(node_id, fresh_data)
-    if not is_terminal(fresh.state, fresh.tempo, queued_prompt=fresh.queued_prompt):
-        return (
-            f"dag-tick: SKIP stop {node_id} — no longer terminal since "
-            f"classification (state={fresh.state} tempo={fresh.tempo} "
-            f"queuedPrompt={fresh.queued_prompt}); work may have been resumed"
-        )
-    if not background_pid_alive(
-        node_id, roster, is_alive=is_alive, proc_start=proc_start
-    ):
-        return f"dag-tick: SKIP stop {node_id} — settled since classification"
-    try:
-        result = subprocess.run(
-            [ctx.claude_bin, "stop", node_id],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as exc:
-        return f"dag-tick: SKIP stop {node_id} — claude binary unavailable: {exc}"
-    if result.returncode == 0:
-        return f"dag-tick: STOP {node_id} (rc=0)"
-    return (
-        f"dag-tick: STOP {node_id} FAILED rc={result.returncode} "
-        f"stderr={result.stderr.strip()}"
-    )
-
-
 def _execute_or_preview(
     actions: Sequence[Action],
     ctx: TickContext,
@@ -1419,12 +1294,6 @@ def _execute_or_preview(
         elif action.kind is ActionKind.RESPAWN:
             lines.append(
                 execute_respawn(
-                    action.node_id, ctx, is_alive=is_alive, proc_start=proc_start
-                )
-            )
-        elif action.kind is ActionKind.STOP:
-            lines.append(
-                execute_stop(
                     action.node_id, ctx, is_alive=is_alive, proc_start=proc_start
                 )
             )

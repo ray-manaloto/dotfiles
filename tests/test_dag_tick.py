@@ -946,7 +946,9 @@ def test_gate_status_three_faces(stderr_text: str, expected: str) -> None:
         (dag_tick.NodeClass.DEAD, True, 10.0, dag_tick.ActionKind.RESPAWN),
         (dag_tick.NodeClass.DEAD, False, 999_999.0, dag_tick.ActionKind.LOG),
         (dag_tick.NodeClass.DEAD, False, None, dag_tick.ActionKind.LOG),
-        (dag_tick.NodeClass.DONE, True, 10.0, dag_tick.ActionKind.STOP),
+        # 2026-10-03: DONE is never stopped, live pid or not — an idle
+        # session waiting for its next message reads DONE too.
+        (dag_tick.NodeClass.DONE, True, 10.0, None),
         (dag_tick.NodeClass.DONE, False, 10.0, None),
         (dag_tick.NodeClass.WEDGED, True, 10.0, dag_tick.ActionKind.LOG),
         (dag_tick.NodeClass.WEDGED, False, 10.0, dag_tick.ActionKind.LOG),
@@ -994,9 +996,12 @@ def test_plan_is_pure_and_order_preserving() -> None:
         dag_tick.ClassifiedNode(
             "done-1", dag_tick.NodeClass.DONE, pid_alive=True, state_age_s=10.0
         ),
+        dag_tick.ClassifiedNode(
+            "wedged-1", dag_tick.NodeClass.WEDGED, pid_alive=True, state_age_s=10.0
+        ),
     ]
     actions = dag_tick.plan(nodes, max_age_s=100.0)
-    assert [a.node_id for a in actions] == ["dead-1", "done-1"]
+    assert [a.node_id for a in actions] == ["dead-1", "wedged-1"]
 
 
 def test_plan_over_age_dead_reason_names_the_age() -> None:
@@ -2117,7 +2122,7 @@ def test_read_census_healthy_empty_fleet_is_silent(
 
 
 # ---------------------------------------------------------------------------
-# execute_respawn() / execute_stop() — monkeypatched subprocess only
+# execute_respawn() — monkeypatched subprocess only
 # ---------------------------------------------------------------------------
 
 
@@ -2281,257 +2286,6 @@ def test_execute_respawn_missing_binary_returns_skip_line(
     line = dag_tick.execute_respawn("abc123", ctx)
     assert "SKIP respawn abc123" in line
     assert "claude binary unavailable" in line
-
-
-# A `state.json` that really is terminal under `is_terminal`: a settled
-# state, an idle tempo, and no queued reply. Every `execute_stop` test that
-# is NOT about the terminal re-check has to write one — since #604 the call
-# exits through the unreadable-state SKIP without it, which is the same
-# silent disarming the #601 v5 review caught on the respawn side (a SKIP
-# assertion that does not say WHICH skip is satisfied by any of them).
-_TERMINAL_STATE: dict[str, object] = {"state": "done", "tempo": "idle"}
-
-
-def test_execute_stop_reports_success(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "abc123", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-    monkeypatch.setattr(
-        dag_tick.subprocess,
-        "run",
-        lambda *_a, **_k: _FakeCompleted(returncode=0),
-    )
-    line = dag_tick.execute_stop("abc123", ctx)
-    assert line == "dag-tick: STOP abc123 (rc=0)"
-
-
-def test_execute_stop_reports_failure(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "abc123", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-    monkeypatch.setattr(
-        dag_tick.subprocess,
-        "run",
-        lambda *_a, **_k: _FakeCompleted(returncode=1, stderr="boom"),
-    )
-    line = dag_tick.execute_stop("abc123", ctx)
-    assert "FAILED rc=1" in line
-    assert "boom" in line
-
-
-def test_execute_stop_skips_when_pid_already_settled(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """Stop-side TOCTOU fix (#578 respec round 2).
-
-    Classification can be up to one tick (60s) stale. If the node's pid is
-    already gone by the time `execute_stop` runs (settled on its own, or
-    reaped by something else), it must SKIP rather than issue a stop against
-    a process that no longer exists — which would otherwise log a false
-    FAILED line.
-
-    ⚠️ The terminal `state.json` is REQUIRED for this test to test anything.
-    Without it #604's re-check exits through the unreadable-state SKIP
-    first, and the pid guard could be deleted with this test still green.
-    """
-    daemon_dir = _roster(tmp_path, {})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "abc123", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-
-    def _fail(*_args: object, **_kwargs: object) -> None:
-        msg = "must not issue a stop once the pid has already settled"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(dag_tick.subprocess, "run", _fail)
-    line = dag_tick.execute_stop("abc123", ctx)
-    assert "SKIP stop abc123" in line
-    assert "settled since classification" in line
-
-
-def test_execute_stop_missing_binary_returns_skip_line(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    daemon_dir = _roster(tmp_path, {"abc123": os.getpid()})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "abc123", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-
-    def _raise_missing(*_args: object, **_kwargs: object) -> None:
-        raise FileNotFoundError(2, "No such file or directory", "claude")
-
-    monkeypatch.setattr(dag_tick.subprocess, "run", _raise_missing)
-    line = dag_tick.execute_stop("abc123", ctx)
-    assert "SKIP stop abc123" in line
-    assert "claude binary unavailable" in line
-
-
-@pytest.mark.parametrize(
-    ("label", "fresh_state"),
-    [
-        # tempo — a delivered human reply flips the ledger active.
-        ("resumed_active", {"state": "done", "tempo": "active"}),
-        # queuedPrompt — a reply whose delivery FAILED is persisted instead,
-        # leaving the state settled. `is_terminal` denies this too, and it is
-        # the route a `state`/`tempo`-only re-check would miss.
-        (
-            "reply_queued",
-            {"state": "done", "tempo": "idle", "queuedPrompt": "go on then"},
-        ),
-        # state — the node left the terminal set entirely.
-        ("left_terminal", {"state": "blocked", "tempo": "idle"}),
-    ],
-)
-def test_execute_stop_skips_a_node_that_left_terminal_since_classification(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    label: str,
-    fresh_state: dict[str, object],
-) -> None:
-    """#604 — the stop-side mirror of #601 v4's classify->execute race.
-
-    `plan()` maps DONE + live pid to STOP from the CLASSIFICATION snapshot,
-    and `execute_stop` used to re-read only the roster — so a node that
-    stopped being terminal in the window was stopped anyway. `claude stop`
-    is live-proven to stop mid-activity (`docs/receipts/565.md`), so that
-    path could terminate work a human had just resumed and persist
-    `stopped` over it.
-
-    Driven through the REAL chain (classify -> plan -> execute) so the
-    snapshot the race needs is produced by the module rather than asserted,
-    then `state.json` is mutated before executing — the shape the #601 v5
-    reviewer used to demonstrate it.
-
-    One arm per axis `is_terminal` reads (`state`, `tempo`,
-    `queued_prompt`), because a fix that re-read only one of the three
-    would still pass the other two arms.
-    """
-    daemon_dir = _roster(tmp_path, {"done1": os.getpid()})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "done1", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-    snapshot = dag_tick.classify_background_rows(
-        [{"id": "done1", "kind": "background"}], ctx
-    )
-    assert snapshot.classified[0].node_class is dag_tick.NodeClass.DONE
-    assert [a.kind for a in dag_tick.plan(snapshot.classified, max_age_s=86400.0)] == [
-        dag_tick.ActionKind.STOP
-    ]
-
-    # …and then a human resumes it, before the planned action executes.
-    _write_state(jobs_dir, "done1", fresh_state)
-
-    def _fail_run(*_args: object, **_kwargs: object) -> None:
-        msg = f"a node that left terminal ({label}) must not be stopped"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(dag_tick.subprocess, "run", _fail_run)
-    line = dag_tick.execute_stop("done1", ctx)
-    assert "SKIP stop done1" in line
-    assert "no longer terminal since classification" in line
-
-
-def test_execute_stop_still_stops_a_node_that_is_still_terminal(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The control arm for #604: same chain, the node stays terminal.
-
-    Identical to the test above through the plan step, but `state.json` is
-    rewritten to another genuinely terminal shape. The stop must still
-    fire — a "fix" that skipped on any re-read, or on any rewrite of the
-    file, would retire the watchdog's lingering-process reaper and still
-    pass every arm above.
-    """
-    daemon_dir = _roster(tmp_path, {"done1": os.getpid()})
-    jobs_dir = tmp_path / "jobs"
-    _write_state(jobs_dir, "done1", _TERMINAL_STATE)
-    ctx = _ctx(tmp_path, jobs_dir=jobs_dir, daemon_dir=daemon_dir)
-    snapshot = dag_tick.classify_background_rows(
-        [{"id": "done1", "kind": "background"}], ctx
-    )
-    assert [a.kind for a in dag_tick.plan(snapshot.classified, max_age_s=86400.0)] == [
-        dag_tick.ActionKind.STOP
-    ]
-    _write_state(jobs_dir, "done1", {"state": "stopped", "tempo": "idle"})
-    calls: list[list[str]] = []
-
-    def _fake_run(argv: list[str], **_kwargs: object) -> _FakeCompleted:
-        calls.append(argv)
-        return _FakeCompleted(returncode=0)
-
-    monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
-    line = dag_tick.execute_stop("done1", ctx)
-    assert calls == [["claude", "stop", "done1"]]
-    assert line == "dag-tick: STOP done1 (rc=0)"
-
-
-def test_execute_stop_skips_when_state_json_vanished_before_execution(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """An unreadable `state.json` at execution SKIPs — cannot prove safety.
-
-    The same ruling `execute_respawn` carries, deliberately one rule across
-    both actions: a node classified DONE necessarily HAD a readable one, so
-    its disappearance is anomalous and nothing here can prove the node is
-    still terminal.
-
-    The consequence is asserted, not just documented: the line must tell an
-    operator this is NOT retried. A node with a persistently unreadable
-    `state.json` classifies conservative-ALIVE next tick, which plans no
-    action at all, so `execute_stop` is never reached for it again and the
-    process lingers silently.
-    """
-    daemon_dir = _roster(tmp_path, {"ghost": os.getpid()})
-    ctx = _ctx(tmp_path, jobs_dir=tmp_path / "jobs", daemon_dir=daemon_dir)
-
-    def _fail_run(*_args: object, **_kwargs: object) -> None:
-        msg = "must not stop a node whose state cannot be read"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(dag_tick.subprocess, "run", _fail_run)
-    line = dag_tick.execute_stop("ghost", ctx)
-    assert "SKIP stop ghost" in line
-    assert "state.json unreadable at execution" in line
-    assert "not retried" in line
-
-
-_EXPECTED_STOP_REASON = (
-    "terminal state but the process is still running; re-checked "
-    "immediately before the stop (a read-to-stop window remains, "
-    "irreducible without a lock the harness does not expose)"
-)
-
-
-def test_plan_stop_reason_states_the_recheck_and_its_residual() -> None:
-    """The STOP reason must claim the re-check WITHOUT claiming safety.
-
-    The same honesty guard `_needs_human_reason` carries, applied to the
-    reason #604 rewrote. It used to be the bare "terminal state but the
-    process is still running", which reported the classification snapshot
-    as if it were the fact at stop time — and that gap IS #604.
-
-    `execute_stop` now re-applies `is_terminal` immediately before the
-    stop, but check-then-act against a file another process may write stays
-    racy without a lock the harness does not expose, so the operator-facing
-    reason has to state both halves. Pinned as a golden equality, for the
-    reason the needs-human golden exists: substring conditions cannot judge
-    meaning, and the failure mode here is a later edit quietly upgrading
-    "narrowed" to "eliminated".
-    """
-    node = dag_tick.ClassifiedNode(
-        "done1", dag_tick.NodeClass.DONE, pid_alive=True, state_age_s=1.0
-    )
-    reason = dag_tick.plan([node], max_age_s=86400.0)[0].reason
-    assert reason == _EXPECTED_STOP_REASON
-    # Diagnostics: name WHICH claim regressed rather than only "it changed".
-    assert "re-checked immediately before the stop" in reason
-    assert "a read-to-stop window remains" in reason
 
 
 # ---------------------------------------------------------------------------
@@ -2787,9 +2541,18 @@ def test_execute_tick_still_respawns_a_fresh_blocked_node_without_needs(
     assert popen_calls == [["claude", "respawn", "dead1"]]
 
 
-def test_execute_tick_stops_a_done_node_with_live_pid(
+def test_execute_tick_never_stops_a_done_node_with_live_pid(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """2026-10-03: a DONE node whose process is alive is left running.
+
+    `done` + a live pid is also an idle coordinator or lane waiting for its
+    next message. The tick used to `claude stop` it, which removed its inbox
+    socket; the coordinator was stopped three times overnight that way. The
+    fake `run` records every non-census call, so a reintroduced stop of any
+    spelling fails here. Fixture identical to the removed stop test, so this
+    is that test's outcome inverted, not a new shape.
+    """
     jobs_dir = tmp_path / "jobs"
     daemon_dir = _roster(tmp_path, {"done1": os.getpid()})
     _write_state(jobs_dir, "done1", {"state": "done", "tempo": "idle"})
@@ -2805,11 +2568,18 @@ def test_execute_tick_stops_a_done_node_with_live_pid(
         run_calls.append(argv)
         return _FakeCompleted(returncode=0)
 
+    def _fail_popen(*_args: object, **_kwargs: object) -> None:
+        msg = "a DONE node must never be respawned"
+        raise AssertionError(msg)
+
     monkeypatch.setattr(dag_tick.subprocess, "run", _fake_run)
+    monkeypatch.setattr(dag_tick.subprocess, "Popen", _fail_popen)
     assert dag_tick.execute_tick(ctx) == 0
-    assert run_calls == [["claude", "stop", "done1"]]
+    assert run_calls == []
     captured = capsys.readouterr()
-    assert "dag-tick: STOP done1 (rc=0)" in captured.out
+    assert "STOP" not in captured.out
+    assert not hasattr(dag_tick, "execute_stop")
+    assert "STOP" not in {kind.name for kind in dag_tick.ActionKind}
 
 
 def test_execute_tick_wedged_node_makes_no_action_subprocess_call(
