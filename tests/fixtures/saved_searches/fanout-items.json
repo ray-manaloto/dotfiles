@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-10-03T01:50:52.911556+00:00",
+  "out_dir": "fixtures/fanout-items",
+  "policy_version": null,
+  "query": "llvm-project",
+  "repo": "jdx/mise",
+  "request_id": null,
+  "sources": [
+    {
+      "control": null,
+      "elapsed_s": 0.6670980420312844,
+      "items": [
+        {
+          "date": "2026-09-24T01:56:57Z",
+          "snippet": "<!-- entire-trail-link-start -->\nhttps://entire.io/gh/jdx/mise/trails/172\n<!-- entire-trail-link-end -->\n\nSince 2026.8.9, mise prefers a release's `.tar.zst` asset over `.tar.xz`. For LLVM, that broke installs:\n\n```\n$ mise use -g github:llvm/llvm-project\nError: Failed to install github:llvm/llvm-project@latest: failed to extract tar: …/LLVM-23.1.2-Linux-X64.tar.zst to …: Frame requires too much memory for decoding\n```\n\nLLVM compresses its `.tar.zst` releases with a 1 GiB window (`zstd --long=30`",
+          "title": "fix(install): extract .tar.zst archives compressed with a long window",
+          "url": "https://github.com/jdx/mise/pull/13566"
+        },
+        {
+          "date": "2026-07-16T03:34:21Z",
+          "snippet": "## Summary\n\nPorts jdx/aube's `benchmarks/pgo.bash` three-phase PGO pipeline to mise, wired into the release tarball builds. Follow-up to #11025 / #11027 / #11029 — this attacks the remaining first-touch page-in cost with profile-guided code layout, the last lever identified in that series.\n\n- **`scripts/pgo.bash`** — instrument (`-Cprofile-generate`) → train → rebuild (`-Cprofile-use`). Training is hermetic and offline: throwaway HOME + isolated `MISE_*_DIR`s exercising settings/config load, too",
+          "title": "perf(release): add PGO builds for natively-trainable release targets",
+          "url": "https://github.com/jdx/mise/pull/11031"
+        },
+        {
+          "date": "2026-06-18T20:53:20Z",
+          "snippet": "## Summary\n\nAdd [`ldc`](https://github.com/ldc-developers/ldc), the LLVM-based compiler for the [D programming language](https://dlang.org/), to the mise registry.\n\nRelevant links:\n\n- D programming language: <https://dlang.org/>\n- LDC project page: <https://wiki.dlang.org/LDC>\n- LDC GitHub repository: <https://github.com/ldc-developers/ldc>\n\n## Registry entry\n\n- Backend: [`github:ldc-developers/ldc`](https://github.com/ldc-developers/ldc)\n- Test command: `ldc2 --version`\n- Expected output: `{{ve",
+          "title": "registry: add ldc (github:ldc-developers/ldc)",
+          "url": "https://github.com/jdx/mise/pull/10527"
+        }
+      ],
+      "raw_file": "fixtures/fanout-items/github-issues.raw",
+      "raw_sha256": "1b79d9ce31e2cd264b33df567140ec9a29f815b65de72a038ece5a815f40af4a",
+      "reason": null,
+      "source": "github-issues",
+      "status": "ok"
+    },
+    {
+      "control": null,
+      "elapsed_s": 1.007513708958868,
+      "items": [
+        {
+          "date": "2026-09-24T00:27:43Z",
+          "snippet": "Description\nInstalling or upgrading github:llvm/llvm-project fails while extracting the LLVM .tar.zst archive.\nmise use -g -v github:llvm/llvm-project\n\nThe download and artifact verification succeed, but extraction fails with:\nError: 0: Failed to install github:llvm/llvm-project@latest: failed to extract tar: ~/.local/share/mise/downloads/github-llvm-llvm-project/llvmorg-23.1.2/LLVM-23.1.2-Linux-X64.tar.zst to ~/.local/share/m\n\nRelevant log:\n❯ mise use -g -v github:llvm/llvm-project\nDEBUG ARGS: ",
+          "title": "Installing or upgrading `github:llvm/llvm-project` fails while extracting the LLVM .tar.zst archive.",
+          "url": "https://github.com/jdx/mise/discussions/13563"
+        },
+        {
+          "date": "2026-09-24T01:02:21Z",
+          "snippet": "Description\nWith global:\n[settings]\njava.shorthand_vendor = \"corretto\"\nand a project containing:\n[tools]\njava = \"21\"\nmise correctly resolves 21 to the latest Corretto 21 release, but does not recognize an already-installed vendor-qualified JDK of that exact version.\nFor example, corretto-21.0.12.9.1 is installed, but mise still reports 21.0.12.9.1 as missing.\nThis is not the same as #8170, which has been closed.\nI did have to run mise cache clean java to get the ls-remote output to change and ha",
+          "title": "java.shorthand_vendor does not recognize an already-installed vendor-qualified JDK",
+          "url": "https://github.com/jdx/mise/discussions/13564"
+        },
+        {
+          "date": "2026-09-29T16:02:21Z",
+          "snippet": "Panic\n> mise generate install-script -l -w\n=== Async Backtrace (panic occurred in tokio runtime) ===\n[no accessible async backtrace]\n------- TASK DUMP TREE -------\n\n=== End Async Backtrace ===\n\nThe application panicked (crashed).\nMessage:  called `Option::unwrap()` on a `None` value\nLocation: src/cli/generate/install_script.rs:140\n\n  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n   1: backtrace[2242689a8ea63bae]::backtrace::trace::<<backtrace[2242689a8ea63bae]:",
+          "title": "Mise 2026.9.17 panics running install-script",
+          "url": "https://github.com/jdx/mise/discussions/13823"
+        }
+      ],
+      "raw_file": "fixtures/fanout-items/github-discussions.raw",
+      "raw_sha256": "6376bb57187dd71991d12debf87896059fc311711fc5bea2abe2981009b68b7d",
+      "reason": null,
+      "source": "github-discussions",
+      "status": "ok"
+    },
+    {
+      "control": {
+        "count": 1,
+        "query": "jdx/mise"
+      },
+      "elapsed_s": 2.6150269999634475,
+      "items": [],
+      "raw_file": "fixtures/fanout-items/github-releases.raw",
+      "raw_sha256": "1647cac3486608e218d53c8afabdfe5b39291c0aa892146a311c0d0774f89863",
+      "reason": null,
+      "source": "github-releases",
+      "status": "empty_verified"
+    }
+  ],
+  "strict_five": false
+}

@@ -887,6 +887,11 @@ description = "Fetch raw research evidence concurrently from configured sources"
 # Thin caller; python/src/dotfiles_setup/research_fanout.py.
 run = 'uv run --project python python -m dotfiles_setup.research_fanout'
 
+[tasks.research-saved-search]
+description = "Record, rerun and report freshness of saved GitHub searches"
+# Thin caller; python/src/dotfiles_setup/saved_searches.py (#1502).
+run = 'uv run --project python python -m dotfiles_setup.saved_searches'
+
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"
 # Thin caller (zero-bash-logic); logic in

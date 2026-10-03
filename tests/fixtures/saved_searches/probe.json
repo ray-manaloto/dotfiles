@@ -1,0 +1,13 @@
+{
+  "kind": "probe",
+  "probe_out": "fixtures/plan/code-search.json",
+  "manifest": "fixtures/plan/code-search.json",
+  "generated_at": "2026-10-03T01:51:00+00:00",
+  "probes": [
+    {"kind":"code-search","role":"query","query":"repo:jdx/mise llvm-project","rc":0,"http_status":200,"count":3,"rate_limited":false,"incomplete_results":false},
+    {"kind":"code-search","role":"must-hit","query":"repo:jdx/mise install","rc":0,"http_status":200,"count":12,"rate_limited":false,"incomplete_results":false},
+    {"kind":"code-search","role":"health","query":"repo:cli/cli filename:README.md","rc":0,"http_status":200,"count":9,"rate_limited":false,"incomplete_results":false},
+    {"kind":"code-search","role":"readme","query":"repo:jdx/mise filename:README.md","rc":0,"http_status":200,"count":1,"rate_limited":false,"incomplete_results":false},
+    {"kind":"code-search","role":"known-absent","query":"spent-fixture-nonce repo:jdx/mise","rc":0,"http_status":200,"count":0,"rate_limited":false,"incomplete_results":false}
+  ]
+}

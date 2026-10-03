@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SavedSearchSnapshot",
+  "description": "One saved-search rerun and its fresh controls.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["file", "generated_at", "watches", "controls"],
+  "properties": {
+    "file": {"type": "string"},
+    "generated_at": {"type": "string"},
+    "watches": {"type": "array", "items": {"$ref": "#/$defs/WatchRun"}},
+    "controls": {"type": "array", "items": {"$ref": "#/$defs/SearchControl"}}
+  },
+  "$defs": {
+    "RerunStatus": {"description": "Verified answer or explicit failure of a rerun.", "type": "string", "enum": ["ok", "empty-verified", "empty-unarmed", "rate-limited", "incomplete", "uncollectable", "error"]},
+    "WatchRun": {
+      "description": "Search outcome with its count and returned URLs.",
+      "type": "object",
+      "required": ["id", "kind", "query", "repo", "status", "count", "urls", "confirmed", "reason"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"description": "GitHub search endpoint family.", "type": "string", "enum": ["code", "issues", "discussions", "releases"]},
+        "query": {"type": "string"},
+        "repo": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/RerunStatus"},
+        "count": {"type": "integer", "minimum": -1},
+        "urls": {"type": "array", "items": {"type": "string"}},
+        "confirmed": {"type": ["integer", "null"], "minimum": 0},
+        "reason": {"type": ["string", "null"]},
+        "complete": {"description": "True when every hit was collected (collect all).", "type": "boolean"}
+      }
+    },
+    "SearchControl": {
+      "description": "Fresh positive or negative control outcome.",
+      "type": "object",
+      "required": ["role", "query", "count", "rc", "status"],
+      "properties": {
+        "role": {"type": "string"},
+        "query": {"type": "string"},
+        "count": {"type": "integer", "minimum": -1},
+        "rc": {"type": "integer"},
+        "status": {"$ref": "#/$defs/RerunStatus"}
+      }
+    }
+  }
+}

@@ -11,6 +11,7 @@ export const meta = {
     { title: 'Synthesize', detail: 'one Opus pass writes the report (opus, high)' },
     { title: 'Verify', detail: 'one independent refuter per load-bearing claim (sonnet), a completeness critic, an Opus adjudicator for any refuted or misleading flag, then reconcile' },
     { title: 'Advise', detail: 'optional codex-sol-advisor second opinion (codex tokens, not Claude)' },
+    { title: 'Save', detail: 'research-fanout manifests → docs/research/saved-searches/<slug>.toml (beside the report without a repo root) via one workflow-built `mise run research-saved-search -- record` (haiku); never changes status (#1502)' },
     { title: 'Retrospect', detail: 'a READ-ONLY Explore agent proposes tuning from what this run found hard; a haiku writer saves it as a PROPOSAL FILE under docs/research/kb/reports/agents/ — never applied (#1502)' },
   ],
 }
@@ -211,6 +212,7 @@ const ROUTE = {
   adjudicate: { model: 'opus', effort: 'high' },
   reconcile: { model: 'sonnet', effort: 'medium' },
   advisor: { agentType: 'codex-sol-advisor' },
+  saveSearches: { model: 'haiku' },
   // READ-ONLY by construction: Explore cannot edit, so a retrospect cannot tune its own rules.
   retrospect: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   retrospectWrite: { model: 'haiku' },
@@ -310,15 +312,60 @@ const RETRO_WRITE = { type: 'object', required: ['written', 'path'], properties:
 // gitignored tree. With no known ROOT it sits beside the report.
 const RETRO_PATH = ROOT ? `${ROOT}/docs/research/kb/reports/agents/research-sweep-retrospect-${REPORT_SLUG}.md`
   : `${A.reportPath.replace(/\.md$/, '')}.retrospect.md`
+const SAVED_PATH = ROOT ? `${ROOT}/docs/research/saved-searches/${REPORT_SLUG}.toml`
+  : `${A.reportPath.replace(/\.md$/, '')}.searches.toml`
+const ORIGIN = underDocs ? 'report:docs/' + underDocs : 'report:' + A.reportPath.split('/').pop()
 
 // Retrospect (#1502): every exit — early or late — goes through finish(), so a run that stopped at
 // a null stage still records what was hard. It may only ever ADD to the result: it never changes
 // `status`/`statuses`, so a failed retrospect cannot turn a failed run into `complete`.
 const finish = async result => {
+  let savedSearches = { status: 'skipped', path: SAVED_PATH, watches: 0, missing: [] }
+  if (A.saveSearches !== false) {
+    phase('Save')
+    const manifests = [...new Set([
+      ...dependencyRuns.filter(r => r.fresh === true).map(r => r.manifest),
+      // rc != 0 planner runs are excluded: their manifest (if any) is not this run's answer
+      ...(plan ? plan.runs.filter(r => r.rc === 0).map(r => r.manifest).filter(p => typeof p === 'string' && p.trim()) : []),
+    ])]
+    // Only probes whose PROBE-JSON line this run ACCEPTED: the paths are fixed, so a rejected or missing
+    // probe would otherwise save an earlier run's manifest under this run's question (cold review F4).
+    const probes = [planProbe ? PLAN_PROBE : null, ...DEP_REPOS.map((r, i) => (depProbes[i] ? depProbeOut(r) : null))]
+      .filter(Boolean)
+    const command = [
+      `mise run research-saved-search -- record --out ${shq(SAVED_PATH)} --question ${shq(A.question)} --origin ${shq(ORIGIN)}`,
+      ...manifests.map(p => `--fanout-manifest ${shq(p)}`),
+      ...probes.map(p => `--probe-manifest ${shq(p)}`),
+    ].join(' ')
+    const got = await run('saveSearches', 'save-searches', 'Save', [
+      'Run this ONE command from the repository root exactly, never piped:',
+      '  ' + command,
+      'Return its LAST stdout line — it starts with `SAVED-SEARCH-JSON ` — VERBATIM as `line`: copy it, never retype, reformat or summarise it, and never print environment values.',
+    ].join('\n'), { schema: PROBE })
+    savedSearches.status = got ? 'no-line' : 'save-null'
+    if (got && typeof got.line === 'string' && got.line.trim().startsWith('SAVED-SEARCH-JSON ')) {
+      try {
+        const p = JSON.parse(got.line.trim().slice('SAVED-SEARCH-JSON '.length))
+        if (p && p.kind === 'saved-search-record') {
+          if (p.out !== SAVED_PATH) savedSearches.status = 'mismatch'
+          else if (typeof p.written === 'boolean') savedSearches = {
+            status: p.written ? 'written' : 'not-written', path: SAVED_PATH,
+            watches: p.watches, missing: p.missing,
+            ...(p.written ? {} : { reason: p.reason }),
+          }
+        }
+      } catch (e) {
+        savedSearches.status = 'no-line'
+      }
+    }
+  }
+  if (savedSearches.status !== 'written') log(`Save: searches not saved (${savedSearches.status})`)
+  result = { ...result, savedSearches }
   if (A.retrospect === false) return { ...result, retrospect: { status: 'skipped', path: null } }
   phase('Retrospect')
   const facts = Object.fromEntries(Object.entries({
     status: result.status, statuses: result.statuses, mandatoryGaps: result.mandatoryGaps,
+    savedSearches: savedSearches.status,
     stageGaps: result.stageGaps, fanoutGaps: result.fanoutGaps, mirrorGaps: result.mirrorGaps,
     codeSearchGaps: result.codeSearchGaps, codeSearchNotes: result.codeSearchNotes,
     failedReads: result.failedReads, unverifiedEmpty: result.triage ? result.triage.unverifiedEmpty : undefined,
@@ -379,7 +426,8 @@ const planPrompt = [
   'Choose only the sources that fit the question: API/library behaviour -> github-* + firecrawl-developer + context7;',
   'recent community sentiment -> last30days + exa; general web -> exa + firecrawl-search. Write 1-3 query variants',
   '(short search terms, not sentences). For each variant run exactly:',
-  `  mise run research-fanout -- "<query>" ${REPO ? `--repo ${REPO} ` : ''}--sources <comma list>`,
+  `  mise run research-fanout -- '<query>' ${REPO ? `--repo ${REPO} ` : ''}--sources <comma list>`,
+  "The query must be ONE single-quoted shell word; write a ' inside it as '\\''.",
   'and record the manifest path it prints and its real exit code.',
   DEP_REPOS.length ? `A separate MANDATORY stage already runs ${DEP_SOURCES} for ${DEP_REPOS.join(', ')} (both directions for related repos); add github-* runs only for query variants it does not cover.` : '',
   'GITHUB CODE SEARCH — MANDATORY on every run, through ONE probe that runs every search itself and records the real',
@@ -405,7 +453,8 @@ const depPrompt = (r, i) => [
   `MANDATORY DEPENDENCY-REPO STAGE for ${r}: it runs whatever any planner chose. QUESTION: ${A.question}`,
   'From the repository root, run each command below exactly, in order, never piped (queries are project NAMES or',
   'short search terms, never owner/repo slugs):',
-  ...depQueries(r).map((q, k) => `  mise run research-fanout -- "${q === null ? '<2-4 short search terms from the QUESTION>' : q}" --repo ${r} --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}${RUN_ID ? ` --request-id ${RUN_ID}` : ''}`),
+  ...depQueries(r).map((q, k) => `  mise run research-fanout -- ${q === null ? "'<2-4 short search terms from the QUESTION>'" : shq(q)} --repo ${r} --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}${RUN_ID ? ` --request-id ${RUN_ID}` : ''}`),
+  "Each query must be ONE single-quoted shell word; write a ' inside it as '\\''.",
   'Then run this probe exactly, never piped — it re-reads those manifests (which query really ran, and whether',
   `${DEP_SOURCES} each answered) and runs the code-search and repository checks itself:`,
   '  ' + probeCmd(depProbeOut(r), [

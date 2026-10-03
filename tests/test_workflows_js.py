@@ -93,6 +93,7 @@ KNOWN_LABEL_PREFIXES = {
     "mirror-index",
     "retrospect",
     "retrospect-write",
+    "save-searches",
 }
 
 ARGS = {
@@ -185,9 +186,9 @@ const CODE_SEARCH_OK = [
   { query: 'fresh-nonsense-token', role: 'known-absent', count: 0, rc: 0 },
 ]
 const PLAN_PROBE_OK = (prompt, rows) => PROBE_LINE(prompt, CS(rows))
-const DEPS_QUERIES = (prompt) => prompt.split('mise run research-fanout -- "').slice(1)
+const DEPS_QUERIES = (prompt) => prompt.split("mise run research-fanout -- '").slice(1)
   .map((part, k) => {
-    const q = part.split('"')[0]
+    const q = shWord("'" + part)
     return q.startsWith('<') ? `q${k}` : q
   })
 const DEPS = (prompt, o = {}) => {
@@ -307,6 +308,11 @@ const agent = async (_prompt, options = {}) => {
   if (label.startsWith('mirror')) return MIRROR_OK(_prompt)
   if (label === 'retrospect-write') {
     return { written: true, path: RETRO_PATH_OF(_prompt) }
+  }
+  if (label === 'save-searches') {
+    return { line: 'SAVED-SEARCH-JSON ' + JSON.stringify({
+      kind: 'saved-search-record', out: argsOf(_prompt, '--out')[0],
+      written: true, watches: 3, missing: [] }) }
   }
   if (label === 'triage') {
     return {
@@ -651,6 +657,7 @@ _SWEEP_ROUTING = {
     # its own rules; the verbatim writer is a cheap general-purpose copy job
     "retrospect": ("Explore", "sonnet", "low"),
     "retrospect-write": ("general-purpose", "haiku", ""),
+    "save-searches": ("general-purpose", "haiku", ""),
 }
 
 
@@ -1148,6 +1155,10 @@ for _old, _new in (
         (
             "  if (label === 'reconcile')"
             " events.push({ kind: 'reconcile', prompt: _prompt })\n"
+            "  if (label === 'save-searches') {\n"
+            "    events.push({ kind: 'save-searches', prompt: _prompt })\n"
+            "    return SAVE_STUB\n"
+            "  }\n"
             "  if (label === 'retrospect') {\n"
             "    events.push({ kind: 'retrospect', prompt: _prompt })\n"
             "    return RETRO_STUB\n"
@@ -1183,6 +1194,11 @@ def _mandatory_run(
         "refute": _OK_VERDICT,
         "retro": "{ findings: [], proposals: [] }",
         "retro_write": "{ written: true, path: RETRO_PATH_OF(_prompt) }",
+        "save": (
+            "{ line: 'SAVED-SEARCH-JSON ' + JSON.stringify({"
+            " kind: 'saved-search-record', out: argsOf(_prompt, '--out')[0],"
+            " written: true, watches: 3, missing: [] }) }"
+        ),
         **(stubs or {}),
     }
     body = _sub(_SWEEP_MANDATORY_BODY, "REFUTE", stub["refute"])
@@ -1192,6 +1208,7 @@ def _mandatory_run(
     body = _sub(body, "return INDEX_STUB\n", f"return {stub['mirror_index']}\n")
     body = _sub(body, "return RETRO_STUB\n", f"return {stub['retro']}\n")
     body = _sub(body, "return RETRO_WRITE_STUB\n", f"return {stub['retro_write']}\n")
+    body = _sub(body, "return SAVE_STUB\n", f"return {stub['save']}\n")
     body = _sub(
         body,
         "PLAN_PROBE_OK(_prompt, CODE_SEARCH_OK)",
@@ -1333,9 +1350,10 @@ def test_research_sweep_dependency_stage_runs_per_repo_both_directions(
     assert sorted(deps) == ["deps:example/repo", "deps:other/tool"]
     main_prompt, other_prompt = deps["deps:example/repo"], deps["deps:other/tool"]
     assert main_prompt.count(sources) == 2
-    assert '"tool" --repo example/repo' in main_prompt
+    # single-quoted since #1582: a double-quoted query let a `$VAR` expand in the shell
+    assert "'tool' --repo example/repo" in main_prompt
     assert other_prompt.count(sources) == 1
-    assert '"repo" --repo other/tool' in other_prompt
+    assert "'repo' --repo other/tool" in other_prompt
     # one --out per run: every related repo's query is the same name, so a shared
     # default slug dir would let concurrent runs unlink each other's files (M8)
     out = "--out '.agent/kb/raw/research-fanout/research-sweep/deps"
@@ -2196,6 +2214,7 @@ def test_research_sweep_failed_stage_clause_names_what_was_read(
         ("return INDEX_STUB\n", "return INDEX_OK(_prompt)\n"),
         ("return RETRO_STUB\n", "return null\n"),
         ("return RETRO_WRITE_STUB\n", "return null\n"),
+        ("return SAVE_STUB\n", "return null\n"),
         ("if (label === 'triage') {", "if (label === 'triage') { return null"),
     ):
         body = _sub(body, old, new)
@@ -2669,6 +2688,229 @@ def test_research_sweep_retrospect_runs_on_an_early_exit(tmp_path: Path) -> None
     assert _result(payload)["retrospect"] == {"status": "skipped", "path": None}
 
 
+@pytest.mark.parametrize(
+    ("stub", "expected"),
+    [
+        (
+            (
+                "{ line: 'SAVED-SEARCH-JSON ' + JSON.stringify({"
+                " kind: 'saved-search-record', out: argsOf(_prompt, '--out')[0],"
+                " written: true, watches: 3, missing: [] }) }"
+            ),
+            "written",
+        ),
+        (
+            (
+                "{ line: 'SAVED-SEARCH-JSON ' + JSON.stringify({"
+                " kind: 'saved-search-record', out: '/other.toml',"
+                " written: true, watches: 3, missing: [] }) }"
+            ),
+            "mismatch",
+        ),
+        (
+            (
+                "{ line: 'SAVED-SEARCH-JSON ' + JSON.stringify({"
+                " kind: 'saved-search-record', out: argsOf(_prompt, '--out')[0],"
+                " written: false, watches: 0, missing: ['missing.json'],"
+                " reason: 'no watches' }) }"
+            ),
+            "not-written",
+        ),
+        ("null", "save-null"),
+        ("{ line: 'not-json' }", "no-line"),
+        (
+            (
+                "{ line: 'SAVED-SEARCH-JSON ' + JSON.stringify({"
+                " kind: 'other', out: argsOf(_prompt, '--out')[0] }) }"
+            ),
+            "no-line",
+        ),
+    ],
+)
+def test_research_sweep_save_receipt_never_changes_status(
+    tmp_path: Path, stub: str, expected: str
+) -> None:
+    """Save precedes Retrospect and adds an outcome without changing sweep status.
+
+    FAIL arm: move finish's Save below Retrospect, accept a mismatched out, or
+    let a failed save change status/statuses/mandatoryGaps.
+    """
+    baseline = _mandatory_run(
+        tmp_path, "sweep-no-save.js", {"links": [], "saveSearches": False}
+    )
+    payload = _mandatory_run(tmp_path, "sweep-save.js", {"links": []}, {"save": stub})
+    run_result = _result(payload)
+    saved = cast("dict[str, object]", run_result["savedSearches"])
+    assert run_result["status"] == "complete"
+    assert saved["status"] == expected
+    for key in ("status", "statuses", "mandatoryGaps"):
+        assert run_result[key] == _result(baseline)[key]
+    phases = [event["title"] for event in _of_kind(payload, "phase")]
+    assert phases.index("Save") < phases.index("Retrospect")
+    if expected == "written":
+        assert saved["watches"] == 3
+    if expected == "not-written":
+        assert saved["reason"] == "no watches"
+        assert saved["missing"] == ["missing.json"]
+
+
+def test_research_sweep_save_disabled_has_no_call(tmp_path: Path) -> None:
+    """The caller can opt out independently of Retrospect.
+
+    FAIL arm: drop A.saveSearches === false handling in finish.
+    """
+    disabled = _mandatory_run(
+        tmp_path, "sweep-save-off.js", {"links": [], "saveSearches": False}
+    )
+    enabled = _mandatory_run(tmp_path, "sweep-save-on.js", {"links": []})
+    assert (
+        cast("dict[str, object]", _result(disabled)["savedSearches"])["status"]
+        == "skipped"
+    )
+    calls = cast("list[dict[str, str]]", disabled["calls"])
+    assert all(call["label"] != "save-searches" for call in calls)
+    assert "Save" not in [event["title"] for event in _of_kind(disabled, "phase")]
+    for key in ("status", "statuses", "mandatoryGaps"):
+        assert _result(disabled)[key] == _result(enabled)[key]
+
+
+def test_research_sweep_save_prompt_uses_only_fresh_manifests(tmp_path: Path) -> None:
+    """The command covers planner and all probes while rejecting stale dependency runs.
+
+    FAIL arm: save every dependencyRuns row rather than fresh === true, or
+    omit plan.runs[].manifest because it lives outside FANOUT_DIR.
+    """
+    deps = (
+        "DEPS(_prompt, { runs: argsOf(_prompt, '--repo-check')[0] === 'example/repo'"
+        " ? [{ query: 'q0' }, { query: 'tool', fresh: false }]"
+        " : [{ query: 'repo' }] })"
+    )
+    extra = {
+        "links": [],
+        "relatedRepos": ["other/tool"],
+        "retrospect": False,
+        "reportPath": f"{REPO_ROOT}/docs/research-sweep.md",
+    }
+    planner_manifest = str(tmp_path / "planner.json")
+    plan_runs = (
+        "[{ query: 'q', sources: ['exa'], manifest: "
+        + json.dumps(planner_manifest)
+        + ", rc: 0 }]"
+    )
+    payload = _mandatory_run(
+        tmp_path, "sweep-save-paths.js", extra, {"deps": deps, "plan_runs": plan_runs}
+    )
+    baseline = _mandatory_run(
+        tmp_path,
+        "sweep-save-paths-off.js",
+        {**extra, "saveSearches": False},
+        {"deps": deps, "plan_runs": plan_runs},
+    )
+    prompt = _of_kind(payload, "save-searches")[0]["prompt"]
+    words = _command(prompt, "research-saved-search -- record")
+
+    def values(flag: str) -> list[str]:
+        return [words[index + 1] for index, word in enumerate(words) if word == flag]
+
+    prefix = ".agent/kb/raw/research-fanout/research-sweep"
+    assert values("--fanout-manifest") == [
+        f"{prefix}/deps/example--repo/1/manifest.json",
+        f"{prefix}/deps/other--tool/1/manifest.json",
+        planner_manifest,
+    ]
+    assert values("--probe-manifest") == [
+        f"{prefix}/plan/code-search.json",
+        f"{prefix}/deps/example--repo/probe.json",
+        f"{prefix}/deps/other--tool/probe.json",
+    ]
+    assert values("--origin") == ["report:docs/research-sweep.md"]
+    assert "SAVED-SEARCH-JSON" in prompt
+    assert (
+        cast("dict[str, object]", _result(payload)["savedSearches"])["status"]
+        == "written"
+    )
+    assert not _of_kind(payload, "retrospect")
+    for key in ("status", "statuses", "mandatoryGaps"):
+        assert _result(payload)[key] == _result(baseline)[key]
+
+
+def test_research_sweep_save_runs_on_early_exit(tmp_path: Path) -> None:
+    """An early no-manifests exit still records its probes.
+
+    FAIL arm: call Save only on the final complete path instead of inside finish.
+    """
+    extra = {"links": [], "repo": "", "retrospect": False}
+    stubs = {"plan_runs": "[]"}
+    payload = _mandatory_run(tmp_path, "sweep-save-early.js", extra, stubs)
+    baseline = _mandatory_run(
+        tmp_path, "sweep-save-early-off.js", {**extra, "saveSearches": False}, stubs
+    )
+    assert _result(payload)["status"] == "no-manifests"
+    assert (
+        cast("dict[str, object]", _result(payload)["savedSearches"])["status"]
+        == "written"
+    )
+    for key in ("status", "statuses", "mandatoryGaps"):
+        assert _result(payload)[key] == _result(baseline)[key]
+
+
+@pytest.mark.parametrize(
+    ("report", "repo_root", "origin", "saved_path"),
+    [
+        (
+            f"{REPO_ROOT}/Ray's checkout/docs/research/runs/report.md",
+            f"{REPO_ROOT}/Ray's checkout",
+            "report:docs/research/runs/report.md",
+            (
+                f"{REPO_ROOT}/Ray's checkout/docs/research/saved-searches/"
+                "research--runs--report.toml"
+            ),
+        ),
+        (
+            "/abs/Ray's reports/report.md",
+            str(REPO_ROOT),
+            "report:report.md",
+            f"{REPO_ROOT}/docs/research/saved-searches/report.toml",
+        ),
+        (
+            "/abs/Ray's reports/report.md",
+            None,
+            "report:report.md",
+            "/abs/Ray's reports/report.searches.toml",
+        ),
+    ],
+)
+def test_research_sweep_save_origin_and_shell_quoting(
+    tmp_path: Path, report: str, repo_root: str | None, origin: str, saved_path: str
+) -> None:
+    """Origins are portable, while quoted paths/questions remain single shell words.
+
+    FAIL arm: use the absolute report path for ORIGIN or omit shq in the Save command.
+    """
+    extra = {
+        "links": [],
+        "retrospect": False,
+        "reportPath": report,
+        "repoRoot": repo_root,
+        "question": "Ray's query: $value `literal`",
+    }
+    payload = _mandatory_run(tmp_path, "sweep-save-quoted.js", extra)
+    baseline = _mandatory_run(
+        tmp_path, "sweep-save-quoted-off.js", {**extra, "saveSearches": False}
+    )
+    prompt = _of_kind(payload, "save-searches")[0]["prompt"]
+    words = _command(prompt, "research-saved-search -- record")
+    assert words[words.index("--origin") + 1] == origin
+    assert words[words.index("--out") + 1] == saved_path
+    assert words[words.index("--question") + 1] == extra["question"]
+    assert (
+        cast("dict[str, object]", _result(payload)["savedSearches"])["path"]
+        == saved_path
+    )
+    for key in ("status", "statuses", "mandatoryGaps"):
+        assert _result(payload)[key] == _result(baseline)[key]
+
+
 def test_research_sweep_repo_root_is_normalised_and_dot_segments_refused(
     tmp_path: Path,
 ) -> None:
@@ -2791,6 +3033,7 @@ def test_research_sweep_early_exit_lists_the_stage_status(tmp_path: Path) -> Non
         ("return INDEX_STUB\n", "return INDEX_OK(_prompt)\n"),
         ("return RETRO_STUB\n", "return null\n"),
         ("return RETRO_WRITE_STUB\n", "return null\n"),
+        ("return SAVE_STUB\n", "return null\n"),
         ("if (label === 'plan+fetch') {", "if (label === 'plan+fetch') { return null"),
         (
             "  if (label === 'synthesize') {\n",
