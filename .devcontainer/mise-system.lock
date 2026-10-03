@@ -2235,38 +2235,38 @@ checksum = "sha256:618c4bc1f94b02337ee210003c0b7c066f11548a8cdc5109df10db043dc47
 url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.0/bun-linux-x64-musl-baseline.zip"
 
 [[tools.cargo-binstall]]
-version = "1.24.0"
+version = "1.25.0"
 backend = "aqua:cargo-bins/cargo-binstall"
 
 [tools.cargo-binstall."platforms.linux-arm64"]
-checksum = "sha256:fa5d4362758d13c38c6630260528c895b535e96afeed08ed7003caf722524ab9"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-aarch64-unknown-linux-gnu.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590639427"
+checksum = "sha256:f21f4b209f33d9f4e55a712e530e566c327c93aa54627f28829ef740142bd624"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-aarch64-unknown-linux-gnu.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606891417"
 
 [tools.cargo-binstall."platforms.linux-arm64-musl"]
-checksum = "sha256:c2c44aba65d402ac43ee821387c49246bc574bde65d3d7f0f7a9e666c5a69f7f"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590639354"
+checksum = "sha256:4d3cc6e0308d2f76b7de7f69d1d316a2749917bb6c1a9c69cea803400460e5a6"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-aarch64-unknown-linux-musl.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606891321"
 
 [tools.cargo-binstall."platforms.linux-x64"]
-checksum = "sha256:ab139b59b86ce14baf9a8da0592dd4c73fdc8b8a7d74a9746881bd68d411f4d8"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590638764"
+checksum = "sha256:ff5a7ebf50c3a0f2edaf44bcabc9c05b85ead42f485e026647325a3c665f29c4"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606890700"
 
 [tools.cargo-binstall."platforms.linux-x64-baseline"]
-checksum = "sha256:ab139b59b86ce14baf9a8da0592dd4c73fdc8b8a7d74a9746881bd68d411f4d8"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590638764"
+checksum = "sha256:ff5a7ebf50c3a0f2edaf44bcabc9c05b85ead42f485e026647325a3c665f29c4"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606890700"
 
 [tools.cargo-binstall."platforms.linux-x64-musl"]
-checksum = "sha256:7ffe1832c4bc3148d00f02d51c1d96c9cccdec76a0fa20e6e5692201d78bcc0b"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590638693"
+checksum = "sha256:6d864dd99e63386b54c7ca1808eb000571a9e00f530ed86a2c0016d0290083b9"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606890630"
 
 [tools.cargo-binstall."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7ffe1832c4bc3148d00f02d51c1d96c9cccdec76a0fa20e6e5692201d78bcc0b"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.24.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/590638693"
+checksum = "sha256:6d864dd99e63386b54c7ca1808eb000571a9e00f530ed86a2c0016d0290083b9"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.25.0/cargo-binstall-x86_64-unknown-linux-musl.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/606890630"
 
 [[tools.chezmoi]]
 version = "2.72.2"
@@ -2431,27 +2431,27 @@ conda_deps = [
 ]
 
 [[tools."conda:cmake"]]
-version = "4.4.3"
+version = "4.4.4"
 backend = "conda:cmake"
 
 [tools."conda:cmake".options]
 channel = "conda-forge"
 
 [tools."conda:cmake"."platforms.linux-arm64"]
-checksum = "sha256:e1e2409127984da55665e27abdd21eb6b8a7454cbe0fe7e3ded948a843e25938"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.3-hcbeb305_0.conda"
+checksum = "sha256:dc8ff0ee118f93a820a2c677a548c4d35ba675c91a6f9917fd29116efe928f70"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.4-hcbeb305_0.conda"
 conda_deps = [
-    "libstdcxx-16.2.0-hef695bb_7",
-    "libgcc-16.2.0-h205dda4_7",
-    "rhash-1.4.6-he30d5cf_2",
-    "libuv-1.52.1-h80f16a2_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "liblzma-5.8.3-he30d5cf_1",
-    "ncurses-6.6-h2b6f883_1",
     "libexpat-2.8.5-h4154aff_0",
     "libcurl-8.22.0-h86273da_0",
-    "bzip2-1.0.8-h4777abc_10",
+    "libgcc-16.2.0-h205dda4_7",
+    "libstdcxx-16.2.0-hef695bb_7",
+    "rhash-1.4.6-he30d5cf_2",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "libuv-1.52.1-h80f16a2_1",
+    "ncurses-6.6-h2b6f883_1",
+    "liblzma-5.8.3-he30d5cf_1",
     "zstd-1.5.7-h9d15635_7",
+    "bzip2-1.0.8-h4777abc_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_7",
     "krb5-1.22.2-h095d8e5_2",
@@ -2468,20 +2468,20 @@ conda_deps = [
 ]
 
 [tools."conda:cmake"."platforms.linux-arm64-musl"]
-checksum = "sha256:e1e2409127984da55665e27abdd21eb6b8a7454cbe0fe7e3ded948a843e25938"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.3-hcbeb305_0.conda"
+checksum = "sha256:dc8ff0ee118f93a820a2c677a548c4d35ba675c91a6f9917fd29116efe928f70"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.4-hcbeb305_0.conda"
 conda_deps = [
-    "libstdcxx-16.2.0-hef695bb_7",
-    "libgcc-16.2.0-h205dda4_7",
-    "rhash-1.4.6-he30d5cf_2",
-    "libuv-1.52.1-h80f16a2_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "liblzma-5.8.3-he30d5cf_1",
-    "ncurses-6.6-h2b6f883_1",
     "libexpat-2.8.5-h4154aff_0",
     "libcurl-8.22.0-h86273da_0",
-    "bzip2-1.0.8-h4777abc_10",
+    "libgcc-16.2.0-h205dda4_7",
+    "libstdcxx-16.2.0-hef695bb_7",
+    "rhash-1.4.6-he30d5cf_2",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "libuv-1.52.1-h80f16a2_1",
+    "ncurses-6.6-h2b6f883_1",
+    "liblzma-5.8.3-he30d5cf_1",
     "zstd-1.5.7-h9d15635_7",
+    "bzip2-1.0.8-h4777abc_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_7",
     "krb5-1.22.2-h095d8e5_2",
@@ -2498,20 +2498,20 @@ conda_deps = [
 ]
 
 [tools."conda:cmake"."platforms.linux-x64"]
-checksum = "sha256:a6d21b5166cd7a44fa975e541f1abf851579a8ac3458e72e77125761da06c842"
-url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.3-hff7ac6b_0.conda"
+checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
+url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
+    "libexpat-2.8.5-hd2095e1_0",
+    "ncurses-6.6-hdb14827_1",
+    "rhash-1.4.6-hb03c661_2",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "libuv-1.52.1-h280c20c_1",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "ncurses-6.6-hdb14827_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "rhash-1.4.6-hb03c661_2",
-    "libuv-1.52.1-h280c20c_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "bzip2-1.0.8-hda65f42_10",
-    "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "bzip2-1.0.8-hda65f42_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
     "krb5-1.22.2-hbc21106_2",
@@ -2528,20 +2528,20 @@ conda_deps = [
 ]
 
 [tools."conda:cmake"."platforms.linux-x64-baseline"]
-checksum = "sha256:a6d21b5166cd7a44fa975e541f1abf851579a8ac3458e72e77125761da06c842"
-url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.3-hff7ac6b_0.conda"
+checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
+url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
+    "libexpat-2.8.5-hd2095e1_0",
+    "ncurses-6.6-hdb14827_1",
+    "rhash-1.4.6-hb03c661_2",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "libuv-1.52.1-h280c20c_1",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "ncurses-6.6-hdb14827_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "rhash-1.4.6-hb03c661_2",
-    "libuv-1.52.1-h280c20c_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "bzip2-1.0.8-hda65f42_10",
-    "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "bzip2-1.0.8-hda65f42_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
     "krb5-1.22.2-hbc21106_2",
@@ -2558,20 +2558,20 @@ conda_deps = [
 ]
 
 [tools."conda:cmake"."platforms.linux-x64-musl"]
-checksum = "sha256:a6d21b5166cd7a44fa975e541f1abf851579a8ac3458e72e77125761da06c842"
-url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.3-hff7ac6b_0.conda"
+checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
+url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
+    "libexpat-2.8.5-hd2095e1_0",
+    "ncurses-6.6-hdb14827_1",
+    "rhash-1.4.6-hb03c661_2",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "libuv-1.52.1-h280c20c_1",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "ncurses-6.6-hdb14827_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "rhash-1.4.6-hb03c661_2",
-    "libuv-1.52.1-h280c20c_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "bzip2-1.0.8-hda65f42_10",
-    "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "bzip2-1.0.8-hda65f42_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
     "krb5-1.22.2-hbc21106_2",
@@ -2588,20 +2588,20 @@ conda_deps = [
 ]
 
 [tools."conda:cmake"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:a6d21b5166cd7a44fa975e541f1abf851579a8ac3458e72e77125761da06c842"
-url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.3-hff7ac6b_0.conda"
+checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
+url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
+    "libcurl-8.22.0-ha042cf0_0",
+    "libexpat-2.8.5-hd2095e1_0",
+    "ncurses-6.6-hdb14827_1",
+    "rhash-1.4.6-hb03c661_2",
+    "liblzma-5.8.3-hb03c661_1",
+    "libzlib-1.3.2-h25fd6f3_3",
+    "libuv-1.52.1-h280c20c_1",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "ncurses-6.6-hdb14827_1",
-    "liblzma-5.8.3-hb03c661_1",
-    "rhash-1.4.6-hb03c661_2",
-    "libuv-1.52.1-h280c20c_1",
-    "libzlib-1.3.2-h25fd6f3_3",
-    "bzip2-1.0.8-hda65f42_10",
-    "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
     "zstd-1.5.7-hb78ec9c_7",
+    "bzip2-1.0.8-hda65f42_10",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-he0feb66_7",
     "krb5-1.22.2-hbc21106_2",
@@ -5512,37 +5512,29 @@ url = "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64"
 url_api = "https://api.github.com/repos/mikefarah/yq/releases/assets/522028022"
 
 [[tools.zig]]
-version = "0.16.0"
+version = "0.17.0"
 backend = "core:zig"
 
 [tools.zig."platforms.linux-arm64"]
-checksum = "sha256:ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
-url = "https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz"
+checksum = "sha256:9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8"
+url = "https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz"
 
 [tools.zig."platforms.linux-arm64-musl"]
-checksum = "sha256:ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
-url = "https://ziglang.org/download/0.16.0/zig-aarch64-linux-0.16.0.tar.xz"
+checksum = "sha256:9e8d11661d4ae3bd57702a3832781e23ad151dde5798e16a5ccd503f65234ff8"
+url = "https://ziglang.org/download/0.17.0/zig-aarch64-linux-0.17.0.tar.xz"
 
 [tools.zig."platforms.linux-x64"]
-checksum = "sha256:70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
+checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
 
 [tools.zig."platforms.linux-x64-baseline"]
-checksum = "sha256:70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
+checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
 
 [tools.zig."platforms.linux-x64-musl"]
-checksum = "sha256:70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
+checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
 
 [tools.zig."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-linux-0.16.0.tar.xz"
-
-[tools.zig."platforms.macos-x64"]
-checksum = "sha256:0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-macos-0.16.0.tar.xz"
-
-[tools.zig."platforms.macos-x64-baseline"]
-checksum = "sha256:0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7"
-url = "https://ziglang.org/download/0.16.0/zig-x86_64-macos-0.16.0.tar.xz"
+checksum = "sha256:1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
