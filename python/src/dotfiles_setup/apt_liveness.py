@@ -69,7 +69,7 @@ def _index_versions(
             raise RuntimeError(msg)
         try:
             packages = apt_repo.parse_packages(gzip.decompress(raw))
-        except (OSError, EOFError, zlib.error, KeyError, ValueError, TypeError) as exc:
+        except (OSError, EOFError, zlib.error, ValueError, TypeError) as exc:
             msg = f"{url}: invalid Packages index: {exc}"
             raise ValueError(msg) from exc
         if not packages or any(not package.version for package in packages):

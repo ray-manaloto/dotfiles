@@ -258,7 +258,15 @@ def test_report_limits_installability_claim() -> None:
         b"bad gzip",
         gzip.compress(b"Package: broken\n\n"),
     ],
-    ids=["truncated-gzip", "corrupt-deflate", "bad-gzip-header", "missing-version"],
+    # missing-version-paragraph hits the post-parse "empty or malformed" check,
+    # not the except tuple: parse_packages reads every field with .get, so there
+    # is no KeyError arm (cold review F1 on 2c0ca279).
+    ids=[
+        "truncated-gzip",
+        "corrupt-deflate",
+        "bad-gzip-header",
+        "missing-version-paragraph",
+    ],
 )
 def test_cli_malformed_index_fails_cleanly_with_url(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], raw: bytes
