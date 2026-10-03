@@ -59,12 +59,20 @@ def repos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
     return main_repo.resolve(), lane.resolve()
 
 
-def _job(jobs_dir: Path, session_id: str, name: str, created_at: str) -> None:
+def _job(
+    jobs_dir: Path,
+    session_id: str,
+    name: str,
+    created_at: str,
+    *,
+    state: str | None = None,
+) -> None:
     path = jobs_dir / session_id[:8] / "state.json"
     path.parent.mkdir(parents=True)
-    path.write_text(
-        json.dumps({"sessionId": session_id, "name": name, "createdAt": created_at})
-    )
+    record = {"sessionId": session_id, "name": name, "createdAt": created_at}
+    if state is not None:
+        record["state"] = state
+    path.write_text(json.dumps(record))
 
 
 @pytest.fixture
@@ -308,33 +316,25 @@ def test_a_takeover_while_waiting_for_the_lock_refuses_the_write(
     assert plan.read_text() == before
 
 
-def test_a_newer_finished_coordinator_does_not_lock_out_the_live_one(
-    jobs_dir: Path,
+@pytest.mark.parametrize("newest_state", ["done", "stopped", "working", None])
+def test_an_idle_newer_coordinator_still_supersedes_an_older_one(
+    tmp_path: Path, newest_state: str | None
 ) -> None:
-    """Cold review F2: a stopped/done successor record must not win."""
-    for state, sid in (("stopped", "ffffffff-1"), ("done", "ffffffff-2")):
-        path = jobs_dir / sid[:8] / "state.json"
-        path.parent.mkdir(exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {
-                    "sessionId": sid + "-pad",
-                    "name": f"dotfiles-20261003T16000{sid[-1]}.0-05.coordinator",
-                    "createdAt": "2026-10-03T21:00:00Z",
-                    "state": state,
-                }
-            )
-        )
-    env = {handoff_inbox.SESSION_ENV: NEWEST_ID}
-    assert handoff_inbox.require_newest_coordinator(env, jobs_dir) == NEWEST
-    _job(
-        jobs_dir,
-        "99999999-1111-2222-3333-444444444444",
-        "dotfiles-20261003T160009.0-05.coordinator",
-        "2026-10-03T21:00:00Z",
-    )
+    """``done`` is idle-but-live ($CC/agent-view.md), so it must still win.
+
+    Ray ruled 2026-10-03 to revert a state filter (cold review F2) that let an
+    older, ``working`` coordinator pass whenever the newer one read ``done``.
+    """
+    jobs = tmp_path / "jobs"
+    _job(jobs, OLDER_ID, OLDER, "2026-10-03T19:08:09.393Z", state="working")
+    _job(jobs, NEWEST_ID, NEWEST, "2026-10-03T19:41:32.500Z", state=newest_state)
+
     with pytest.raises(handoff_inbox.InboxError, match="not the newest"):
-        handoff_inbox.require_newest_coordinator(env, jobs_dir)
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: OLDER_ID}, jobs
+        )
+    caller = {handoff_inbox.SESSION_ENV: NEWEST_ID}
+    assert handoff_inbox.require_newest_coordinator(caller, jobs) == NEWEST
 
 
 def test_append_reads_the_body_from_file_or_stdin(

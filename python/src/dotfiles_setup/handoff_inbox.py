@@ -21,9 +21,11 @@ The newest coordinator only (Ray ruled 2026-10-03 ~15:00):
 
 The caller's identity is ``CLAUDE_CODE_SESSION_ID`` resolved through its
 harness job record; it must carry a coordinator name and the newest
-``createdAt`` of every coordinator-named record that is still live (a
-``done`` or ``stopped`` record is skipped, so a dead successor cannot lock the
-live coordinator out). It is checked again once the target's lock is held.
+``createdAt`` of every coordinator-named record, whatever its ``state``: a
+``done`` record is an idle session that may still be live, so a state filter
+would let a superseded coordinator pass (Ray ruling 2026-10-03; the lockout a
+dead record can cause belongs to the gate redesign). It is checked again once
+the target's lock is held.
 
 Limits, stated so nobody relies on more: the variable is caller-supplied, and
 an Agent-tool subagent inherits its parent's session id, so a coordinator's
@@ -76,8 +78,6 @@ TASK_PLAN = Path("task_plan.md")
 LOCK_SUBDIR = Path(".agent") / "state" / "handoff-inbox"
 BACKUP_SUBDIR = LOCK_SUBDIR / "backups"
 SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
-#: Harness job states after which a record no longer owns anything.
-TERMINAL_JOB_STATES = frozenset({"done", "stopped"})
 BACKUPS_KEPT = 20
 
 RC_OK = 0
@@ -192,7 +192,6 @@ def require_newest_coordinator(env: Mapping[str, str], jobs_dir: Path) -> str:
             isinstance(other, str)
             and is_coordinator(other)
             and at is not None
-            and data.get("state") not in TERMINAL_JOB_STATES
             and (newest is None or at > newest[0])
         ):
             newest = (at, other)
