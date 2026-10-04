@@ -1094,8 +1094,8 @@ def decide_payload(
         return ask_quality.decide(tool_input)
     if branch_guard.handles(tool_name):
         # Coordinator confinement first: branch_guard's fix (`git checkout -b`)
-        # would switch the SHARED main checkout's branch, which a coordinator
-        # must never do. Then branch protection, then script policy.
+        # would switch the SHARED main checkout's branch to make an edit, which
+        # a coordinator must never do. Then branch protection, then script policy.
         policy_reason = (
             coordinator_write_guard.decide(tool_input, session_id)
             or branch_guard.decide(tool_input)

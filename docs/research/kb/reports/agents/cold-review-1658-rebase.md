@@ -185,4 +185,3 @@ ticketed, not re-raise them.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — the offline Claude Code docs
   (`sources/agent-harness-docs/docs/claude-code/`), for the hook payload fields, `ExitWorktree` input, worktree
   isolation checks and `bgIsolation`.
-

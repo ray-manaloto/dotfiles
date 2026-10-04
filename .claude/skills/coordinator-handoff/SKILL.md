@@ -73,8 +73,10 @@ returned rc 2 on 2026-10-03.
 
 The successor launches with `worktree.bgIsolation: "none"` so it can edit the
 git-ignored main-checkout planning files (`task_plan.md`, `.agent/**`)
-directly. `coordinator_write_guard` denies its Edit/Write/NotebookEdit on any
-other main-checkout path; Bash writes are not covered, so make none. Never
+directly. `coordinator_write_guard` denies its Edit/Write/NotebookEdit on other
+tracked main-checkout paths, but fails open on a missing identity, a failed git
+probe and the topology cases in #1638 (nested repos, `.git/`, path case, a
+newline in the repo root); Bash writes are not covered, so make none. Never
 switch the main checkout's branch to make an edit (the ship procedure above
 still switches it to ship): use `EnterWorktree name=<slug>` for tracked edits, and `ExitWorktree` (keep) before the next planning-file edit.
 
