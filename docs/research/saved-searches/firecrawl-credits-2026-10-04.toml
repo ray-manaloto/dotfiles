@@ -1,0 +1,80 @@
+# Firecrawl credit availability and HTTP 402 prior art, measured 2026-10-04.
+# Tune queries, cadence, and limits, then rerun with research-saved-search.
+# `issues` includes both issues and PRs; add is:issue or is:pr to narrow.
+# Inline repo qualifiers intentionally use direct REST/GraphQL searches and
+# explicit positive/negative controls. Every {nonce} is fresh per rerun.
+# CLI canonical repository: firecrawl-cli/package.json -> firecrawl/cli;
+# gh api repos/firecrawl/cli confirmed it, with has_discussions=false.
+# Discussion counts are returned nodes up to limit, not total matching count.
+schema_version = 1
+
+[[watch]]
+id = "firecrawl-api-credit-issues-prs"
+kind = "issues"
+origin = "topic:firecrawl-credit-preflight"
+question = "Which API issues and PRs cover balances, credit usage, HTTP 402, or preflight checks?"
+cadence = "weekly"
+tags = ["firecrawl", "credits", "402", "preflight", "issues", "pull-requests"]
+limit = 20
+queries = [
+  'repo:firecrawl/firecrawl credits',
+  'repo:firecrawl/firecrawl "credit" "balance"',
+  'repo:firecrawl/firecrawl "credit-usage"',
+  'repo:firecrawl/firecrawl 402',
+  'repo:firecrawl/firecrawl preflight',
+  'repo:firecrawl/firecrawl "pre-flight"',
+]
+control_hit = 'repo:firecrawl/firecrawl "per-key spend limit"'
+control_absent = 'repo:firecrawl/firecrawl "{nonce}"'
+
+[[watch]]
+id = "firecrawl-cli-credit-issues-prs"
+kind = "issues"
+origin = "topic:firecrawl-credit-preflight"
+question = "Which CLI issues and PRs cover credit-usage/status, balances, 402, and early credit checks?"
+cadence = "weekly"
+tags = ["firecrawl", "cli", "credits", "402", "preflight", "issues", "pull-requests"]
+limit = 20
+queries = [
+  'repo:firecrawl/cli credits',
+  'repo:firecrawl/cli "credit" "balance"',
+  'repo:firecrawl/cli "credit-usage"',
+  'repo:firecrawl/cli 402',
+  'repo:firecrawl/cli preflight',
+  'repo:firecrawl/cli "pre-flight"',
+]
+control_hit = 'repo:firecrawl/cli "omit inferred credit usage"'
+control_absent = 'repo:firecrawl/cli "{nonce}"'
+
+[[watch]]
+id = "firecrawl-credit-discussions"
+kind = "discussions"
+origin = "topic:firecrawl-credit-preflight"
+question = "What do Firecrawl discussions report about balances, credit-usage, 402, and preflight?"
+cadence = "weekly"
+tags = ["firecrawl", "credits", "402", "preflight", "discussions"]
+limit = 20
+queries = [
+  'repo:firecrawl/firecrawl credit',
+  'repo:firecrawl/firecrawl "credit-usage"',
+  'repo:firecrawl/firecrawl 402',
+  'repo:firecrawl/firecrawl preflight',
+  'repo:firecrawl/firecrawl "pre-flight"',
+]
+control_hit = 'repo:firecrawl/firecrawl CostGoat'
+control_absent = 'repo:firecrawl/firecrawl "{nonce}"'
+
+# CLI discussions are disabled today. This watch notices future enablement;
+# its positive control proves the GraphQL route using the enabled main repo.
+# A zero here does not imply an active CLI discussion forum was fully audited.
+[[watch]]
+id = "firecrawl-cli-discussion-availability"
+kind = "discussions"
+origin = "topic:firecrawl-credit-preflight"
+question = "If CLI discussions become available, do they cover credit balance or 402 handling?"
+cadence = "weekly"
+tags = ["firecrawl", "cli", "credits", "402", "discussions", "currently-disabled"]
+limit = 20
+queries = ['repo:firecrawl/cli credit', 'repo:firecrawl/cli 402']
+control_hit = 'repo:firecrawl/firecrawl CostGoat'
+control_absent = 'repo:firecrawl/cli "{nonce}"'
