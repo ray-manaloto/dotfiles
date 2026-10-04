@@ -42,10 +42,8 @@ so the wrapper lives in the Python argv (M3). Anything else is out of scope. If 
     instead of starting a second one.
   - `smoke timed out after <T> seconds: …`: existing prefix; it must also report the reap result
     (`reaped N in-container processes` or `ORPHANS REMAIN: pids …`).
-- The in-container command must self-terminate before the host timeout. Wrap it in GNU coreutils
-  `timeout --kill-after=<k> <T_inner>`, with `T_inner` < host timeout. Verify in the image that `timeout` exists and
-  that it signals the whole process group, including xdist workers and `bun` grandchildren. If it does not, use
-  `setsid` plus a group kill, and say which in the result.
+- The in-container command must self-terminate before the host timeout: a coreutils `timeout --kill-after` wrapper
+  (exact budget in §3a; §3a overrides this bullet).
 
 ## 3a. Design pins (premise-verify round 1, `docs/research/kb/reports/agents/premise-verifier-land-smoke-round2.md`)
 
@@ -77,6 +75,22 @@ so the wrapper lives in the Python argv (M3). Anything else is out of scope. If 
   probe. If `--kill-after` is unsupported, STOP and dissent.
 - **F5 (M9):** keep stdout and stderr separate, and prefer the first FAIL line, then the last 3 stdout lines.
 
+- **Re-verify pins (`docs/research/kb/reports/agents/premise-verifier-land-smoke-round2-reverify.md`):**
+  - **N1, group kill:** run ONE harmless in-image arm, read-only in effect:
+    `docker exec <id> /usr/bin/python3 -c …` plus `timeout -k1 1 sh -c 'sleep 30 & sleep 30 & wait'`, then a `/proc`
+    check that no `sleep 30` survives. Record the result. If children survive, the marker reap is the backstop: say so
+    in the result and do NOT claim group kill.
+  - **N2:** `verify_latest` catches `host_lock.HostLockTimeoutError` and returns a failed `smoke-tiers-1-3` Check
+    carrying `smoke host heavy-slot wait timed out`. `test_container.py:421-426` must stay green.
+  - **N3:** the fake `docker` must support a ready-file handshake, emit rc 124/137 for the inner path, and record argv
+    so the "delete the wrapper" mutation fails an argv assertion. Host-timeout tests use the smallest `T`.
+  - **N4:** the probe and reap use `/usr/bin/python3` (NOT the mise shim; `.devcontainer/mise-system.toml:217-219`).
+    Verify that exact path in-image.
+  - **N5 (accepted residual):** rc 137 from an OOM/SIGKILL child is reported as a timeout. Distinguish by elapsed
+    time ≥ `T` if cheap; otherwise name it in the rule.
+  - **N6:** both timeout paths format the configured `T` (not `T+kill_after+grace`). `test_container.py:315`
+    (`after 0.1 seconds`) is the anchor.
+
 ## 4. Constraints and invariants
 
 - Fix these cold-review findings: **F1** (flaky 0.1 s fixture; generous timeout for non-timeout tests, a ready-file
@@ -85,11 +99,9 @@ so the wrapper lives in the Python argv (M3). Anything else is out of scope. If 
   tail, with the first FAIL line preferred), **F7** (narrow the rule wording), **F8** (make the `pass_fds` mutation
   fail a test), and **F9** (rule failure-mode table rows for the new messages, rule file only). For **F4** and **F6**,
   do not implement them: list them as tickets to file in your closing list.
-- Pre-flight orphan check: before the exec, probe the container read-only for a running `devcontainer-smoke.sh` or a
-  pytest whose parent chain is the smoke. If found, fail with the "already running" detail. Never kill a process you
-  did not start, except in the post-timeout reap.
-- Post-timeout reap: after a host timeout, re-probe the container. Kill only processes whose command line is the smoke
-  script or its descendants. Report survivors in the detail.
+- Pre-flight and reap: exactly as §3a pins them. Pre-flight REFUSES on any `devcontainer-smoke.sh` process. The reap
+  kills ONLY processes carrying THIS run's `DOTFILES_SMOKE_RUN_ID`, on both timeout paths (host `TimeoutExpired` and
+  inner rc 124/137), and reports survivors. **§3a overrides §3 and §4 wherever they differ.**
 - The smoke stays under `host_lock.HEAVY_GATE` (round 1). Do not drop the slot.
 - Zero-skip; no inline suppressions; no new `.sh`; no `2>/dev/null` in the Dockerfile; keep the zero-bash-logic budget.
 - Do NOT run the full pytest suite, `mise run lint` or `mise run verify`. The caller runs the heavy gates under the
