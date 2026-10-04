@@ -133,7 +133,7 @@ def main_checkout(cwd: Path) -> Path   # first entry of `git worktree list --por
 def transcript_path(session_id: str, projects_dir: Path) -> Path | None
 def successor_brief(*, old_name, old_session_id, old_transcript, handoff, ship_queue) -> str
 def launch_argv(name: str, brief: str) -> list[str]
-    # ["claude","--bg","-n",name,"--settings",'{"crossSessionInbound":"accept"}',brief]
+    # ["claude","--bg","-n",name,"--settings",'{"crossSessionInbound":"accept","worktree":{"bgIsolation":"none"}}',brief]
 def launch(handoff: Path, old_session_id: str, *, dry_run: bool, runner=subprocess.run) -> int
     # also records the census (below) into state_dir/<old_session_id>.json["census"]
     # and embeds it in the successor brief.

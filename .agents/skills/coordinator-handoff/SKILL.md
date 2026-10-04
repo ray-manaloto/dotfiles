@@ -71,6 +71,10 @@ mise run coordinator-handoff -- launch \
 `--handoff` must be an **absolute path**; a relative path from a worktree
 returned rc 2 on 2026-10-03.
 
+The successor launches with `worktree.bgIsolation: "none"` to edit main-checkout
+planning files directly, but must still branch before editing tracked files
+(do-not #9, `branch_guard`).
+
 It records the census of this session's live heavy runs, as defined by
 `HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts
 `claude --bg -n dotfiles-<Chicago ISO ns>.coordinator` from the main checkout

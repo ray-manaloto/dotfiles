@@ -500,7 +500,7 @@ def test_launch_dry_run_prints_argv_from_the_main_checkout(
         "-n",
         "dotfiles-20261002T163103.000000007-05.coordinator",
         "--settings",
-        '{"crossSessionInbound":"accept"}',
+        '{"crossSessionInbound":"accept","worktree":{"bgIsolation":"none"}}',
     ]
     assert f"cwd: {main}\n" in output
     brief = argv[6]
@@ -519,6 +519,24 @@ def test_launch_dry_run_prints_argv_from_the_main_checkout(
     assert "DRY RUN" in output
     assert runner.calls == []
     assert not (tmp_path / "state" / f"{SESSION}.json").exists()
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_launch_settings_accept_inbound_and_disable_coordinator_isolation(
+    tmp_path: Path, checkouts: tuple[Path, Path], handoff: Path
+) -> None:
+    """The coordinator's emitted settings preserve inbound and allow planning edits."""
+    lines: list[str] = []
+    deps = _deps(tmp_path, checkouts[1], lines, runner=_Recorder(0))
+
+    assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 0
+
+    argv = json.loads("".join(lines).split("\n", 1)[0].removeprefix("argv: "))
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert settings == {
+        "crossSessionInbound": "accept",
+        "worktree": {"bgIsolation": "none"},
+    }
 
 
 @pytest.mark.usefixtures("coordinator_jobs")
