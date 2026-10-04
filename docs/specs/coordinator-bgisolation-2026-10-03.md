@@ -17,7 +17,7 @@ Follow-up: [coordinator main-checkout write guard](coordinator-main-checkout-gua
 - `python/src/dotfiles_setup/coordinator_handoff.py`: the launch `--settings` JSON.
 - `tests/test_coordinator_handoff.py`: the argv assertion at ~:503. Add one test that the settings JSON parses and carries both keys.
 - `docs/specs/coordinator-auto-handoff-2026-10-02.md` (:136) and `docs/specs/coordinator-auto-handoff-2026-10-02-requirements.md` (:16): update the documented argv.
-- `.claude/skills/coordinator-handoff/SKILL.md`: one sentence in §2 saying the successor launches with `worktree.bgIsolation: "none"`, so it may edit main-checkout planning files directly. It must still branch before editing tracked files (do-not #9, branch_guard).
+- `.claude/skills/coordinator-handoff/SKILL.md`: one sentence in §2 saying the successor launches with `worktree.bgIsolation: "none"`, so it may edit main-checkout planning files directly. Tracked edits go through `EnterWorktree`, never a branch switch of the shared main checkout (superseded wording "must still branch before editing tracked files" — see the main-checkout guard spec, Revision 3).
 
 Nothing else. In particular, do NOT add `worktree.bgIsolation` to `.claude/settings.json` or `.claude/settings.local.json`. That would remove isolation from every lane.
 

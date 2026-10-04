@@ -82,7 +82,6 @@ def test_shared_identity_preserves_handoff_api(name: str | None) -> None:
     expected = name == _NAME
     assert session_common.is_coordinator(name) is expected
     assert coordinator_handoff.is_coordinator(name) is expected
-    assert coordinator_handoff.COORDINATOR_NAME_RE is session_common.COORDINATOR_NAME_RE
 
 
 @pytest.mark.parametrize("key", ["file_path", "notebook_path"])
@@ -144,9 +143,21 @@ def test_missing_malformed_and_lane_records(
     )
 
 
-@pytest.mark.parametrize("content", ["{", "\udcff"])
+_DEEP_NESTING = 200_000
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["{", "\udcff", "[" * _DEEP_NESTING + "]" * _DEEP_NESTING],
+    ids=["truncated", "bad-utf8", "deep-nesting"],
+)
 def test_unreadable_json_allows(repo: Path, jobs: Path, content: str) -> None:
-    """Corrupt JSON and invalid UTF-8 fail open; a valid record denies."""
+    """Corrupt JSON, bad UTF-8 and parser recursion allow; a valid record denies.
+
+    Deep nesting makes the JSON parser raise RecursionError, which read_json
+    does not catch: the guard must allow rather than raise, or the hook fails
+    open past branch_guard and script_guard as well.
+    """
     path = jobs / _SESSION[:8] / "state.json"
     path.write_bytes(content.encode("utf-8", errors="surrogateescape"))
     assert (

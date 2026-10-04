@@ -34,7 +34,7 @@ def decide(tool_input: dict[str, object], session_id: str | None,
 ```
 
 - `decide_payload(tool_name, tool_input, session_id: str | None = None)`. The new parameter is keyword-compatible, and existing callers and tests stay valid.
-- Order inside the file-tool branch: `branch_guard.decide(...) or coordinator_write_guard.decide(...) or script_guard.decide(...)`.
+- Order inside the file-tool branch (Revision 3, after the #1638 review): `coordinator_write_guard.decide(...) or branch_guard.decide(...) or script_guard.decide(...)` — coordinator first, because branch_guard's remedy (`git checkout -b`) would switch the shared main checkout's branch. The identity lookup sits inside the guard's `try`, so a malformed job record allows and the later guards still run.
 - Coordinator identity: `coordinator_handoff.is_coordinator(session_common.session_name(session_id, jobs_dir or session_common.default_jobs_dir()))`. If that would create an import cycle, import `COORDINATOR_NAME_RE` or move `is_coordinator` to `session_common`; say which in the report.
 - "Main checkout" means the target's repository top-level, with `git rev-parse --git-dir` equal to `--git-common-dir` (resolved). Equivalently, the target is NOT in a linked worktree. Reuse `branch_guard` helpers (`_probe_dir`, `_git_capture`, `is_ignored`) where you can, rather than duplicating them.
 - The target path comes from `tool_input["file_path"]` or `["notebook_path"]`, the same as `branch_guard._target`.
@@ -83,7 +83,7 @@ Real git repos in tmp_path: a main checkout, a linked worktree made with `git wo
 | P2 | I | `parse_payload` returns `(tool_name, tool_input, root_payload)`, and `pretooluse_main` discards the root | `hook_guard.py:1039`, `:1108-1109` |
 | P3 | I | `hook_dispatch` calls `hook_guard.decide_payload(tool_name, tool_input)` | `python/src/dotfiles_setup/hook_dispatch.py:55` |
 | P4 | I | `session_name(session_id, jobs_dir)` returns the job's name or None; `job_record` trusts only an exact `sessionId` match | `python/src/dotfiles_setup/session_common.py:71-85` |
-| P5 | L | `COORDINATOR_NAME_RE = ^dotfiles-.+\.coordinator$`; `is_coordinator(name)` | `python/src/dotfiles_setup/coordinator_handoff.py:74`, `:200-202` |
+| P5 | L | `COORDINATOR_NAME_RE = ^dotfiles-.+\.coordinator$`; `is_coordinator(name)` | at authoring: `python/src/dotfiles_setup/coordinator_handoff.py:74`, `:200-202`; since #1633 both live in `session_common.py` |
 | P6 | I | `branch_guard` helpers `_probe_dir`, `_git_capture`, `is_ignored(path, root)`, `_target`; it fails open | `python/src/dotfiles_setup/branch_guard.py:82-170`, `:274-293` |
 | P7 | L | Hook stdin carries `"session_id"` at the root of the payload | `knowledge-base/sources/agent-harness-docs/docs/claude-code/hooks.md:780` |
 | P8 | L | `/task_plan.md` is gitignored | `.gitignore:144` |

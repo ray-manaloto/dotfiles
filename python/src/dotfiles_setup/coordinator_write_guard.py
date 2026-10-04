@@ -61,12 +61,15 @@ def decide(
     """
     if not isinstance(session_id, str) or not session_id:
         return None
-    name = session_common.session_name(
-        session_id, jobs_dir or session_common.default_jobs_dir()
-    )
-    if not session_common.is_coordinator(name):
-        return None
     try:
+        # Inside the try: a malformed job record (e.g. RecursionError, a
+        # RuntimeError) must allow here so the later guards in the `or`
+        # chain still run, rather than crash the hook open.
+        name = session_common.session_name(
+            session_id, jobs_dir or session_common.default_jobs_dir()
+        )
+        if not session_common.is_coordinator(name):
+            return None
         target = _target(tool_input)
         root = _main_root(target)
         if root is None or target is None:
@@ -79,7 +82,7 @@ def decide(
     return (
         f"Coordinator Edit/Write/NotebookEdit in the main checkout is limited "
         f"to git-ignored paths; {target.relative_to(root)} is not ignored. "
-        "Do NOT switch the main checkout's branch. "
+        "Do NOT switch the main checkout's branch to make an edit. "
         "EnterWorktree name=<branch-slug>, then edit the worktree copy; "
         "ExitWorktree (keep) before the next planning-file edit."
     )

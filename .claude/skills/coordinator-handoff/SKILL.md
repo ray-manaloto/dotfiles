@@ -75,8 +75,8 @@ The successor launches with `worktree.bgIsolation: "none"` so it can edit the
 git-ignored main-checkout planning files (`task_plan.md`, `.agent/**`)
 directly. `coordinator_write_guard` denies its Edit/Write/NotebookEdit on any
 other main-checkout path; Bash writes are not covered, so make none. Never
-switch the main checkout's branch: use `EnterWorktree name=<slug>` for tracked
-edits, and `ExitWorktree` (keep) before the next planning-file edit.
+switch the main checkout's branch to make an edit (the ship procedure above
+still switches it to ship): use `EnterWorktree name=<slug>` for tracked edits, and `ExitWorktree` (keep) before the next planning-file edit.
 
 It records the census of this session's live heavy runs, as defined by
 `HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts
