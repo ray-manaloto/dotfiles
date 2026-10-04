@@ -42,14 +42,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from dotfiles_setup import reap
+from dotfiles_setup import handoff_inbox, reap
 from dotfiles_setup.session_common import (
+    HANDOFF_INBOX,
     PROJECT,
+    SHIP_QUEUE,
     SHORT_ID_LEN,
     STATE_LOCK_TIMEOUT_S,
     StateLockedError,
     StateUnreadableError,
     default_jobs_dir,
+    is_coordinator,
     job_record,
     main_checkout,
     now_iso,
@@ -71,7 +74,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-COORDINATOR_NAME_RE = re.compile(r"^dotfiles-.+\.coordinator$")
 COORDINATOR_FEATURE = "coordinator"
 
 ENV_LIMIT = "DOTFILES_COORDINATOR_HANDOFF_PCT"
@@ -104,8 +106,6 @@ type DecisionReason = Literal[
 ]
 
 STATE_SUBDIR = Path(".agent") / "state" / "coordinator-handoff"
-SHIP_QUEUE = Path(".agent") / "plans" / "main-checkout-ship-queue.md"
-HANDOFF_INBOX = Path(".agent") / "plans" / "handoff-inbox"
 CROSS_SESSION_SETTINGS = '{"crossSessionInbound":"accept"}'
 
 #: Long operations a coordinator may own when it hands off. The tasks first,
@@ -192,11 +192,6 @@ class Decision:
         payload = asdict(self)
         payload["warnings"] = list(self.warnings)
         return json.dumps(payload, sort_keys=True)
-
-
-def is_coordinator(name: str | None) -> bool:
-    """Whether a job-record name is a dotfiles coordinator's."""
-    return name is not None and COORDINATOR_NAME_RE.fullmatch(name) is not None
 
 
 def next_level(last_fired: float | None, cfg: Config) -> float:
@@ -1179,7 +1174,7 @@ def _stop(short_id: str, runner: Runner | None) -> int:
 
 
 def add_subcommands(parser: argparse.ArgumentParser) -> None:
-    """``coordinator-handoff {decide,release,name,launch,retire}``."""
+    """``coordinator-handoff {decide,release,name,launch,retire,inbox}``."""
     sub = parser.add_subparsers(dest="handoff_command", required=True)
     decide_parser = sub.add_parser(
         "decide", help="JSON fire decision for one context measurement (rc 0)"
@@ -1242,6 +1237,13 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
         help="Stop even while the old session's harness tasks are in flight",
     )
     retire_parser.add_argument("--dry-run", action="store_true")
+    handoff_inbox.add_subcommands(
+        sub.add_parser(
+            "inbox",
+            help="Sanctioned main-checkout inbox/plan/queue writes "
+            "(mise run handoff-inbox)",
+        )
+    )
     for child in (decide_parser, release_parser, launch_parser, retire_parser):
         child.add_argument(
             "--jobs-dir", type=Path, default=None, help="Override ~/.claude/jobs"
@@ -1258,10 +1260,8 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
 def main(args: argparse.Namespace, _project_root: Path) -> int:
     """Dispatch one parsed ``coordinator-handoff`` invocation."""
     command = args.handoff_command
-    if command == "name":
-        name = stamped_name(args.project, args.feature, time.time_ns())
-        sys.stdout.write(name + "\n")
-        return 0
+    if command in {"name", "inbox"}:
+        return _stateless_main(args)
     try:
         state_dir = (
             getattr(args, "state_dir", None) or main_checkout(Path.cwd()) / STATE_SUBDIR
@@ -1296,6 +1296,15 @@ def main(args: argparse.Namespace, _project_root: Path) -> int:
             deps=LaunchDeps(state_dir=state_dir, jobs_dir=jobs_dir),
         )
     return _retire_main(args, jobs_dir, state_dir)
+
+
+def _stateless_main(args: argparse.Namespace) -> int:
+    """The verbs that need no handoff state directory."""
+    if args.handoff_command == "inbox":
+        return handoff_inbox.main(args)
+    name = stamped_name(args.project, args.feature, time.time_ns())
+    sys.stdout.write(name + "\n")
+    return 0
 
 
 def _release_main(args: argparse.Namespace, state_dir: Path) -> int:

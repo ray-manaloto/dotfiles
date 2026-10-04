@@ -278,9 +278,16 @@ def test_decision_json_shape() -> None:
 
 
 def test_cli_decide_and_renamed(
-    tmp_path: Path, repo: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    repo: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The hook's exact argv shapes parse and answer through `main`."""
+    # `main` builds StartDeps without `processes`, so an "auto" record falls
+    # through to reap.snapshot() of the REAL tree; under a named claude caller
+    # that read "nonconforming" instead of "defer". Pin an empty tree.
+    monkeypatch.setattr(reap, "snapshot", lambda: ())
     state = str(tmp_path / "state")
     _job(tmp_path / "jobs", "auto-session", name_source="auto")
     decide_args = setup_parser().parse_args(

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup import hook_guard
+from dotfiles_setup.session_common import SessionError, main_checkout
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -155,14 +156,28 @@ def _rows(payload: object, member: str) -> list[Mapping[str, object]]:
     return value
 
 
-def _session_ids(payload: object, repo_root: Path) -> tuple[str, ...]:
+def project_name(repo_root: Path) -> str:
+    """AgentsView's project for ``repo_root``: the MAIN checkout's basename.
+
+    AgentsView files a session started in a linked worktree under the main
+    checkout's project (measured 2026-10-03: session 998ab91b, cwd
+    ``fanout-fixes-20261002``, project ``dotfiles``), so the worktree's own
+    basename made the no-flag pass UNVERIFIABLE from every linked worktree
+    (DE-F1). A root that is not a git checkout has only its own name.
+    """
+    try:
+        return main_checkout(repo_root).name
+    except SessionError:
+        return repo_root.name
+
+
+def _session_ids(payload: object, expected_project: str) -> tuple[str, ...]:
     rows = _rows(payload, "sessions")
-    project_name = repo_root.name
     selected: list[str] = []
     for row in rows:
         agent = row.get("agent")
         project = row.get("project")
-        if agent != "claude" or project != project_name:
+        if agent != "claude" or project != expected_project:
             message = (
                 "session list returned a row outside its native filters: "
                 f"agent={agent!r} project={project!r}"
@@ -299,6 +314,7 @@ def _run_pass(
     remote = remote_from_skill(request.skill_path)
     session_ids = request.session_ids
     if not session_ids:
+        project = project_name(repo_root)
         listed = _run_json(
             [
                 "agentsview",
@@ -307,7 +323,7 @@ def _run_pass(
                 "--agent",
                 "claude",
                 "--project",
-                repo_root.name,
+                project,
                 "--include-children",
                 "--limit",
                 str(request.limit),
@@ -316,7 +332,7 @@ def _run_pass(
             ],
             runner=runner,
         )
-        session_ids = _session_ids(listed, repo_root)
+        session_ids = _session_ids(listed, project)
     findings = False
     for session_id in session_ids:
         payload = _run_json(
