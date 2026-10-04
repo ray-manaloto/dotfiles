@@ -106,6 +106,9 @@ _PR_TAG_RE = re.compile(r"^pr-(\d+)$")
 #: daemon busy loading a large image is slow but alive, so sync waits far longer
 #: than the session doctor's 10 s before calling the state UNKNOWN.
 _DOCKER_PS_TIMEOUT_S = 120.0
+#: `{{.State}}` values plain `docker ps` (no `-a`) lists — container_image_id's
+#: first preference, matching its pre-#1554 `docker ps -q` pass.
+_LIVE_STATES = frozenset({"running", "paused", "restarting"})
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
@@ -525,8 +528,11 @@ def container_image_id(names: DevcontainerNames) -> str | None:
     rows = docker_container_rows(names, timeout_s=_DOCKER_PS_TIMEOUT_S)
     if not rows:
         return None
-    running = [cid for cid, state, _name in rows if state == "running"]
-    cid = running[0] if running else rows[0][0]
+    # The pre-#1554 first pass was plain `docker ps -q`, which lists paused and
+    # restarting containers as well as running ones; keep that selection, or
+    # an older paused container loses to a newer exited leftover.
+    live = [cid for cid, state, _name in rows if state in _LIVE_STATES]
+    cid = live[0] if live else rows[0][0]
     res = _run(
         ["docker", "inspect", cid, "--format", "{{.Image}}"],
         timeout=_DOCKER_PS_TIMEOUT_S,
@@ -852,18 +858,29 @@ def _verify(workspace: Path, *, full: bool, image_ref: str) -> bool:
 
 
 def sync_main(workspace: Path, options: SyncOptions | None = None) -> int:
-    """CLI entry: observe → (report CI) → converge → verify. 0 = verified."""
+    """CLI entry: observe → (report CI) → converge → verify. 0 = verified.
+
+    One error boundary for the whole run (#1478, #1554): a docker that stops
+    answering — while observing, or while ``write_sync_record`` reads the
+    overlay id after a lifecycle command succeeded — makes the container state
+    UNKNOWN, so sync exits 2 ("could not verify", as ``--check`` does for an
+    unreachable registry) instead of acting on a guess or escaping as a
+    traceback through ``land``.
+    """
+    try:
+        return _sync_run(workspace, options)
+    except DockerUnavailableError as exc:
+        sys.stdout.write(f"FAIL  sync: container state UNKNOWN — {exc}\n")
+        return 2
+
+
+def _sync_run(workspace: Path, options: SyncOptions | None) -> int:
+    """The body of :func:`sync_main`, without its docker error boundary."""
     opts = options if options is not None else SyncOptions()
     image_ref = opts.image_ref
     _report_inflight(opts.tag, wait=opts.wait)
 
-    try:
-        status = observe(workspace, image_ref)
-    except DockerUnavailableError as exc:
-        # #1478: no container state can be concluded, so neither --check nor
-        # a converge may act — 2 is "could not verify", as for --check below.
-        sys.stdout.write(f"FAIL  sync: container state UNKNOWN — {exc}\n")
-        return 2
+    status = observe(workspace, image_ref)
     # #800 F4: an unreachable registry makes container_current True
     # unconditionally (never take a destructive action on currency grounds
     # while offline) — so [CONTAINER OUTDATED] goes silent here too even

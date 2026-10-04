@@ -561,9 +561,18 @@ def _docker_ps_and_inspect(states: tuple[str, ...], *, inspect_rc: int = 0) -> s
         # must not shadow the genuinely running container (id1).
         (("exited", "running"), "sha256:img-id1"),
         (("running",), "sha256:img-id0"),
+        # Plain `docker ps` (the pre-#1554 first pass) lists paused containers
+        # too: an older PAUSED one still beats a newer exited leftover.
+        (("exited", "paused"), "sha256:img-id1"),
         ((), None),
     ],
-    ids=["stopped-only", "newer-exited-then-running", "running", "none"],
+    ids=[
+        "stopped-only",
+        "newer-exited-then-running",
+        "running",
+        "newer-exited-then-paused",
+        "none",
+    ],
 )
 def test_container_image_id_prefers_running_else_newest(
     monkeypatch: pytest.MonkeyPatch,
@@ -585,6 +594,30 @@ def test_container_image_id_refuses_a_down_daemon(
     )
     with pytest.raises(DockerUnavailableError, match="Cannot connect"):
         sync.container_image_id(_NAMES)
+
+
+def test_sync_exits_unknown_when_docker_fails_after_the_lifecycle_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1554 review: write_sync_record reads the overlay id AFTER `mise run up`.
+
+    That read is outside observe(), so a docker that stops answering there
+    escaped sync_main as a traceback (through `land` too). It must be the same
+    rc=2 UNKNOWN as an observe-time failure, and verification must not run.
+    """
+    monkeypatch.setattr(sync, "observe", lambda *_a: _status(state="stopped"))
+    monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
+    monkeypatch.setattr(sync, "resolve_names", lambda **_k: _NAMES)
+    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
+    lifecycle: list[list[str]] = []
+    monkeypatch.setattr(sync, "_stream", lambda cmd, **_k: lifecycle.append(cmd) or 0)
+    monkeypatch.setattr(
+        sync, "verify_latest", lambda *_a, **_k: pytest.fail("verify ran")
+    )
+    _fake_docker(monkeypatch, tmp_path, "echo 'daemon went away' >&2; exit 1")
+
+    assert sync.sync_main(_WORKSPACE) == 2
+    assert lifecycle == [["mise", "run", "up"]]
 
 
 def test_container_image_id_refuses_a_failed_inspect(
