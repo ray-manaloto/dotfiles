@@ -57,6 +57,11 @@ This is the canonical argv block. Until the class fix, the 12 codex wrappers sti
   stdin is appended as a `<stdin>` block. Prefer stdin for large prompts and
   unambiguous composition, not because positional prompts fail.
 - `--full-context` does not exist.
+- A call that pins no `-m`/`model_reasoning_effort` inherits the GLOBAL `~/.codex/config.toml` (2026-10-01: an
+  unpinned review lens ran at effort `low` and had to be re-run): pin both per call and read the run's model/effort
+  banner or its rollout before citing a result. The project `.codex/config.toml` IS read and validated
+  (`--ignore-user-config` suppresses it) — an older "project config is inert" note is wrong — but it is gitignored and
+  untracked, so `git clean -xdf` deletes it. Evidence: `docs/research/kb/reports/agents/memory-curation-review-2026-10-03.md` (C7a).
 
 The operator-specific control plane and error history remain in
 `.claude/agents/codex-sol-operator.md`; this rule owns only the shared invocation

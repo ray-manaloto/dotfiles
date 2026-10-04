@@ -9,7 +9,8 @@ worked.
 ## Always (Ray, 2026-09-30 — items 2-4 are machine-enforced only inside the `research-sweep-run` workflow; in-lane and item 1 rely on this rule)
 
 1. **Never guess.** Before building anything, research-sweep native tools and features first — mise,
-   Claude Code and codex docs **and their issues**.
+   Claude Code and codex docs **and their issues**. Before diagnosing, search OUR OWN record too: this repo's issues
+   (open and closed), `docs/specs/` decisions and `task_plan.md` RULING lines — recorded is not retrieved.
 2. **Always GitHub code search** (`gh api -X GET search/code`), with a must-hit and a fresh known-absent control.
 3. **Always the dependency repos' issues/PRs/discussions/releases** — pass `--repo`; `--list-sources`
    reporting `needs --repo` means usable, not absent.
