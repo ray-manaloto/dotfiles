@@ -4,6 +4,9 @@ Review: `docs/research/kb/reports/agents/cold-reviewer-llvm-fix5-f2f163a9-2026-1
 Parent: `docs/specs/llvm-major-detect-bump-fix5.md`. Lane llvm23. Line numbers are the review's, at f2f163a9; re-read
 them.
 
+> **F1 RULED (Ray, 2026-10-04, direct AskUserQuestion): "Not frozen: require head".** This amends R1's recorded
+> "apt build is that tag OR the branch head" to "apt has built the current branch head" (head may be the tag or tag+1).
+
 ## Architect decisions on the review
 
 - **F1 (resolves an ambiguity in the ruling):** Ray's ruling text — "release/M.x head equals its latest llvmorg-M tag AND
