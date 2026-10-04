@@ -94,24 +94,37 @@ and slot/timeout coverage for the other paths remains deferred (F6).
 Timeout diagnostics prefer the first stdout `FAIL` line, then the first stderr
 `FAIL` line if stdout has none; otherwise they use the last three stdout lines
 (stderr only if stdout is empty), capped at 2,000 characters. The streams remain
-separate; this does not claim a merged chronology. Both timeout paths report
+separate; this does not claim a merged chronology. Completed non-timeout failures
+retain the combined stdout-then-stderr tail when neither stream has a `FAIL`
+line, so a stderr-only cause remains visible; this is also capped at 2,000
+characters and does not claim a merged chronology. Both timeout paths report
 the configured `<T>`, without a stale-base/rebuild hint.
 `DOTFILES_SMOKE_TIMEOUT_S` overrides the 1,800-second default; invalid, nonfinite
 or nonpositive values retain that default.
 
 Only this verification smoke takes or reuses the host heavy slot. Container id,
 mount destination and HEAD are re-resolved under the slot, which stays held
-through exec, process probe and reap. The smoke child inherits the slot fd when
-present. A bounded slot-wait timeout is a failed Check without a rebuild hint.
+through exec, process probe and reap. The host Docker CLI child inherits the
+slot fd when present; this is not an in-container fd. A bounded slot-wait
+timeout is a failed Check without a rebuild hint.
 
-Pre-flight refuses any live `devcontainer-smoke.sh` process, regardless of its
-marker; it never kills existing work. Each new run has a fresh
+Pre-flight refuses a live process whose argv[0] basename is
+`devcontainer-smoke.sh`, or whose argv[0] basename is `bash`/`sh` and argv[1]
+basename is `devcontainer-smoke.sh`, regardless of its marker. A script name
+mentioned elsewhere in an editor, search or agent argument does not qualify;
+pre-flight never kills existing work. Each new run has a fresh
 `DOTFILES_SMOKE_RUN_ID`. In-container `timeout --kill-after` uses `<T>` plus a
 kill-after budget; the host timeout adds grace so the inner wrapper fires first.
-Both host timeout and inner rc 124/137 probe and reap only processes carrying
-this run's marker, reporting `reaped N in-container processes` or
+Inner rc 124/137 is classified as an in-container timeout only after elapsed
+time reaches 90% of `<T>`; an earlier exit reports its return code. Both host
+timeout and inner rc 124/137 (including early exits) probe and reap only
+processes carrying this run's marker, reporting `reaped N in-container processes` or
 `ORPHANS REMAIN: pids …`. Marker reap is the cleanup backstop. Accepted residual:
-rc 137 from a child OOM/SIGKILL is also classified as a timeout.
+after the elapsed threshold, a child's own rc 124, child OOM/SIGKILL or container
+stop returning rc 137 can still be classified as a timeout. The threshold
+narrows ambiguity; it does not establish the cause. Probe/reap error text is
+bounded to 500 characters and excludes the inline process-scanner program;
+failed reap remains explicitly unverified rather than claiming no orphans.
 
 **Exclude live smoke and unresolved orphans before a retry or standalone probe.**
 Do not bypass a busy host slot with `mise run smoke`; safely schedule that probe

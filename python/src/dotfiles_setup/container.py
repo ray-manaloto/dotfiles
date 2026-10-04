@@ -38,6 +38,7 @@ import math
 import os
 import subprocess
 import sys
+import time
 import uuid
 from typing import TYPE_CHECKING
 
@@ -52,6 +53,8 @@ logger = logging.getLogger(__name__)
 # Smoke can take minutes (tier 2 runs pytest, tier 3 links + runs sanitizers
 # and reaches github over ssh); bound it so a hang surfaces instead of blocking.
 _SMOKE_TIMEOUT_S = 1800.0
+_SMOKE_TIMEOUT_ELAPSED_RATIO = 0.9
+_SMOKE_PROCESS_ERROR_LIMIT = 500
 
 
 @dataclasses.dataclass(frozen=True)
@@ -148,7 +151,13 @@ def matching():
             if state == "Z":
                 continue
             if mode == "probe":
-                selected = b"devcontainer-smoke.sh" in (entry / "cmdline").read_bytes()
+                argv = (entry / "cmdline").read_bytes().split(b"\\0")
+                selected = bool(argv) and (
+                    os.path.basename(argv[0]) == b"devcontainer-smoke.sh"
+                    or (os.path.basename(argv[0]) in {b"bash", b"sh"}
+                        and len(argv) > 1
+                        and os.path.basename(argv[1]) == b"devcontainer-smoke.sh")
+                )
             else:
                 environment = (entry / "environ").read_bytes().split(b"\\0")
                 selected = ("DOTFILES_SMOKE_RUN_ID=" + marker).encode() in environment
@@ -188,6 +197,17 @@ print(json.dumps({"pids": pids, "reaped": len(reaped)}))
 """
 
 
+def _smoke_process_error(message: str) -> str:
+    """Keep bounded diagnostics without including the inline scanner program."""
+    for program in (
+        _SMOKE_PROCESSES_PROGRAM,
+        repr(_SMOKE_PROCESSES_PROGRAM),
+        json.dumps(_SMOKE_PROCESSES_PROGRAM),
+    ):
+        message = message.replace(program, "[inline scanner]")
+    return message.strip()[:_SMOKE_PROCESS_ERROR_LIMIT]
+
+
 def _smoke_processes(
     container_id: str, *, marker: str = "", lock_fd: int | None = None
 ) -> tuple[list[int], int, str]:
@@ -208,7 +228,11 @@ def _smoke_processes(
             pass_fds=() if lock_fd is None else (lock_fd,),
         )
         if result.returncode:
-            return [], 0, result.stderr.strip() or f"exit {result.returncode}"
+            return (
+                [],
+                0,
+                _smoke_process_error(result.stderr) or f"exit {result.returncode}",
+            )
         payload = json.loads(result.stdout)
         pids = payload["pids"]
         reaped = payload["reaped"]
@@ -216,13 +240,24 @@ def _smoke_processes(
             return [], 0, "invalid process list"
         if not isinstance(reaped, int):
             return [], 0, "invalid reap count"
-    except (subprocess.TimeoutExpired, ValueError, KeyError, TypeError, OSError) as exc:
-        return [], 0, str(exc)
+    except subprocess.TimeoutExpired as exc:
+        return (
+            [],
+            0,
+            _smoke_process_error(
+                f"process {'reap' if marker else 'probe'} "
+                f"timed out after {exc.timeout:g} seconds"
+            ),
+        )
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return [], 0, _smoke_process_error(str(exc))
     return pids, reaped, ""
 
 
-def _smoke_output(stdout: str | bytes | None, stderr: str | bytes | None) -> str:
-    """Prefer a FAIL line, then the stdout tail, without reordering streams."""
+def _smoke_output(
+    stdout: str | bytes | None, stderr: str | bytes | None, *, timed_out: bool = True
+) -> str:
+    """Prefer FAIL; use stdout for timeouts and combined streams for completed runs."""
     streams = [
         part.decode(errors="replace") if isinstance(part, bytes) else part or ""
         for part in (stdout, stderr)
@@ -231,8 +266,14 @@ def _smoke_output(stdout: str | bytes | None, stderr: str | bytes | None) -> str
         for line in stream.splitlines():
             if "FAIL" in line:
                 return line[-2000:]
-    lines = streams[0].strip().splitlines() or streams[1].strip().splitlines()
-    return " | ".join(lines[-3:])[-2000:] or "no partial output"
+    lines = (
+        streams[0].strip().splitlines() or streams[1].strip().splitlines()
+        if timed_out
+        else (streams[0] + streams[1]).strip().splitlines()
+    )
+    return " | ".join(lines[-3:])[-2000:] or (
+        "no partial output" if timed_out else "smoke failed (no output)"
+    )
 
 
 def _smoke_timeout_detail(
@@ -267,6 +308,7 @@ def _run_smoke(
     marker = str(uuid.uuid4())
     kill_after = max(1, min(30, 0.1 * timeout))
     grace = max(2, min(60, 0.1 * timeout))
+    started = time.monotonic()
     try:
         res = _run(
             [
@@ -294,13 +336,19 @@ def _run_smoke(
     if res.returncode == 0:
         return True, "tiers 1-3 OK"
     if res.returncode in {124, 137}:
+        elapsed = time.monotonic() - started
         cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
-        return False, (
-            f"smoke timed out after {timeout:g} seconds (in-container timeout): "
-            f"{_smoke_output(res.stdout, res.stderr)}; {cleanup}"
+        timed_out = elapsed >= _SMOKE_TIMEOUT_ELAPSED_RATIO * timeout
+        status = (
+            f"smoke timed out after {timeout:g} seconds (in-container timeout)"
+            if timed_out
+            else f"smoke exited with rc {res.returncode}"
         )
+        output = _smoke_output(res.stdout, res.stderr, timed_out=timed_out)
+        return False, f"{status}: {output}; {cleanup}"
     return False, (
-        f"{_smoke_output(res.stdout, res.stderr)} — stale base? `mise run dev-rebuild`"
+        f"{_smoke_output(res.stdout, res.stderr, timed_out=False)}"
+        " — stale base? `mise run dev-rebuild`"
     )
 
 

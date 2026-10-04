@@ -15,6 +15,7 @@ import textwrap
 import time
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
@@ -214,8 +215,8 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
     monkeypatch.setenv("HOME", str(home))
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    git = shutil.which("git", path=os.defpath)
-    assert git is not None
+    git = shutil.which("git", path=os.defpath) or shutil.which("git")
+    assert git is not None, "smoke fixture requires git on os.defpath or PATH"
     (bindir / "git").symlink_to(git)
     monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
     workspace = tmp_path / "workspace"
@@ -293,12 +294,18 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
             proc = root / "proc"
             proc.mkdir(exist_ok=True)
             if "/usr/bin/python3" in args:
+                program = args[args.index("-c") + 1]
                 if os.environ.get("SMOKE_PROBE_ERROR") or (
                     args[-2] == "reap" and os.environ.get("SMOKE_REAP_ERROR")
                 ):
-                    print("proc unavailable", file=sys.stderr)
+                    form = os.environ.get("SMOKE_ERROR_PROGRAM")
+                    inline = (repr(program) if form == "repr"
+                              else json.dumps(program) if form == "json"
+                              else program if form else "")
+                    print(os.environ.get("SMOKE_PROCESS_ERROR", "proc unavailable")
+                          + inline,
+                          file=sys.stderr)
                     sys.exit(2)
-                program = args[args.index("-c") + 1]
                 sys.argv = ["probe", *args[-2:]]
                 # Execute the shipped scanner against a Docker-boundary proc sandbox.
                 # Actual signal delivery is retained; proc disappearance follows kill.
@@ -388,6 +395,7 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
                 os.write(2, b"old stderr warning\xff\n")
                 if mode == "timeout":
                     time.sleep(60)
+                time.sleep(float(os.environ.get("SMOKE_INNER_DELAY", args[-2][:-1])))
                 if mode == "inner_group" and "timeout" in args:
                     os.killpg(child.pid, signal.SIGKILL)
                     child.wait(timeout=20)
@@ -432,6 +440,36 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
             if str(state) in command.stdout:
                 with contextlib.suppress(ProcessLookupError):
                     os.kill(int(pid), signal.SIGKILL)
+
+
+def test_smoke_fixture_uses_path_when_defpath_has_no_git(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> None:
+    """A mise-provided PATH git still initializes the isolated public gate."""
+    git = shutil.which("git", path=os.defpath) or shutil.which("git")
+    assert git is not None, "regression control requires a working git"
+    path_bin = tmp_path / "path-git"
+    path_bin.mkdir()
+    (path_bin / "git").symlink_to(git)
+    monkeypatch.setenv("PATH", f"{path_bin}:{os.environ['PATH']}")
+    monkeypatch.setattr(os, "defpath", str(tmp_path / "empty-default-path"))
+    assert shutil.which("git", path=os.defpath) is None
+    workspace = request.getfixturevalue("smoke_system")
+    assert container.verify_latest_main(workspace) == 0
+
+
+def test_completed_failure_reports_stderr_only_cause(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Progress on stdout must not hide a stderr-only mise panic."""
+    monkeypatch.setenv("SMOKE_MODE", "diagnostic")
+    monkeypatch.setenv("SMOKE_OUTPUT", "tier 2 starting")
+    monkeypatch.setenv("SMOKE_STDERR", "mise Rust panic: src/git.rs:193")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert "mise Rust panic: src/git.rs:193" in check.detail
 
 
 @pytest.mark.parametrize("entrypoint", ["checks", "verify", "sync"])
@@ -644,13 +682,19 @@ def test_inner_timeout_and_marker_cleanup(
 
 
 @pytest.mark.parametrize("marker", ["", "other-run"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "/workspaces/scripts/devcontainer-smoke.sh",
+        "/bin/bash\0scripts/devcontainer-smoke.sh",
+        "/bin/sh\0/workspaces/scripts/devcontainer-smoke.sh",
+    ],
+)
 def test_preflight_refuses_existing_smoke_without_killing(
-    smoke_system: Path, marker: str
+    smoke_system: Path, marker: str, command: str
 ) -> None:
     root = Path(os.environ["SMOKE_STATE"])
-    row = _proc_row(
-        root, 999999, command="bash scripts/devcontainer-smoke.sh", marker=marker
-    )
+    row = _proc_row(root, 999999, command=command, marker=marker)
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
     assert check.ok is False
     assert check.detail == "smoke already running in cafef00dbeef (pids 999999)"
@@ -658,6 +702,71 @@ def test_preflight_refuses_existing_smoke_without_killing(
     assert not (root / "marker").exists()
     assert len(_smoke_calls()) == 1
     assert _smoke_calls()[0]["args"][-2] == "probe"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python\0-c\0print('devcontainer-smoke.sh')",
+        "agent\0message about scripts/devcontainer-smoke.sh",
+        "grep\0devcontainer-smoke.sh",
+        "vim\0scripts/devcontainer-smoke.sh",
+        "bash\0-c\0echo scripts/devcontainer-smoke.sh",
+        "sh\0-c\0echo scripts/devcontainer-smoke.sh",
+        "/bin/not-devcontainer-smoke.sh\0scripts/devcontainer-smoke.sh",
+    ],
+)
+def test_preflight_ignores_mentions_of_smoke_script(
+    smoke_system: Path, command: str
+) -> None:
+    root = Path(os.environ["SMOKE_STATE"])
+    row = _proc_row(root, 999999, command=command, marker="other-run")
+    assert container.verify_latest_main(smoke_system) == 0
+    assert row.exists()
+    assert (root / "marker").exists()
+
+
+@pytest.mark.parametrize("mode", ["inner124", "inner137"])
+def test_early_timeout_like_exit_reports_rc_and_still_reaps(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    monkeypatch.setenv("SMOKE_MODE", mode)
+    monkeypatch.setenv("SMOKE_INNER_DELAY", "0")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "3")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    rc = "124" if mode == "inner124" else "137"
+    assert f"smoke exited with rc {rc}:" in check.detail
+    assert "timed out" not in check.detail
+    assert "reaped 1 in-container processes" in check.detail
+    assert "old stderr warning" in check.detail
+
+
+@pytest.mark.parametrize("mode", ["inner124", "inner137"])
+@pytest.mark.parametrize("elapsed", [2.699, 2.7])
+def test_inner_timeout_classification_at_ninety_percent(
+    smoke_system: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    elapsed: float,
+) -> None:
+    """The independent clock pins both sides of 0.9 * the three-second bound."""
+    readings = iter((0.0, elapsed))
+    monkeypatch.setattr(
+        container, "time", SimpleNamespace(monotonic=lambda: next(readings))
+    )
+    monkeypatch.setenv("SMOKE_MODE", mode)
+    monkeypatch.setenv("SMOKE_INNER_DELAY", "0")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "3")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    if elapsed == 2.7:
+        assert "smoke timed out after 3 seconds (in-container timeout):" in check.detail
+    else:
+        rc = "124" if mode == "inner124" else "137"
+        assert f"smoke exited with rc {rc}:" in check.detail
+        assert "timed out" not in check.detail
+    assert "reaped 1 in-container processes" in check.detail
 
 
 @pytest.mark.parametrize("mode", ["timeout", "inner124", "inner137"])
@@ -690,14 +799,20 @@ def test_smoke_probe_failure_refuses_launch(
         (
             "early\nfinal one\nfinal two\nfinal three",
             "old stderr warning",
-            "final one | final two | final three",
+            "final two | final three | old stderr warning",
         ),
         ("FAIL: first\nFAIL: second\nlast", "FAIL: stderr", "FAIL: first"),
         ("last stdout", "FAIL: stderr", "FAIL: stderr"),
         ("", "first\nsecond\nthird\nfourth", "second | third | fourth"),
+        (
+            "tier 2 starting",
+            "mise Rust panic: src/git.rs:193",
+            "tier 2 starting | mise Rust panic: src/git.rs:193",
+        ),
+        ("", "", "smoke failed (no output)"),
     ],
 )
-def test_smoke_diagnostics_keep_streams_separate(
+def test_completed_smoke_failure_preserves_stderr(
     smoke_system: Path,
     monkeypatch: pytest.MonkeyPatch,
     stdout: str,
@@ -823,6 +938,7 @@ def test_marker_rechecked_after_process_identity_is_bound(
 ) -> None:
     """A process whose marker changes before signaling is never killed."""
     monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
     monkeypatch.setenv("SMOKE_PID_RECYCLED", "1")
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
     root = Path(os.environ["SMOKE_STATE"])
@@ -837,11 +953,71 @@ def test_reap_failure_reports_cleanup_unverified(
     smoke_system: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
     monkeypatch.setenv("SMOKE_REAP_ERROR", "1")
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
     assert check.ok is False
     assert "ORPHANS REMAIN: process reap unverified (proc unavailable)" in check.detail
     assert "dev-rebuild" not in check.detail
+
+
+@pytest.mark.parametrize("mode", ["probe", "reap"])
+@pytest.mark.parametrize("program_form", ["raw", "repr", "json", "long"])
+def test_process_errors_are_bounded_and_exclude_inline_program(
+    smoke_system: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    program_form: str,
+) -> None:
+    monkeypatch.setenv(
+        "SMOKE_PROBE_ERROR" if mode == "probe" else "SMOKE_REAP_ERROR", "1"
+    )
+    monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
+    monkeypatch.setenv(
+        "SMOKE_PROCESS_ERROR",
+        "x" * 1000 if program_form == "long" else "scanner unavailable\n",
+    )
+    if program_form != "long":
+        monkeypatch.setenv("SMOKE_ERROR_PROGRAM", program_form)
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    if program_form == "long":
+        assert "x" * 500 in check.detail
+        assert "x" * 501 not in check.detail
+    else:
+        assert "scanner unavailable" in check.detail
+        assert "[inline scanner]" in check.detail
+    assert "import json" not in check.detail
+    assert "pidfd_send_signal" not in check.detail
+
+
+@pytest.mark.parametrize("mode", ["probe", "reap"])
+def test_process_timeout_omits_command_and_inline_program(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    def timing_out[**P, R](run: Callable[P, R]) -> Callable[P, R]:
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
+            if (
+                args
+                and isinstance(args[0], list)
+                and "/usr/bin/python3" in args[0]
+                and args[0][-2] == mode
+            ):
+                raise subprocess.TimeoutExpired(args[0], 10)
+            return run(*args, **kwargs)
+
+        return wrapped
+
+    monkeypatch.setattr(subprocess, "run", timing_out(subprocess.run))
+    monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert f"process {mode} timed out after 10 seconds" in check.detail
+    assert "import json" not in check.detail
+    assert "/usr/bin/python3" not in check.detail
+    assert "Command" not in check.detail
 
 
 def test_unreadable_process_command_refuses_launch(
@@ -850,7 +1026,7 @@ def test_unreadable_process_command_refuses_launch(
     """An inaccessible process cannot establish that no smoke is running."""
     root = Path(os.environ["SMOKE_STATE"])
     row = _proc_row(
-        root, 999999, command="bash scripts/devcontainer-smoke.sh", marker="other-run"
+        root, 999999, command="bash\0scripts/devcontainer-smoke.sh", marker="other-run"
     )
     monkeypatch.setenv("SMOKE_UNREADABLE", "1")
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
