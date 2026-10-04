@@ -4,8 +4,8 @@
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from msgspec import UNSET, Meta, UnsetType, field
-from msgspec import Struct as _Struct
+from dotfiles_setup.codec import UNSET, Meta, UnsetType, field
+from dotfiles_setup.codec import Struct as _Struct
 
 
 class Struct(_Struct, forbid_unknown_fields=True):

@@ -236,6 +236,12 @@ target-python-version = "3.14"
 # Explicit ruff formatters: the default (black+isort) is deprecated upstream,
 # and these run the venv's ruff with hk's own config.
 formatters = ["ruff-check", "ruff-format"]
+# Runs AFTER those: rewrites `from msgspec import` to `from dotfiles_setup.codec
+# import`, because only the codec may import msgspec (#1502; the in-container
+# ship caught two generated modules crossing that boundary).
+# A comma-separated STRING, not a list: 0.83.0's config validator calls
+# `.split(",")` on it (a list raised AttributeError, measured 2026-10-03).
+custom-formatters = "dotfiles_setup.codegen_imports"
 # Without it every run stamps a timestamp, so `--check` can never pass.
 disable-timestamp = true
 # `extra-fields = "forbid"` reaches msgspec output ONLY through the generic
