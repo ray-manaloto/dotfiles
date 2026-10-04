@@ -1,0 +1,12 @@
+[research-fanout] $ uv run --project python python -m dotfiles_setup.research_fanout 'Codex FORCE_COLOR ANSI banner color never' --repo openai/codex --strict-five --request-id 01a106e5-1722-7430-a264-7868d18cf493 --last30days-plan /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-banner-ansi/docs/research/kb/raw/banner-ansi/r2-last30days-plan.json --out /Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493
+/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/manifest.json
+github-issues  empty_verified  0 items  1.295s
+github-discussions  empty_verified  0 items  1.273s
+github-releases  empty_verified  0 items  9.742s
+exa  ok  10 items  0.159s
+context7  ok  3 items  4.807s
+firecrawl-developer  ok  10 items  0.181s
+firecrawl-search  error  0 items  0.519s  [exited 1: Error: Request failed with status code 402 |]
+last30days  ok  3 items  4.986s
+strict-five  fail  [firecrawl-search did not complete]
+[research-fanout] ERROR task failed

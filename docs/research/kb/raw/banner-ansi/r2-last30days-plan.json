@@ -1,0 +1,15 @@
+{
+  "intent": "factual",
+  "freshness_mode": "recent",
+  "cluster_mode": "none",
+  "source_weights": {"github": 1.0, "grounding": 1.0},
+  "subqueries": [
+    {
+      "id": "codex-banner-ansi-r2",
+      "search_query": "Codex FORCE_COLOR ANSI banner color never",
+      "ranking_query": "OpenAI Codex exec color auto FORCE_COLOR ANSI session id banner color never",
+      "sources": ["github", "grounding"],
+      "weight": 1.0
+    }
+  ]
+}

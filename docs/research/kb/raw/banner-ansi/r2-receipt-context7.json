@@ -1,0 +1,29 @@
+{
+  "control": null,
+  "elapsed_s": 4.697816583036911,
+  "items": [
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/src/render/highlight.rs\n\nMaps ANSI palette index 0-7 to ratatui named Color variants (Black, Red, Green, Yellow, Blue, Magenta, Cyan, Gray) and indices 8-255 to RtColor::Indexed(n). Named variants are used because terminals apply bold/bright differently for named vs indexed colors.\n\n```rust\nfn ansi_palette_color(index: u8) -> RtColor {\n    match index {\n        0x00 => RtColor::Black,\n        0x01 => RtColor::Red,\n        0x02 => RtC",
+      "title": "ansi_palette_color helper",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/src/render/highlight.rs"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md\n\n- **Default:** Most of the time, just use the default foreground color. `reset` can help get it back.\n- **Active controls and input emphasis:** Use `style::accent_style()` or\n  `style::accent_color_on(background)` for text on a painted surface.\n- **Semantic statuses:** Use `style::status_style(StatusTone)`; terminal-owned ANSI\n  colors remain the fallback for limited palettes.\n- **Success and additions:** Use ANSI `green`.",
+      "title": "Foreground colors",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md\n\n- Avoid unchecked custom foreground colors. Use `style::readable_color_on(color, background)`\n  for theme-derived text, passing the background actually painted behind it. `None` means\n  the terminal background; color reduction is included in the contrast check. When the\n  background is unknown, supported theme colors are preserved rather than guessed.\n  Generic code renderers preserve configured syntax foregrounds; diff re",
+      "title": "Avoid",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/context7.raw",
+  "raw_sha256": "7558c05df475e89c82504dc44270a4058f98c6f7a7c3e7bdd0ac2b0dabbadeb6",
+  "reason": null,
+  "source": "context7",
+  "status": "ok"
+}

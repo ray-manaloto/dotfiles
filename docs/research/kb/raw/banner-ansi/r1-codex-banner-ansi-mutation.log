@@ -1,0 +1,31 @@
+bringing up nodes...
+bringing up nodes...
+
+F
+=================================== FAILURES ===================================
+____________ test_parent_thread_id_from_real_codex_0160_ansi_banner ____________
+[gw0] darwin -- Python 3.14.0 /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-banner-ansi/python/.venv/bin/python
+
+    def test_parent_thread_id_from_real_codex_0160_ansi_banner() -> None:
+        banner = (
+            Path(__file__).parent / "fixtures" / "codex-0.160.0-banner.txt"
+        ).read_bytes()
+    
+        assert b"\x1b[1msession id:\x1b[0m" in banner
+>       assert (
+            lane_result.parse_parent_thread_id(banner.decode("utf-8"))
+            == "01a1068f-53a0-7540-a774-b8222ab83864"
+        )
+E       assert None == '01a1068f-53a0-7540-a774-b8222ab83864'
+E        +  where None = <function parse_parent_thread_id at 0x1079a37f0>('OpenAI Codex v0.160.0\n--------\n\x1b[1mworkdir:\x1b[0m /Users/rmanaloto/dev/github/ray-manaloto/dotfiles\n\x1b[1mmod...e or modify the checkout; return the complete report in your final response, which the supervisor captures via -o.\n\n')
+E        +    where <function parse_parent_thread_id at 0x1079a37f0> = lane_result.parse_parent_thread_id
+E        +    and   'OpenAI Codex v0.160.0\n--------\n\x1b[1mworkdir:\x1b[0m /Users/rmanaloto/dev/github/ray-manaloto/dotfiles\n\x1b[1mmod...e or modify the checkout; return the complete report in your final response, which the supervisor captures via -o.\n\n' = <built-in method decode of bytes object at 0x7779b18500>('utf-8')
+E        +      where <built-in method decode of bytes object at 0x7779b18500> = b"OpenAI Codex v0.160.0\n--------\n\x1b[1mworkdir:\x1b[0m /Users/rmanaloto/dev/github/ray-manaloto/dotfiles\n\x1b[1mmo...e or modify the checkout; return the complete report in your final response, which the supervisor captures via -o.\n\n".decode
+
+tests/test_lane_result.py:144: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_lane_result.py::test_parent_thread_id_from_real_codex_0160_ansi_banner
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!! xdist.dsession.Interrupted: stopping after 1 failures !!!!!!!!!!!!!
+1 failed in 0.88s
+EXIT=2

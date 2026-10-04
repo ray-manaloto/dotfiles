@@ -1,0 +1,75 @@
+{
+  "clusters": [
+    {
+      "engagement_total": 127799,
+      "sources": [
+        "github"
+      ],
+      "summary": "Project: openai/codex (128K stars, 20517 open issues, Rust)\n  Lightweight coding agent that runs in your terminal\n  README: <p align=\"center\"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.\n<p align=\"center\">\n  <img src=\"https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png\" alt=\"Codex CLI splash\" width=\"80%\" />\n</p>\n</br>\nIf you want C",
+      "title": "openai/codex (128K stars) - 20517 open issues"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "# A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary. \u00b7 2026-09-10T00:00:00+00:00\n\nA branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.\n\nI built a two-color Main Thread banner with Quarkus Banner 1.6.0. The extension renders the FIGlet text, font, layout, and ANSI/plain variants during augmentation. It stores both finished strings in the packaged application.\n\nAt runtime, BannerRecorder chooses the variant tha",
+      "title": "A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary."
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com\n\n 04 Sep 2026 \u00b7 Original en ingl\u00e9s \u00b7 Art\u00edculo \n\n# FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal\n\nFORCE_COLOR es una propuesta de est\u00e1ndar informal presentada en 2023 para resolver un problema cotidiano en la l\u00ednea de comandos: c\u00f3mo activar el color ANSI cuando un programa lo desactiva autom\u00e1ticamente. As\u00ed como la variable de entorno NO_COLOR existe para que el usuario desactive el color en cu",
+      "title": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com"
+    }
+  ],
+  "freshness_verdicts": [],
+  "generated_at": "2026-10-04T12:34:04.954269Z",
+  "query": "Codex FORCE_COLOR ANSI banner color never",
+  "results": [
+    {
+      "candidate_id": "https://github.com/openai/codex",
+      "cluster": 0,
+      "engagement": {
+        "comments": 20517,
+        "stars": 127799
+      },
+      "published_at": "2026-10-04",
+      "relevance_score": 0.6546,
+      "source": "github",
+      "summary": "Project: openai/codex (128K stars, 20517 open issues, Rust)\n  Lightweight coding agent that runs in your terminal\n  README: <p align=\"center\"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.\n<p align=\"center\">\n  <img src=\"https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png\" alt=\"Codex CLI splash\" width=\"80%\" />\n</p>\n</br>\nIf you want C",
+      "title": "openai/codex (128K stars) - 20517 open issues",
+      "url": "https://github.com/openai/codex"
+    },
+    {
+      "candidate_id": "https://linkedin.com/posts/markuseisele_java-quarkus-quarkiverse-activity-7503697630019928064-phnm",
+      "cluster": 1,
+      "engagement": {},
+      "published_at": "2026-09-10",
+      "relevance_score": 0.0,
+      "source": "grounding",
+      "summary": "# A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary. \u00b7 2026-09-10T00:00:00+00:00\n\nA branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.\n\nI built a two-color Main Thread banner with Quarkus Banner 1.6.0. The extension renders the FIGlet text, font, layout, and ANSI/plain variants during augmentation. It stores both finished strings in the packaged application.\n\nAt runtime, BannerRecorder chooses the variant tha",
+      "title": "A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.",
+      "url": "https://www.linkedin.com/posts/markuseisele_java-quarkus-quarkiverse-activity-7503697630019928064-PhNM"
+    },
+    {
+      "candidate_id": "https://ojeo.com/noticia/force-color-el-est%c3%a1ndar-informal-para-forzar-el-color-en-la-terminal",
+      "cluster": 2,
+      "engagement": {},
+      "published_at": "2026-09-04",
+      "relevance_score": 0.0,
+      "source": "grounding",
+      "summary": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com\n\n 04 Sep 2026 \u00b7 Original en ingl\u00e9s \u00b7 Art\u00edculo \n\n# FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal\n\nFORCE_COLOR es una propuesta de est\u00e1ndar informal presentada en 2023 para resolver un problema cotidiano en la l\u00ednea de comandos: c\u00f3mo activar el color ANSI cuando un programa lo desactiva autom\u00e1ticamente. As\u00ed como la variable de entorno NO_COLOR existe para que el usuario desactive el color en cu",
+      "title": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com",
+      "url": "https://ojeo.com/noticia/force-color-el-est%C3%A1ndar-informal-para-forzar-el-color-en-la-terminal/"
+    }
+  ],
+  "schema_version": "1.3",
+  "source_status": {
+    "github": "ok",
+    "grounding": "ok"
+  },
+  "window_days": 30
+}

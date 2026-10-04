@@ -1,0 +1,257 @@
+{
+  "generated_at": "2026-10-04T12:34:09.012191+00:00",
+  "out_dir": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493",
+  "policy_version": "strict-five-v1",
+  "query": "Codex FORCE_COLOR ANSI banner color never",
+  "repo": "openai/codex",
+  "request_id": "01a106e5-1722-7430-a264-7868d18cf493",
+  "sources": [
+    {
+      "control": {
+        "count": 10,
+        "query": "codex"
+      },
+      "elapsed_s": 1.0848570419475436,
+      "items": [],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/github-issues.raw",
+      "raw_sha256": "c9938edecb99d754b2d039ac9eec320a94c769b6a6417921e2dcbef9e2fe01a0",
+      "reason": null,
+      "source": "github-issues",
+      "status": "empty_verified"
+    },
+    {
+      "control": {
+        "count": 10,
+        "query": "codex"
+      },
+      "elapsed_s": 1.4381240829825401,
+      "items": [],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/github-discussions.raw",
+      "raw_sha256": "e56779ec134a9f8d1d081cbb18e643fab4abb2dbcbc9b45057d681aa549f358e",
+      "reason": null,
+      "source": "github-discussions",
+      "status": "empty_verified"
+    },
+    {
+      "control": null,
+      "elapsed_s": 12.028650916996412,
+      "items": [],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/github-releases.raw",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "exited 1: stream error: stream ID 1; CANCEL; received from peer |",
+      "source": "github-releases",
+      "status": "error"
+    },
+    {
+      "control": null,
+      "elapsed_s": 1.6544161249767058,
+      "items": [
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Custom command-backed TUI status line or colored status banner",
+          "url": "https://github.com/openai/codex/issues/20244"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Codex 0.130.0 still loses background/pill colors inside tmux 3.6a",
+          "url": "https://github.com/openai/codex/issues/22761"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Allow configuring semantic TUI colors beyond syntax highlighting",
+          "url": "https://github.com/openai/codex/issues/21130"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "ANSI background colors are dropped in command output rendering",
+          "url": "https://github.com/openai/codex/issues/22056"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Diff rendering (still) looks bad on Apple Terminal.app on Monterey",
+          "url": "https://github.com/openai/codex/issues/15416"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "codex-rs/tui/src/terminal_palette.rs",
+          "url": "https://github.com/openai/codex/blob/5af85998/codex-rs/tui/src/terminal_palette.rs"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "codex-rs/tui/src/terminal_palette.rs",
+          "url": "https://github.com/openai/codex/blob/31519549/codex-rs/tui/src/terminal_palette.rs"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "FORCE_COLOR: Keep Your Command Line Colorful, Even when Piping - Retain Text Colors in Logs, Output Streams, and More",
+          "url": "https://force-color.org/"
+        },
+        {
+          "date": "2026-02-26T00:00:00.000Z",
+          "snippet": "",
+          "title": "`ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices \u00b7 Issue #12890 \u00b7 openai/codex",
+          "url": "https://github.com/openai/codex/issues/12890"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "fix(tui): decode ANSI alpha-channel encoding in syntax themes",
+          "url": "https://github.com/openai/codex/pull/13382/files"
+        }
+      ],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/exa.raw",
+      "raw_sha256": "f2703b27274c8547e920b71591993528ddd48a0e706b0058ab4b13e879083f05",
+      "reason": null,
+      "source": "exa",
+      "status": "ok"
+    },
+    {
+      "control": null,
+      "elapsed_s": 4.697816583036911,
+      "items": [
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/src/render/highlight.rs\n\nMaps ANSI palette index 0-7 to ratatui named Color variants (Black, Red, Green, Yellow, Blue, Magenta, Cyan, Gray) and indices 8-255 to RtColor::Indexed(n). Named variants are used because terminals apply bold/bright differently for named vs indexed colors.\n\n```rust\nfn ansi_palette_color(index: u8) -> RtColor {\n    match index {\n        0x00 => RtColor::Black,\n        0x01 => RtColor::Red,\n        0x02 => RtC",
+          "title": "ansi_palette_color helper",
+          "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/src/render/highlight.rs"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md\n\n- **Default:** Most of the time, just use the default foreground color. `reset` can help get it back.\n- **Active controls and input emphasis:** Use `style::accent_style()` or\n  `style::accent_color_on(background)` for text on a painted surface.\n- **Semantic statuses:** Use `style::status_style(StatusTone)`; terminal-owned ANSI\n  colors remain the fallback for limited palettes.\n- **Success and additions:** Use ANSI `green`.",
+          "title": "Foreground colors",
+          "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md\n\n- Avoid unchecked custom foreground colors. Use `style::readable_color_on(color, background)`\n  for theme-derived text, passing the background actually painted behind it. `None` means\n  the terminal background; color reduction is included in the contrast check. When the\n  background is unknown, supported theme colors are preserved rather than guessed.\n  Generic code renderers preserve configured syntax foregrounds; diff re",
+          "title": "Avoid",
+          "url": "https://github.com/openai/codex/blob/main/codex-rs/tui/styles.md"
+        }
+      ],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/context7.raw",
+      "raw_sha256": "7558c05df475e89c82504dc44270a4058f98c6f7a7c3e7bdd0ac2b0dabbadeb6",
+      "reason": null,
+      "source": "context7",
+      "status": "ok"
+    },
+    {
+      "control": null,
+      "elapsed_s": 1.230705082998611,
+      "items": [
+        {
+          "date": null,
+          "snippet": "This PR enriches the output of the `exec` subcommand, making use of color. It also introduces a new `--color=always|never|auto` option so the caller can control whether the output is colorized.\n\nI had to do a bit of experimentation with the `owo_colors` crate to figure out how to support this in a maintainable way because its `if_supports_color()` API is annoying to work with and `owo_colors::set_override(false)` doesn't do what you might expect. As you can see in `event_processor.rs`, I went wi",
+          "title": "openai/codex#719",
+          "url": "https://github.com/openai/codex/issues/719"
+        },
+        {
+          "date": null,
+          "snippet": "New style guide:\n\n# Headers, primary, and secondary text\n\n- **Headers:** Use `bold`. For markdown with various header levels, leave in the `#` signs.\n- **Primary text:** Default.\n- **Secondary text:** Use `dim`.\n\n# Foreground colors\n\n- **Default:** Most of the time, just use the default foreground color. `reset` can help get it back.\n- **Selection:** Use ANSI `blue`. (Ed & AE want to make this cyan too, but we'll do that in a followup since it's riskier in different themes.)\n- **User input tips ",
+          "title": "openai/codex#2401",
+          "url": "https://github.com/openai/codex/issues/2401"
+        },
+        {
+          "date": null,
+          "snippet": "# `ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices\\#12890\n\n#13016\n\n#13016\n\n## Description\n\ntummetott\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPro\n\n### Which model were you using?\n\ngpt-5.3-codex\n\n### What platform is your computer?\n\nDarwin 24.6.0 arm64 arm\n\n### What terminal emulator and version are you using (if applicable)?\n\nWezterm\n\n### What issue are you seeing?\n\nContinuation of #1618\n\nWhen `tui.",
+          "title": "`ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices#12890",
+          "url": "https://github.com/openai/codex/issues/12890"
+        },
+        {
+          "date": null,
+          "snippet": "# Codex CLI themes are genuinely unusable\\#12912\n\n#13016\n\n#13016\n\n## Description\n\nimmapolar\n\n**Codex CLI version:**\n\n0.105.0\n\n**Description:**\n\nThe `background` key inside `.tmTheme` scope rules for `markup.inserted`, `markup.deleted`, and `markup.changed` is completely ignored. The diff view always renders with hardcoded bright red/green backgrounds regardless of what's defined in the custom theme file.\n\n**Impact:**\n\nUnusable for anyone with a custom terminal color scheme. The bright hardcoded ",
+          "title": "Codex CLI themes are genuinely unusable#12912",
+          "url": "https://github.com/openai/codex/issues/12912"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "TUI status line becomes monochrome despite status_line_use_colors=true in 0.156.x#48068",
+          "url": "https://github.com/openai/codex/issues/48068"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "TUI: Hook systemMessage renders ANSI SGR escapes as literal text instead of styles#48451",
+          "url": "https://github.com/openai/codex/issues/48451"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "TUI: set DECSET 2031 so an in-place terminal theme change updates the composer colours#38575",
+          "url": "https://github.com/openai/codex/issues/38575"
+        },
+        {
+          "date": null,
+          "snippet": "# Color diff in Warp terminal is unreadable in the new version (Windows)\\#12904\n\n#13016\n\n#13016\n\n## Description\n\ntomasmarekk\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPRO\n\n### Which model were you using?\n\ngpt-5.3-codex-xhigh\n\n### What platform is your computer?\n\nMicrosoft Windows NT 10.0.26200.0 x64\n\n### What terminal emulator and version are you using (if applicable)?\n\nWarp\n\n### What issue are you seeing?\n\nAfter installing the new version",
+          "title": "Color diff in Warp terminal is unreadable in the new version (Windows)#12904",
+          "url": "https://github.com/openai/codex/issues/12904"
+        },
+        {
+          "date": null,
+          "snippet": "# TUI: startup-only palette cache leaves input unreadable after system light/dark changes (0.154.0)\\#45163\n\n## Description\n\nlightninglu10\n\n### What version of Codex CLI is running?\n\n`codex-cli 0.154.0`. The startup-only cache is also present in upstream `main` at `a592c38c16cdd7623dacc9168926ebccedfb67d3`.\n\n### What subscription do you have?\n\nNot relevant to this terminal-rendering issue.\n\n### Which model were you using?\n\nModel-independent; observed in long-running Codex CLI sessions.\n\n### What ",
+          "title": "TUI: startup-only palette cache leaves input unreadable after system light/dark changes (0.154.0)#45163",
+          "url": "https://github.com/openai/codex/issues/45163"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Use syntax theme colors for inline code and file paths",
+          "url": "https://github.com/openai/codex/issues/46069"
+        }
+      ],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/firecrawl-developer.raw",
+      "raw_sha256": "be94cda3e582c6fffc3c23ee5c839e2bbd1305c8f4677c40e92a2c9ba316e2db",
+      "reason": null,
+      "source": "firecrawl-developer",
+      "status": "ok"
+    },
+    {
+      "control": null,
+      "elapsed_s": 0.39725174999330193,
+      "items": [],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/firecrawl-search.raw",
+      "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "exited 1: Error: Request failed with status code 402 |",
+      "source": "firecrawl-search",
+      "status": "error"
+    },
+    {
+      "control": null,
+      "elapsed_s": 8.009643082972616,
+      "items": [
+        {
+          "date": "2026-10-04",
+          "snippet": "Project: openai/codex (128K stars, 20517 open issues, Rust)\n  Lightweight coding agent that runs in your terminal\n  README: <p align=\"center\"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.\n<p align=\"center\">\n  <img src=\"https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png\" alt=\"Codex CLI splash\" width=\"80%\" />\n</p>\n</br>\nIf you want C",
+          "title": "openai/codex (128K stars) - 20517 open issues",
+          "url": "https://github.com/openai/codex"
+        },
+        {
+          "date": "2026-09-10",
+          "snippet": "# A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary. \u00b7 2026-09-10T00:00:00+00:00\n\nA branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.\n\nI built a two-color Main Thread banner with Quarkus Banner 1.6.0. The extension renders the FIGlet text, font, layout, and ANSI/plain variants during augmentation. It stores both finished strings in the packaged application.\n\nAt runtime, BannerRecorder chooses the variant tha",
+          "title": "A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.",
+          "url": "https://www.linkedin.com/posts/markuseisele_java-quarkus-quarkiverse-activity-7503697630019928064-PhNM"
+        },
+        {
+          "date": "2026-09-04",
+          "snippet": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com\n\n 04 Sep 2026 \u00b7 Original en ingl\u00e9s \u00b7 Art\u00edculo \n\n# FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal\n\nFORCE_COLOR es una propuesta de est\u00e1ndar informal presentada en 2023 para resolver un problema cotidiano en la l\u00ednea de comandos: c\u00f3mo activar el color ANSI cuando un programa lo desactiva autom\u00e1ticamente. As\u00ed como la variable de entorno NO_COLOR existe para que el usuario desactive el color en cu",
+          "title": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com",
+          "url": "https://ojeo.com/noticia/force-color-el-est%C3%A1ndar-informal-para-forzar-el-color-en-la-terminal/"
+        }
+      ],
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/last30days.raw",
+      "raw_sha256": "5c4a698c08b48b05506b13628ca04632aff6bf84f24d84539b02d6f039a26e97",
+      "reason": null,
+      "source": "last30days",
+      "status": "ok"
+    }
+  ],
+  "strict_five": true
+}

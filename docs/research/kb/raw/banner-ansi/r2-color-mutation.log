@@ -1,0 +1,55 @@
+bringing up nodes...
+bringing up nodes...
+
+F
+=================================== FAILURES ===================================
+__________ test_codex_behind_a_mise_shim_still_receives_its_own_flags __________
+[gw0] darwin -- Python 3.14.0 /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-banner-ansi/python/.venv/bin/python
+
+tmp_path = PosixPath('/private/var/folders/z4/0p475gq56vvczc3y4qlt60f80000gn/T/pytest-of-rmanaloto/pytest-3668/popen-gw0/test_codex_behind_a_mise_shim_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d327230>
+
+    def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#1362: resolving the shim made argv `mise exec -c …`, so codex never ran.
+    
+        The layout is the real one on this Mac: `shims/codex` is a symlink to the
+        `mise` binary. Resolving that symlink is exactly the regression.
+        """
+        bin_dir = tmp_path / "bin"
+        shims = tmp_path / "shims"
+        bin_dir.mkdir()
+        shims.mkdir()
+        mise = bin_dir / "mise"
+        mise.write_text("#!/bin/sh\nexit 0\n")
+        mise.chmod(0o755)
+        (shims / "codex").symlink_to(mise)
+        found = {"mise": str(mise), "codex": str(shims / "codex")}
+        calls: list[tuple[str, ...]] = []
+    
+        def fake_popen(command: tuple[str, ...], **_kwargs: object) -> _DetachedProcess:
+            calls.append(command)
+            return _DetachedProcess()
+    
+        monkeypatch.setattr(sdlc_team.shutil, "which", found.get)
+        monkeypatch.setattr(sdlc_team.subprocess, "Popen", fake_popen)
+        result = sdlc_team.dispatch(_request(tmp_path), tmp_path)
+    
+        assert result.status is sdlc_team.SdlcStatus.DISPATCHED
+        prefix = result.argv[: result.argv.index("-c")]
+        assert Path(prefix[-2]).name == "codex", prefix
+        assert prefix[-1] == "exec", prefix
+        assert prefix == (str(mise), "exec", "--", "codex", "exec"), (
+            "without `--`, mise parses codex's flags as its own"
+        )
+>       assert "--color" in result.argv
+E       AssertionError: assert '--color' in ('/private/var/folders/z4/0p475gq56vvczc3y4qlt60f80000gn/T/pytest-of-rmanaloto/pytest-3668/popen-gw0/test_codex_behind_a_mise_shim_0/bin/mise', 'exec', '--', 'codex', 'exec', '-c', ...)
+E        +  where ('/private/var/folders/z4/0p475gq56vvczc3y4qlt60f80000gn/T/pytest-of-rmanaloto/pytest-3668/popen-gw0/test_codex_behind_a_mise_shim_0/bin/mise', 'exec', '--', 'codex', 'exec', '-c', ...) = SdlcTeamDispatch(run_id='run-42', status=<SdlcStatus.DISPATCHED: 'dispatched'>, pid=4242, argv=('/private/var/folders/...odex_behind_a_mise_shim_0', mode=<SdlcMode.REVIEW: 'review'>, started_at='2026-10-04T12:36:48.901682+00:00', errors=()).argv
+
+tests/test_sdlc_team.py:412: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_sdlc_team.py::test_codex_behind_a_mise_shim_still_receives_its_own_flags
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!! xdist.dsession.Interrupted: stopping after 1 failures !!!!!!!!!!!!!
+1 failed in 1.03s

@@ -1,0 +1,9 @@
+github-issues: empty_verified; raw SHA-256 matches; reason=None
+github-discussions: empty_verified; raw SHA-256 matches; reason=None
+github-releases: error; raw SHA-256 matches; reason=exited 1: stream error: stream ID 1; CANCEL; received from peer |
+exa: ok; raw SHA-256 matches; reason=None
+context7: ok; raw SHA-256 matches; reason=None
+firecrawl-developer: ok; raw SHA-256 matches; reason=None
+firecrawl-search: error; raw SHA-256 matches; reason=exited 1: Error: Request failed with status code 402 |
+last30days: ok; raw SHA-256 matches; reason=None
+All eight sources present; request ID, repo, policy and raw hashes verified.

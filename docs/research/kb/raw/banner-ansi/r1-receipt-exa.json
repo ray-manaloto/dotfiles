@@ -1,0 +1,71 @@
+{
+  "control": null,
+  "elapsed_s": 0.34203875000821427,
+  "items": [
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Custom command-backed TUI status line or colored status banner",
+      "url": "https://github.com/openai/codex/issues/20244"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Exec Mode Event Processing | openai/codex | DeepWiki",
+      "url": "https://deepwiki.com/openai/codex/4.2.1-exec-mode-event-processing"
+    },
+    {
+      "date": "2026-02-12T00:00:00.000Z",
+      "snippet": "",
+      "title": "ANSI Escape Code Injection in OpenAI's Codex CLI Leading to RCE",
+      "url": "https://dganev.com/posts/2026-02-12-ansi-escape-injection-codex-cli/"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "fix(tui): decode ANSI alpha-channel encoding in syntax themes",
+      "url": "https://github.com/openai/codex/issues/13382"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Bug: raw ANSI control sequences in Windows interactive CLI when cwd is a Git repo (``), but not when `.git` is removed",
+      "url": "https://github.com/openai/codex/issues/23691"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Windows Terminal detection via WT_SESSION changes TUI background from white to black",
+      "url": "https://github.com/openai/codex/issues/37769"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "feat(app-server): move v2 `sessionId` onto `Thread`",
+      "url": "https://github.com/openai/codex/pull/21336"
+    },
+    {
+      "date": "2025-11-18T00:00:00.000Z",
+      "snippet": "",
+      "title": "Garbled output / not setting dumb terminal mode with shell snapshot on \u00b7 Issue #6850 \u00b7 openai/codex",
+      "url": "https://github.com/openai/codex/issues/6850"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "codex-rs/core/src/session/session.rs",
+      "url": "https://github.com/openai/codex/blob/27c05a52/codex-rs/core/src/session/session.rs"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "aps command - github.com/gadflysu/aps",
+      "url": "https://pkg.go.dev/github.com/gadflysu/aps"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/exa.raw",
+  "raw_sha256": "a0fa279412408e2860075c24a3f911e207eea97158a42a007a0d7bb8b2ece59a",
+  "reason": null,
+  "source": "exa",
+  "status": "ok"
+}

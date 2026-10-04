@@ -1,0 +1,13 @@
+{
+  "control": {
+    "count": 10,
+    "query": "codex"
+  },
+  "elapsed_s": 1.0848570419475436,
+  "items": [],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/github-issues.raw",
+  "raw_sha256": "c9938edecb99d754b2d039ac9eec320a94c769b6a6417921e2dcbef9e2fe01a0",
+  "reason": null,
+  "source": "github-issues",
+  "status": "empty_verified"
+}

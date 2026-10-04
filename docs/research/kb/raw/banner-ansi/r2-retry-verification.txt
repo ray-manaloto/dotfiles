@@ -1,0 +1,13 @@
+generated_at: 2026-10-04T12:48:50.577252+00:00
+strict-five: (False, 'firecrawl-search did not complete')
+github-issues: status=empty_verified; validation=None; raw SHA-256 matches; control={'count': 10, 'query': 'codex'}; reason=None
+github-discussions: status=empty_verified; validation=None; raw SHA-256 matches; control={'count': 10, 'query': 'codex'}; reason=None
+github-releases: status=empty_verified; validation=None; raw SHA-256 matches; control={'count': 1, 'query': 'openai/codex'}; reason=None
+exa: status=ok; validation=None; raw SHA-256 matches; control=None; reason=None
+context7: status=ok; validation=None; raw SHA-256 matches; control=None; reason=None
+firecrawl-developer: status=ok; validation=None; raw SHA-256 matches; control=None; reason=None
+firecrawl-search: status=error; validation=firecrawl-search did not complete; raw SHA-256 matches; control=None; reason=exited 1: Error: Request failed with status code 402 |
+last30days: status=ok; validation=None; raw SHA-256 matches; control=None; reason=None
+Last30Days schema=1.3; internal github=ok, grounding=ok.
+All five groups ran; seven routes validate; Firecrawl search remains a blocker.
+Oversized raw file not promoted or cited: github-releases.raw; 30180141 bytes.

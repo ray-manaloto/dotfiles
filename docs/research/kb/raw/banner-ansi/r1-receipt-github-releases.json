@@ -1,0 +1,13 @@
+{
+  "control": {
+    "count": 1,
+    "query": "openai/codex"
+  },
+  "elapsed_s": 9.019095625029877,
+  "items": [],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/github-releases.raw",
+  "raw_sha256": "06b3916e15dea42b7e2ce381495c494581c32eb560e87882e67d2009c6183813",
+  "reason": null,
+  "source": "github-releases",
+  "status": "empty_verified"
+}

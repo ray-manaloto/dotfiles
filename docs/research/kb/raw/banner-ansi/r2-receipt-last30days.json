@@ -1,0 +1,29 @@
+{
+  "control": null,
+  "elapsed_s": 8.009643082972616,
+  "items": [
+    {
+      "date": "2026-10-04",
+      "snippet": "Project: openai/codex (128K stars, 20517 open issues, Rust)\n  Lightweight coding agent that runs in your terminal\n  README: <p align=\"center\"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.\n<p align=\"center\">\n  <img src=\"https://github.com/openai/codex/blob/main/.github/codex-cli-splash.png\" alt=\"Codex CLI splash\" width=\"80%\" />\n</p>\n</br>\nIf you want C",
+      "title": "openai/codex (128K stars) - 20517 open issues",
+      "url": "https://github.com/openai/codex"
+    },
+    {
+      "date": "2026-09-10",
+      "snippet": "# A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary. \u00b7 2026-09-10T00:00:00+00:00\n\nA branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.\n\nI built a two-color Main Thread banner with Quarkus Banner 1.6.0. The extension renders the FIGlet text, font, layout, and ANSI/plain variants during augmentation. It stores both finished strings in the packaged application.\n\nAt runtime, BannerRecorder chooses the variant tha",
+      "title": "A branded startup banner seems cosmetic. In Quarkus, it can show a clear architecture boundary.",
+      "url": "https://www.linkedin.com/posts/markuseisele_java-quarkus-quarkiverse-activity-7503697630019928064-PhNM"
+    },
+    {
+      "date": "2026-09-04",
+      "snippet": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com\n\n 04 Sep 2026 \u00b7 Original en ingl\u00e9s \u00b7 Art\u00edculo \n\n# FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal\n\nFORCE_COLOR es una propuesta de est\u00e1ndar informal presentada en 2023 para resolver un problema cotidiano en la l\u00ednea de comandos: c\u00f3mo activar el color ANSI cuando un programa lo desactiva autom\u00e1ticamente. As\u00ed como la variable de entorno NO_COLOR existe para que el usuario desactive el color en cu",
+      "title": "FORCE_COLOR: el est\u00e1ndar informal para forzar el color en la terminal - ojeo.com",
+      "url": "https://ojeo.com/noticia/force-color-el-est%C3%A1ndar-informal-para-forzar-el-color-en-la-terminal/"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/last30days.raw",
+  "raw_sha256": "5c4a698c08b48b05506b13628ca04632aff6bf84f24d84539b02d6f039a26e97",
+  "reason": null,
+  "source": "last30days",
+  "status": "ok"
+}
