@@ -6199,61 +6199,61 @@ url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checke
 provenance = "github-attestations"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.56.1"
+version = "0.56.2"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:b24eccb6300b4935183b279c0749fbc666fecfba44e856fc48bc0c908fe52693"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930392"
+checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:b24eccb6300b4935183b279c0749fbc666fecfba44e856fc48bc0c908fe52693"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930392"
+checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:ccf92c317d8cf67abf161273ae01751682775e984d0b92ae13f42bfe5e3d1ed4"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930371"
+checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:ccf92c317d8cf67abf161273ae01751682775e984d0b92ae13f42bfe5e3d1ed4"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930371"
+checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:7c2a2ba665f05b136538aa762d4113dbca7e8cea517bdbb84a0a15ed882e39ab"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930379"
+checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7c2a2ba665f05b136538aa762d4113dbca7e8cea517bdbb84a0a15ed882e39ab"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930379"
+checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:08a267583cafdff43649aee7ffd6e9e574fef28e93dc977fc339ecbb1a237fd4"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930398"
+checksum = "sha256:782c00d5f76a58d803c336a618db04f2542f94f399078b4872acb95b186e71c5"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715218"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:8f90513ff8b5a44bad266e718793c870b049fd4dd56a4ef0afcee14b9749473c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930407"
+checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:8f90513ff8b5a44bad266e718793c870b049fd4dd56a4ef0afcee14b9749473c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.1/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/601930407"
+checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
@@ -6496,7 +6496,7 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.132.4"
+version = "44.132.5"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
