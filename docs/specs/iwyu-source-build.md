@@ -8,6 +8,20 @@
 > - Q3: retire the conda IWYU and fix2's conda pin/lock parity in that PR; readiness = `gh api branches/clang_<M>` 200.
 > - Q4: a SEPARATE PR after the detector PR, which keeps its conda gate until then.
 >
+> **AMENDED (Ray, 2026-10-04, direct AskUserQuestion; supersedes Q3's "retire the conda IWYU / always source-build"):**
+> "always want an IWYU per llvm tools install; prefer prebuilt binaries whenever possible" — "use prebuilt if it is
+> fully compatible with the llvm tools and compiler, else we have to build from source". So, per LLVM install:
+> - **apt LLVM <P>:** use a PREBUILT IWYU (today conda-forge) when it is fully compatible: its linked libllvm/libclang
+>   major == P on both linux arches, AND a build-time smoke proves it parses a probe TU with that toolchain's flags and
+>   headers with zero errors. Otherwise build from a pinned `clang_<P>` SHA in the content-hashed stage.
+> - **clang-p2996:** no prebuilt can link the fork (`docs/research/kb/reports/agents/iwyu-p2996-research-2026-10-03.md`),
+>   so always build from source (`clang_<p2996 major>`, against `/opt/clang-p2996`).
+> - **Readiness for apt major M** = (a compatible prebuilt exists) OR (IWYU branch `clang_<M>` exists, so source is
+>   possible), and the release-branch FREEZE gate (`docs/specs/llvm-major-detect-bump-fix5.md`, ruled 2026-10-04)
+>   applies independently.
+> §§0-5 below still describe the source-build path. They need a revision for the prebuilt-first selection before
+> dispatch.
+>
 > Next: the SLOT-gated configure-only cmake probe on the published `:p2996-<hash>` export (§5.2, queued by the
 > coordinator), then §6/§7 and a premise-verifier pass before dispatch.
 
