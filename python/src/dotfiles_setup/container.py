@@ -33,10 +33,13 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import math
+import os
 import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import host_lock
 from dotfiles_setup.devcontainer_names import resolve_names
 
 if TYPE_CHECKING:
@@ -59,10 +62,15 @@ class Check:
 
 
 def _run(
-    cmd: list[str], *, timeout: float | None = None
+    cmd: list[str], *, timeout: float | None = None, pass_fds: tuple[int, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        cmd, capture_output=True, text=True, check=False, timeout=timeout
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+        pass_fds=pass_fds,
     )
 
 
@@ -106,24 +114,56 @@ def _bind_mount_dest(container_id: str, workspace: Path) -> str | None:
 
 
 def _run_smoke(container_id: str, workspace_dest: str) -> tuple[bool, str]:
-    res = _run(
-        [
-            "docker",
-            "exec",
-            "--workdir",
-            workspace_dest,
-            container_id,
-            "scripts/devcontainer-smoke.sh",
-        ],
-        timeout=_SMOKE_TIMEOUT_S,
-    )
+    timeout = _SMOKE_TIMEOUT_S
+    try:
+        configured = float(os.environ.get("DOTFILES_SMOKE_TIMEOUT_S", timeout))
+    except ValueError:
+        configured = timeout
+    if math.isfinite(configured) and configured > 0:
+        timeout = configured
+    try:
+        # Use the existing bounded, reentrant host slot: container-local locks
+        # have a different filesystem and cannot coordinate this shared CPU.
+        with host_lock.held(
+            host_lock.HEAVY_GATE, f"container smoke {container_id}"
+        ) as fd:
+            res = _run(
+                [
+                    "docker",
+                    "exec",
+                    "--workdir",
+                    workspace_dest,
+                    container_id,
+                    "scripts/devcontainer-smoke.sh",
+                ],
+                timeout=timeout,
+                pass_fds=() if fd is None else (fd,),
+            )
+    except subprocess.TimeoutExpired as exc:
+        # TimeoutExpired keeps bytes even with text=True; decode partial output
+        # defensively and bound the diagnostic independently of suite verbosity.
+        partial = "\n".join(
+            part.decode(errors="replace") if isinstance(part, bytes) else part or ""
+            for part in (exc.stdout, exc.stderr)
+        )
+        tail = " | ".join(partial.strip().splitlines()[-3:])[-2000:]
+        return (
+            False,
+            (
+                f"smoke timed out after {exc.timeout:g} seconds: "
+                f"{tail or 'no partial output'}"
+            ),
+        )
+    except host_lock.HostLockTimeoutError as exc:
+        return False, f"smoke host heavy-slot wait timed out: {exc}"
     if res.returncode == 0:
         return True, "tiers 1-3 OK"
     combined = (res.stdout + res.stderr).strip().splitlines()
     # Surface the first FAIL line if present, else the tail.
     fails = [line for line in combined if "FAIL" in line]
     tail = fails[:1] or combined[-3:]
-    return False, " | ".join(tail) if tail else "smoke failed (no output)"
+    detail = " | ".join(tail) if tail else "smoke failed (no output)"
+    return False, f"{detail} — stale base? `mise run dev-rebuild`"
 
 
 def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
@@ -186,11 +226,7 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
             Check(
                 "smoke-tiers-1-3",
                 ok=smoke_ok,
-                detail=(
-                    smoke_detail
-                    if smoke_ok
-                    else f"{smoke_detail} — stale base? `mise run dev-rebuild`"
-                ),
+                detail=smoke_detail,
             )
         )
 

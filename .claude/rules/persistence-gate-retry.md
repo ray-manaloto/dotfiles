@@ -64,25 +64,43 @@ real defect. Retain the direct rc and do not credit `dev-rebuild` as a repair.
 Case history and the discriminating arms live in
 `docs/rules-evidence/persistence-gate-retry.md`.
 
-## The land-smoke transient (`land` only, twice in two sessions)
+## The land-smoke transient and timeout
 
 `mise run land -- <PR#>` has twice reported `FAIL smoke-tiers-1-3` on a container
-that was perfectly healthy, and both times a plain retry passed:
+that was healthy, and both September retries passed:
 
 | Session | Signature inside the failure | Standalone `mise run smoke` | `land` retry |
 |---|---|---|---|
 | 2026-09-03 (`land -- 955`) | a Rust panic in **mise's own** `src/git.rs:193` — not a path in this repo | rc=0, tiers 1-3 OK | rc=0 |
 | 2026-09-03 (`land -- 958`) | `=== FAILURES ===` with the generic "stale base?" hint | rc=0, tiers 1-3 OK | rc=0 |
 
-**The discriminating probe is `mise run smoke` on its own.** If it returns rc=0 with
-tiers 1-3 OK, the container is a valid environment and `land`'s failure was transient —
-retry `land` once. If it fails the same way standalone, that is a real defect: triage it,
-do not retry.
+On 2026-10-04, `land -- 1662` ran smoke in `postCreateCommand` during converge:
+pytest passed 5,023 tests in 823.64 seconds, then tiers 1-3 passed. The second,
+`verify-latest` smoke timed out after 1,800 seconds and escaped as a traceback.
+See `docs/specs/land-smoke-timeout-2026-10-04.md` for the recorded evidence.
 
-⚠️ **The expensive wrong move is `mise run dev-rebuild`.** `land`'s hint text says
-"stale base?", which points straight at a ~21.5GB pull that can take hours — and in both
-recorded cases the base was already current. Run the standalone probe first; it costs
-about a minute and settles it.
+`verify-latest` now reports smoke timeouts as a failed `smoke-tiers-1-3` Check,
+with seconds and the last three partial-output lines (capped at 2,000 characters),
+so `sync` and `land` return their normal nonzero status. Timeout failures receive
+no stale-base/rebuild hint. `DOTFILES_SMOKE_TIMEOUT_S` can override the 1,800-second
+default; invalid, nonfinite or nonpositive values retain that default.
+
+The `docker exec` smoke takes the existing host heavy slot to avoid competing
+with host gates. An inherited slot is reused; waiting remains bounded by the
+slot's normal timeout. A slot-wait timeout is a failed Check identifying the
+wait, without a rebuild hint. Lifecycle smoke has no same-run container-ID and
+HEAD proof, so verification still runs it again; no reuse is claimed.
+
+**The discriminating probe is `mise run smoke` on its own.** If it returns rc=0 with
+tiers 1-3 OK, retry `land` once. Diagnose slot-wait timeouts as host contention and
+smoke timeouts from their partial output and host load. A timeout alone does not
+prove a stale image or a container defect. If standalone smoke fails the same
+checks, triage those checks before retrying.
+
+⚠️ **The expensive wrong move for a timeout is `mise run dev-rebuild`.** The old
+generic hint led toward a ~21.5GB pull even when the base was current. Non-timeout
+smoke failures retain the hint, but diagnose the signature first. Standalone smoke
+runs full pytest; the October run's pytest alone took nearly 14 minutes.
 
 ⚠️ **The task notification cannot be trusted here.** Both failures arrived with a
 "completed (exit code 0)" summary while the log's real `rc=1` sat in the file. Read the
