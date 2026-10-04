@@ -328,7 +328,7 @@ const finish = async result => {
   }).filter(([, v]) => v !== undefined))
   const retro = await run('retrospect', 'retrospect', 'Retrospect', [
     `A research sweep just ended. QUESTION: ${A.question}`,
-    `REPORT: ${A.reportPath}${result.status === 'complete' ? '' : ' (may be missing or partial: the run did not complete)'}`,
+    `REPORT: ${A.reportPath}${['complete', 'provisional'].includes(result.status) ? '' : ' (may be missing or partial: the run did not complete)'}`,
     'You are READ-ONLY. Record what this run found HARD or MISSING — empty or unverified sources, mandatory gaps, failed',
     'reads, stages that returned null, controls that could not discriminate — each as one finding grounded in the RUN',
     'FACTS below. Then PROPOSE changes to the workflow (.claude/workflows/research-sweep-run.js), its fetcher',
@@ -628,7 +628,10 @@ LINKS.length ? run('mirrorIndex', 'mirror-index', 'Mirror', indexPrompt, { schem
 planManifests.length ? run('planManifests', 'plan-manifests', 'Triage', planManifestPrompt, { schema: PROBE }) : null,
 ])
 const planManifestProbe = readProbe(planManifestGot, PLAN_MANIFEST_PROBE)
-if (planManifests.length && planManifestProbe === null) fanoutGaps.push('planner provisional check did not run')
+if (planManifests.length && planManifestProbe === null) {
+  fanoutGaps.push('planner provisional check did not run')
+  mandatoryGaps.push('planner provisional check did not run')
+}
 const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m =>
   (Array.isArray(m.provisional) ? m.provisional : []).map(line => `${m.path}: ${line}`))
 const provisionalRoutes = [...new Set([

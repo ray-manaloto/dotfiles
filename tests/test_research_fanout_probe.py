@@ -649,6 +649,45 @@ def test_mirror_credit_fallback_records_success_and_readme(
     assert "provisional" in readme
 
 
+def test_webclaw_markdown_redacts_credentials_and_caps_primary_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mirror_credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    del mirror_credit_env
+    sentinel = "webclaw-credential-sentinel"
+    monkeypatch.setenv("SERP_API_KEY", sentinel)
+    url = "https://primary.test/doc"
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            return _done(argv, 1, err=b"Insufficient credits " + b"diagnostic " * 100)
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": f"# mirror {sentinel}"},
+                    "metadata": {"url": url},
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-url", url, "--mirror-path", str(tmp_path / "mirror.md")],
+        runner,
+        capsys,
+    )
+    row = _only(payload)
+    assert row["provisional"] is True
+    assert len(str(row["primary_reason"])) <= 300
+    assert (tmp_path / "mirror.md").read_text() == "# mirror [REDACTED]"
+    assert sentinel not in json.dumps(payload)
+
+
 @pytest.mark.parametrize(
     "failure", ["auth", "redirect", "missing", "timeout", "invalid", "empty"]
 )

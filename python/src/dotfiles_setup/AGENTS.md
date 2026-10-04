@@ -24,4 +24,10 @@ issues, discussions, and releases are separate arms; empty results need their
 same-source control. If a required arm fails, report the exact route and
 `RESEARCH INCOMPLETE:` rather than claiming comprehensive research.
 A provisional pass is not a failure, but the answer must name every
-provisional route the manifest lists.
+provisional source and `via <route>` for each substituted source, and say
+`PROVISIONAL`. The Codex Stop hook blocks once if any token is missing or the
+answer is null. It allows an already continued Stop (`stop_hook_active`),
+including a provisional pass after an earlier INCOMPLETE block; that accepted
+limitation can leave a provisional answer unnamed.
+The live hook uses `~/.codex/tools/dotfiles-research-gate`; these changes take
+effect there only after the coordinator's O1 gate pull.

@@ -1382,6 +1382,31 @@ def test_research_sweep_primary_routes_remain_complete(tmp_path: Path) -> None:
     assert "PROVISIONAL ROUTES:" not in _of_kind(payload, "synth-prompt")[0]["prompt"]
 
 
+@pytest.mark.parametrize("status", ["complete", "provisional", "mandatory-gap"])
+def test_research_sweep_retrospect_calls_provisional_run_completed(
+    tmp_path: Path, status: str
+) -> None:
+    stubs = (
+        {
+            "mirror": "MIRROR_OK(_prompt, { route: 'webclaw', provisional: true, "
+            "primary_reason: 'Insufficient credits' })"
+        }
+        if status == "provisional"
+        else {"plan_manifests": "null"}
+        if status == "mandatory-gap"
+        else {}
+    )
+    payload = _mandatory_run(
+        tmp_path,
+        f"sweep-retro-{status}.js",
+        {"links": ["https://caller.test/a"]},
+        stubs,
+    )
+    assert _result(payload)["status"] == status
+    prompt = _of_kind(payload, "retrospect")[0]["prompt"]
+    assert ("the run did not complete" in prompt) is (status == "mandatory-gap")
+
+
 @pytest.mark.parametrize(
     "probe",
     [
@@ -1394,10 +1419,10 @@ def test_research_sweep_primary_routes_remain_complete(tmp_path: Path) -> None:
     ],
     ids=["not-run", "malformed", "wrong-output-path"],
 )
-def test_research_sweep_missing_planner_probe_is_named_fanout_gap(
+def test_research_sweep_missing_planner_probe_is_mandatory_gap(
     tmp_path: Path, probe: str
 ) -> None:
-    """Missing or copied evidence is a fan-out gap, without a mandatory gap."""
+    """Missing or copied planner evidence must degrade the run's status."""
     payload = _mandatory_run(
         tmp_path,
         "sweep-missing-planner-probe.js",
@@ -1406,8 +1431,10 @@ def test_research_sweep_missing_planner_probe_is_named_fanout_gap(
     )
     run_result = _result(payload)
     assert run_result["fanoutGaps"] == ["planner provisional check did not run"]
-    assert run_result["mandatoryGaps"] == []
+    assert run_result["mandatoryGaps"] == ["planner provisional check did not run"]
     assert run_result["provisionalRoutes"] == []
+    assert run_result["status"] == "mandatory-gap"
+    assert run_result["statuses"] == ["mandatory-gap"]
 
 
 @pytest.mark.parametrize(

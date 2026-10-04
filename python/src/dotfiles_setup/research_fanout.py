@@ -115,7 +115,17 @@ CREDIT_METERED_SOURCES = frozenset(
 )
 _CREDIT_TEXT = re.compile(
     r"insufficient credits|payment required|out of credits|credits exhausted|"
-    r"quota exceeded|exceeded your quota",
+    r"not enough credits|run out of searches",
+    re.IGNORECASE,
+)
+_QUOTA_TEXT = re.compile(r"quota exceeded|exceeded your quota", re.IGNORECASE)
+_FALLBACK_CREDIT_TEXT = re.compile(
+    r"not enough credits|your account has run out of searches",
+    re.IGNORECASE,
+)
+_CREDIT_STATUS = re.compile(
+    r'(?:(?:"status"|"statusCode")\s*:\s*|'
+    r"\bstatus(?:\s+code)?\s*[:=]?\s+|\bHTTP(?:/\d(?:\.\d)?)?\s+)(\d{3})\b",
     re.IGNORECASE,
 )
 _FALLBACK_ROUTES = MappingProxyType({"firecrawl-search": ("serper", "serpapi")})
@@ -126,12 +136,14 @@ _FALLBACK_KEYS = MappingProxyType(
 
 def is_credit_exhaustion(http_status: int | None, text: str) -> bool:
     """Distinguish exhausted quota from auth, transient limits and server errors."""
+    if http_status is None and (match := _CREDIT_STATUS.search(text)):
+        http_status = int(match[1])
     if http_status == _HTTP_PAYMENT_REQUIRED:
         return True
     if http_status == _HTTP_QUOTA:
-        return bool(_CREDIT_TEXT.search(text))
+        return bool(_CREDIT_TEXT.search(text) or _QUOTA_TEXT.search(text))
     if http_status is None:
-        return bool(_CREDIT_TEXT.search(text) or re.search(r"\b402\b", text))
+        return bool(_CREDIT_TEXT.search(text))
     return False
 
 
@@ -665,18 +677,23 @@ def _redact_text(text: str, env: dict[str, str]) -> str:
     )
     for value in values:
         text = text.replace(value, "[REDACTED]")
+    return text
+
+
+def _redact_request_text(text: str, env: dict[str, str]) -> str:
     # Request URLs can carry SerpApi keys; provider pricing links are evidence.
+    # Exclude JSON escape backslashes so a closing escaped quote stays intact.
     return re.sub(
-        r"https://(?:google\.serper\.dev/search|serpapi\.com/search\.json)[^\s\"<>]*",
+        r"https://(?:google\.serper\.dev/search|serpapi\.com/search\.json)[^\s\"<>\\]*",
         "[REDACTED REQUEST URL]",
-        text,
+        _redact_text(text, env),
     )
 
 
 def _redacted_stderr(
     completed: subprocess.CompletedProcess[bytes], env: dict[str, str]
 ) -> str:
-    return _redact_text((completed.stderr or b"").decode(errors="replace"), env)
+    return _redact_request_text((completed.stderr or b"").decode(errors="replace"), env)
 
 
 def _subprocess_error(
@@ -922,6 +939,31 @@ def _firecrawl_developer(
     )
 
 
+def _fallback_records(payload: object, route: str) -> list[object] | None:
+    if not isinstance(payload, dict):
+        return None
+    field = "organic" if route == "serper" else "organic_results"
+    records = payload.get(field)
+    if isinstance(records, list):
+        return records
+    # https://serpapi.com/api-status-and-error-codes documents Success with
+    # Fully empty and no organic_results; it still needs a same-route control.
+    metadata, information = (
+        payload.get("search_metadata"),
+        payload.get("search_information"),
+    )
+    if (
+        route == "serpapi"
+        and field not in payload
+        and isinstance(metadata, dict)
+        and metadata.get("status") == "Success"
+        and isinstance(information, dict)
+        and information.get("organic_results_state") == "Fully empty"
+    ):
+        return []
+    return None
+
+
 def _fallback_search(
     route: str, query: str, request: FanoutRequest, *, http: Http, deadline: _Deadline
 ) -> _Attempt:
@@ -940,16 +982,15 @@ def _fallback_search(
         timeout=deadline.remaining(),
     )
     # SerpApi discontinued num; respect the limit locally (provider docs).
-    raw = _redact_text(raw.decode(errors="replace"), dict(os.environ)).encode()
+    raw = _redact_request_text(raw.decode(errors="replace"), dict(os.environ)).encode()
     if not _HTTP_OK <= status < _HTTP_REDIRECT:
         return _Attempt((), raw, f"HTTP {status}", http_status=status)
     try:
         payload = _decode_json(raw)
     except ValueError:
         return _Attempt((), raw, "invalid JSON", http_status=status)
-    field = "organic" if route == "serper" else "organic_results"
-    records = payload.get(field) if isinstance(payload, dict) else None
-    if not isinstance(records, list):
+    records = _fallback_records(payload, route)
+    if records is None:
         return _Attempt(
             (), raw, "unexpected fallback response shape", http_status=status
         )
@@ -1302,10 +1343,12 @@ def _primary_envelope(attempt: _Attempt) -> bytes:
         {
             "http_status": attempt.http_status,
             "rc": attempt.rc,
-            "body": _redact_text(
+            "body": _redact_request_text(
                 attempt.raw.decode(errors="replace"), dict(os.environ)
             ),
-            "stderr_redacted": _redact_text(attempt.stderr_redacted, dict(os.environ)),
+            "stderr_redacted": _redact_request_text(
+                attempt.stderr_redacted, dict(os.environ)
+            ),
         },
         sort_keys=True,
     ).encode()
@@ -1318,18 +1361,42 @@ class _CreditRun:
     started: float
 
 
+def _fallback_attempt(route: str, request: FanoutRequest, run: _CreditRun) -> _Attempt:
+    try:
+        return _primary_attempt(
+            route,
+            request.query,
+            request,
+            boundaries=run.boundaries,
+            deadline=run.deadline,
+        )
+    except _CredentialHeaderError as exc:
+        return _Attempt((), b"", str(exc))
+    except _HttpBodyError as exc:
+        return _Attempt((), b"", exc.reason)
+    except (
+        OSError,
+        ValueError,
+        http_client.HTTPException,
+        subprocess.TimeoutExpired,
+    ) as exc:
+        return _Attempt(
+            (), b"", "timed out" if _is_timeout_failure(exc) else "request failed"
+        )
+
+
 def _credit_result(
     source: str, request: FanoutRequest, primary: _Attempt, run: _CreditRun
 ) -> _Fetch:
     boundaries, deadline, started = run.boundaries, run.deadline, run.started
     envelope = _primary_envelope(primary)
-    reason = _redact_text(
+    reason = _redact_request_text(
         primary.stderr_redacted.strip()
         or primary.raw.decode(errors="replace").strip()
         or primary.error
         or "credits-exhausted",
         dict(os.environ),
-    ).replace("\n", " | ")
+    ).replace("\n", " | ")[-300:]
     attempts = [
         RouteAttempt(source, Status.SKIPPED, primary.http_status, reason, None, None)
     ]
@@ -1355,27 +1422,19 @@ def _credit_result(
             )
             evidence.append(None)
             continue
-        try:
-            final = _primary_attempt(
-                fallback,
-                request.query,
-                request,
-                boundaries=boundaries,
-                deadline=deadline,
-            )
-        except (
-            OSError,
-            ValueError,
-            http_client.HTTPException,
-            subprocess.TimeoutExpired,
-        ) as exc:
-            final = _Attempt(
-                (), b"", "timed out" if _is_timeout_failure(exc) else "request failed"
-            )
+        final = _fallback_attempt(fallback, request, run)
         fallback_status = Status.ERROR
         fallback_reason = final.error
-        if final.error and _attempt_credit(final):
+        # Only fallback attempts accept these provider phrases at any status.
+        # Serper's exhaustion status is unverified; primary status gating stays.
+        fallback_credit = _FALLBACK_CREDIT_TEXT.search(
+            final.raw.decode(errors="replace")
+        )
+        if final.error and (_attempt_credit(final) or fallback_credit):
             fallback_status = Status.SKIPPED
+            fallback_reason = (
+                final.raw.decode(errors="replace").strip() or final.error
+            )[-300:]
         elif final.error:
             genuine_error = final.error
             genuine_raw = final.raw
@@ -1849,7 +1908,7 @@ def _valid_json_response(source: str, payload: object, status: object) -> bool:
         )
     if source == "exa":
         valid = valid and bool(payload.get("requestId"))
-    if source in {"firecrawl-developer", "firecrawl-search", "serper", "serpapi"}:
+    if source in {"firecrawl-developer", "firecrawl-search"}:
         valid = valid and payload.get("success") is True
     return valid
 
@@ -1898,12 +1957,21 @@ def _validate_strict_row(row: dict[str, object], manifest_path: Path) -> str | N
 
 
 @dataclass(frozen=True)
+class ProvisionalEntry:
+    """Validated source and optional winning route for answer enforcement."""
+
+    source: str
+    route: str | None
+
+
+@dataclass(frozen=True)
 class StrictVerdict:
     """A validated receipt, including explicit provisional provenance."""
 
     passed: bool
     provisional: tuple[str, ...]
     reason: str
+    provisional_entries: tuple[ProvisionalEntry, ...] = ()
 
 
 def _provisional_line(row: dict[str, object]) -> str:
@@ -1918,13 +1986,18 @@ def _provisional_line(row: dict[str, object]) -> str:
         errors = [
             f"{a.get('route')}: {a.get('reason')}"
             for a in attempts[1:]
-            if isinstance(a, dict) and a.get("status") == Status.ERROR.value
+            if isinstance(a, dict)
+            and a.get("status") in {Status.ERROR.value, Status.SKIPPED.value}
         ]
     line = (
         f"{source} via {row['route']} (credits-exhausted: {primary_reason})"
         if row.get("route")
         else f"{source} skipped: credits-exhausted ({primary_reason}); "
-        "no fallback route"
+        + (
+            "no fallback succeeded"
+            if _FALLBACK_ROUTES.get(source)
+            else "no fallback route"
+        )
     )
     return line + ("; " + "; ".join(errors) if errors else "")
 
@@ -2062,11 +2135,8 @@ def _validate_credit_output(
         message = "missing winning route evidence"
         raise _ReceiptError(message)
     payload = _decode_json(raw)
-    key = "organic" if route == "serper" else "organic_results"
-    records = payload.get(key) if isinstance(payload, dict) else None
-    if not isinstance(records, list) or (
-        row["status"] == Status.OK.value and not records
-    ):
+    records = _fallback_records(payload, str(route))
+    if records is None or (row["status"] == Status.OK.value and not records):
         message = "raw evidence is not a successful fallback response"
         raise _ReceiptError(message)
 
@@ -2093,6 +2163,7 @@ def _validate_provisional_row(
 def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
     """Validate same-turn hashed evidence and re-derive every credit exception."""
     provisional = []
+    provisional_entries = []
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
@@ -2135,6 +2206,9 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
                 return StrictVerdict(passed=False, provisional=(), reason=reason)
             if row.get("provisional"):
                 provisional.append(_provisional_line(row))
+                provisional_entries.append(
+                    ProvisionalEntry(row["source"], row.get("route"))
+                )
     except OSError, ValueError, KeyError, TypeError, AttributeError:
         return StrictVerdict(
             passed=False,
@@ -2146,7 +2220,12 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
         if provisional
         else "all required sources completed"
     )
-    return StrictVerdict(passed=True, provisional=tuple(provisional), reason=reason)
+    return StrictVerdict(
+        passed=True,
+        provisional=tuple(provisional),
+        reason=reason,
+        provisional_entries=tuple(provisional_entries),
+    )
 
 
 def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, str]:
@@ -2554,7 +2633,7 @@ def _mirror_probe(
         if credit:
             row["primary_reason"] = (
                 redacted.strip() or raw.decode(errors="replace")
-            ).replace("\n", " | ")
+            ).replace("\n", " | ")[-300:]
             row["route"] = "webclaw"
             rc, reason = _webclaw_mirror(url, path, runner, deadline.remaining())
             status = 0
@@ -2879,6 +2958,7 @@ def _run_fanout(
     out_dir = args.out or (
         repo_root / ".agent/kb/raw/research-fanout" / _slug(args.query)
     )
+    out_dir = out_dir.expanduser()
     if not out_dir.is_absolute():
         out_dir = repo_root / out_dir
     if args.strict_five:

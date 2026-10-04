@@ -236,9 +236,9 @@ def test_hook_provisional_pass_and_forged_evidence_block(tmp_path: Path) -> None
     directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
     manifest = _hook_manifest(directory)
     result = _invoke(tmp_path, {**base, "hook_event_name": "Stop"})
-    assert "decision" not in result
-    assert "PROVISIONAL" in str(result["systemMessage"])
-    assert "firecrawl-developer" in str(result["systemMessage"])
+    assert result["decision"] == "block"
+    assert "PROVISIONAL" in str(result["reason"])
+    assert "firecrawl-developer" in str(result["reason"])
     data = json.loads(manifest.read_text())
     row = next(r for r in data["sources"] if r["source"] == "firecrawl-developer")
     forged = b'{"http_status":500,"rc":null,"body":"","stderr_redacted":""}'
@@ -283,3 +283,102 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
     assert "PROVISIONAL" in context
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
     assert json.loads(marker.read_text())["policy"] == "strict-five-v2"
+
+
+@pytest.mark.parametrize(
+    ("message", "active", "blocked"),
+    [
+        (None, False, True),
+        ("firecrawl-developer; firecrawl-search via serper", False, True),
+        ("PROVISIONAL firecrawl-search via serper", False, True),
+        ("PROVISIONAL firecrawl-developer; firecrawl-search", False, True),
+        ("PROVISIONAL firecrawl-developer; firecrawl-search via serpapi", False, True),
+        ("PROVISIONAL firecrawl-developer; firecrawl-search via serper", False, False),
+        (None, True, False),
+        ("RESEARCH INCOMPLETE: earlier failure", True, False),
+    ],
+    ids=[
+        "null",
+        "missing-marker",
+        "missing-source",
+        "missing-route",
+        "wrong-route",
+        "named",
+        "continued-null",
+        "earlier-incomplete",
+    ],
+)
+def test_provisional_stop_names_each_source_and_route_once(
+    tmp_path: Path, message: str | None, *, active: bool, blocked: bool
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+    )
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    path = _hook_manifest(directory)
+    data = json.loads(path.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "firecrawl-search")
+    envelope = (
+        b'{"http_status":null,"rc":1,"body":"",'
+        b'"stderr_redacted":"Insufficient credits"}'
+    )
+    primary = directory / "firecrawl-search.primary.raw"
+    primary.write_bytes(envelope)
+    raw = b'{"organic":[{"link":"https://primary.test"}]}'
+    winning = directory / "firecrawl-search.serper.raw"
+    winning.write_bytes(raw)
+    Path(row["raw_file"]).write_bytes(raw)
+    row.update(
+        route="serper",
+        provisional=True,
+        raw_sha256=hashlib.sha256(raw).hexdigest(),
+        attempts=[
+            {
+                "route": "firecrawl-search",
+                "status": "skipped",
+                "reason": "Insufficient credits",
+                "raw_file": str(primary),
+                "raw_sha256": hashlib.sha256(envelope).hexdigest(),
+            },
+            {
+                "route": "serper",
+                "status": "ok",
+                "raw_file": str(winning),
+                "raw_sha256": hashlib.sha256(raw).hexdigest(),
+            },
+        ],
+    )
+    path.write_text(json.dumps(data))
+    result = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": message,
+            "stop_hook_active": active,
+        },
+    )
+    if blocked:
+        assert result["decision"] == "block"
+        assert "firecrawl-developer" in str(result["reason"])
+        assert "firecrawl-search via serper" in str(result["reason"])
+        assert "PROVISIONAL" in str(result["reason"])
+        # Codex sets stop_hook_active after continuing, even if still unnamed.
+        continued = _invoke(
+            tmp_path,
+            {
+                **base,
+                "hook_event_name": "Stop",
+                "last_assistant_message": message,
+                "stop_hook_active": True,
+            },
+        )
+        assert "decision" not in continued
+    else:
+        assert result == {}

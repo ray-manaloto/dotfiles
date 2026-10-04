@@ -105,11 +105,28 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
         if verdict.provisional:
+            message = event.get("last_assistant_message")
+            tokens = [
+                token
+                for entry in verdict.provisional_entries
+                for token in (
+                    entry.source,
+                    *([f"via {entry.route}"] if entry.route else []),
+                )
+            ]
+            named = isinstance(message, str) and all(
+                re.search(r"(?<![\w-])" + re.escape(token) + r"(?![\w-])", message)
+                for token in ("PROVISIONAL", *tokens)
+            )
+            if named or event.get("stop_hook_active") is True:
+                return {}
             return {
-                "systemMessage": "Research receipt PROVISIONAL "
+                "decision": "block",
+                "reason": "Research receipt PROVISIONAL "
                 "(credit-exhausted provider): "
                 + "; ".join(verdict.provisional)
-                + ". Say so in the answer."
+                + ". Name PROVISIONAL and every source, plus via <route> for each "
+                "substituted source, in the answer.",
             }
         return {}
     reason = verdict.reason
