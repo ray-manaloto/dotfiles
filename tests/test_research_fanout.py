@@ -34,6 +34,7 @@ from dotfiles_setup.research_fanout import (
     default_http,
     default_runner,
     fan_out,
+    is_credit_exhaustion,
     main,
     validate_strict_five,
 )
@@ -92,7 +93,7 @@ def _strict_manifest(tmp_path: Path) -> Path:
         json.dumps(
             {
                 "strict_five": True,
-                "policy_version": "strict-five-v1",
+                "policy_version": "strict-five-v2",
                 "request_id": "turn-1",
                 "query": "Codex hooks",
                 "repo": "openai/codex",
@@ -233,7 +234,7 @@ class FakeHttp:
         """Record the request and return its query-keyed response."""
         payload = body if body is not None else params
         assert payload is not None
-        query = str(payload["query"])
+        query = str(payload.get("query", payload.get("q")))
         self.calls.append((endpoint, payload, headers, timeout))
         return self.responses[query]
 
@@ -2023,3 +2024,645 @@ def test_firecrawl_search_restricts_to_web_and_parses_web_key(
     assert result.items[0].title == "mise config | mise-en-place"
     argv = runner.calls[0][0]
     assert argv[argv.index("--sources") + 1] == "web"
+
+
+_CREDIT_FIXTURES = Path(__file__).parent / "fixtures/research_fanout"
+# Coordinator f9467b, 2026-10-03 22:2x CDT; fc402/rc.txt records both rc=1:
+# mise exec -- firecrawl search "mise tasks" --limit 1
+# mise exec -- firecrawl scrape https://mise.jdx.dev/ --format markdown
+_CAPTURED_CREDIT_RC = 1
+
+
+@pytest.fixture
+def credit_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate all metered keys and CLI discovery from the interactive shell."""
+    for name in (
+        "SERPER_API_KEY",
+        "SERP_API_KEY",
+        "EXA_API_KEY",
+        "FIRECRAWL_API_KEY",
+        "CONTEXT7_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    for name in ("firecrawl", "webclaw", "ctx7"):
+        executable = binary / name
+        executable.write_text("#!/bin/sh\nexit 99\n")
+        executable.chmod(0o755)
+    monkeypatch.setenv("PATH", str(binary))
+
+
+@pytest.mark.parametrize(
+    ("status", "text", "expected"),
+    [
+        (402, "", True),
+        (429, "quota exceeded", True),
+        (429, "rate limit", False),
+        (401, "Insufficient credits", False),
+        (403, "out of credits", False),
+        (500, "payment required", False),
+        (200, "Insufficient credits", False),
+        (None, "connection reset", False),
+        (None, "billing", False),
+    ],
+)
+def test_credit_classifier_status_table(
+    status: int | None, text: str, *, expected: bool
+) -> None:
+    assert is_credit_exhaustion(status, text) is expected
+
+
+@pytest.mark.parametrize("route", ["search", "scrape"])
+def test_credit_classifier_live_fixtures(route: str) -> None:
+    assert is_credit_exhaustion(
+        None, (_CREDIT_FIXTURES / f"firecrawl-402-{route}.err").read_text()
+    )
+
+
+@pytest.mark.parametrize("body", [b"", b"Insufficient credits"])
+def test_credit_http_402_is_skipped_without_fallback(
+    tmp_path: Path, credit_env: None, body: bytes
+) -> None:
+    del credit_env
+    http = FakeHttp({"topic": (402, body)})
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-developer", "--out", str(tmp_path)],
+            tmp_path,
+            http=http,
+        )
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "credits-exhausted",
+        True,
+    )
+    assert len(http.calls) == 1
+    _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(tmp_path / "manifest.json", "turn-1")[0] is True
+
+
+def _merge_credit_manifest(directory: Path, row: dict[str, Any]) -> Path:
+    preserved = {p: p.read_bytes() for p in directory.glob(f"{row['source']}*.raw")}
+    path = _strict_manifest(directory)
+    for raw, content in preserved.items():
+        raw.write_bytes(content)
+    manifest = json.loads(path.read_text())
+    manifest["sources"] = [
+        row if r["source"] == row["source"] else r for r in manifest["sources"]
+    ]
+    path.write_text(json.dumps(manifest))
+    return path
+
+
+def test_credit_http_500_stays_error(tmp_path: Path, credit_env: None) -> None:
+    del credit_env
+    http = FakeHttp({"topic": (500, b"payment required")})
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-developer", "--out", str(tmp_path)],
+            tmp_path,
+            http=http,
+        )
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["reason"], row["provisional"], row["attempts"]) == (
+        "error",
+        "HTTP 500",
+        False,
+        [],
+    )
+    assert len(http.calls) == 1
+
+
+@pytest.mark.parametrize("defensive", [False, True])
+def test_credit_search_substitution_redacts_and_binds_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    credit_env: None,
+    *,
+    defensive: bool,
+) -> None:
+    del credit_env
+    sentinel = "SERPER-sentinel-never-persist"
+    monkeypatch.setenv("SERPER_API_KEY", sentinel)
+    runner = ScriptedRunner(
+        [
+            _completed(
+                [], 0, b'{"success":false,"error":"Insufficient credits","status":402}'
+            )
+            if defensive
+            else _completed(
+                [],
+                _CAPTURED_CREDIT_RC,
+                (_CREDIT_FIXTURES / "firecrawl-402-search.out").read_bytes(),
+                (_CREDIT_FIXTURES / "firecrawl-402-search.err").read_bytes(),
+            )
+        ]
+    )
+    http = FakeHttp(
+        {
+            "topic": (
+                200,
+                json.dumps(
+                    {
+                        "organic": [
+                            {
+                                "title": "Result",
+                                "link": "https://primary.test/doc",
+                                "snippet": sentinel
+                                + " https://google.serper.dev/search?api_key="
+                                + sentinel,
+                            }
+                        ]
+                    }
+                ).encode(),
+            )
+        }
+    )
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 0
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["route"], row["provisional"]) == ("ok", "serper", True)
+    assert row["items"][0]["url"] == "https://primary.test/doc"
+    assert http.calls[0][0] is Endpoint.SERPER_SEARCH
+    assert http.calls[0][1] == {"q": "topic", "num": 10}
+    assert http.calls[0][2]["X-API-KEY"] == sentinel
+    envelope = json.loads((tmp_path / "firecrawl-search.primary.raw").read_bytes())
+    assert envelope["rc"] == (0 if defensive else _CAPTURED_CREDIT_RC)
+    if not defensive:
+        assert "https://firecrawl.dev/pricing" in envelope["stderr_redacted"]
+    output = capsys.readouterr().out
+    assert "provisional" in output
+    assert sentinel not in output
+    for path in tmp_path.glob("*.json"):
+        assert sentinel not in path.read_text()
+    for path in tmp_path.glob("*.raw"):
+        assert sentinel.encode() not in path.read_bytes()
+        assert b"https://google.serper.dev/search" not in path.read_bytes()
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert reason.startswith("provisional: firecrawl-search via serper")
+
+
+def test_credit_search_chain_uses_serpapi(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    del credit_env
+    sentinel = "SERPAPI-sentinel-never-persist"
+    monkeypatch.setenv("SERP_API_KEY", sentinel)
+    runner = ScriptedRunner(
+        [
+            _completed(
+                [],
+                1,
+                stderr=(_CREDIT_FIXTURES / "firecrawl-402-search.err").read_bytes(),
+            )
+        ]
+    )
+    http = FakeHttp(
+        {"topic": (200, b'{"organic_results":[{"link":"https://primary.test/api"}]}')}
+    )
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 0
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["route"] == "serpapi"
+    assert row["attempts"][1]["status"] == "skipped"
+    assert "not inherited" in row["attempts"][1]["reason"]
+    assert http.calls[0][0] is Endpoint.SERPAPI_SEARCH
+    assert http.calls[0][1] == {"engine": "google", "q": "topic", "api_key": sentinel}
+    assert sentinel not in capsys.readouterr().out
+    assert all(sentinel.encode() not in p.read_bytes() for p in tmp_path.glob("*.raw"))
+    assert sentinel not in (tmp_path / "manifest.json").read_text()
+
+
+def test_credit_fallback_genuine_error_is_not_laundered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "sentinel")
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    http = FakeHttp({"topic": (500, b"payment required")})
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["status"] == "error"
+    assert row["attempts"][1]["status"] == "error"
+    assert row["provisional"] is False
+
+
+@pytest.mark.parametrize("source", ["firecrawl-search", "firecrawl-developer"])
+def test_credit_strict_forgery_rederives_http_and_cli(
+    tmp_path: Path, credit_env: None, source: str
+) -> None:
+    del credit_env
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    http = FakeHttp({"topic": (402, b"")})
+    main(
+        ["topic", "--sources", source, "--out", str(tmp_path)],
+        tmp_path,
+        runner=runner,
+        http=http,
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0]
+    envelope = json.dumps(
+        {
+            "http_status": 500 if source == "firecrawl-developer" else None,
+            "rc": None if source == "firecrawl-developer" else 1,
+            "body": "",
+            "stderr_redacted": "Unauthorized",
+        }
+    ).encode()
+    Path(row["attempts"][0]["raw_file"]).write_bytes(envelope)
+    row["attempts"][0]["raw_sha256"] = hashlib.sha256(envelope).hexdigest()
+    row["attempts"][0]["http_status"] = 402
+    Path(row["raw_file"]).write_bytes(envelope)
+    row["raw_sha256"] = hashlib.sha256(envelope).hexdigest()
+    data = json.loads(manifest.read_text())
+    data["sources"] = [row if r["source"] == source else r for r in data["sources"]]
+    manifest.write_text(json.dumps(data))
+    assert validate_strict_five(manifest, "turn-1") == (
+        False,
+        f"{source} credit-exhaustion evidence does not re-derive",
+    )
+
+
+def test_credit_strict_rejects_v1_and_github_exception(tmp_path: Path) -> None:
+    path = _strict_manifest(tmp_path)
+    data = json.loads(path.read_text())
+    data["policy_version"] = "strict-five-v1"
+    path.write_text(json.dumps(data))
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "request identity or policy mismatch",
+    )
+    data["policy_version"] = "strict-five-v2"
+    data["sources"][0].update(
+        status="skipped", skip_reason="credits-exhausted", provisional=True
+    )
+    path.write_text(json.dumps(data))
+    assert validate_strict_five(path, "turn-1")[0] is False
+    data["sources"][0].update(skip_reason="prerequisite", provisional=False)
+    path.write_text(json.dumps(data))
+    assert validate_strict_five(path, "turn-1")[0] is False
+
+
+def test_credit_reuse_clears_attempt_files_and_lists_fallbacks(
+    tmp_path: Path, credit_env: None, capsys: pytest.CaptureFixture[str]
+) -> None:
+    del credit_env
+    for name in (
+        "firecrawl-search.primary.raw",
+        "firecrawl-search.serper.raw",
+        "firecrawl-search.serpapi.raw",
+    ):
+        (tmp_path / name).write_text("old")
+    main(
+        ["topic", "--sources", "firecrawl-developer", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({"topic": (500, b"")}),
+    )
+    assert not (tmp_path / "firecrawl-search.primary.raw").exists()
+    assert not (tmp_path / "firecrawl-search.serper.raw").exists()
+    assert not (tmp_path / "firecrawl-search.serpapi.raw").exists()
+    capsys.readouterr()
+    assert main(["--list-sources"], tmp_path) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 11
+    assert lines[-3:] == [
+        "fallback:serper  HTTPS POST  SERPER_API_KEY in process environment  absent",
+        "fallback:serpapi  HTTPS GET  SERP_API_KEY in process environment  absent",
+        "fallback:webclaw  webclaw CLI  webclaw on PATH  present",
+    ]
+
+
+def test_credit_http_reason_redacts_request_urls_and_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    del credit_env
+    sentinel = "exa-sentinel-secret"
+    monkeypatch.setenv("EXA_API_KEY", sentinel)
+    body = (
+        f"Insufficient credits {sentinel} "
+        f"https://serpapi.com/search.json?api_key={sentinel} "
+        "https://firecrawl.dev/pricing"
+    ).encode()
+    assert (
+        main(
+            ["topic", "--sources", "exa", "--out", str(tmp_path)],
+            tmp_path,
+            http=FakeHttp({"topic": (402, body)}),
+        )
+        == 1
+    )
+    output = capsys.readouterr().out
+    assert sentinel not in output
+    assert "https://serpapi.com/search.json" not in output
+    assert "https://firecrawl.dev/pricing" in output
+    for file in (*tmp_path.glob("*.json"), *tmp_path.glob("*.raw")):
+        assert sentinel.encode() not in file.read_bytes()
+        assert b"https://serpapi.com/search.json" not in file.read_bytes()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        (401, b"Insufficient credits"),
+        (403, b"Insufficient credits"),
+        (429, b"rate limit"),
+        (500, b"payment required"),
+        (200, b"invalid JSON Insufficient credits"),
+    ],
+)
+def test_credit_genuine_primary_errors_do_not_try_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    response: tuple[int, bytes],
+) -> None:
+    del credit_env
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    http = FakeHttp({"topic": response})
+    assert (
+        main(["topic", "--sources", "exa", "--out", str(tmp_path)], tmp_path, http=http)
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["status"] == "error"
+    assert row["provisional"] is False
+    assert row["attempts"] == []
+    assert len(http.calls) == 1
+
+
+def test_credit_fallback_empty_requires_positive_same_route_control(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    http = FakeHttp(
+        {
+            "topic": (200, b'{"organic":[]}'),
+            "python": (200, b'{"organic":[{"link":"https://python.org"}]}'),
+        }
+    )
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 0
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["status"] == "empty_verified"
+    assert row["control"] == {"query": "python", "count": 1}
+    assert [call[0] for call in http.calls] == [
+        Endpoint.SERPER_SEARCH,
+        Endpoint.SERPER_SEARCH,
+    ]
+    path = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(path, "turn-1")[0] is True
+    data = json.loads(path.read_text())
+    source = next(r for r in data["sources"] if r["source"] == "firecrawl-search")
+    source["control"]["count"] = 0
+    path.write_text(json.dumps(data))
+    assert validate_strict_five(path, "turn-1") == (
+        False,
+        "firecrawl-search empty result lacks a positive control",
+    )
+
+
+def test_credit_earlier_fallback_error_survives_later_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    monkeypatch.setenv("SERP_API_KEY", "serpapi-sentinel")
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    calls = []
+
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del params, body, headers, timeout
+        calls.append(endpoint)
+        return (
+            (500, b"failure")
+            if endpoint is Endpoint.SERPER_SEARCH
+            else (200, b'{"organic_results":[{"link":"https://primary.test"}]}')
+        )
+
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 0
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["route"] == "serpapi"
+    assert row["attempts"][1]["status"] == "error"
+    assert "serper: HTTP 500" in capsys.readouterr().out
+    assert calls == [Endpoint.SERPER_SEARCH, Endpoint.SERPAPI_SEARCH]
+    path = _merge_credit_manifest(tmp_path, row)
+    assert "serper: HTTP 500" in validate_strict_five(path, "turn-1")[1]
+
+
+def test_credit_cli_full_stderr_classifies_before_reason_cut(
+    tmp_path: Path, credit_env: None
+) -> None:
+    del credit_env
+    runner = ScriptedRunner(
+        [
+            _completed(
+                [], 1, stderr=b"Insufficient credits\n" + b"diagnostic details " * 100
+            )
+        ]
+    )
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+        )
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["skip_reason"] == "credits-exhausted"
+    assert (
+        "Insufficient credits"
+        in json.loads((tmp_path / "firecrawl-search.primary.raw").read_bytes())[
+            "stderr_redacted"
+        ]
+    )
+
+
+@pytest.mark.parametrize("route", ["serper", "serpapi"])
+def test_credit_fallback_default_transport_uses_primary_doc_shapes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None, route: str
+) -> None:
+    del credit_env
+    monkeypatch.setenv(
+        "SERPER_API_KEY" if route == "serper" else "SERP_API_KEY", "fallback-sentinel"
+    )
+    calls = []
+    payload = (
+        b'{"organic":[{"link":"https://primary.test"}]}'
+        if route == "serper"
+        else b'{"organic_results":[{"link":"https://primary.test"}]}'
+    )
+
+    def urlopen(request: urllib.request.Request, *, timeout: float) -> ChunkedResponse:
+        assert timeout > 0
+        calls.append(request)
+        return ChunkedResponse([payload])
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=default_http,
+        )
+        == 0
+    )
+    assert len(calls) == 1
+    request = calls[0]
+    if route == "serper":
+        assert request.full_url == "https://google.serper.dev/search"
+        assert request.get_method() == "POST"
+        assert request.get_header("X-api-key") == "fallback-sentinel"
+        assert isinstance(request.data, bytes)
+        assert json.loads(request.data) == {"q": "topic", "num": 10}
+    else:
+        assert request.get_method() == "GET"
+        assert request.full_url == (
+            "https://serpapi.com/search.json?engine=google&"
+            "q=topic&api_key=fallback-sentinel"
+        )
+        assert request.data is None
+
+
+def test_credit_later_quota_does_not_replace_genuine_error_raw(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    monkeypatch.setenv("SERP_API_KEY", "serpapi-sentinel")
+
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del params, body, headers, timeout
+        return (
+            (500, b"server unavailable")
+            if endpoint is Endpoint.SERPER_SEARCH
+            else (402, b"Insufficient credits")
+        )
+
+    runner = ScriptedRunner([_completed([], 1, stderr=b"Insufficient credits")])
+    assert (
+        main(
+            ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=http,
+        )
+        == 1
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert row["status"] == "error"
+    assert row["reason"] == "HTTP 500"
+    assert row["provisional"] is False
+    assert (tmp_path / "firecrawl-search.raw").read_bytes() == b"server unavailable"
+    assert row["attempts"][2]["status"] == "skipped"
+
+
+def test_credit_all_metered_sources_form_provisional_strict_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    runner = ScriptedRunner(
+        [_completed([], 1, stderr=b"Insufficient credits") for _ in range(2)]
+    )
+    sources = "exa,context7,firecrawl-developer,firecrawl-search"
+    assert (
+        main(
+            ["topic", "--sources", sources, "--out", str(tmp_path)],
+            tmp_path,
+            runner=runner,
+            http=FakeHttp({"topic": (402, b"")}),
+        )
+        == 1
+    )
+    credit_rows = json.loads((tmp_path / "manifest.json").read_text())["sources"]
+    assert [row["status"] for row in credit_rows] == ["skipped"] * 4
+    evidence = {path: path.read_bytes() for path in tmp_path.glob("*.raw")}
+    path = _strict_manifest(tmp_path)
+    for raw, content in evidence.items():
+        raw.write_bytes(content)
+    data = json.loads(path.read_text())
+    replacements = {row["source"]: row for row in credit_rows}
+    data["sources"] = [replacements.get(row["source"], row) for row in data["sources"]]
+    path.write_text(json.dumps(data))
+    passed, reason = validate_strict_five(path, "turn-1")
+    assert passed
+    assert reason.startswith("provisional: ")
+    for source in sources.split(","):
+        assert f"{source} skipped: credits-exhausted" in reason

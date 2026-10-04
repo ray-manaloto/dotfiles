@@ -355,6 +355,9 @@ def test_mirror_measures_what_landed_and_never_a_stale_file(
         "path": str(target),
         "rc": 0,
         "http_status": 200,
+        "route": "firecrawl",
+        "provisional": False,
+        "primary_reason": "",
         "bytes": 7,
         "reason": "",
     }
@@ -554,3 +557,183 @@ def test_fanout_manifest_request_id_must_match_this_run(
             capsys,
         )
         assert _only(payload)["fresh"] is fresh, expect
+
+
+_CREDIT_FIXTURES = Path(__file__).parent / "fixtures/research_fanout"
+_CAPTURED_CREDIT_RC = 1  # coordinator f9467b, 2026-10-03; fc402/rc.txt
+
+
+@pytest.fixture
+def mirror_credit_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("FIRECRAWL_API_KEY", "EXA_API_KEY", "SERPER_API_KEY", "SERP_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "isolated-bin"))
+
+
+@pytest.mark.parametrize("defensive", [False, True])
+def test_mirror_credit_fallback_records_success_and_readme(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mirror_credit_env: None,
+    *,
+    defensive: bool,
+) -> None:
+    del mirror_credit_env
+    url = "https://primary.test/doc/"
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            return (
+                _done(
+                    argv,
+                    0,
+                    b'{"success":false,"error":"Insufficient credits","status":402}',
+                )
+                if defensive
+                else _done(
+                    argv,
+                    _CAPTURED_CREDIT_RC,
+                    (_CREDIT_FIXTURES / "firecrawl-402-scrape.out").read_bytes(),
+                    (_CREDIT_FIXTURES / "firecrawl-402-scrape.err").read_bytes(),
+                )
+            )
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": "# mirrored\n"},
+                    "metadata": {"url": "https://primary.test/doc#fragment"},
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    links = tmp_path / "links"
+    assert (
+        main(
+            [
+                "--probe-out",
+                str(links / "1.probe.json"),
+                "--mirror-url",
+                url,
+                "--mirror-path",
+                str(links / "1.md"),
+            ],
+            tmp_path,
+            runner=runner,
+            timing=Timing().timing(),
+        )
+        == 0
+    )
+    row = _only(json.loads((links / "1.probe.json").read_text()))
+    assert (
+        row["route"],
+        row["provisional"],
+        row["rc"],
+        row["http_status"],
+        row["reason"],
+    ) == ("webclaw", True, 0, 0, "")
+    assert (links / "1.md").read_text() == "# mirrored\n"
+    assert "Insufficient credits" in str(row["primary_reason"])
+    assert runner.calls[1] == ["webclaw", "-f", "json", url]
+    _probe(
+        tmp_path,
+        ["--mirror-index", str(links), "--mirror-count", "1"],
+        Runner([]),
+        capsys,
+    )
+    readme = (links / "README.md").read_text()
+    assert "| route |" in readme
+    assert "| 0 | 11 |  | webclaw |" in readme
+    assert "provisional" in readme
+
+
+@pytest.mark.parametrize(
+    "failure", ["auth", "redirect", "missing", "timeout", "invalid", "empty"]
+)
+def test_mirror_credit_controls_never_write_bad_content(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mirror_credit_env: None,
+    failure: str,
+) -> None:
+    del mirror_credit_env
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            stderr = (
+                b"Unauthorized"
+                if failure == "auth"
+                else (_CREDIT_FIXTURES / "firecrawl-402-scrape.err").read_bytes()
+            )
+            return _done(argv, 1, err=stderr)
+        if failure == "missing":
+            raise FileNotFoundError
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(argv, 1)
+        if failure == "invalid":
+            return _done(argv, 0, b"invalid JSON")
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": "" if failure == "empty" else "bad"},
+                    "metadata": {
+                        "url": "https://other.test/doc"
+                        if failure == "redirect"
+                        else "https://primary.test/doc"
+                    },
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-url", "https://primary.test/doc", "--mirror-path", "links/1.md"],
+        runner,
+        capsys,
+    )
+    row = _only(payload)
+    assert not (tmp_path / "links/1.md").exists()
+    assert row["reason"]
+    assert row["provisional"] is False
+    if failure == "auth":
+        assert len(runner.calls) == 1
+        assert row["route"] == "firecrawl"
+    else:
+        assert len(runner.calls) == 2
+        assert row["route"] == "webclaw"
+    if failure == "missing":
+        assert row["rc"] == 127
+        assert "webclaw not found" in str(row["reason"])
+    if failure == "timeout":
+        assert row["rc"] == 124
+        assert "webclaw timed out" in str(row["reason"])
+
+
+def test_fanout_manifest_provisional_is_derived_and_clear_for_control(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "manifest.json"
+    _fanout_manifest(manifest, {"firecrawl-search": "ok"}, 0)
+    data = json.loads(manifest.read_text())
+    data["sources"][0].update(
+        route="serper",
+        provisional=True,
+        attempts=[{"route": "firecrawl-search", "reason": "Insufficient credits"}],
+    )
+    manifest.write_text(json.dumps(data))
+    _, payload = _probe(
+        tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
+    )
+    assert _only(payload)["provisional"] == [
+        "firecrawl-search via serper (credits-exhausted: Insufficient credits)"
+    ]
+    _fanout_manifest(manifest, {"firecrawl-search": "ok"}, 0)
+    _, payload = _probe(
+        tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
+    )
+    assert _only(payload)["provisional"] == []

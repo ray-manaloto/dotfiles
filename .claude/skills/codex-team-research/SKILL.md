@@ -28,8 +28,9 @@ recover direct user corrections; a summary alone is not acceptance evidence.
 2. Use the project's native `research-fanout` under scoped fnox for **Exa,
    Context7, Last30Days, Firecrawl developer index and web search, and GitHub
    issues/discussions/releases**. The native `codex_research` profile supplies
-   Exa and Firecrawl credentials. Do not infer missing credentials from the
-   inherited shell, print their values, or copy them into reports.
+   Exa, Firecrawl, Serper (`SERPER_API_KEY`) and SerpApi (`SERP_API_KEY`)
+   credentials. Do not infer missing credentials from the inherited shell,
+   print their values, or copy them into reports.
 3. Always require `--strict-five` for a team recommendation. When the global
    Codex research hook supplies a turn ID and output directory, use those as
    `--request-id` and `--out`. Otherwise create a unique request ID and output
@@ -42,8 +43,11 @@ recover direct user corrections; a summary alone is not acceptance evidence.
    ```
 
    Keep stdout and the direct exit code. A failed arm is a blocker for a
-   five-provider claim. A retry gets its own recorded outcome; never erase the
-   failed route. Verify the manifest's per-source status and raw-file SHA-256.
+   five-provider claim. A metered arm skipped or substituted for credit
+   exhaustion is the exception: the receipt passes **provisional**, and the
+   answer must name every provisional route. A retry gets its own recorded
+   outcome; never erase the failed route. Verify the manifest's per-source
+   status and raw-file SHA-256.
 4. Run targeted GitHub **repository code** search separately when the decision
    depends on an implementation detail. The fan-out GitHub arms cover issues,
    discussions, and releases; an `empty_verified` result does not establish

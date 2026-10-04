@@ -201,6 +201,7 @@ const ROUTE = {
   deps: { model: 'sonnet', effort: 'low' },
   mirror: { model: 'haiku' },
   mirrorIndex: { model: 'haiku' },
+  planManifests: { model: 'haiku' },
   triage: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   readLinks: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   read: { agentType: 'Explore', model: 'haiku' },
@@ -494,7 +495,8 @@ const mirror = LINKS.map((url, i) => {
     return { url, path, rc: null, bytes: 0, reason: `mirror ${why}` }
   }
   // The probe's own reason wins: a 404 page comes back rc=0 WITH bytes, and it is not a mirror.
-  return { url, path, rc: m.rc, bytes: m.bytes, reason: m.reason || (m.rc === 0 && m.bytes > 0 ? '' : `rc=${m.rc}, ${m.bytes} bytes`) }
+  return { url, path, rc: m.rc, bytes: m.bytes, reason: m.reason || (m.rc === 0 && m.bytes > 0 ? '' : `rc=${m.rc}, ${m.bytes} bytes`),
+    route: m.route, provisional: m.provisional === true, primaryReason: m.primary_reason || '' }
 })
 const mirrored = m => m.rc === 0 && m.bytes > 0 && !m.reason
 // A link firecrawl could not fetch is the WORLD, not the process: a named gap, not a mandatory one.
@@ -605,7 +607,13 @@ const indexPrompt = [
   '  ' + probeCmd(INDEX_OUT, [`--mirror-index ${shq(MIRROR_DIR)}`, `--mirror-count ${LINKS.length}`]),
   COPY_LINE,
 ].join('\n')
-const [triageOut, mirrorIndex] = await Promise.all([!manifests.length ? EMPTY_TRIAGE : run('triage', 'triage', 'Triage', [
+const PLAN_MANIFEST_PROBE = `${FANOUT_DIR}/plan/manifests.json`
+const planManifestPrompt = [
+  'Read the planner manifests to record their provisional credit-exhaustion routes. Run exactly, never piped:',
+  '  ' + probeCmd(PLAN_MANIFEST_PROBE, planManifests.map(m => `--fanout-manifest ${shq(m)}`)),
+  COPY_LINE,
+].join('\n')
+const [triageOut, mirrorIndex, planManifestGot] = await Promise.all([!manifests.length ? EMPTY_TRIAGE : run('triage', 'triage', 'Triage', [
   `QUESTION: ${A.question}`,
   `Read these research-fanout manifests and every <source>.json beside them:\n${manifests.join('\n')}`,
   codeSearch.length ? `Code-search rows (recorded by research-fanout probes): ${JSON.stringify(codeSearch)}` : '',
@@ -617,7 +625,17 @@ const [triageOut, mirrorIndex] = await Promise.all([!manifests.length ? EMPTY_TR
   LINKS.length ? `Do NOT choose these (the caller's links, read separately): ${LINKS.join(' ')}` : '',
 ].filter(Boolean).join('\n'), { schema: TRIAGE }),
 LINKS.length ? run('mirrorIndex', 'mirror-index', 'Mirror', indexPrompt, { schema: PROBE }) : null,
+planManifests.length ? run('planManifests', 'plan-manifests', 'Triage', planManifestPrompt, { schema: PROBE }) : null,
 ])
+const planManifestProbe = readProbe(planManifestGot, PLAN_MANIFEST_PROBE)
+if (planManifests.length && planManifestProbe === null) fanoutGaps.push('planner provisional check did not run')
+const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m =>
+  (Array.isArray(m.provisional) ? m.provisional : []).map(line => `${m.path}: ${line}`))
+const provisionalRoutes = [...new Set([
+  ...mirror.filter(m => m.provisional && mirrored(m)).map(m => `${m.url}: mirrored via ${m.route} (${m.primaryReason})`),
+  ...manifestProvisional(planManifestProbe),
+  ...depProbes.flatMap(manifestProvisional),
+])]
 const indexRow = probesOf(readProbe(mirrorIndex, INDEX_OUT), 'mirror-index')[0]
 if (LINKS.length && !(indexRow && indexRow.written === true)) mandatoryGaps.push(`mirror stage: README index ${MIRROR_DIR}/README.md was not written`)
 log(`Mandatory: ${dependencyRuns.length} dependency run(s) over ${DEP_REPOS.length} repo(s); ${mirror.filter(mirrored).length}/${mirror.length} link(s) mirrored; ${mandatoryGaps.length} mandatory gap(s)`)
@@ -710,9 +728,10 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   'even when its count is 0: "Code search" (query | role | source | count | rc — write RATE-LIMITED, never 0, for a',
   'rateLimited row, and UNARMED beside an unarmed 0) from CODE SEARCH, with each CODE SEARCH NOTE under it as a note',
   '(not a gap); "Dependency-repo fan-out" (repo | query | required sources failed | manifest) from DEPENDENCY RUNS;',
-  '"Offline mirrors" (link | mirror file | rc | bytes | failure) from MIRRORS. These rows were recorded by',
+  '"Offline mirrors" (link | mirror file | rc | bytes | failure | route | provisional) from MIRRORS. These rows were recorded by',
   'research-fanout probes; cite the manifest paths. Every MIRROR GAP, CODE SEARCH GAP and MANDATORY GAP is a Gap; when',
   'MANDATORY GAPS is non-empty, the Answer must say the sweep is INCOMPLETE and name what did not run.',
+  'Name every PROVISIONAL ROUTE below in the Answer and provenance; credit-skipped or substituted research is provisional.',
   `Return the path and the claims the Answer depends on (at most ${VERIFY_MAX}); mark absence=true on every claim`,
   'that something does NOT exist or does NOT happen — those are the easiest to get wrong.',
   LINKS.length ? `CALLER LINKS (each must be cited or named as unread): ${LINKS.join(' ')}` : '',
@@ -724,6 +743,7 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   `DEPENDENCY RUNS:\n${JSON.stringify(dependencyRuns)}`,
   `MIRRORS:\n${JSON.stringify(mirror)}`,
   mirrorGaps.length ? `MIRROR GAPS:\n${JSON.stringify(mirrorGaps)}` : '',
+  provisionalRoutes.length ? `PROVISIONAL ROUTES:\n${JSON.stringify(provisionalRoutes)}` : '',
   mandatoryGaps.length ? `MANDATORY GAPS:\n${JSON.stringify(mandatoryGaps)}` : '',
   fanoutGaps.length ? `FANOUT GAPS (each is a Gap: a planner fan-out run that failed or wrote no manifest):\n${JSON.stringify(fanoutGaps)}` : '',
   `FAILED READS:\n${JSON.stringify(failedReads)}`,
@@ -731,7 +751,7 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
-const common = { stageGaps, mandatoryGaps, fanoutGaps, plan, triage, failedReads, codeSearch, codeSearchNotes, codeSearchGaps, dependencyRuns, mirror, mirrorGaps }
+const common = { stageGaps, mandatoryGaps, fanoutGaps, plan, triage, failedReads, codeSearch, codeSearchNotes, codeSearchGaps, dependencyRuns, mirror, mirrorGaps, provisionalRoutes }
 if (synth === null) return await finish(withStatuses('synth-null', { ...common, claims, routing }))
 
 phase('Verify')
@@ -830,13 +850,15 @@ if (A.advisor) {
 // mirror, code search) did not run or did not succeed — `mandatoryGaps` names each; partial-verify =
 // SOME refuters returned null; links-only / stage-gap = plan, fan-out or triage failed, so the evidence
 // base is the caller links (links-only) or what the mandatory stages produced (stage-gap, no links —
-// never `links-only` with zero links). Early exits: plan-null | no-manifests | triage-null | synth-null.
+// never `links-only` with zero links); provisional = a validated credit fallback or credit-skipped
+// manifest source. Early exits: plan-null | no-manifests | triage-null | synth-null.
 const statuses = [
   verdicts.length && unverified.length === verdicts.length ? 'verify-null' : '',
   !reconciled ? 'reconcile-null' : '',
   mandatoryGaps.length ? 'mandatory-gap' : '',
   unverified.length && unverified.length < verdicts.length ? 'partial-verify' : '',
   stageGaps.length ? (LINKS.length ? 'links-only' : 'stage-gap') : '',
+  provisionalRoutes.length ? 'provisional' : '',
 ].filter(Boolean)
 const status = statuses[0] || 'complete'
 return await finish({ status, statuses, ...common, reportPath: synth.reportPath, claims: claims.length, verdicts, adjudication, refuted, gaps, advice, routing })

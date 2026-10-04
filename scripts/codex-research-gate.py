@@ -14,9 +14,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
 
-validate_strict_five = import_module(
+strict_five_verdict = import_module(
     "dotfiles_setup.research_fanout"
-).validate_strict_five
+).strict_five_verdict
 
 _EXPLICIT_RESEARCH = re.compile(
     r"\b(research|look up|investigate|best practices|latest|upstream|"
@@ -72,22 +72,26 @@ def _on_submit(event: dict[str, object], marker: Path) -> dict[str, object]:
             {
                 "turn_id": event["turn_id"],
                 "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-                "policy": "strict-five-v1",
+                "policy": "strict-five-v2",
             }
         ),
         encoding="utf-8",
     )
+    relative_out = (
+        f"~/.codex/research-coverage/{event['session_id']}/{event['turn_id']}"
+    )
     context = (
-        "Research policy strict-five-v1 applies to this turn. Run every source: "
-        f"{_SOURCE_NAMES}. Use `fnox --config ~/.config/fnox/config.toml "
-        "--profile codex_research --no-defaults --no-daemon --non-interactive "
+        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
+        "`fnox --config ~/.config/fnox/config.toml --profile codex_research "
+        "--no-defaults --no-daemon --non-interactive "
         f"exec -- mise -C {REPO_ROOT} run research-fanout -- QUERY "
-        "--repo OWNER/REPO "
-        f"--strict-five --request-id {event['turn_id']} "
-        "--last30days-plan PLAN.json "
-        f"--out {marker.parent}`. Verify the manifest and primary sources. "
-        "If a required route fails, report `RESEARCH INCOMPLETE:` "
-        "and the exact blocker."
+        "--repo OWNER/REPO --strict-five "
+        f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
+        f"--out {relative_out}`. Verify manifest and primary sources. "
+        "For failed routes report `RESEARCH INCOMPLETE:` and the exact blocker. "
+        "A provider out of credits (HTTP 402 or quota 429) is recorded "
+        "skipped: credits-exhausted or substituted; the receipt passes "
+        "PROVISIONAL; report it."
     )
     return {
         "hookSpecificOutput": {
@@ -98,9 +102,17 @@ def _on_submit(event: dict[str, object], marker: Path) -> dict[str, object]:
 
 
 def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
-    passed, reason = validate_strict_five(manifest, str(event["turn_id"]))
-    if passed:
+    verdict = strict_five_verdict(manifest, str(event["turn_id"]))
+    if verdict.passed:
+        if verdict.provisional:
+            return {
+                "systemMessage": "Research receipt PROVISIONAL "
+                "(credit-exhausted provider): "
+                + "; ".join(verdict.provisional)
+                + ". Say so in the answer."
+            }
         return {}
+    reason = verdict.reason
     message = event.get("last_assistant_message")
     if (
         event.get("stop_hook_active") is True

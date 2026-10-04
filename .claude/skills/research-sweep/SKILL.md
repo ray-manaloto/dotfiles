@@ -58,7 +58,8 @@ this repo use this skill and do not import `kb_setup.research`
   PRs), which is a note, not a gap (Ray, 2026-10-02);
   pass `runId` to stamp each fan-out with `--request-id` so only THIS run's
   manifests count, else freshness is a 1-hour age window),
-  **mirror** (every link saved by the pinned firecrawl into
+  **mirror** (every link saved by the mirror probe using pinned firecrawl, or
+  webclaw when firecrawl answers credit exhaustion, into
   `docs/research/kb/raw/<report-slug>/links/<n>.md` plus a `README.md` index;
   readers read the mirror) and **code search** (at least one planner query that
   is evidence, a fresh known-absent control, and a must-hit >0 from the planner
@@ -67,8 +68,10 @@ this repo use this skill and do not import `kb_setup.research`
   `mise run research-fanout -- --probe-out <path> ...` command (`--code-search
   ROLE=Q`, `--repo-check R`, `--fanout-manifest M --require ...`, `--mirror-url
   U --mirror-path F`, `--mirror-index DIR --mirror-count N`), which runs gh and
-  firecrawl itself and writes real exit codes and HTTP statuses to that
-  manifest (a page answering HTTP >= 400 is a failure and is not saved:
+  firecrawl itself (with webclaw fallback for credit exhaustion) and writes
+  real exit codes and HTTP statuses to that manifest (a page answering
+  HTTP >= 400 is a failure and is not saved, except a credit-exhausted route
+  may be substituted by a validated webclaw response:
   firecrawl exits 0 with a full 404 body; a stale manifest or mirror probe from
   an earlier sweep is a gap, never evidence); the agent copies the final
   `PROBE-JSON` line, and the workflow accepts it only when it names the exact
@@ -98,7 +101,11 @@ this repo use this skill and do not import `kb_setup.research`
   state that applies and `status` is its head, so a mandatory gap is never
   hidden (#1513). A planner fan-out run that failed
   is listed in `fanoutGaps`; a link that will not fetch is a named gap
-  (`mirrorGaps`) and is read live. Omitting both `repo` and `relatedRepos` is a
+  (`mirrorGaps`) and is read live. A successful webclaw mirror records
+  `route: "webclaw"`, `provisional: true`, webclaw's rc (0), and an empty
+  reason; its README records that rc and route. `provisionalRoutes` names
+  provisional mirrors and routes from planner and dependency manifests.
+  Omitting both `repo` and `relatedRepos` is a
   mandatory gap. `repoRoot` (absolute) is required with `links` when
   `reportPath` is not under `<repo>/docs/`. The report slug is the path below
   `docs/` with `/` → `--` (so two `runs/<run>/report.md` never share a mirror
@@ -131,7 +138,8 @@ this repo use this skill and do not import `kb_setup.research`
    are usable here (`needs --repo` means usable once you pass `--repo` — never
    drop a github source for it). Always run `--sources
    github-issues,github-discussions,github-releases` against every dependency
-   repo, save every link you were given with `mise exec -- firecrawl scrape`,
+   repo, save every link you were given with the mirror probe
+   `mise run research-fanout -- --probe-out <p> --mirror-url <u> --mirror-path <f>`,
    and run a GitHub code search with its two controls (the mandatory stages
    above). Then run 1-3 query variants — short search terms, not
    sentences — scoped with `--repo` whenever the question is about one project:
@@ -190,10 +198,20 @@ this repo use this skill and do not import `kb_setup.research`
   failed, with / without caller links; `stageGaps` names which, and the report
   states what was actually READ — caller links read, hits triaged from the
   planner or dependency-repo manifests, deep-read URLs, answered code-search
-  rows); early exits `plan-null`, `no-manifests`, `triage-null`, `synth-null`.
+  rows), then `provisional` (a credit-exhausted provider was skipped or
+  substituted); early exits `plan-null`, `no-manifests`, `triage-null`,
+  `synth-null` stay degraded without adding `provisional`.
   `statuses` carries every one that applies. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and
   says so in the report's Verification section.
+- **Credit exhaustion stays visible.** A metered provider's HTTP 402, quota
+  429 or "Insufficient credits" is `skipped: credits-exhausted`, or Firecrawl
+  search is substituted by Serper (`SERPER_API_KEY`), then SerpApi
+  (`SERP_API_KEY`); the mirror probe can substitute webclaw for scrape.
+  These receipts pass **provisional**, and the report must name every entry
+  in `provisionalRoutes`. Auth failures, 5xx, timeouts, malformed JSON, plain
+  rate limits and GitHub errors remain failures and do not trigger fallback.
+  Bare `firecrawl scrape`, including the deep-read step, has no fallback.
 - **GitHub code search** (mandatory on every sweep): in-lane, `gh api -X GET
   search/code -f q='QUERY'` — no parentheses/`**`, 10 requests/min (a 403/429
   is a rate limit, not zero; the probe waits out a reset under 60 s once), and

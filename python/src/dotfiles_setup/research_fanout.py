@@ -38,6 +38,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Never, Protocol
 
 from dotfiles_setup import child_env
@@ -56,6 +57,8 @@ _PROCESS_KILL_DRAIN_S = 2.0
 _PROCESS_CANCEL_POLL_S = 0.1
 _HTTP_OK = 200
 _HTTP_REDIRECT = 300
+_HTTP_PAYMENT_REQUIRED = 402
+_HTTP_QUOTA = 429
 _RELEASE_STOPWORDS = frozenset(
     {"the", "and", "for", "with", "from", "this", "that", "are", "was", "not", "you"}
 )
@@ -100,11 +103,57 @@ class Status(Enum):
     SKIPPED = "skipped"
 
 
+class SkipReason(Enum):
+    """Why a source was deliberately skipped."""
+
+    PREREQUISITE = "prerequisite"
+    CREDITS_EXHAUSTED = "credits-exhausted"
+
+
+CREDIT_METERED_SOURCES = frozenset(
+    {"exa", "context7", "firecrawl-developer", "firecrawl-search"}
+)
+_CREDIT_TEXT = re.compile(
+    r"insufficient credits|payment required|out of credits|credits exhausted|"
+    r"quota exceeded|exceeded your quota",
+    re.IGNORECASE,
+)
+_FALLBACK_ROUTES = MappingProxyType({"firecrawl-search": ("serper", "serpapi")})
+_FALLBACK_KEYS = MappingProxyType(
+    {"serper": "SERPER_API_KEY", "serpapi": "SERP_API_KEY"}
+)
+
+
+def is_credit_exhaustion(http_status: int | None, text: str) -> bool:
+    """Distinguish exhausted quota from auth, transient limits and server errors."""
+    if http_status == _HTTP_PAYMENT_REQUIRED:
+        return True
+    if http_status == _HTTP_QUOTA:
+        return bool(_CREDIT_TEXT.search(text))
+    if http_status is None:
+        return bool(_CREDIT_TEXT.search(text) or re.search(r"\b402\b", text))
+    return False
+
+
+@dataclass(frozen=True)
+class RouteAttempt:
+    """A tried route and its independently hashed evidence."""
+
+    route: str
+    status: Status
+    http_status: int | None
+    reason: str | None
+    raw_file: str | None
+    raw_sha256: str | None
+
+
 class Endpoint(Enum):
     """HTTP destinations accepted by the injected transport boundary."""
 
     EXA_SEARCH = "exa-search"
     FIRECRAWL_DEVELOPER = "firecrawl-developer"
+    SERPER_SEARCH = "serper-search"
+    SERPAPI_SEARCH = "serpapi-search"
 
 
 @dataclass(frozen=True)
@@ -137,6 +186,10 @@ class SourceResult:
     control: Control | None
     raw_file: str | None
     raw_sha256: str | None = None
+    skip_reason: SkipReason | None = None
+    route: str | None = None
+    provisional: bool = False
+    attempts: tuple[RouteAttempt, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -201,12 +254,16 @@ class _Attempt:
     items: tuple[Item, ...]
     raw: bytes
     error: str | None = None
+    http_status: int | None = None
+    rc: int | None = None
+    stderr_redacted: str = ""
 
 
 @dataclass(frozen=True)
 class _Fetch:
     result: SourceResult
     raw: bytes | None
+    attempt_raw: tuple[bytes | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -442,7 +499,51 @@ def default_http(
             return response.status, _read_http_body(response, deadline)
         except urllib.error.HTTPError as exc:
             return exc.code, _read_http_body(exc, deadline)
+    if endpoint in {Endpoint.SERPER_SEARCH, Endpoint.SERPAPI_SEARCH}:
+        return _fallback_http(
+            endpoint, params=params, body=body, headers=headers, deadline=deadline
+        )
     message = f"unsupported endpoint: {endpoint.value}"
+    raise ValueError(message)
+
+
+def _fallback_http(
+    endpoint: Endpoint,
+    *,
+    params: dict[str, str | int] | None,
+    body: dict[str, object] | None,
+    headers: dict[str, str],
+    deadline: _Deadline,
+) -> tuple[int, bytes]:
+    if endpoint is Endpoint.SERPER_SEARCH:
+        try:
+            response = urllib.request.urlopen(
+                urllib.request.Request(
+                    "https://google.serper.dev/search",
+                    data=json.dumps(body or {}).encode(),
+                    headers=headers,
+                    method="POST",
+                ),
+                timeout=deadline.remaining(),
+            )
+            return response.status, _read_http_body(response, deadline)
+        except urllib.error.HTTPError as exc:
+            return exc.code, _read_http_body(exc, deadline)
+    if endpoint is Endpoint.SERPAPI_SEARCH:
+        query = urllib.parse.urlencode(params or {})
+        try:
+            response = urllib.request.urlopen(
+                urllib.request.Request(
+                    f"https://serpapi.com/search.json?{query}",
+                    headers=headers,
+                    method="GET",
+                ),
+                timeout=deadline.remaining(),
+            )
+            return response.status, _read_http_body(response, deadline)
+        except urllib.error.HTTPError as exc:
+            return exc.code, _read_http_body(exc, deadline)
+    message = "unsupported fallback endpoint"
     raise ValueError(message)
 
 
@@ -530,26 +631,30 @@ def _run_json(
     runner: Runner,
     deadline: _Deadline,
     env: dict[str, str],
-) -> tuple[object | None, bytes, str | None]:
+) -> tuple[object | None, bytes, str | None, int, str]:
     completed = runner(argv, timeout=deadline.remaining(), env=env)
-    raw = completed.stdout or b""
+    raw = _redact_text((completed.stdout or b"").decode(errors="replace"), env).encode()
+    stderr = _redacted_stderr(completed, env)
     if completed.returncode != 0:
-        return None, raw, _subprocess_error(completed, env)
+        return (
+            None,
+            raw,
+            _subprocess_error(completed, env),
+            completed.returncode,
+            stderr,
+        )
     try:
-        return _decode_json(raw), raw, None
+        return _decode_json(raw), raw, None, completed.returncode, stderr
     except ValueError:
-        return None, raw, "invalid JSON"
+        return None, raw, "invalid JSON", completed.returncode, stderr
 
 
 def _gh_env() -> dict[str, str]:
     return child_env.clean_env(keep=frozenset({"GITHUB_TOKEN", "GH_TOKEN"}))
 
 
-def _subprocess_error(
-    completed: subprocess.CompletedProcess[bytes], env: dict[str, str]
-) -> str:
-    stderr = (completed.stderr or b"").decode(errors="replace")
-    credential_values = sorted(
+def _redact_text(text: str, env: dict[str, str]) -> str:
+    values = sorted(
         (
             value
             for name, value in env.items()
@@ -558,10 +663,27 @@ def _subprocess_error(
         key=len,
         reverse=True,
     )
-    for value in credential_values:
-        stderr = stderr.replace(value, "[REDACTED]")
-    stderr = stderr.replace("\r\n", "\n").replace("\r", "\n")
-    stderr = stderr.replace("\n", " | ")
+    for value in values:
+        text = text.replace(value, "[REDACTED]")
+    # Request URLs can carry SerpApi keys; provider pricing links are evidence.
+    return re.sub(
+        r"https://(?:google\.serper\.dev/search|serpapi\.com/search\.json)[^\s\"<>]*",
+        "[REDACTED REQUEST URL]",
+        text,
+    )
+
+
+def _redacted_stderr(
+    completed: subprocess.CompletedProcess[bytes], env: dict[str, str]
+) -> str:
+    return _redact_text((completed.stderr or b"").decode(errors="replace"), env)
+
+
+def _subprocess_error(
+    completed: subprocess.CompletedProcess[bytes], env: dict[str, str]
+) -> str:
+    stderr = _redacted_stderr(completed, env)
+    stderr = stderr.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " | ")
     return f"exited {completed.returncode}: {stderr.strip()[-300:]}"
 
 
@@ -592,11 +714,11 @@ def _github_issues(
     repo = _required_repo(request)
     encoded = urllib.parse.quote_plus(query)
     endpoint = f"/search/issues?q=repo:{repo}+{encoded}&per_page={request.limit}"
-    payload, raw, error = _run_json(
+    payload, raw, error, rc, stderr = _run_json(
         ["gh", "api", endpoint], runner=runner, deadline=deadline, env=_gh_env()
     )
     if error:
-        return _Attempt((), raw, error)
+        return _Attempt((), raw, error, rc=rc, stderr_redacted=stderr)
     return _Attempt(_items_from_payload(payload, limit=request.limit), raw)
 
 
@@ -608,7 +730,7 @@ def _github_discussions(
     deadline: _Deadline,
 ) -> _Attempt:
     repo = _required_repo(request)
-    payload, raw, error = _run_json(
+    payload, raw, error, rc, stderr = _run_json(
         [
             "gh",
             "api",
@@ -625,7 +747,7 @@ def _github_discussions(
         env=_gh_env(),
     )
     if error:
-        return _Attempt((), raw, error)
+        return _Attempt((), raw, error, rc=rc, stderr_redacted=stderr)
     if not isinstance(payload, dict):
         return _Attempt((), raw, "unexpected response shape")
     if "errors" in payload:
@@ -651,14 +773,14 @@ def _github_releases(
     deadline: _Deadline,
 ) -> _Attempt:
     repo = _required_repo(request)
-    payload, raw, error = _run_json(
+    payload, raw, error, rc, stderr = _run_json(
         ["gh", "api", f"repos/{repo}/releases?per_page=100"],
         runner=runner,
         deadline=deadline,
         env=_gh_env(),
     )
     if error:
-        return _Attempt((), raw, error)
+        return _Attempt((), raw, error, rc=rc, stderr_redacted=stderr)
     if not isinstance(payload, list):
         return _Attempt((), raw, "unexpected JSON shape")
     terms = tuple(
@@ -710,7 +832,7 @@ def _github_repo_control(
     deadline: _Deadline,
 ) -> tuple[int | None, str | None]:
     repo = _required_repo(request)
-    payload, _raw, error = _run_json(
+    payload, _raw, error, _rc, _stderr = _run_json(
         ["gh", "api", f"repos/{repo}"],
         runner=runner,
         deadline=deadline,
@@ -735,12 +857,14 @@ def _http_json(
         timeout=deadline.remaining(),
     )
     if not _HTTP_OK <= status < _HTTP_REDIRECT:
-        return _Attempt((), raw, f"HTTP {status}")
+        return _Attempt((), raw, f"HTTP {status}", http_status=status)
     try:
         payload = _decode_json(raw)
     except ValueError:
-        return _Attempt((), raw, "invalid JSON")
-    return _Attempt(_items_from_payload(payload, limit=request.limit), raw)
+        return _Attempt((), raw, "invalid JSON", http_status=status)
+    return _Attempt(
+        _items_from_payload(payload, limit=request.limit), raw, http_status=status
+    )
 
 
 def _exa(
@@ -798,6 +922,56 @@ def _firecrawl_developer(
     )
 
 
+def _fallback_search(
+    route: str, query: str, request: FanoutRequest, *, http: Http, deadline: _Deadline
+) -> _Attempt:
+    name = _FALLBACK_KEYS[route]
+    key = _credential_header(name, os.environ.get(name, ""))
+    endpoint = Endpoint.SERPER_SEARCH if route == "serper" else Endpoint.SERPAPI_SEARCH
+    status, raw = http(
+        endpoint,
+        params={"engine": "google", "q": query, "api_key": key}
+        if route == "serpapi"
+        else None,
+        body={"q": query, "num": request.limit} if route == "serper" else None,
+        headers={"X-API-KEY": key, "Content-Type": "application/json"}
+        if route == "serper"
+        else {},
+        timeout=deadline.remaining(),
+    )
+    # SerpApi discontinued num; respect the limit locally (provider docs).
+    raw = _redact_text(raw.decode(errors="replace"), dict(os.environ)).encode()
+    if not _HTTP_OK <= status < _HTTP_REDIRECT:
+        return _Attempt((), raw, f"HTTP {status}", http_status=status)
+    try:
+        payload = _decode_json(raw)
+    except ValueError:
+        return _Attempt((), raw, "invalid JSON", http_status=status)
+    field = "organic" if route == "serper" else "organic_results"
+    records = payload.get(field) if isinstance(payload, dict) else None
+    if not isinstance(records, list):
+        return _Attempt(
+            (), raw, "unexpected fallback response shape", http_status=status
+        )
+    items = tuple(
+        item
+        for record in records[: request.limit]
+        if isinstance(record, dict)
+        and (
+            item := _record_item(
+                {
+                    "url": record.get("link"),
+                    "title": record.get("title"),
+                    "snippet": record.get("snippet"),
+                    "date": record.get("date"),
+                }
+            )
+        )
+        is not None
+    )
+    return _Attempt(items, raw, http_status=status)
+
+
 def _firecrawl_search(
     query: str,
     request: FanoutRequest,
@@ -805,7 +979,7 @@ def _firecrawl_search(
     runner: Runner,
     deadline: _Deadline,
 ) -> _Attempt:
-    payload, raw, error = _run_json(
+    payload, raw, error, rc, stderr = _run_json(
         [
             "firecrawl",
             "search",
@@ -823,8 +997,17 @@ def _firecrawl_search(
         env=child_env.clean_env(keep=frozenset({"FIRECRAWL_API_KEY"})),
     )
     if error:
-        return _Attempt((), raw, error)
-    return _Attempt(_items_from_payload(payload, limit=request.limit), raw)
+        return _Attempt((), raw, error, rc=rc, stderr_redacted=stderr)
+    if isinstance(payload, dict) and payload.get("success") is False:
+        return _Attempt(
+            (), raw, "provider reported failure", rc=rc, stderr_redacted=stderr
+        )
+    return _Attempt(
+        _items_from_payload(payload, limit=request.limit),
+        raw,
+        rc=rc,
+        stderr_redacted=stderr,
+    )
 
 
 def _context7_library_id(raw: bytes) -> str | None:
@@ -878,7 +1061,13 @@ def _context7(
     )
     library_raw = library.stdout or b""
     if library.returncode != 0:
-        return _Attempt((), library_raw, _subprocess_error(library, env))
+        return _Attempt(
+            (),
+            library_raw,
+            _subprocess_error(library, env),
+            rc=library.returncode,
+            stderr_redacted=_redacted_stderr(library, env),
+        )
     library_id = _context7_library_id(library_raw)
     if library_id is None:
         return _Attempt((), library_raw)
@@ -889,7 +1078,13 @@ def _context7(
     )
     docs_raw = docs.stdout or b""
     if docs.returncode != 0:
-        return _Attempt((), docs_raw, _subprocess_error(docs, env))
+        return _Attempt(
+            (),
+            docs_raw,
+            _subprocess_error(docs, env),
+            rc=docs.returncode,
+            stderr_redacted=_redacted_stderr(docs, env),
+        )
     return _Attempt(_context7_items(docs_raw, limit=request.limit), docs_raw)
 
 
@@ -953,14 +1148,14 @@ def _last30days(
         argv.extend(("--plan", str(request.last30days_plan), "--web-backend=exa"))
     if request.repo:
         argv.append(f"--github-repo={request.repo}")
-    payload, raw, error = _run_json(
+    payload, raw, error, rc, stderr = _run_json(
         argv,
         runner=runner,
         deadline=deadline,
         env=_last30days_env(),
     )
     if error:
-        return _Attempt((), raw, error)
+        return _Attempt((), raw, error, rc=rc, stderr_redacted=stderr)
     return _Attempt(_items_from_payload(payload, limit=request.limit), raw)
 
 
@@ -993,7 +1188,11 @@ def _primary_attempt(
     boundaries: _Boundaries,
     deadline: _Deadline,
 ) -> _Attempt:
-    if source == "github-issues":
+    if source in _FALLBACK_KEYS:
+        attempt = _fallback_search(
+            source, query, request, http=boundaries.http, deadline=deadline
+        )
+    elif source == "github-issues":
         attempt = _github_issues(
             query, request, runner=boundaries.runner, deadline=deadline
         )
@@ -1031,7 +1230,14 @@ def _control_query(source: str, request: FanoutRequest) -> str | None:
         return _required_repo(request).rsplit("/", maxsplit=1)[-1]
     if source == "firecrawl-developer" and request.repo:
         return request.repo.rsplit("/", maxsplit=1)[-1]
-    if source in {"exa", "context7", "firecrawl-developer", "firecrawl-search"}:
+    if source in {
+        "exa",
+        "context7",
+        "firecrawl-developer",
+        "firecrawl-search",
+        "serper",
+        "serpapi",
+    }:
         return "python"
     return None
 
@@ -1077,6 +1283,151 @@ def _empty_control(
     return Control(query, count), attempt.error
 
 
+def _attempt_credit(attempt: _Attempt) -> bool:
+    text = attempt.stderr_redacted + "\n" + attempt.raw.decode(errors="replace")
+    status = attempt.http_status
+    if status is None and attempt.rc == 0:
+        try:
+            payload = _decode_json(attempt.raw)
+        except ValueError:
+            return False
+        if isinstance(payload, dict) and payload.get("success") is False:
+            claimed = payload.get("status")
+            status = claimed if isinstance(claimed, int) else None
+    return is_credit_exhaustion(status, text)
+
+
+def _primary_envelope(attempt: _Attempt) -> bytes:
+    return json.dumps(
+        {
+            "http_status": attempt.http_status,
+            "rc": attempt.rc,
+            "body": _redact_text(
+                attempt.raw.decode(errors="replace"), dict(os.environ)
+            ),
+            "stderr_redacted": _redact_text(attempt.stderr_redacted, dict(os.environ)),
+        },
+        sort_keys=True,
+    ).encode()
+
+
+@dataclass(frozen=True)
+class _CreditRun:
+    boundaries: _Boundaries
+    deadline: _Deadline
+    started: float
+
+
+def _credit_result(
+    source: str, request: FanoutRequest, primary: _Attempt, run: _CreditRun
+) -> _Fetch:
+    boundaries, deadline, started = run.boundaries, run.deadline, run.started
+    envelope = _primary_envelope(primary)
+    reason = _redact_text(
+        primary.stderr_redacted.strip()
+        or primary.raw.decode(errors="replace").strip()
+        or primary.error
+        or "credits-exhausted",
+        dict(os.environ),
+    ).replace("\n", " | ")
+    attempts = [
+        RouteAttempt(source, Status.SKIPPED, primary.http_status, reason, None, None)
+    ]
+    evidence: list[bytes | None] = [envelope]
+    final = primary
+    status = Status.SKIPPED
+    route = None
+    control = None
+    genuine_error = None
+    genuine_raw = None
+    for fallback in _FALLBACK_ROUTES.get(source, ()):
+        key = _FALLBACK_KEYS[fallback]
+        if not os.environ.get(key):
+            attempts.append(
+                RouteAttempt(
+                    fallback,
+                    Status.SKIPPED,
+                    None,
+                    f"{key} not inherited; run through fnox exec",
+                    None,
+                    None,
+                )
+            )
+            evidence.append(None)
+            continue
+        try:
+            final = _primary_attempt(
+                fallback,
+                request.query,
+                request,
+                boundaries=boundaries,
+                deadline=deadline,
+            )
+        except (
+            OSError,
+            ValueError,
+            http_client.HTTPException,
+            subprocess.TimeoutExpired,
+        ) as exc:
+            final = _Attempt(
+                (), b"", "timed out" if _is_timeout_failure(exc) else "request failed"
+            )
+        fallback_status = Status.ERROR
+        fallback_reason = final.error
+        if final.error and _attempt_credit(final):
+            fallback_status = Status.SKIPPED
+        elif final.error:
+            genuine_error = final.error
+            genuine_raw = final.raw
+        elif final.items:
+            fallback_status = Status.OK
+        else:
+            control, _error = _empty_control(
+                fallback, request, boundaries=boundaries, deadline=deadline
+            )
+            fallback_status = (
+                Status.EMPTY_VERIFIED if control.count else Status.EMPTY_UNVERIFIED
+            )
+            fallback_reason = None if control.count else "canary failed"
+            if not control.count:
+                genuine_error = fallback_reason
+                genuine_raw = final.raw
+        attempts.append(
+            RouteAttempt(
+                fallback,
+                fallback_status,
+                final.http_status,
+                fallback_reason,
+                None,
+                None,
+            )
+        )
+        evidence.append(final.raw)
+        if fallback_status in {Status.OK, Status.EMPTY_VERIFIED}:
+            status, route, reason = fallback_status, fallback, None
+            break
+    if route is None and genuine_error:
+        status, reason = Status.ERROR, genuine_error
+    result = SourceResult(
+        source,
+        status,
+        final.items if route else (),
+        time.monotonic() - started,
+        reason,
+        control if route else None,
+        None,
+        skip_reason=SkipReason.CREDITS_EXHAUSTED if status is Status.SKIPPED else None,
+        route=route,
+        provisional=status is Status.SKIPPED or route is not None,
+        attempts=tuple(attempts),
+    )
+    return _Fetch(
+        result,
+        final.raw if route else genuine_raw if status is Status.ERROR else envelope,
+        tuple(evidence),
+    )
+
+
 def _source_result(
     source: str,
     request: FanoutRequest,
@@ -1096,6 +1447,7 @@ def _source_result(
             prerequisite,
             None,
             None,
+            skip_reason=SkipReason.PREREQUISITE,
         )
         return _Fetch(result, None)
     deadline = _Deadline.after(_timeout_for(source, request.timeout))
@@ -1109,6 +1461,14 @@ def _source_result(
             deadline=deadline,
         )
         raw = attempt.raw
+        if (
+            source in CREDIT_METERED_SOURCES
+            and attempt.error
+            and _attempt_credit(attempt)
+        ):
+            return _credit_result(
+                source, request, attempt, _CreditRun(boundaries, deadline, started)
+            )
         if attempt.error:
             status = Status.ERROR
             reason = attempt.error
@@ -1299,6 +1659,14 @@ def _list_sources(repo: str | None) -> None:
         transport, prerequisite = _SOURCE_DETAILS[source]
         presence = _presence(source, probe)
         sys.stdout.write(f"{source}  {transport}  {prerequisite}  {presence}\n")
+    for route, transport in (("serper", "HTTPS POST"), ("serpapi", "HTTPS GET")):
+        key = _FALLBACK_KEYS[route]
+        presence = "present" if os.environ.get(key) else "absent"
+        sys.stdout.write(
+            f"fallback:{route}  {transport}  {key} in process environment  {presence}\n"
+        )
+    presence = "present" if shutil.which("webclaw") else "absent"
+    sys.stdout.write(f"fallback:webclaw  webclaw CLI  webclaw on PATH  {presence}\n")
 
 
 def _validate_args(args: argparse.Namespace) -> None:
@@ -1364,7 +1732,10 @@ def _persist(
     out_dir.mkdir(parents=True, exist_ok=True)
     owned_names = ["manifest.json"]
     for source in _SOURCE_NAMES:
-        owned_names.extend((f"{source}.json", f"{source}.raw"))
+        owned_names.extend((f"{source}.json", f"{source}.raw", f"{source}.primary.raw"))
+        owned_names.extend(
+            f"{source}.{route}.raw" for route in _FALLBACK_ROUTES.get(source, ())
+        )
     for name in owned_names:
         (out_dir / name).unlink(missing_ok=True)
     results: list[SourceResult] = []
@@ -1373,8 +1744,31 @@ def _persist(
         if outcome.raw is not None:
             raw_path = out_dir / f"{outcome.result.source}.raw"
             raw_path.write_bytes(outcome.raw)
+        persisted_attempts = []
+        for attempt, evidence in zip(
+            outcome.result.attempts, outcome.attempt_raw, strict=True
+        ):
+            attempt_path = None
+            if evidence is not None:
+                label = (
+                    "primary"
+                    if attempt.route == outcome.result.source
+                    else attempt.route
+                )
+                attempt_path = out_dir / f"{outcome.result.source}.{label}.raw"
+                attempt_path.write_bytes(evidence)
+            persisted_attempts.append(
+                replace(
+                    attempt,
+                    raw_file=str(attempt_path) if attempt_path else None,
+                    raw_sha256=hashlib.sha256(evidence).hexdigest()
+                    if evidence is not None
+                    else None,
+                )
+            )
         result = replace(
             outcome.result,
+            attempts=tuple(persisted_attempts),
             raw_file=str(raw_path) if raw_path is not None else None,
             raw_sha256=(
                 hashlib.sha256(outcome.raw).hexdigest()
@@ -1392,7 +1786,7 @@ def _persist(
             "repo": request.repo,
             "request_id": request_id,
             "strict_five": strict_five,
-            "policy_version": "strict-five-v1" if strict_five else None,
+            "policy_version": "strict-five-v2" if strict_five else None,
             "generated_at": datetime.now(UTC).isoformat(),
             "sources": [asdict(result) for result in results],
             "out_dir": str(out_dir),
@@ -1455,7 +1849,7 @@ def _valid_json_response(source: str, payload: object, status: object) -> bool:
         )
     if source == "exa":
         valid = valid and bool(payload.get("requestId"))
-    if source in {"firecrawl-developer", "firecrawl-search"}:
+    if source in {"firecrawl-developer", "firecrawl-search", "serper", "serpapi"}:
         valid = valid and payload.get("success") is True
     return valid
 
@@ -1503,20 +1897,220 @@ def _validate_strict_row(row: dict[str, object], manifest_path: Path) -> str | N
     return _validate_raw_response(source, raw, row["status"])
 
 
-def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, str]:
-    """Reject partial or reused five-provider evidence after it is persisted."""
+@dataclass(frozen=True)
+class StrictVerdict:
+    """A validated receipt, including explicit provisional provenance."""
+
+    passed: bool
+    provisional: tuple[str, ...]
+    reason: str
+
+
+def _provisional_line(row: dict[str, object]) -> str:
+    source = str(row.get("source", "unknown"))
+    attempts = row.get("attempts")
+    primary_reason = str(row.get("reason") or "credits-exhausted")
+    errors = []
+    if isinstance(attempts, list) and attempts:
+        primary = attempts[0]
+        if isinstance(primary, dict):
+            primary_reason = str(primary.get("reason") or primary_reason)
+        errors = [
+            f"{a.get('route')}: {a.get('reason')}"
+            for a in attempts[1:]
+            if isinstance(a, dict) and a.get("status") == Status.ERROR.value
+        ]
+    line = (
+        f"{source} via {row['route']} (credits-exhausted: {primary_reason})"
+        if row.get("route")
+        else f"{source} skipped: credits-exhausted ({primary_reason}); "
+        "no fallback route"
+    )
+    return line + ("; " + "; ".join(errors) if errors else "")
+
+
+class _ReceiptError(ValueError):
+    """A specific validation failure safe to report to the caller."""
+
+
+def _bound_raw(file: object, digest: object, expected: Path) -> bytes:
+    if not isinstance(file, str) or Path(file) != expected:
+        message = "unbound raw evidence"
+        raise _ReceiptError(message)
+    raw = Path(file).read_bytes()
+    if digest != hashlib.sha256(raw).hexdigest():
+        message = "raw evidence hash is missing or changed"
+        raise _ReceiptError(message)
+    return raw
+
+
+def _validate_credit_status(row: dict[str, object]) -> None:
+    source = str(row["source"])
+    route = row.get("route")
+    if row.get("provisional") is not True or source not in CREDIT_METERED_SOURCES:
+        message = "invalid provisional source"
+        raise _ReceiptError(message)
+    if route:
+        if route not in _FALLBACK_ROUTES.get(source, ()):
+            message = "invalid fallback route"
+            raise _ReceiptError(message)
+        if reason := _validate_row_status(row):
+            raise _ReceiptError(reason.removeprefix(source + " "))
+    elif (
+        row.get("status") != Status.SKIPPED.value
+        or row.get("skip_reason") != SkipReason.CREDITS_EXHAUSTED.value
+    ):
+        message = "invalid credit skip"
+        raise _ReceiptError(message)
+
+
+def _credit_attempts(
+    row: dict[str, object], directory: Path
+) -> tuple[list[dict[str, object]], bytes]:
+    source = str(row["source"])
+    attempts = row.get("attempts")
+    if (
+        not isinstance(attempts, list)
+        or not attempts
+        or not isinstance(attempts[0], dict)
+        or attempts[0].get("route") != source
+    ):
+        message = "missing primary attempt"
+        raise _ReceiptError(message)
+    allowed = (source, *_FALLBACK_ROUTES.get(source, ()))
+    seen = []
+    primary_raw = b""
+    for attempt in attempts:
+        if not isinstance(attempt, dict) or attempt.get("route") not in allowed:
+            message = "invalid attempt route"
+            raise _ReceiptError(message)
+        route = attempt["route"]
+        if route in seen:
+            message = "duplicated attempt route"
+            raise _ReceiptError(message)
+        seen.append(route)
+        if attempt.get("raw_file") is None:
+            if (
+                route == source
+                or attempt.get("raw_sha256") is not None
+                or attempt.get("status") != Status.SKIPPED.value
+            ):
+                message = "missing attempt evidence"
+                raise _ReceiptError(message)
+            continue
+        label = "primary" if route == source else route
+        raw = _bound_raw(
+            attempt.get("raw_file"),
+            attempt.get("raw_sha256"),
+            directory / f"{source}.{label}.raw",
+        )
+        if route == source:
+            primary_raw = raw
+    return attempts, primary_raw
+
+
+def _credit_envelope(raw: bytes) -> _Attempt:
+    envelope = _decode_json(raw)
+    if (
+        not isinstance(envelope, dict)
+        or not isinstance(envelope.get("body"), str)
+        or not isinstance(envelope.get("stderr_redacted"), str)
+    ):
+        message = "malformed primary envelope"
+        raise _ReceiptError(message)
+    status, rc = envelope.get("http_status"), envelope.get("rc")
+    if (status is not None and (type(status) is not int or rc is not None)) or (
+        status is None and type(rc) is not int
+    ):
+        message = "malformed primary transport"
+        raise _ReceiptError(message)
+    attempt = _Attempt(
+        (),
+        envelope["body"].encode(),
+        "provider failure",
+        http_status=status,
+        rc=rc,
+        stderr_redacted=envelope["stderr_redacted"],
+    )
+    if not _attempt_credit(attempt):
+        message = "credit-exhaustion evidence does not re-derive"
+        raise _ReceiptError(message)
+    return attempt
+
+
+def _validate_credit_output(
+    row: dict[str, object],
+    attempts: list[dict[str, object]],
+    raw: bytes,
+    primary_raw: bytes,
+) -> None:
+    route = row.get("route")
+    if not route:
+        if raw != primary_raw or any(
+            a.get("status") in {Status.ERROR.value, Status.EMPTY_UNVERIFIED.value}
+            for a in attempts
+        ):
+            message = "invalid credit skip evidence"
+            raise _ReceiptError(message)
+        return
+    winning = next((a for a in attempts if a.get("route") == route), None)
+    if (
+        not winning
+        or winning.get("status") != row["status"]
+        or winning.get("raw_sha256") != row.get("raw_sha256")
+    ):
+        message = "missing winning route evidence"
+        raise _ReceiptError(message)
+    payload = _decode_json(raw)
+    key = "organic" if route == "serper" else "organic_results"
+    records = payload.get(key) if isinstance(payload, dict) else None
+    if not isinstance(records, list) or (
+        row["status"] == Status.OK.value and not records
+    ):
+        message = "raw evidence is not a successful fallback response"
+        raise _ReceiptError(message)
+
+
+def _validate_provisional_row(
+    row: dict[str, object], manifest_path: Path
+) -> str | None:
+    source = str(row["source"])
+    try:
+        _validate_credit_status(row)
+        attempts, primary_raw = _credit_attempts(row, manifest_path.parent)
+        _credit_envelope(primary_raw)
+        raw = _bound_raw(
+            row.get("raw_file"),
+            row.get("raw_sha256"),
+            manifest_path.parent / f"{source}.raw",
+        )
+        _validate_credit_output(row, attempts, raw, primary_raw)
+    except _ReceiptError as exc:
+        return f"{source} {exc}"
+    return None
+
+
+def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
+    """Validate same-turn hashed evidence and re-derive every credit exception."""
+    provisional = []
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
-            return False, "malformed research manifest"
+            return StrictVerdict(
+                passed=False, provisional=(), reason="malformed research manifest"
+            )
         if (
             not manifest.get("strict_five")
-            or manifest.get("policy_version") != "strict-five-v1"
+            or manifest.get("policy_version") != "strict-five-v2"
             or manifest.get("request_id") != request_id
             or not manifest.get("query")
             or not manifest.get("repo")
         ):
-            return False, "request identity or policy mismatch"
+            return StrictVerdict(
+                passed=False,
+                provisional=(),
+                reason="request identity or policy mismatch",
+            )
         rows = manifest["sources"]
         if (
             not isinstance(rows, list)
@@ -1524,13 +2118,41 @@ def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, st
             or any(not isinstance(row, dict) for row in rows)
             or {row["source"] for row in rows} != set(_SOURCE_NAMES)
         ):
-            return False, "required source missing or duplicated"
+            return StrictVerdict(
+                passed=False,
+                provisional=(),
+                reason="required source missing or duplicated",
+            )
         for row in rows:
-            if reason := _validate_strict_row(row, manifest_path):
-                return False, reason
+            reason = (
+                _validate_provisional_row(row, manifest_path)
+                if row.get("provisional")
+                or row.get("route")
+                or row.get("skip_reason") == SkipReason.CREDITS_EXHAUSTED.value
+                else _validate_strict_row(row, manifest_path)
+            )
+            if reason:
+                return StrictVerdict(passed=False, provisional=(), reason=reason)
+            if row.get("provisional"):
+                provisional.append(_provisional_line(row))
     except OSError, ValueError, KeyError, TypeError, AttributeError:
-        return False, "malformed or unreadable research evidence"
-    return True, "all required sources completed"
+        return StrictVerdict(
+            passed=False,
+            provisional=(),
+            reason="malformed or unreadable research evidence",
+        )
+    reason = (
+        "provisional: " + "; ".join(provisional)
+        if provisional
+        else "all required sources completed"
+    )
+    return StrictVerdict(passed=True, provisional=tuple(provisional), reason=reason)
+
+
+def validate_strict_five(manifest_path: Path, request_id: str) -> tuple[bool, str]:
+    """Keep the existing verdict-pair interface for callers."""
+    verdict = strict_five_verdict(manifest_path, request_id)
+    return verdict.passed, verdict.reason
 
 
 # Probe mode (#1514). A saved workflow has no filesystem or shell of its own
@@ -1777,6 +2399,7 @@ def _fanout_manifest_probe(
         "fresh": False,
         "sources": {},
         "required_failed": [],
+        "provisional": [],
     }
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -1786,6 +2409,9 @@ def _fanout_manifest_probe(
         reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
         row["required_failed"] = [f"{name}: {reason}" for name in required]
         return row
+    row["provisional"] = [
+        _provisional_line(r) for r in rows if r.get("provisional") is True
+    ]
     age = _manifest_age(manifest, clock)
     row["query"] = manifest.get("query")
     row["age_s"] = None if age is None else round(age, 1)
@@ -1809,67 +2435,138 @@ def _fanout_manifest_probe(
     return row
 
 
+def _webclaw_mirror(
+    url: str, path: Path, runner: Runner, timeout: float
+) -> tuple[int, str]:
+    try:
+        completed = runner(
+            ["webclaw", "-f", "json", url], timeout=timeout, env=child_env.clean_env()
+        )
+    except FileNotFoundError:
+        return _RC_NOT_FOUND, "credits-exhausted; webclaw not found on PATH"
+    except subprocess.TimeoutExpired:
+        return _RC_TIMEOUT, "credits-exhausted; webclaw timed out"
+    if completed.returncode != 0:
+        return (
+            completed.returncode,
+            f"credits-exhausted; webclaw rc={completed.returncode}",
+        )
+    return _write_webclaw_mirror(completed.stdout or b"", url, path)
+
+
+def _write_webclaw_mirror(raw: bytes, url: str, path: Path) -> tuple[int, str]:
+    try:
+        payload = _decode_json(raw)
+        content = payload.get("content") if isinstance(payload, dict) else None
+        metadata = payload.get("metadata") if isinstance(payload, dict) else None
+        markdown = content.get("markdown") if isinstance(content, dict) else None
+        final = metadata.get("url") if isinstance(metadata, dict) else None
+        requested = urllib.parse.urlsplit(url)
+        actual = urllib.parse.urlsplit(final) if isinstance(final, str) else None
+        if actual is None or (
+            requested.scheme.casefold(),
+            requested.netloc.casefold(),
+            requested.path.rstrip("/"),
+        ) != (
+            actual.scheme.casefold(),
+            actual.netloc.casefold(),
+            actual.path.rstrip("/"),
+        ):
+            return 0, "credits-exhausted; webclaw redirected to " + _redact_text(
+                str(final), dict(os.environ)
+            )
+        if not isinstance(markdown, str) or not markdown.strip():
+            return 0, "credits-exhausted; webclaw rc=0, empty markdown"
+        path.write_text(_redact_text(markdown, dict(os.environ)), encoding="utf-8")
+    except ValueError:
+        return 0, "credits-exhausted; webclaw output was not JSON"
+    return 0, ""
+
+
 def _mirror_probe(
     url: str, path: Path, *, runner: Runner, timeout: float
 ) -> dict[str, object]:
-    """Save one caller link with the pinned firecrawl and measure what landed.
-
-    `--json` carries the page's HTTP status: firecrawl exits 0 and returns a
-    full body for a 404 (measured 2026-10-02: a 328-byte "Error 404" page), so a
-    size check alone saves an error page as a successful mirror.
-    """
+    """Persist a validated native scrape, or a credit-triggered webclaw mirror."""
+    row: dict[str, object] = {
+        "kind": "mirror",
+        "url": url,
+        "path": str(path),
+        "route": "firecrawl",
+        "provisional": False,
+        "primary_reason": "",
+    }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # A failed scrape must not leave an EARLIER sweep's file to be measured.
         path.unlink(missing_ok=True)
     except OSError as exc:
         return {
-            "kind": "mirror",
-            "url": url,
-            "path": str(path),
+            **row,
             "rc": 1,
             "http_status": 0,
             "bytes": 0,
             "reason": f"cannot prepare {path}: {type(exc).__name__}",
         }
     env = child_env.clean_env(keep=frozenset({"FIRECRAWL_API_KEY"}))
-    argv = [
-        "firecrawl",
-        "scrape",
-        url,
-        "--format",
-        "markdown",
-        "--only-main-content",
-        "--json",
-    ]
     status = 0
+    deadline = _Deadline.after(timeout)
     try:
-        completed = runner(argv, timeout=timeout, env=env)
+        completed = runner(
+            [
+                "firecrawl",
+                "scrape",
+                url,
+                "--format",
+                "markdown",
+                "--only-main-content",
+                "--json",
+            ],
+            timeout=deadline.remaining(),
+            env=env,
+        )
         rc = completed.returncode
-        # _subprocess_error redacts credentials and joins stderr lines with " | ".
-        redacted = _subprocess_error(completed, env).partition(": ")[2]
-        reason = next((p.strip() for p in redacted.split(" | ") if p.strip()), "")
+        redacted = _redacted_stderr(completed, env)
+        raw = _redact_text(
+            (completed.stdout or b"").decode(errors="replace"), env
+        ).encode()
+        reason = next((p.strip() for p in redacted.splitlines() if p.strip()), "")
+        failure_payload = False
+        claimed_status = None
         if rc == 0:
-            status, markdown, reason = _scrape_payload(completed.stdout or b"")
-            # An error page is never saved: later sweeps grep these mirrors.
+            status, markdown, reason = _scrape_payload(raw)
+            try:
+                payload = _decode_json(raw)
+                failure_payload = (
+                    isinstance(payload, dict) and payload.get("success") is False
+                )
+                if (
+                    failure_payload
+                    and isinstance(payload, dict)
+                    and isinstance(payload.get("status"), int)
+                ):
+                    claimed_status = payload["status"]
+            except ValueError:
+                pass
             if markdown and not reason:
                 path.write_text(markdown, encoding="utf-8")
-    except subprocess.TimeoutExpired:
+        credit = (rc != 0 or failure_payload) and is_credit_exhaustion(
+            claimed_status, redacted + "\n" + raw.decode(errors="replace")
+        )
+        if credit:
+            row["primary_reason"] = (
+                redacted.strip() or raw.decode(errors="replace")
+            ).replace("\n", " | ")
+            row["route"] = "webclaw"
+            rc, reason = _webclaw_mirror(url, path, runner, deadline.remaining())
+            status = 0
+            row["provisional"] = rc == 0 and not reason
+    except subprocess.TimeoutExpired, TimeoutError:
         rc, reason = _RC_TIMEOUT, "timed out"
     except FileNotFoundError:
         rc, reason = _RC_NOT_FOUND, "firecrawl not found on PATH"
     size = path.stat().st_size if path.is_file() else 0
     if not reason and not (rc == 0 and size > 0):
         reason = f"rc={rc}, {size} bytes"
-    return {
-        "kind": "mirror",
-        "url": url,
-        "path": str(path),
-        "rc": rc,
-        "http_status": status,
-        "bytes": size,
-        "reason": reason,
-    }
+    return {**row, "rc": rc, "http_status": status, "bytes": size, "reason": reason}
 
 
 def _scrape_payload(raw: bytes) -> tuple[int, str, str]:
@@ -1878,6 +2575,8 @@ def _scrape_payload(raw: bytes) -> tuple[int, str, str]:
         payload = _decode_json(raw)
     except ValueError:
         return 0, "", "firecrawl output was not JSON"
+    if isinstance(payload, dict) and payload.get("success") is False:
+        return 0, "", "firecrawl reported failure"
     data = payload.get("data", payload) if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         return 0, "", "unexpected firecrawl JSON shape"
@@ -1919,6 +2618,7 @@ def _mirror_index_probe(
                         "",
                         0,
                         "stale probe from an earlier run",
+                        "",
                     )
                 )
                 continue
@@ -1930,12 +2630,21 @@ def _mirror_index_probe(
                     mirror["rc"],
                     mirror["bytes"],
                     mirror["reason"],
+                    mirror.get("route", ""),
                 )
             )
         except OSError, ValueError, KeyError, TypeError, StopIteration:
             missing += 1
             rows.append(
-                (n, "(unknown)", f"{n}.md", "", 0, "mirror probe missing or unreadable")
+                (
+                    n,
+                    "(unknown)",
+                    f"{n}.md",
+                    "",
+                    0,
+                    "mirror probe missing or unreadable",
+                    "",
+                )
             )
     readme = directory / "README.md"
     lines = [
@@ -1946,11 +2655,13 @@ def _mirror_index_probe(
             "--only-main-content --json` (the pinned binary, via `mise run "
             "research-fanout -- --probe-out`); a page answering HTTP >= 400 is a "
             "failure whatever its size. Every value below is read from the "
-            "`<n>.probe.json` beside it."
+            "`<n>.probe.json` beside it. When firecrawl answered credit exhaustion "
+            "the link was fetched with `webclaw -f json` instead "
+            "(route `webclaw`, provisional)."
         ),
         "",
-        "| n | url | file | rc | bytes | failure reason |",
-        "|---|---|---|---|---|---|",
+        "| n | url | file | rc | bytes | failure reason | route |",
+        "|---|---|---|---|---|---|---|",
         *("| " + " | ".join(_cell(v) for v in row) + " |" for row in rows),
     ]
     try:
@@ -2133,7 +2844,17 @@ def _probe_main(spec: _ProbeSpec, boundaries: _ProbeBoundaries) -> int:
 def _print_summary(manifest_path: Path, results: list[SourceResult]) -> None:
     sys.stdout.write(f"{manifest_path}\n")
     for result in results:
-        reason = f"  [{result.reason}]" if result.reason else ""
+        detail = result.reason
+        if result.provisional:
+            row = json.loads(json.dumps(asdict(result), default=_json_default))
+            line = _provisional_line(row)
+            if result.route:
+                prefix = f"{result.source} via {result.route} (credits-exhausted: "
+                replacement = f"via {result.route}; {result.source} credits-exhausted ("
+                detail = "provisional: " + line.replace(prefix, replacement, 1)
+            else:
+                detail = line.removeprefix(result.source + " ")
+        reason = f"  [{detail}]" if detail else ""
         sys.stdout.write(
             f"{result.source}  {result.status.value}  {len(result.items)} items  "
             f"{result.elapsed_s:.3f}s{reason}\n"

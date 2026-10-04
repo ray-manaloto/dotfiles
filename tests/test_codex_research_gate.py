@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,11 +16,13 @@ import pytest
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
 
 
-def _invoke(tmp_path: Path, event: dict[str, object]) -> dict[str, object]:
+def _invoke(
+    tmp_path: Path, event: dict[str, object], hook: Path = HOOK
+) -> dict[str, object]:
     env = os.environ.copy()
     env["HOME"] = str(tmp_path)
     result = subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, str(hook)],
         input=json.dumps(event),
         capture_output=True,
         text=True,
@@ -142,3 +146,140 @@ def test_malformed_manifest_returns_block_decision(tmp_path: Path) -> None:
     reason = result["reason"]
     assert isinstance(reason, str)
     assert "malformed research manifest" in reason
+
+
+def _hook_manifest(directory: Path) -> Path:
+    """Independent complete receipt with one hashed metered-provider envelope."""
+    sources = {
+        "github-issues": {"items": [{"html_url": "https://primary.test"}]},
+        "github-discussions": {
+            "data": {"search": {"nodes": [{"url": "https://primary.test"}]}}
+        },
+        "github-releases": [{"html_url": "https://primary.test"}],
+        "exa": {"requestId": "r1", "results": [{"url": "https://primary.test"}]},
+        "context7": "Context7 documentation",
+        "firecrawl-developer": {
+            "http_status": 402,
+            "rc": None,
+            "body": "",
+            "stderr_redacted": "",
+        },
+        "firecrawl-search": {
+            "success": True,
+            "data": {"web": [{"url": "https://primary.test"}]},
+        },
+        "last30days": {"schema_version": "1.3", "source_status": {"reddit": "ok"}},
+    }
+    rows = []
+    for source, payload in sources.items():
+        raw = (
+            payload.encode()
+            if isinstance(payload, str)
+            else json.dumps(payload).encode()
+        )
+        path = directory / f"{source}.raw"
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        row = {
+            "source": source,
+            "status": "ok",
+            "items": [{"url": "https://primary.test"}],
+            "raw_file": str(path),
+            "raw_sha256": digest,
+        }
+        if source == "firecrawl-developer":
+            primary = directory / "firecrawl-developer.primary.raw"
+            primary.write_bytes(raw)
+            row.update(
+                status="skipped",
+                items=[],
+                skip_reason="credits-exhausted",
+                provisional=True,
+                attempts=[
+                    {
+                        "route": source,
+                        "status": "skipped",
+                        "http_status": 402,
+                        "reason": "HTTP 402",
+                        "raw_file": str(primary),
+                        "raw_sha256": digest,
+                    }
+                ],
+            )
+        rows.append(row)
+    path = directory / "manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "strict_five": True,
+                "policy_version": "strict-five-v2",
+                "request_id": "turn-1",
+                "query": "hooks",
+                "repo": "openai/codex",
+                "sources": rows,
+            }
+        )
+    )
+    return path
+
+
+def test_hook_provisional_pass_and_forged_evidence_block(tmp_path: Path) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+    )
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    manifest = _hook_manifest(directory)
+    result = _invoke(tmp_path, {**base, "hook_event_name": "Stop"})
+    assert "decision" not in result
+    assert "PROVISIONAL" in str(result["systemMessage"])
+    assert "firecrawl-developer" in str(result["systemMessage"])
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "firecrawl-developer")
+    forged = b'{"http_status":500,"rc":null,"body":"","stderr_redacted":""}'
+    Path(row["attempts"][0]["raw_file"]).write_bytes(forged)
+    row["attempts"][0]["raw_sha256"] = hashlib.sha256(forged).hexdigest()
+    Path(row["raw_file"]).write_bytes(forged)
+    row["raw_sha256"] = hashlib.sha256(forged).hexdigest()
+    manifest.write_text(json.dumps(data))
+    result = _invoke(tmp_path, {**base, "hook_event_name": "Stop"})
+    assert result["decision"] == "block"
+    assert "does not re-derive" in str(result["reason"])
+
+
+def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None:
+    root = tmp_path / ("long-checkout-" * 15)
+    script = root / "scripts/codex-research-gate.py"
+    script.parent.mkdir(parents=True)
+    shutil.copyfile(HOOK, script)
+    # The copied hook must use real package imports, never a mocked validator.
+    imported = subprocess.run(
+        [sys.executable, "-c", "import dotfiles_setup"],
+        capture_output=True,
+        check=False,
+    )
+    if imported.returncode != 0:
+        shutil.copytree(HOOK.parent.parent / "python/src", root / "python/src")
+    result = _invoke(
+        tmp_path,
+        {
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+        script,
+    )
+    specific = result["hookSpecificOutput"]
+    assert isinstance(specific, dict)
+    context = specific["additionalContext"]
+    assert isinstance(context, str)
+    assert len(context) <= 1000
+    assert "PROVISIONAL" in context
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    assert json.loads(marker.read_text())["policy"] == "strict-five-v2"

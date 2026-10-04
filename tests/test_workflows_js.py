@@ -91,6 +91,7 @@ KNOWN_LABEL_PREFIXES = {
     "deps",
     "mirror",
     "mirror-index",
+    "plan-manifests",
     "retrospect",
     "retrospect-write",
 }
@@ -185,6 +186,9 @@ const CODE_SEARCH_OK = [
   { query: 'fresh-nonsense-token', role: 'known-absent', count: 0, rc: 0 },
 ]
 const PLAN_PROBE_OK = (prompt, rows) => PROBE_LINE(prompt, CS(rows))
+const PLAN_MANIFEST_OK = (prompt, provisional = []) => PROBE_LINE(prompt,
+  argsOf(prompt, '--fanout-manifest').map(path => ({ kind: 'fanout-manifest',
+    path, exists: true, fresh: true, sources: {}, required_failed: [], provisional })))
 const DEPS_QUERIES = (prompt) => prompt.split('mise run research-fanout -- "').slice(1)
   .map((part, k) => {
     const q = part.split('"')[0]
@@ -197,7 +201,8 @@ const DEPS = (prompt, o = {}) => {
     kind: 'fanout-manifest', path, exists: runs[k].exists !== false,
     query: runs[k].query, age_s: runs[k].age_s === undefined ? 5 : runs[k].age_s,
     fresh: runs[k].fresh !== false,
-    sources: {}, required_failed: runs[k].requiredFailed || [] }] : []))
+    sources: {}, required_failed: runs[k].requiredFailed || [],
+    provisional: runs[k].provisional || [] }] : []))
   const control = o.control || { count: 7, rc: 0, rateLimited: false }
   const health = 'health' in o ? o.health
     : prompt.includes("'health=repo:cli/cli filename:README.md'")
@@ -303,6 +308,7 @@ const agent = async (_prompt, options = {}) => {
   }
   // the mandatory stages: one copied PROBE-JSON line each (#1514)
   if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'plan-manifests') return PLAN_MANIFEST_OK(_prompt)
   if (label === 'mirror-index') return INDEX_OK(_prompt)
   if (label.startsWith('mirror')) return MIRROR_OK(_prompt)
   if (label === 'retrospect-write') {
@@ -646,6 +652,7 @@ _SWEEP_ROUTING = {
     "deps": ("general-purpose", "sonnet", "low"),
     "mirror": ("general-purpose", "haiku", ""),
     "mirror-index": ("general-purpose", "haiku", ""),
+    "plan-manifests": ("general-purpose", "haiku", ""),
     "codex-sol-advisor": ("codex-sol-advisor", "", ""),
     # #1502: READ-ONLY by construction (Explore cannot edit), so it cannot tune
     # its own rules; the verbatim writer is a cheap general-purpose copy job
@@ -706,6 +713,7 @@ _SWEEP_HAPPY_BODY = """
       codeSearchProbe: PLAN_PROBE_OK(_prompt, CODE_SEARCH_OK), sourceDive: false }
   }
   if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'plan-manifests') return PLAN_MANIFEST_OK(_prompt)
   if (label === 'mirror-index') return INDEX_OK(_prompt)
   if (label.startsWith('mirror')) return MIRROR_OK(_prompt)
   if (label === 'triage') {
@@ -817,6 +825,7 @@ _SWEEP_TUNING_BODY = """
       codeSearchProbe: PLAN_PROBE_OK(_prompt, CODE_SEARCH_OK), sourceDive: false }
   }
   if (label.startsWith('deps')) return DEPS_OK(_prompt)
+  if (label === 'plan-manifests') return PLAN_MANIFEST_OK(_prompt)
   if (label === 'mirror-index') return INDEX_OK(_prompt)
   if (label.startsWith('mirror')) return MIRROR_OK(_prompt)
   if (label === 'triage') {
@@ -1103,6 +1112,15 @@ def test_research_sweep_keeps_a_section_fragment(tmp_path: Path) -> None:
 _SWEEP_MANDATORY_BODY = _SWEEP_TUNING_BODY
 for _old, _new in (
     (
+        "  if (label === 'plan-manifests') return PLAN_MANIFEST_OK(_prompt)\n",
+        (
+            "  if (label === 'plan-manifests') {\n"
+            "    events.push({ kind: 'plan-manifests', label, prompt: _prompt })\n"
+            "    return PLAN_MANIFEST_STUB\n"
+            "  }\n"
+        ),
+    ),
+    (
         "  if (label.startsWith('deps')) return DEPS_OK(_prompt)\n",
         (
             "  if (label.startsWith('deps')) {\n"
@@ -1177,6 +1195,7 @@ def _mandatory_run(
         "deps": "DEPS_OK(_prompt)",
         "mirror": "MIRROR_OK(_prompt)",
         "mirror_index": "INDEX_OK(_prompt)",
+        "plan_manifests": "PLAN_MANIFEST_OK(_prompt)",
         "code_search": "CODE_SEARCH_OK",
         "plan_runs": _PLAN_RUNS_OK,
         "plan": "",
@@ -1190,6 +1209,9 @@ def _mandatory_run(
     body = _sub(body, "return DEPS_STUB\n", f"return {stub['deps']}\n")
     body = _sub(body, "return MIRROR_STUB\n", f"return {stub['mirror']}\n")
     body = _sub(body, "return INDEX_STUB\n", f"return {stub['mirror_index']}\n")
+    body = _sub(
+        body, "return PLAN_MANIFEST_STUB\n", f"return {stub['plan_manifests']}\n"
+    )
     body = _sub(body, "return RETRO_STUB\n", f"return {stub['retro']}\n")
     body = _sub(body, "return RETRO_WRITE_STUB\n", f"return {stub['retro_write']}\n")
     body = _sub(
@@ -1266,6 +1288,163 @@ def test_research_sweep_mirrors_each_caller_link_once(tmp_path: Path) -> None:
     )
     assert f"(mirror: {raw}/1.md, 42 bytes)" in link_read["prompt"]
     assert _result(payload)["status"] == "complete"
+
+
+def test_research_sweep_provisional_mirror_keeps_validated_route(
+    tmp_path: Path,
+) -> None:
+    """A successful fallback is read offline and disclosed in the final result.
+
+    FAIL arms: retain the primary rc=1, drop provenance, or omit provisional
+    from common/statuses; each loses a distinct public output below.
+    """
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-provisional-mirror.js",
+        {"links": ["https://caller.test/a"]},
+        {
+            "mirror": "MIRROR_OK(_prompt, { route: 'webclaw', provisional: true, "
+            "primary_reason: 'Insufficient credits' })"
+        },
+    )
+    run_result = _result(payload)
+    route = "https://caller.test/a: mirrored via webclaw (Insufficient credits)"
+    assert run_result["provisionalRoutes"] == [route]
+    assert run_result["status"] == "provisional"
+    assert run_result["statuses"] == ["provisional"]
+    assert run_result["mirrorGaps"] == []
+    mirror = cast("list[dict[str, object]]", run_result["mirror"])[0]
+    assert mirror["route"] == "webclaw"
+    assert mirror["primaryReason"] == "Insufficient credits"
+    read = next(
+        e for e in _of_kind(payload, "read") if e["label"].startswith("read-link")
+    )
+    assert "(mirror: " in read["prompt"]
+    assert "(NO MIRROR:" not in read["prompt"]
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+    assert "PROVISIONAL ROUTES:" in synth
+    assert route in synth
+
+
+@pytest.mark.parametrize("source", ["planner", "dependency"])
+def test_research_sweep_manifest_provisional_is_probe_derived(
+    tmp_path: Path, source: str
+) -> None:
+    """An agent's planner runs lack route fields; only the probe supplies them.
+
+    FAIL arm: trust planner metadata, or omit dependency probe rows, and the
+    corresponding literal route disappears from the returned result.
+    """
+    line = "firecrawl-search via serper (credits-exhausted: Insufficient credits)"
+    planner_manifest = str(tmp_path / "planner" / "manifest.json")
+    stubs = {
+        "plan_runs": json.dumps(
+            [{"query": "q", "sources": ["exa"], "manifest": planner_manifest, "rc": 0}]
+        )
+    }
+    if source == "planner":
+        stubs["plan_manifests"] = f"PLAN_MANIFEST_OK(_prompt, [{json.dumps(line)}])"
+        manifest = planner_manifest
+    else:
+        stubs["deps"] = (
+            "DEPS(_prompt, { runs: [{ query: 'q0', provisional: ["
+            f"{json.dumps(line)}] }}] }})"
+        )
+        manifest = (
+            ".agent/kb/raw/research-fanout/research-sweep/deps/"
+            "example--repo/1/manifest.json"
+        )
+    payload = _mandatory_run(
+        tmp_path, f"sweep-provisional-{source}.js", {"links": []}, stubs
+    )
+    run_result = _result(payload)
+    assert run_result["provisionalRoutes"] == [f"{manifest}: {line}"]
+    assert run_result["status"] == "provisional"
+    assert run_result["statuses"] == ["provisional"]
+    assert f"{manifest}: {line}" in _of_kind(payload, "synth-prompt")[0]["prompt"]
+    planner = _of_kind(payload, "plan-manifests")[0]["prompt"]
+    words = _command(planner, "--fanout-manifest")
+    assert words[words.index("--probe-out") + 1] == (
+        ".agent/kb/raw/research-fanout/research-sweep/plan/manifests.json"
+    )
+    assert words[words.index("--fanout-manifest") + 1] == planner_manifest
+
+
+def test_research_sweep_primary_routes_remain_complete(tmp_path: Path) -> None:
+    """Control: ordinary mirrors and all-ok manifests never claim provisional."""
+    payload = _mandatory_run(
+        tmp_path, "sweep-primary-complete.js", {"links": ["https://caller.test/a"]}
+    )
+    run_result = _result(payload)
+    assert run_result["provisionalRoutes"] == []
+    assert run_result["statuses"] == []
+    assert run_result["status"] == "complete"
+    assert "PROVISIONAL ROUTES:" not in _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        "null",
+        "{ line: 'not-json' }",
+        (
+            "{ line: 'PROBE-JSON ' + JSON.stringify({ kind: 'probe', "
+            "probe_out: '/elsewhere/probe.json', probes: [] }) }"
+        ),
+    ],
+    ids=["not-run", "malformed", "wrong-output-path"],
+)
+def test_research_sweep_missing_planner_probe_is_named_fanout_gap(
+    tmp_path: Path, probe: str
+) -> None:
+    """Missing or copied evidence is a fan-out gap, without a mandatory gap."""
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-missing-planner-probe.js",
+        {"links": []},
+        {"plan_manifests": probe},
+    )
+    run_result = _result(payload)
+    assert run_result["fanoutGaps"] == ["planner provisional check did not run"]
+    assert run_result["mandatoryGaps"] == []
+    assert run_result["provisionalRoutes"] == []
+
+
+@pytest.mark.parametrize(
+    ("stubs", "status"),
+    [
+        ({"refute": "null"}, "verify-null"),
+        (
+            {"refute": f"label === 'refute:1/2' ? null : {_OK_VERDICT}"},
+            "partial-verify",
+        ),
+        (
+            {
+                "deps": "DEPS(_prompt, { runs: [{ query: 'q0', "
+                "requiredFailed: ['github-issues: error (HTTP 403)'] }] })"
+            },
+            "mandatory-gap",
+        ),
+        ({"plan_runs": "[]"}, "links-only"),
+    ],
+)
+def test_research_sweep_degraded_status_precedes_provisional(
+    tmp_path: Path, stubs: dict[str, str], status: str
+) -> None:
+    """Appending provisional must never replace a more serious degraded status."""
+    payload = _mandatory_run(
+        tmp_path,
+        "sweep-provisional-precedence.js",
+        {"links": ["https://caller.test/a"]},
+        {
+            **stubs,
+            "mirror": "MIRROR_OK(_prompt, { route: 'webclaw', provisional: true, "
+            "primary_reason: 'Insufficient credits' })",
+        },
+    )
+    run_result = _result(payload)
+    assert run_result["status"] == status
+    assert run_result["statuses"] == [status, "provisional"]
 
 
 def test_research_sweep_unfetchable_link_is_a_named_gap(tmp_path: Path) -> None:
@@ -2194,6 +2373,7 @@ def test_research_sweep_failed_stage_clause_names_what_was_read(
         ("return DEPS_STUB\n", "return DEPS_OK(_prompt)\n"),
         ("return MIRROR_STUB\n", "return MIRROR_OK(_prompt)\n"),
         ("return INDEX_STUB\n", "return INDEX_OK(_prompt)\n"),
+        ("return PLAN_MANIFEST_STUB\n", "return PLAN_MANIFEST_OK(_prompt)\n"),
         ("return RETRO_STUB\n", "return null\n"),
         ("return RETRO_WRITE_STUB\n", "return null\n"),
         ("if (label === 'triage') {", "if (label === 'triage') { return null"),
@@ -2789,6 +2969,7 @@ def test_research_sweep_early_exit_lists_the_stage_status(tmp_path: Path) -> Non
         ("return DEPS_STUB\n", "return DEPS_OK(_prompt)\n"),
         ("return MIRROR_STUB\n", "return MIRROR_OK(_prompt)\n"),
         ("return INDEX_STUB\n", "return INDEX_OK(_prompt)\n"),
+        ("return PLAN_MANIFEST_STUB\n", "return PLAN_MANIFEST_OK(_prompt)\n"),
         ("return RETRO_STUB\n", "return null\n"),
         ("return RETRO_WRITE_STUB\n", "return null\n"),
         ("if (label === 'plan+fetch') {", "if (label === 'plan+fetch') { return null"),
