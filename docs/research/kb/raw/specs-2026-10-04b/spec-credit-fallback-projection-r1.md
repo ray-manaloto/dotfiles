@@ -601,3 +601,42 @@ All `research_fanout.py`, gate, workflow and test paths are relative to the cred
 | P38 | The cold review's 331/331 green baseline at 636dd297 | A | Inherited (`cold-review-credit-fallback-636dd297.md:104`). Not re-measured, because there was no Bash. |
 | P39 | There are no other code consumers of `research_fanout` beyond the gate, the workflow and the two test files | V | Grep `research_fanout\|strict_five_verdict\|validate_strict_five` (excluding `docs/**`) gave 6 files: the gate, the workflow, the module, 2 tests, and `mise.toml` (the task definition) |
 | P40 | No skill or rule text documents the `reason`/`primary_reason`/`required_failed` probe fields | V | Grep under the worktree `.claude/` matched only the workflow (`:481`, `:499`, `:638`). That match is the control arm. |
+
+## 8. Corrections r1.1 (architect, 2026-10-04 ~04:30 CDT, from premise-verifier round 1)
+
+Source: `docs/research/kb/reports/agents/premise-verifier-credit-fallback-projection-r1.md` in the credit-fallback
+worktree (verdict FIX FIRST). These corrections SUPERSEDE the conflicting text above. P2 confirmed by the architect:
+`git status --short` in the worktree shows only untracked report files; tracked tree clean at 636dd297.
+
+**A. T7 / M-N1c (§3.4, §5.1).** For a `SKIPPED` fallback attempt with `raw_file` set, EVERY failure of the shared
+decode helper (bound/hash failure excepted — keep its existing reason), envelope-shape failure, or `_fallback_credit`
+False maps to the single fixed reason `fallback credit skip does not re-derive`. The shared helper must not leak its
+`malformed primary …` texts into the fallback path. T7 gains two arms with a WELL-FORMED envelope that does not
+re-derive: (i) `http_status: 200` with the credit phrase at top-level `message`; (ii) `http_status: 400` without the
+phrase. Both → strict False with that exact reason. M-N1c (delete only the validator `_fallback_credit` call) must turn
+both arms RED; the bare-body arm may stay GREEN under M-N1c and that is expected.
+
+**B. T4 (§5.1).** T4's route arm pins the EXACT reason `firecrawl-search invalid fallback route` (and asserts the
+sentinel absent). Deleting the route check at `:2027-2029` then yields `missing winning route evidence`, so T4 goes RED
+on the reason pin, not on the sentinel.
+
+**C. JS mirror row with `code: ''` (§3.6).** Add to the mirror-row validation: a row with `code === ''` that is not
+`mirrored` (i.e. `rc !== 0 || bytes <= 0`) is coerced — `rc === 0 && bytes === 0` → `code: 'empty-output'`; anything
+else → `invalid-probe` plus the mandatory gap. No row may be neither mirrored nor a gap. Add a T14 arm for each branch.
+
+**D. P31 correction.** `tests/test_research_fanout_probe.py:117-118` is code-search only and encodes no diagnostic;
+remove it from §5.2 (it stays unchanged under U4).
+
+**E. §5.2 additions (sanctioned inversions).**
+- `tests/test_research_fanout.py`: `:734` → `[process-failed]`; `:2535`, `:2538` → `serper: http-error`; `:2833` →
+  `<route>: prerequisite`.
+- `tests/test_research_fanout_probe.py`: `:635` reads `detail.primary_reason` / `detail.reason` from the on-disk probe;
+  `:740`, `:750`, `:753` become `code` checks (non-empty, `not-found`, `timeout`); `:771-773` become structured
+  `{source, route}` entries; `:686` reads the on-disk file (stdout has no `detail`).
+- `tests/test_workflows_js.py`: `:1579`, `:1583-1588`, `:3029`, `:3039` → `(http-error)`; `:2918`, `:2930` →
+  `(canary-empty)`. The `required_failed` validation runs BEFORE the `wf:482` disabled-tracker filter.
+
+**F. Non-blocking, fold in.** T6(e) pins `http_status` 400 (serper) / 403 (serpapi). U8: `.strip()` `full_name` before
+`_REPO_SHAPE.fullmatch`. JS re-validates `repo-check.full_name` against `REPO_SHAPE` (`wf:105`) before `wf:519-523`;
+on violation interpolate `""`. New T6–T9/T16 tests use the `credit_env` / `mirror_credit_env` fixtures; T9's
+prerequisite arm unsets `EXA_API_KEY`.
