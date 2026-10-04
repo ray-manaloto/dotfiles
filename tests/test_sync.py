@@ -541,50 +541,65 @@ def test_sync_refuses_to_converge_when_docker_is_down(
     assert sync.sync_main(_WORKSPACE, sync.SyncOptions(check_only=True)) == 2
 
 
-def test_container_image_id_falls_back_to_a_stopped_container(
+def _docker_ps_and_inspect(states: tuple[str, ...], *, inspect_rc: int = 0) -> str:
+    """A fake ``docker`` body: ``ps`` prints rows, ``inspect <id>`` prints an image."""
+    return (
+        'case "$1" in\n'
+        f"  ps) {_rows(*states)}; exit 0 ;;\n"
+        f'  inspect) [ {inspect_rc} -eq 0 ] || {{ echo "No such object: $2" >&2;'
+        f' exit {inspect_rc}; }}; echo "sha256:img-$2"; exit 0 ;;\n'
+        "esac\nexit 99"
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # #800 F1: a stopped container's overlay must remain observable.
+        (("exited",), "sha256:img-id0"),
+        # `docker ps -a` lists newest first: a newer EXITED leftover (id0)
+        # must not shadow the genuinely running container (id1).
+        (("exited", "running"), "sha256:img-id1"),
+        (("running",), "sha256:img-id0"),
+        ((), None),
+    ],
+    ids=["stopped-only", "newer-exited-then-running", "running", "none"],
+)
+def test_container_image_id_prefers_running_else_newest(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    case: tuple[tuple[str, ...], str | None],
 ) -> None:
-    """#800 F1: a stopped container's overlay must remain observable."""
-    calls: list[list[str]] = []
-
-    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        if cmd[:3] == ["docker", "ps", "-q"]:
-            return _cp("")
-        if cmd[:3] == ["docker", "ps", "-aq"]:
-            return _cp("stopped-container\n")
-        if cmd[:2] == ["docker", "inspect"]:
-            return _cp("sha256:stopped-overlay\n")
-        raise AssertionError(cmd)
-
-    monkeypatch.setattr(sync, "_run", fake_run)
-
-    assert sync.container_image_id(_NAMES) == "sha256:stopped-overlay"
-    assert [cmd[:3] for cmd in calls[:2]] == [
-        ["docker", "ps", "-q"],
-        ["docker", "ps", "-aq"],
-    ]
-    assert calls[2][:3] == ["docker", "inspect", "stopped-container"]
+    """Healthy-daemon control arm for the #1554 refusals below."""
+    states, expected = case
+    _fake_docker(monkeypatch, tmp_path, _docker_ps_and_inspect(states))
+    assert sync.container_image_id(_NAMES) == expected
 
 
-def test_container_image_id_prefers_running_without_stopped_fallback(
-    monkeypatch: pytest.MonkeyPatch,
+def test_container_image_id_refuses_a_down_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A running match wins without consulting the stopped-container list."""
-    calls: list[list[str]] = []
+    """#1554: an unanswered ``docker ps`` is UNKNOWN, never "no container"."""
+    _fake_docker(
+        monkeypatch, tmp_path, 'echo "Cannot connect to the Docker daemon" >&2; exit 1'
+    )
+    with pytest.raises(DockerUnavailableError, match="Cannot connect"):
+        sync.container_image_id(_NAMES)
 
-    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        if cmd[:3] == ["docker", "ps", "-q"]:
-            return _cp("running-container\n")
-        if cmd[:2] == ["docker", "inspect"]:
-            return _cp("sha256:running-overlay\n")
-        raise AssertionError(cmd)
 
-    monkeypatch.setattr(sync, "_run", fake_run)
+def test_container_image_id_refuses_a_failed_inspect(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1554: ``docker inspect`` rc!=0 raises instead of returning ``None``.
 
-    assert sync.container_image_id(_NAMES) == "sha256:running-overlay"
-    assert not any(cmd[:3] == ["docker", "ps", "-aq"] for cmd in calls)
+    ``None`` means "nothing to compare" to the currency check, so swallowing
+    the failure would read an unknown overlay as current.
+    """
+    _fake_docker(
+        monkeypatch, tmp_path, _docker_ps_and_inspect(("running",), inspect_rc=1)
+    )
+    with pytest.raises(DockerUnavailableError, match="docker inspect id0 failed"):
+        sync.container_image_id(_NAMES)
 
 
 def test_container_state_filters_on_both_id_labels_not_local_folder(
@@ -598,19 +613,16 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
     reverting the filter to the old bare-folder label fails this assertion.
     """
     captured: list[list[str]] = []
-
-    def _record(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
-        captured.append(cmd)
-        return _cp("")
-
-    monkeypatch.setattr(sync, "_run", _record)
-    sync.container_image_id(_NAMES)
-    log = _fake_docker(monkeypatch, tmp_path, "exit 0")
-    sync.container_state(_NAMES)
-    # The fake logs one argv word per line ("$@"), so boundaries survive.
-    captured.append(log.read_text().splitlines())
-    assert len(captured) == 3
+    # The fake logs one argv word per line ("$@"), so boundaries survive. With
+    # no rows, each function makes exactly one `docker ps` call.
+    for probe in (sync.container_state, sync.container_image_id):
+        log = _fake_docker(monkeypatch, tmp_path, "exit 0")
+        log.unlink(missing_ok=True)
+        probe(_NAMES)
+        captured.append(log.read_text().splitlines())
+    assert len(captured) == 2
     for cmd in captured:
+        assert cmd[0] == "ps"
         assert f"label={_NAMES.workspace_label}" in cmd
         assert f"label={_NAMES.arch_label}" in cmd
         assert not any("devcontainer.local_folder" in arg for arg in cmd)

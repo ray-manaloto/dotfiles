@@ -510,26 +510,32 @@ def container_image_id(names: DevcontainerNames) -> str | None:
     whose docstring explains why a bare workspace filter also matches the
     OTHER architecture's container once both are up.
 
-    Prefers a RUNNING match (``docker ps -q``); only when none is running
-    does it fall back to a STOPPED one (``docker ps -aq``), so a non-running
-    container's overlay id can be compared for currency too (#800 F1). The
-    order matters and is not a bare ``-aq``: ``docker ps -a`` lists
-    newest-created first, so a newer exited leftover would otherwise shadow
-    a genuinely running container and hand back the wrong id.
+    Prefers a RUNNING match; only when none is running does it fall back to a
+    STOPPED one, so a non-running container's overlay id can be compared for
+    currency too (#800 F1). The order matters: ``docker ps -a`` lists
+    newest-created first, so a newer exited leftover would otherwise shadow a
+    genuinely running container and hand back the wrong id.
+
+    #1554: the rows come from :func:`doctor.docker_container_rows`, the same
+    rc-checked query :func:`container_state` uses, and ``docker inspect`` is
+    rc-checked too. A down, hung or missing docker raises
+    :class:`doctor.DockerUnavailableError` (sync exits 2, UNKNOWN) instead of
+    returning ``None``, which the currency check reads as "nothing to compare".
     """
-    filters = [
-        "--filter",
-        f"label={names.workspace_label}",
-        "--filter",
-        f"label={names.arch_label}",
-    ]
-    cid = _run(["docker", "ps", "-q", *filters]).stdout.strip()
-    if not cid:
-        cid = _run(["docker", "ps", "-aq", *filters]).stdout.strip()
-    if not cid:
+    rows = docker_container_rows(names, timeout_s=_DOCKER_PS_TIMEOUT_S)
+    if not rows:
         return None
-    res = _run(["docker", "inspect", cid.splitlines()[0], "--format", "{{.Image}}"])
-    return res.stdout.strip() or None if res.returncode == 0 else None
+    running = [cid for cid, state, _name in rows if state == "running"]
+    cid = running[0] if running else rows[0][0]
+    res = _run(
+        ["docker", "inspect", cid, "--format", "{{.Image}}"],
+        timeout=_DOCKER_PS_TIMEOUT_S,
+    )
+    if res.returncode != 0:
+        said = (res.stderr.strip() or f"exit {res.returncode}").splitlines()[0]
+        msg = f"docker inspect {cid} failed: {said}"
+        raise DockerUnavailableError(msg)
+    return res.stdout.strip() or None
 
 
 def container_state(names: DevcontainerNames) -> ContainerState:
