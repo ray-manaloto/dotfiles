@@ -1,0 +1,10 @@
+{
+  "control": null,
+  "elapsed_s": 0.39725174999330193,
+  "items": [],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/firecrawl-search.raw",
+  "raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "reason": "exited 1: Error: Request failed with status code 402 |",
+  "source": "firecrawl-search",
+  "status": "error"
+}

@@ -1,0 +1,71 @@
+{
+  "control": null,
+  "elapsed_s": 1.230705082998611,
+  "items": [
+    {
+      "date": null,
+      "snippet": "This PR enriches the output of the `exec` subcommand, making use of color. It also introduces a new `--color=always|never|auto` option so the caller can control whether the output is colorized.\n\nI had to do a bit of experimentation with the `owo_colors` crate to figure out how to support this in a maintainable way because its `if_supports_color()` API is annoying to work with and `owo_colors::set_override(false)` doesn't do what you might expect. As you can see in `event_processor.rs`, I went wi",
+      "title": "openai/codex#719",
+      "url": "https://github.com/openai/codex/issues/719"
+    },
+    {
+      "date": null,
+      "snippet": "New style guide:\n\n# Headers, primary, and secondary text\n\n- **Headers:** Use `bold`. For markdown with various header levels, leave in the `#` signs.\n- **Primary text:** Default.\n- **Secondary text:** Use `dim`.\n\n# Foreground colors\n\n- **Default:** Most of the time, just use the default foreground color. `reset` can help get it back.\n- **Selection:** Use ANSI `blue`. (Ed & AE want to make this cyan too, but we'll do that in a followup since it's riskier in different themes.)\n- **User input tips ",
+      "title": "openai/codex#2401",
+      "url": "https://github.com/openai/codex/issues/2401"
+    },
+    {
+      "date": null,
+      "snippet": "# `ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices\\#12890\n\n#13016\n\n#13016\n\n## Description\n\ntummetott\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPro\n\n### Which model were you using?\n\ngpt-5.3-codex\n\n### What platform is your computer?\n\nDarwin 24.6.0 arm64 arm\n\n### What terminal emulator and version are you using (if applicable)?\n\nWezterm\n\n### What issue are you seeing?\n\nContinuation of #1618\n\nWhen `tui.",
+      "title": "`ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices#12890",
+      "url": "https://github.com/openai/codex/issues/12890"
+    },
+    {
+      "date": null,
+      "snippet": "# Codex CLI themes are genuinely unusable\\#12912\n\n#13016\n\n#13016\n\n## Description\n\nimmapolar\n\n**Codex CLI version:**\n\n0.105.0\n\n**Description:**\n\nThe `background` key inside `.tmTheme` scope rules for `markup.inserted`, `markup.deleted`, and `markup.changed` is completely ignored. The diff view always renders with hardcoded bright red/green backgrounds regardless of what's defined in the custom theme file.\n\n**Impact:**\n\nUnusable for anyone with a custom terminal color scheme. The bright hardcoded ",
+      "title": "Codex CLI themes are genuinely unusable#12912",
+      "url": "https://github.com/openai/codex/issues/12912"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "TUI status line becomes monochrome despite status_line_use_colors=true in 0.156.x#48068",
+      "url": "https://github.com/openai/codex/issues/48068"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "TUI: Hook systemMessage renders ANSI SGR escapes as literal text instead of styles#48451",
+      "url": "https://github.com/openai/codex/issues/48451"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "TUI: set DECSET 2031 so an in-place terminal theme change updates the composer colours#38575",
+      "url": "https://github.com/openai/codex/issues/38575"
+    },
+    {
+      "date": null,
+      "snippet": "# Color diff in Warp terminal is unreadable in the new version (Windows)\\#12904\n\n#13016\n\n#13016\n\n## Description\n\ntomasmarekk\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPRO\n\n### Which model were you using?\n\ngpt-5.3-codex-xhigh\n\n### What platform is your computer?\n\nMicrosoft Windows NT 10.0.26200.0 x64\n\n### What terminal emulator and version are you using (if applicable)?\n\nWarp\n\n### What issue are you seeing?\n\nAfter installing the new version",
+      "title": "Color diff in Warp terminal is unreadable in the new version (Windows)#12904",
+      "url": "https://github.com/openai/codex/issues/12904"
+    },
+    {
+      "date": null,
+      "snippet": "# TUI: startup-only palette cache leaves input unreadable after system light/dark changes (0.154.0)\\#45163\n\n## Description\n\nlightninglu10\n\n### What version of Codex CLI is running?\n\n`codex-cli 0.154.0`. The startup-only cache is also present in upstream `main` at `a592c38c16cdd7623dacc9168926ebccedfb67d3`.\n\n### What subscription do you have?\n\nNot relevant to this terminal-rendering issue.\n\n### Which model were you using?\n\nModel-independent; observed in long-running Codex CLI sessions.\n\n### What ",
+      "title": "TUI: startup-only palette cache leaves input unreadable after system light/dark changes (0.154.0)#45163",
+      "url": "https://github.com/openai/codex/issues/45163"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Use syntax theme colors for inline code and file paths",
+      "url": "https://github.com/openai/codex/issues/46069"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/firecrawl-developer.raw",
+  "raw_sha256": "be94cda3e582c6fffc3c23ee5c839e2bbd1305c8f4677c40e92a2c9ba316e2db",
+  "reason": null,
+  "source": "firecrawl-developer",
+  "status": "ok"
+}

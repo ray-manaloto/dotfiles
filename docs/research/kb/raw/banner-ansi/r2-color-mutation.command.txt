@@ -1,0 +1,1 @@
+uv run --project python pytest tests/test_sdlc_team.py::test_codex_behind_a_mise_shim_still_receives_its_own_flags -x -q -n 2

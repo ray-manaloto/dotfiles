@@ -1,0 +1,71 @@
+{
+  "control": null,
+  "elapsed_s": 0.15876808302709833,
+  "items": [
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Custom command-backed TUI status line or colored status banner",
+      "url": "https://github.com/openai/codex/issues/20244"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Codex 0.130.0 still loses background/pill colors inside tmux 3.6a",
+      "url": "https://github.com/openai/codex/issues/22761"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Allow configuring semantic TUI colors beyond syntax highlighting",
+      "url": "https://github.com/openai/codex/issues/21130"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "ANSI background colors are dropped in command output rendering",
+      "url": "https://github.com/openai/codex/issues/22056"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Diff rendering (still) looks bad on Apple Terminal.app on Monterey",
+      "url": "https://github.com/openai/codex/issues/15416"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "codex-rs/tui/src/terminal_palette.rs",
+      "url": "https://github.com/openai/codex/blob/5af85998/codex-rs/tui/src/terminal_palette.rs"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "codex-rs/tui/src/terminal_palette.rs",
+      "url": "https://github.com/openai/codex/blob/31519549/codex-rs/tui/src/terminal_palette.rs"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "FORCE_COLOR: Keep Your Command Line Colorful, Even when Piping - Retain Text Colors in Logs, Output Streams, and More",
+      "url": "https://force-color.org/"
+    },
+    {
+      "date": "2026-02-26T00:00:00.000Z",
+      "snippet": "",
+      "title": "`ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices \u00b7 Issue #12890 \u00b7 openai/codex",
+      "url": "https://github.com/openai/codex/issues/12890"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "fix(tui): decode ANSI alpha-channel encoding in syntax themes",
+      "url": "https://github.com/openai/codex/pull/13382/files"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106e5-142e-71c0-be4d-b93077eb25a8/01a106e5-1722-7430-a264-7868d18cf493/exa.raw",
+  "raw_sha256": "4d961ba063b1f6fbaf04a4f3231041e0b1f5399b5c42e44f47942273d48f7abc",
+  "reason": null,
+  "source": "exa",
+  "status": "ok"
+}

@@ -1,0 +1,1 @@
+uv run --project python pytest tests/test_lane_result.py tests/test_sdlc_team.py -x -q -n 2

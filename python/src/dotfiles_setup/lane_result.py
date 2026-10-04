@@ -89,6 +89,7 @@ AGENTSVIEW_PATH: Final = Path(
 _AGENTSVIEW_TIMEOUT_S: Final = 30.0
 _MIN_CONFLICTING_VALUES: Final = 2
 _BANNER_SEARCH_LINES: Final = 50
+_ANSI_CSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 _SECTION_LINE = re.compile(
     r"(?:\bselected\s*:|\bspecialists?\s+(?:spawned|invoked)\s*:|"
@@ -189,7 +190,7 @@ def parse_parent_thread_id(log_text: str) -> str | None:
     """Return the session id from the first delimited Codex exec banner."""
     if not isinstance(log_text, str):
         return None
-    lines = log_text.splitlines()
+    lines = [_ANSI_CSI.sub("", line) for line in log_text.splitlines()]
     banner_index = next(
         (
             index

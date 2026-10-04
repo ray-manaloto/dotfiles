@@ -1,0 +1,124 @@
+### Codex.thread_resume(thread_id, *, approval_mode, base_instructions, config, cwd, developer_instructions, include_turns, model, model_provider, personality, sandbox, service_tier)
+
+Source: https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md
+
+Resumes an existing Codex thread session by its thread ID. Supports optionally including turn history in the server response.
+
+```APIDOC
+### Signature
+```python
+thread_resume(
+    thread_id: str,
+    *,
+    approval_mode=None,
+    base_instructions=None,
+    config=None,
+    cwd=None,
+    developer_instructions=None,
+    include_turns: bool | None = None,
+    model=None,
+    model_provider=None,
+    personality=None,
+    sandbox: Sandbox | None = None,
+    service_tier=None
+) -> Thread
+```
+
+### Parameters
+- **thread_id** (`str`) - ID of the thread to resume.
+- **approval_mode** (optional) - Override approval mode for the resumed thread.
+- **base_instructions** (optional) - Base instructions override.
+- **config** (optional) - Thread configuration.
+- **cwd** (optional) - Working directory.
+- **developer_instructions** (optional) - Developer instructions override.
+- **include_turns** (`bool | None`, optional) - Controls whether the server loads turn history into its response (`True` loads history, `False` skips, `None` preserves server default).
+- **model** (optional) - Model identifier.
+- **model_provider** (optional) - Model provider identifier.
+- **personality** (optional) - Deprecated personality setting.
+- **sandbox** (`Sandbox | None`, optional) - Sandbox instance.
+- **service_tier** (optional) - Service tier specification.
+
+### Returns
+- `Thread` - The resumed thread handle.
+```
+
+--------------------------------
+
+### Initialize execution server session
+
+Source: https://github.com/openai/codex/blob/main/codex-rs/exec-server/README.md
+
+Send an `initialize` request with client configuration to start a session. Receive session parameters and environment information before acknowledging with the `initialized` notification.
+
+```json
+{"id":1,"method":"initialize","params":{"clientName":"example-client"}}
+{"id":1,"result":{"sessionId":"00000000-0000-4000-8000-000000000001","environmentInfo":{"shell":{"name":"bash","path":"/bin/bash"},"cwd":"file:///tmp"}}}
+{"method":"initialized","params":{}}
+```
+
+--------------------------------
+
+### Start a thread and run a turn with Codex
+
+Source: https://github.com/openai/codex/blob/main/sdk/python/README.md
+
+Reuses existing Codex authentication to start a thread and execute a turn. Returns a TurnResult containing the final response, collected items, and token usage.
+
+```python
+from openai_codex import Codex
+
+with Codex() as codex:
+    thread = codex.thread_start()
+    result = thread.run("Explain this repository in three bullets.")
+    print(result.final_response)
+```
+
+--------------------------------
+
+### Resume an existing thread by ID
+
+Source: https://github.com/openai/codex/blob/main/sdk/python/docs/getting-started.md
+
+Resumes and continues an existing thread session using its thread ID.
+
+```python
+with Codex() as codex:
+    thread = codex.thread_resume("thr_123")
+    print(thread.run("Continue where we left off.").final_response)
+```
+
+--------------------------------
+
+### ResumeCommand struct — positional SESSION_ID arg
+
+Source: https://github.com/openai/codex/blob/main/codex-rs/cli/src/main.rs
+
+Defines the `codex resume` subcommand. The `session_id` field accepts an optional UUID or session name as a positional argument. The `config_overrides: SessionTuiCli` flatten brings in all shared TUI flags including `-C`/`--cd`.
+
+```rust
+#[derive(Debug, Parser)]
+struct ResumeCommand {
+    /// Session id (UUID) or session name. UUIDs take precedence if it parses.
+    /// If omitted, use --last to pick the most recent recorded session.
+    #[arg(value_name = "SESSION_ID")]
+    session_id: Option<String>,
+
+    /// Continue the most recent session without showing the picker.
+    #[arg(long = "last", default_value_t = false)]
+    last: bool,
+
+    /// Show all sessions (disables cwd filtering and shows CWD column).
+    #[arg(long = "all", default_value_t = false)]
+    all: bool,
+
+    /// Include non-interactive sessions in the resume picker and --last selection.
+    #[arg(long = "include-non-interactive", default_value_t = false)]
+    include_non_interactive: bool,
+
+    #[clap(flatten)]
+    remote: InteractiveRemoteOptions,
+
+    #[clap(flatten)]
+    config_overrides: SessionTuiCli,
+}
+```

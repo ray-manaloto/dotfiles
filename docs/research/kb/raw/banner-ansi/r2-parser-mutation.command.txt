@@ -1,0 +1,1 @@
+uv run --project python pytest tests/test_lane_result.py::test_parent_thread_id_from_real_ansi_banner -x -q -n 2

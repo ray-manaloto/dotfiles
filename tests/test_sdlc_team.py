@@ -409,6 +409,11 @@ def test_codex_behind_a_mise_shim_still_receives_its_own_flags(
     assert prefix == (str(mise), "exec", "--", "codex", "exec"), (
         "without `--`, mise parses codex's flags as its own"
     )
+    assert "--color" in result.argv
+    assert result.argv[result.argv.index("--color") : result.argv.index("-C")] == (
+        "--color",
+        "never",
+    ), "disable codex's own ANSI styling even when the environment forces colour"
 
 
 def test_dispatch_pins_model_and_effort(

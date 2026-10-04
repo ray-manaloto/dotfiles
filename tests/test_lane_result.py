@@ -135,6 +135,38 @@ The model quoted session id: later-value here.
     assert lane_result.parse_parent_thread_id(quoted_later) is None
 
 
+def test_parent_thread_id_from_real_ansi_banner() -> None:
+    banner = (Path(__file__).parent / "fixtures" / "codex-banner-ansi.txt").read_bytes()
+
+    assert b"\x1b[1msession id:\x1b[0m" in banner
+    assert (
+        lane_result.parse_parent_thread_id(banner.decode("utf-8"))
+        == "01a1068f-53a0-7540-a774-b8222ab83864"
+    )
+
+
+@pytest.mark.parametrize(
+    "coloured_lines",
+    [(0,), (1,), (3,), (4,), (0, 1, 2, 3, 4)],
+    ids=["title", "opening-delimiter", "session-value", "closing-delimiter", "all"],
+)
+def test_parent_thread_id_accepts_coloured_banner_boundaries(
+    coloured_lines: tuple[int, ...],
+) -> None:
+    parent_id = "01a1068f-53a0-7540-a774-b8222ab83864"
+    lines = [
+        "OpenAI Codex v0.160.0",
+        "--------",
+        "workdir: /repo",
+        f"session id: {parent_id}",
+        "--------",
+    ]
+    for index in coloured_lines:
+        lines[index] = f"\x1b[1;36m{lines[index]}\x1b[m"
+
+    assert lane_result.parse_parent_thread_id("\n".join(lines)) == parent_id
+
+
 def test_arm_24_parent_banner_may_follow_traces_within_first_fifty_lines() -> None:
     parent_id = "01a0a8da-6d39-74e3-a8fc-fe66f5505378"
     after_three_traces = "\n".join(

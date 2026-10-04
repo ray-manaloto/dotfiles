@@ -816,6 +816,10 @@ def dispatch(request: SdlcTeamRequest, repo_root: Path) -> SdlcTeamDispatch:
         # it a lane ran whatever ~/.codex/config.toml named.
         "--model",
         request.model,
+        # Disable codex's own ANSI styling (child command output is echoed raw);
+        # the banner parser's strip remains a backstop.
+        "--color",
+        "never",
         "-C",
         paths.workdir,
         "-o",
