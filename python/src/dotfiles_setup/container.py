@@ -255,7 +255,7 @@ def _smoke_processes(
 
 
 def _smoke_output(
-    stdout: str | bytes | None, stderr: str | bytes | None, *, timed_out: bool = True
+    stdout: str | bytes | None, stderr: str | bytes | None, *, timed_out: bool
 ) -> str:
     """Prefer FAIL; use stdout for timeouts and combined streams for completed runs."""
     streams = [
@@ -331,7 +331,7 @@ def _run_smoke(
         cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
         return False, (
             f"smoke timed out after {timeout:g} seconds: "
-            f"{_smoke_output(exc.stdout, exc.stderr)}; {cleanup}"
+            f"{_smoke_output(exc.stdout, exc.stderr, timed_out=True)}; {cleanup}"
         )
     if res.returncode == 0:
         return True, "tiers 1-3 OK"
