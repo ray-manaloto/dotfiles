@@ -314,7 +314,10 @@ def _pin_currency_check(latest: str, project_root: Path | None = None) -> _PinCh
                 f"cannot read the {PIN_TOOL} pin, so pin currency is UNKNOWN: {exc}"
             ],
         )
-    if pinned == latest:
+    comparable = all(_VERSION_RE.fullmatch(v) for v in (pinned, latest))
+    # #1631, same class as the running check: a pin AHEAD of a lagging oracle is
+    # current, not drift — the advice below would otherwise say to "bump" down.
+    if pinned == latest or (comparable and _version_key(pinned) > _version_key(latest)):
         return _PinCheck(state=_PinState.CURRENT)
     message = (
         f"schemas/sources.toml pins {PIN_TOOL} at {pinned} but {latest} is "
@@ -344,6 +347,15 @@ def pin_currency_findings(latest: str, project_root: Path | None = None) -> list
     about the host, so a non-repo root must not manufacture one.
     """
     return _pin_currency_check(latest, project_root).findings
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """Numeric sort key for a :data:`_VERSION_RE` (``X.Y.Z``) string.
+
+    String order is wrong for versions (``"2.1.99" > "2.1.270"``); the regex
+    guarantees three integer fields, so a tuple of ints orders them correctly.
+    """
+    return tuple(int(part) for part in version.split("."))
 
 
 def latest_version(
@@ -501,21 +513,25 @@ def evaluate(
     )
     pin_findings = pin_check.findings
     running_is_version = _VERSION_RE.fullmatch(running) is not None
+    # #1631: only an OLDER install is stale. The native installer self-updates,
+    # so running ahead of the oracle (which lags, and has read differently in
+    # two sessions minutes apart) is normal; flagging it told operators to
+    # DOWNGRADE, and an INVALID verdict is what the PreToolUse half denies on.
+    behind = running_is_version and _version_key(running) < _version_key(latest)
     findings = list(method_findings)
     if not running_is_version:
         findings.append(
             f"`claude doctor` returned a non-version running value: {running[:200]!r}"
         )
-    elif running != latest:
+    elif behind:
         findings.append(
             f"claude on PATH is {running} but {latest} is published "
-            f"(install method: {method}). Run `claude install latest`."
+            f"(per `mise latest {ORACLE_SPEC}`; install method: {method}). "
+            "Run `claude install latest`."
         )
     findings.extend(pin_findings)
     findings.extend(clean_findings)
-    host_failed_assertion = bool(method_findings or clean_findings)
-    if running_is_version:
-        host_failed_assertion = host_failed_assertion or running != latest
+    host_failed_assertion = bool(method_findings or clean_findings) or behind
     return DoctorVerdict(
         verdict=(
             Verdict.INVALID
