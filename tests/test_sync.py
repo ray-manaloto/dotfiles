@@ -41,12 +41,26 @@ def _isolated_sync_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     Probe-observed 2026-07-07: before the write_sync_record isolation fix,
     a host pytest run wrote a FIXTURE digest into the user's real
-    ~/.local/state/dotfiles record. Redirecting _state_file makes that
-    class of pollution impossible for every current and future test here.
+    ~/.local/state/dotfiles record. A temporary HOME makes that class of
+    pollution impossible for every current and future test here. It isolates
+    at the environment boundary, so the real state-path resolver runs
+    (tests/AGENTS.md "Mocking": never patch our own internals).
     """
-    monkeypatch.setattr(
-        sync, "_state_file", lambda ref: tmp_path / f"sync-{hash(ref)}.json"
-    )
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+
+#: Where sync keeps _REF's record under the temporary HOME. Written out
+#: literally, not derived the way the code derives it, so a change to the
+#: path formula is caught here rather than mirrored.
+_STATE_REL = (
+    ".local/state/dotfiles/sync-ghcr.io_ray-manaloto_dotfiles-devcontainer_dev.json"
+)
+
+
+def _state_path(tmp_path: Path) -> Path:
+    path = tmp_path / "home" / _STATE_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 _REPO = "ghcr.io/ray-manaloto/dotfiles-devcontainer"
@@ -564,6 +578,8 @@ def _docker_ps_and_inspect(states: tuple[str, ...], *, inspect_rc: int = 0) -> s
         # Plain `docker ps` (the pre-#1554 first pass) lists paused containers
         # too: an older PAUSED one still beats a newer exited leftover.
         (("exited", "paused"), "sha256:img-id1"),
+        # Restarting is listed by plain `docker ps` too.
+        (("exited", "restarting"), "sha256:img-id1"),
         ((), None),
     ],
     ids=[
@@ -571,6 +587,7 @@ def _docker_ps_and_inspect(states: tuple[str, ...], *, inspect_rc: int = 0) -> s
         "newer-exited-then-running",
         "running",
         "newer-exited-then-paused",
+        "newer-exited-then-restarting",
         "none",
     ],
 )
@@ -805,9 +822,8 @@ def test_write_sync_record_warns_when_container_probe_returns_none(
 
 def test_read_sync_record_non_dict_payload_reads_as_none(tmp_path: Path) -> None:
     """#800 F8: a state file holding a bare JSON list must not raise."""
-    # Same path formula as the `_isolated_sync_state` autouse fixture above —
-    # `tmp_path` is the identical cached fixture instance for this test node.
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(json.dumps([]))
+    # `tmp_path` is the same cached fixture instance the autouse HOME uses.
+    _state_path(tmp_path).write_text(json.dumps([]))
     assert sync.read_sync_record(_REF) is None
 
 
@@ -817,7 +833,7 @@ def test_read_sync_record_parses_legacy_flat_key(tmp_path: Path) -> None:
     Flat ``container_image_id`` key, no ``containers`` — the value lands in
     ``legacy_container_image_id``.
     """
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+    _state_path(tmp_path).write_text(
         json.dumps(
             {
                 "registry_digest": _DIGEST_NEW,
@@ -840,7 +856,7 @@ def test_read_sync_record_non_string_legacy_field_degrades_to_none(
     It degrades to ``None`` like the ``containers`` guard, rather than
     comparing unequal against a real container id.
     """
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+    _state_path(tmp_path).write_text(
         json.dumps(
             {
                 "registry_digest": _DIGEST_NEW,
