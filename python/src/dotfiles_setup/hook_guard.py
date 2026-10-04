@@ -1093,8 +1093,6 @@ def decide_payload(
     if tool_name == "AskUserQuestion":
         return ask_quality.decide(tool_input)
     if branch_guard.handles(tool_name):
-        # Branch first: writing on the default branch is the more fundamental
-        # violation, and its reason names the fix (branch, then re-run). The
         # Coordinator confinement first: branch_guard's fix (`git checkout -b`)
         # would switch the SHARED main checkout's branch, which a coordinator
         # must never do. Then branch protection, then script policy.
