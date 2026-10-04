@@ -6199,61 +6199,61 @@ url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checke
 provenance = "github-attestations"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.56.2"
+version = "0.56.4"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
+checksum = "sha256:f0b460e2c0df13dc2f95815bd449892d69215ced709c0153c95c342246191970"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088750"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
+checksum = "sha256:f0b460e2c0df13dc2f95815bd449892d69215ced709c0153c95c342246191970"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088750"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
+checksum = "sha256:c4ddf687b064639804f5b669c7372d48e6720cf397f320761b6d6ec315e72a96"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088725"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
+checksum = "sha256:c4ddf687b064639804f5b669c7372d48e6720cf397f320761b6d6ec315e72a96"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088725"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
+checksum = "sha256:9f520b1ae417cb8c08cb52b7d7185f0939735ce03836aa240ecce09f788f65af"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088724"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
+checksum = "sha256:9f520b1ae417cb8c08cb52b7d7185f0939735ce03836aa240ecce09f788f65af"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088724"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:782c00d5f76a58d803c336a618db04f2542f94f399078b4872acb95b186e71c5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715218"
+checksum = "sha256:8f7043eadc6c162cf733fff2aaa1514619f38dcb541f39a2a42428d95ccdf6a6"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088756"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
+checksum = "sha256:ae2b9c74e1e82558c0becc119f68b7103376b4891dffa558df1e68f73cff8629"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088718"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
+checksum = "sha256:ae2b9c74e1e82558c0becc119f68b7103376b4891dffa558df1e68f73cff8629"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088718"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
