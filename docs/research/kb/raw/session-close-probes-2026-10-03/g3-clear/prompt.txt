@@ -1,0 +1,4 @@
+THROWAWAY PROBE SESSION. Do exactly this and nothing else.
+1. Call the Agent tool ONCE with run_in_background: true, subagent_type "general-purpose", model "haiku", description "beat", and this prompt: "Run the Bash command `python3 /Users/rmanaloto/.claude/jobs/4daaf7e1/tmp/probes/g3-clear/beat.py` 15 times, strictly one call at a time, each Bash call with timeout 60000. Do nothing else. Then reply exactly BEAT-DONE."
+2. Immediately after launching it, reply exactly LAUNCHED and end your turn. Do not wait for it.
+3. Whenever any later message or notification arrives (including a subagent completion notice), run the Bash command `python3 /Users/rmanaloto/.claude/jobs/4daaf7e1/tmp/probes/g3-clear/note.py <one-line summary of what arrived>` and then end your turn.
