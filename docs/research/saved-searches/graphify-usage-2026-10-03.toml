@@ -1,0 +1,82 @@
+# Saved GitHub searches — graphify usage examples (2026-10-03)
+#
+# Requested by Ray (2026-10-03 ~20:00 CDT, AskUserQuestion answer: "research graphify usage more
+# and create a saved search for github examples"), after lane G's finding that graphify 0.9.73 indexes
+# only page/heading names + links over a markdown/memory dir. The research sweep run for that
+# question: wf_022d69b5-cf3 -> docs/research/kb/reports/agents/graphify-markdown-memory-context-2026-10-03.md.
+#
+# FORMAT: same DRAFT schema as orchestration-2026-10-02.toml (docs/specs/research-watch-2026-09-30.md
+# §3.1 rev 2). control_absent must contain {nonce}, rendered FRESH per run and never written back.
+# A 403 is a rate limit, never zero.
+#
+# ⚠️ REPO RENAME: safishamsi/graphify is now Graphify-Labs/graphify (gh api repos/safishamsi/graphify
+# -> full_name Graphify-Labs/graphify). Code search does NOT follow the rename: the must-hit
+# 'repo:safishamsi/graphify filename:README.md' returned 0 (incomplete_results=true) while the same
+# query on Graphify-Labs/graphify returned 6. Use the canonical name in every repo: qualifier.
+
+schema_version = 1
+
+[[watch]]
+id       = "graphify-code-claude-md-graph-out"
+kind     = "code"
+origin   = "topic:graphify-usage"
+question = "Which projects wire graphify into their agent instructions (CLAUDE.md naming graphify-out)?"
+cadence  = "monthly"
+tags     = ["graphify", "claude-code", "context-reduction"]
+queries  = ['"graphify-out" filename:CLAUDE.md', 'graphify path:.claude/skills']
+control_hit    = 'repo:Graphify-Labs/graphify filename:README.md'
+control_absent = '"{nonce}"'
+
+[[watch]]
+id       = "graphify-code-markdown-memory"
+kind     = "code"
+origin   = "topic:graphify-usage"
+question = "Who runs graphify over markdown notes / memory / Obsidian vaults, and how?"
+cadence  = "monthly"
+tags     = ["graphify", "markdown", "memory", "obsidian"]
+queries  = ['"graphify" path:memory filename:MEMORY.md', 'graphify obsidian']
+control_hit    = 'repo:Graphify-Labs/graphify filename:README.md'
+control_absent = '"{nonce}"'
+
+[[watch]]
+id       = "graphify-code-dependency-pins"
+kind     = "code"
+origin   = "topic:graphify-usage"
+question = "Which projects depend on the graphifyy package (pins to compare against ours)?"
+cadence  = "monthly"
+tags     = ["graphify", "graphifyy", "pin"]
+queries  = ['graphifyy filename:pyproject.toml', 'graphifyy filename:requirements.txt']
+control_hit    = 'repo:Graphify-Labs/graphify filename:README.md'
+control_absent = '"{nonce}"'
+
+[[watch]]
+id       = "graphify-issues-markdown-body-frontmatter"
+kind     = "issues"
+origin   = "topic:graphify-usage"
+question = "Is markdown body text / frontmatter indexed for query (upstream issues, PRs)?"
+cadence  = "weekly"
+tags     = ["graphify", "markdown", "frontmatter"]
+queries  = ['repo:Graphify-Labs/graphify frontmatter', 'repo:Graphify-Labs/graphify markdown body', 'repo:Graphify-Labs/graphify obsidian']
+control_hit    = 'repo:Graphify-Labs/graphify graph'
+control_absent = 'repo:Graphify-Labs/graphify "{nonce}"'
+
+# Measured 2026-10-04T00:46Z / 00:5xZ via `mise run research-fanout -- --probe-out ... --code-search`
+# (probe manifests: ~/.claude/jobs/c1a35607/tmp/graphify-cs-probe.json, graphify-cs2.json).
+# Health/known-absent arms: known-absent '"zqv7k3graphifynope"' -> 0; must-hit on canonical repo -> 6.
+
+[[result]]
+watch_id = "graphify-code-claude-md-graph-out"
+counts   = { '"graphify-out" filename:CLAUDE.md' = 2920, 'graphify path:.claude/skills' = 2032 }
+
+[[result]]
+watch_id = "graphify-code-markdown-memory"
+counts   = { '"graphify" path:memory filename:MEMORY.md' = 3, 'graphify obsidian' = 26048 }
+note     = "'graphify obsidian' is loose token overlap (precision not scored)."
+
+[[result]]
+watch_id = "graphify-code-dependency-pins"
+counts   = { 'graphifyy filename:pyproject.toml' = 271, 'graphifyy filename:requirements.txt' = 183 }
+
+[[result]]
+watch_id = "graphify-issues-markdown-body-frontmatter"
+note     = "Not yet measured here; the research sweep's dependency stage covers issues/discussions/releases."
