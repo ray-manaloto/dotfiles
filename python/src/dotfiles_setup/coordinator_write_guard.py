@@ -77,7 +77,9 @@ def decide(
     except OSError, RuntimeError, ValueError:
         return None
     return (
-        f"Coordinator writes in the main checkout are limited to git-ignored "
-        f"paths; {target.relative_to(root)} is not ignored. "
-        "EnterWorktree name=<branch-slug>, then edit the worktree copy."
+        f"Coordinator Edit/Write/NotebookEdit in the main checkout is limited "
+        f"to git-ignored paths; {target.relative_to(root)} is not ignored. "
+        "Do NOT switch the main checkout's branch. "
+        "EnterWorktree name=<branch-slug>, then edit the worktree copy; "
+        "ExitWorktree (keep) before the next planning-file edit."
     )

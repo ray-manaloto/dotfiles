@@ -310,6 +310,24 @@ def test_decide_payload_wiring(repo: Path, jobs: Path, tool: str) -> None:
     assert hook_guard.decide_payload(tool, target) is None
 
 
+def test_coordinator_reason_wins_on_the_default_branch(repo: Path, jobs: Path) -> None:
+    """On `main`, a coordinator must get EnterWorktree, never `git checkout -b`.
+
+    branch_guard's fix would switch the SHARED main checkout's branch (cold
+    review F1, 2026-10-03); a non-coordinator still gets branch_guard's reason.
+    """
+    _ = jobs
+    _git(repo, "branch", "-m", "main")
+    target: dict[str, object] = {"file_path": str(repo / "tracked.md")}
+    coordinator = hook_guard.decide_payload("Edit", target, session_id=_SESSION)
+    assert coordinator is not None
+    assert "EnterWorktree name=<branch-slug>" in coordinator
+    assert "checkout -b" not in coordinator
+    other = hook_guard.decide_payload("Edit", target)
+    assert other is not None
+    assert "EnterWorktree name=<branch-slug>" not in other
+
+
 @pytest.mark.parametrize("route", ["pretooluse", "dispatch", "wrapper"])
 @pytest.mark.parametrize("session_id", [_SESSION, None, 42])
 def test_real_hook_routes(

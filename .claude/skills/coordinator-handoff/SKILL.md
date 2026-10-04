@@ -71,11 +71,12 @@ mise run coordinator-handoff -- launch \
 `--handoff` must be an **absolute path**; a relative path from a worktree
 returned rc 2 on 2026-10-03.
 
-The successor launches with `worktree.bgIsolation: "none"` to edit main-checkout
-planning files directly, but must still branch before editing tracked files
-(do-not #9, `branch_guard`).
-The coordinator write guard confines main-checkout writes to gitignored paths;
-enter a linked worktree before editing any other repository file.
+The successor launches with `worktree.bgIsolation: "none"` so it can edit the
+git-ignored main-checkout planning files (`task_plan.md`, `.agent/**`)
+directly. `coordinator_write_guard` denies its Edit/Write/NotebookEdit on any
+other main-checkout path; Bash writes are not covered, so make none. Never
+switch the main checkout's branch: use `EnterWorktree name=<slug>` for tracked
+edits, and `ExitWorktree` (keep) before the next planning-file edit.
 
 It records the census of this session's live heavy runs, as defined by
 `HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts

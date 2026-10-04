@@ -1095,10 +1095,12 @@ def decide_payload(
     if branch_guard.handles(tool_name):
         # Branch first: writing on the default branch is the more fundamental
         # violation, and its reason names the fix (branch, then re-run). The
-        # Coordinator confinement follows branch protection, then script policy.
+        # Coordinator confinement first: branch_guard's fix (`git checkout -b`)
+        # would switch the SHARED main checkout's branch, which a coordinator
+        # must never do. Then branch protection, then script policy.
         policy_reason = (
-            branch_guard.decide(tool_input)
-            or coordinator_write_guard.decide(tool_input, session_id)
+            coordinator_write_guard.decide(tool_input, session_id)
+            or branch_guard.decide(tool_input)
             or script_guard.decide(tool_input)
         )
     else:
