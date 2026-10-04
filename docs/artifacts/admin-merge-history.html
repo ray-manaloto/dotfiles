@@ -1,0 +1,29 @@
+<title>Admin Merge History</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Public+Sans:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* One card: what was run, what went wrong, what the task should do. Light only. */
+:root{--ground:#F4F3EF;--card:#FFFFFF;--ink:#24211C;--muted:#5E5A52;--rule:#DAD6CC;--bad:#9B3A1F;--good:#1F6B47;--chip:#EFEBE2;
+--display:"Fraunces",Georgia,serif;--body:"Public Sans",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;color-scheme:light}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:24px}
+.card{max-width:660px;margin:0 auto;background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:22px 24px;display:grid;gap:12px}
+h1{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;text-wrap:balance}
+.rows{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.row{display:grid;grid-template-columns:86px 1fr;gap:12px;border-top:1px solid var(--rule);padding-top:7px}
+.k{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.v{min-width:0}
+code{font-family:var(--mono);font-size:.8em;background:var(--chip);padding:1px 5px;border-radius:4px}
+.bad{color:var(--bad);font-weight:600}.good{color:var(--good);font-weight:600}
+.ask{border-top:2px solid var(--ink);padding-top:10px;font-weight:600}
+@media (max-width:420px){.row{grid-template-columns:1fr;gap:2px}}
+</style>
+<main class="card">
+  <h1>How admin merges have gone so far</h1>
+  <ul class="rows">
+    <li class="row"><span class="k">#831, #833</span><span class="v">An agent ran it as one chain: check the head, turn protection off, merge, turn it back on, confirm. Both <span class="good">ended with protection on</span>.</span></li>
+    <li class="row"><span class="k">#841</span><span class="v">The shipper tried the same chain. The safety check <span class="bad">stopped it</span>, and you ran it by hand.</span></li>
+    <li class="row"><span class="k">#841, #849</span><span class="v">After your hand-run merges, <span class="bad">protection was left off</span> until someone noticed and turned it back on.</span></li>
+    <li class="row"><span class="k">#862</span><span class="v">Your three pasted commands. Off, merge and on are separate, so the last one can be forgotten.</span></li>
+    <li class="row"><span class="k">After merge</span><span class="v"><code>kb-land</code> refuses a PR that was admin-merged, so the sync was done by hand every time.</span></li>
+  </ul>
+  <p class="ask">The lesson: protection gets left off when "turn it back on" is a separate step. One task that always turns it back on fixes that. I need you to pick the shape.</p>
+</main>

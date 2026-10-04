@@ -1,0 +1,36 @@
+Diagnose local Codex installation, config, auth, and runtime health
+
+Usage: codex doctor [OPTIONS]
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.
+          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed
+          as TOML. If it fails to parse as TOML, the raw string is used as a literal.
+          
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --json
+          Emit a redacted machine-readable report
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+      --summary
+          Only show grouped check rows and the final count summary
+
+      --all
+          Expand long lists in detailed human output
+
+      --no-color
+          Disable ANSI color in human output
+
+      --ascii
+          Use ASCII status labels and separators in human output
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-10-03T17:34:16.498186+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/1.probe.json",
+  "probe_out": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/1.probe.json",
+  "probes": [
+    {
+      "bytes": 16944,
+      "http_status": 200,
+      "kind": "mirror",
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/1.md",
+      "rc": 0,
+      "reason": "",
+      "url": "https://learn.chatgpt.com/docs/non-interactive-mode"
+    }
+  ]
+}

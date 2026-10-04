@@ -1,0 +1,36 @@
+Submit a new Codex Cloud task without launching the TUI
+
+Usage: codex cloud exec [OPTIONS] --env <ENV_ID> [QUERY]
+
+Arguments:
+  [QUERY]
+          Task prompt to run in Codex Cloud
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.
+          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed
+          as TOML. If it fails to parse as TOML, the raw string is used as a literal.
+          
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --env <ENV_ID>
+          Target environment identifier (see `codex cloud` to browse)
+
+      --attempts <ATTEMPTS>
+          Number of assistant attempts (best-of-N)
+          
+          [default: 1]
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --branch <BRANCH>
+          Git branch to run in Codex Cloud (defaults to current branch)
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+  -h, --help
+          Print help (see a summary with '-h')

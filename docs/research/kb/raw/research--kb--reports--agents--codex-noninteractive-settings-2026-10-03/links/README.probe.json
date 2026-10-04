@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-10-03T17:51:59.059425+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/README.probe.json",
+  "probe_out": "docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/README.probe.json",
+  "probes": [
+    {
+      "kind": "mirror-index",
+      "missing": 0,
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/README.md",
+      "rows": 19,
+      "written": true
+    }
+  ]
+}

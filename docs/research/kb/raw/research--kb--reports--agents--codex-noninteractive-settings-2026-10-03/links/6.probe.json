@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-10-03T17:34:32.721745+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/6.probe.json",
+  "probe_out": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/6.probe.json",
+  "probes": [
+    {
+      "bytes": 30605,
+      "http_status": 200,
+      "kind": "mirror",
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/codex-noninteractive-research/docs/research/kb/raw/research--kb--reports--agents--codex-noninteractive-settings-2026-10-03/links/6.md",
+      "rc": 0,
+      "reason": "",
+      "url": "https://antigravity.google/docs/cli/headless#streaming-json"
+    }
+  ]
+}

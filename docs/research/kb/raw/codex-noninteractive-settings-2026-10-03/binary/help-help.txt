@@ -1,0 +1,6 @@
+error: unrecognized subcommand '--help'
+
+Usage: codex [OPTIONS] [PROMPT]
+       codex [OPTIONS] <COMMAND> [ARGS]
+
+For more information, try '--help'.

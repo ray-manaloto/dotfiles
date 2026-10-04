@@ -1,0 +1,40 @@
+<title>Codex Headless Findings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Public+Sans:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one card, one screen — a terminal-receipt list of verdicts, then the ask. Light only. */
+:root{
+  --ground:#F3F5F2; --card:#FFFFFF; --ink:#1E2A26; --muted:#56635E;
+  --rule:#D5DDD8; --good:#1F6B47; --warn:#9A4A12; --chip:#E7EFEA;
+  --display:"Fraunces",Georgia,serif; --body:"Public Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:24px}
+.card{max-width:640px;margin:0 auto;background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:22px 24px;display:grid;gap:14px}
+h1{font-family:var(--display);font-weight:600;font-size:1.55rem;line-height:1.2;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:0;font-size:.9rem}
+.rows{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.row{display:grid;grid-template-columns:92px 1fr;gap:12px;align-items:baseline;border-top:1px solid var(--rule);padding-top:8px}
+.k{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.v{min-width:0}
+code{font-family:var(--mono);font-size:.82em;background:var(--chip);padding:1px 5px;border-radius:4px;color:var(--ink)}
+.bad{color:var(--warn);font-weight:600}
+.ok{color:var(--good);font-weight:600}
+.ask{border-top:2px solid var(--ink);padding-top:10px;font-weight:600}
+@media (max-width:420px){.row{grid-template-columns:1fr;gap:2px}}
+</style>
+
+<main class="card">
+  <h1>Running Codex without a person watching</h1>
+  <p class="sub">codex 0.160.0, checked against the installed program on 3 Oct 2026</p>
+  <ul class="rows">
+    <li class="row"><span class="k">Use</span><span class="v"><code>codex exec</code> for any unattended run. The top-level <code>codex review</code> cannot output JSON, so use <code>codex exec review --json</code> instead.</span></li>
+    <li class="row"><span class="k">Gone</span><span class="v"><code>--full-auto</code> <span class="bad">now errors</span>, though the docs still list it as a deprecated flag.</span></li>
+    <li class="row"><span class="k">Careful</span><span class="v"><code>--strict-config</code> works on <code>exec</code> and <code>review</code> but <span class="bad">breaks</span> <code>features</code>, <code>mcp</code> and <code>login</code>.</span></li>
+    <li class="row"><span class="k">Flags</span><span class="v">154 features. <code>multi_agent_v2</code> is stable but <span class="ok">off by default</span>, so try it on single runs first.</span></li>
+    <li class="row"><span class="k">Output</span><span class="v">Claude, Codex and agy each return JSON with different field names. The report drafts one shared format.</span></li>
+    <li class="row"><span class="k">Saved</span><span class="v">18 of 19 doc pages saved offline (the 19th really is missing), plus re-runnable GitHub searches.</span></li>
+  </ul>
+  <p class="ask">What I need from you: nothing right now. Applying these settings to both repos is a later step that I'll bring to you.</p>
+</main>

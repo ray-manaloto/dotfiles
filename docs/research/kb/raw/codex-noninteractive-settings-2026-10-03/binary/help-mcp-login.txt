@@ -1,0 +1,34 @@
+Usage: codex mcp login [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Name of the MCP server to authenticate with oauth
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.
+          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed
+          as TOML. If it fails to parse as TOML, the raw string is used as a literal.
+          
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --no-browser
+          Print the authorization URL and accept the callback URL without opening a browser
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --scopes <SCOPE,SCOPE>
+          Comma-separated list of OAuth scopes to request
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+      --oauth-client-registration <AUTO|CIMD|DCR>
+          OAuth client-registration strategy for this login only
+          
+          [possible values: auto, cimd, dcr]
+
+  -h, --help
+          Print help (see a summary with '-h')

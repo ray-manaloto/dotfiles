@@ -1,0 +1,78 @@
+Register an existing WebSocket exec-server as a remote environment
+
+Usage: codex exec-server forward [OPTIONS] --remote <URL> --environment-id <ID> --connect <URL>
+
+Options:
+  -c, --config <key=value>
+          Override a configuration value that would otherwise be loaded from `~/.codex/config.toml`.
+          Use a dotted path (`foo.bar.baz`) to override nested values. The `value` portion is parsed
+          as TOML. If it fails to parse as TOML, the raw string is used as a literal.
+          
+          Examples: - `-c model="o3"` - `-c 'sandbox_permissions=["disk-full-read-access"]'` - `-c
+          shell_environment_policy.inherit=all`
+
+      --connect <URL>
+          Destination exec-server WebSocket URL
+
+      --enable <FEATURE>
+          Enable a feature (repeatable). Equivalent to `-c features.<name>=true`
+
+      --strict-config
+          Error out when config.toml contains fields that are not recognized by this version of
+          Codex
+
+      --disable <FEATURE>
+          Disable a feature (repeatable). Equivalent to `-c features.<name>=false`
+
+      --linux-sandbox-pid-namespace <MODE>
+          Linux PID namespace: isolate (default) or inherit. Inherit allows signals to other
+          same-UID processes; enable only when provisioning a dedicated environment
+          
+          [default: isolate]
+
+      --proxy-private-ips-via-upstream
+          Allow permitted private IP destinations to use the configured upstream proxy. If no valid
+          upstream proxy applies to the request protocol, connect directly. Loopback stays local.
+          This flag does not require upstream routing
+          
+          [env: CODEX_EXEC_SERVER_PROXY_PRIVATE_IPS_VIA_UPSTREAM=]
+
+      --remote <URL>
+          Register this exec-server as a remote environment using the given base URL
+
+      --remote-transport <REMOTE_TRANSPORT>
+          Transport used for the remote executor connection
+          
+          [default: noise]
+          [possible values: noise, direct]
+
+      --environment-id <ID>
+          Environment id to attach to when registering remotely
+
+      --name <NAME>
+          Human-readable environment name
+
+      --use-agent-identity-auth
+          Use Agent Identity auth from CODEX_ACCESS_TOKEN for remote registration
+
+      --aws-sigv4
+          Sign Direct registration and WebSocket handshake requests with AWS SigV4
+
+      --aws-profile <PROFILE>
+          AWS profile used for SigV4 authentication
+
+      --aws-region <REGION>
+          AWS signing region. Uses the SDK region chain when omitted
+
+      --aws-service <SERVICE>
+          AWS signing service
+          
+          [default: execute-api]
+
+      --exit-on-stdin-close
+          Exit when the parent-owned standard-input pipe closes
+          
+          [env: CODEX_EXEC_SERVER_EXIT_ON_STDIN_CLOSE=]
+
+  -h, --help
+          Print help (see a summary with '-h')
