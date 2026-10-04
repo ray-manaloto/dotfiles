@@ -404,3 +404,10 @@ inherited, with the reason given.
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — local source read (dag_tick, codex_verdict, coordinator_handoff, codex_lane, session_common, branch_guard, main, mise.toml, tests)
 - [mrkhachaturov/agent-harness-docs](https://github.com/mrkhachaturov/agent-harness-docs) — offline mirror `agent-view.md` read for respawn/stop semantics
+
+## §R Rulings (Ray, 2026-10-04 ~09:00 CDT, via coordinator 5a5787)
+
+- **U1:** R1 plus `[bootstrap.repos]`. The plist runs the pinned deploy checkout's venv python directly, with no mise or uv at tick time. The deploy checkout is a native mise `[bootstrap.repos]` clone at a full SHA, not `git worktree add --detach`. Set `process_type = "Background"`, and put `MISE_AUTO_INSTALL=0`, `UV_FROZEN=1` and `UV_NO_SYNC=1` in the plist `environment`. A python `dag-tick-approve -- <sha>` verb still performs the ancestry check against origin/main and runs `uv sync --frozen`. Evidence: `docs/research/kb/reports/agents/research-mise-launchd-worktree.md`.
+- **U2:** terminal re-check plus coordinator-handoff launch/started record (recommended option).
+- **U3–U7:** the spec's recommended options.
+- **Next:** re-derive the PREMISES from origin/main (row A1), run premise-verifier, then dispatch PR 1 ((a), (b), (d)) and PR 2 ((c)) as separate specs.

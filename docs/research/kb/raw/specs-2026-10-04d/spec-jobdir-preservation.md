@@ -672,3 +672,8 @@ owed (fail closed). Confirm, or name additional native files to exempt.
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — source, tests, skills, rules, handoff, sibling specs (local reads only).
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) — offline Claude Code agent-view docs (local reads only).
+
+## §R Rulings (Ray, 2026-10-04, via coordinator 5a5787)
+
+- **Q7:** ship part (2) first, on its own: the implement-mode dispatch gate requiring a committed spec under `docs/specs/`. It touches only `sdlc_team.py`. Parts (1) and (3) follow after #1658 and retire-harness-ship merge.
+- **Q1–Q6, Q8–Q9:** the spec's recommended options (preserve ledger; coordinators only; retire warns only; "committed" means reachable on this host; follow-up issues for the wrapper routes and the bare `claude rm` guard; empty and unknown files count as owed; a one-off schema regen plus a follow-up task).
