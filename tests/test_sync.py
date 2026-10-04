@@ -604,20 +604,53 @@ def test_sync_exits_unknown_when_docker_fails_after_the_lifecycle_succeeds(
     That read is outside observe(), so a docker that stops answering there
     escaped sync_main as a traceback (through `land` too). It must be the same
     rc=2 UNKNOWN as an observe-time failure, and verification must not run.
-    """
-    monkeypatch.setattr(sync, "observe", lambda *_a: _status(state="stopped"))
-    monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
-    monkeypatch.setattr(sync, "resolve_names", lambda **_k: _NAMES)
-    monkeypatch.setattr(sync, "local_image_id", lambda _ref: "img-1")
-    lifecycle: list[list[str]] = []
-    monkeypatch.setattr(sync, "_stream", lambda cmd, **_k: lifecycle.append(cmd) or 0)
-    monkeypatch.setattr(
-        sync, "verify_latest", lambda *_a, **_k: pytest.fail("verify ran")
-    )
-    _fake_docker(monkeypatch, tmp_path, "echo 'daemon went away' >&2; exit 1")
 
-    assert sync.sync_main(_WORKSPACE) == 2
-    assert lifecycle == [["mise", "run", "up"]]
+    Faked only at the system boundary (tests/AGENTS.md "Mocking"): real
+    `docker`, `mise` and `gh` executables first on PATH, identity from env.
+    `docker` serves a current, stopped world until `mise run up` drops a
+    marker; after that its CONTAINER queries (`ps`) fail while image queries
+    still answer — the shape that reaches container_image_id inside
+    write_sync_record. (A daemon that is fully down fails local_image_id first,
+    the record is skipped, and verification fails with rc=1 — no traceback.)
+    """
+    assert sync.SyncOptions().image_ref == _REF
+    gone = tmp_path / "daemon-gone"
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    mise_log = tmp_path / "mise-argv.log"
+    fakes = {
+        "docker": (
+            f'[ "$1" = ps ] && [ -e "{gone}" ] && '
+            '{ echo "daemon went away" >&2; exit 1; }\n'
+            'case "$1 $2" in\n'
+            f"  'buildx imagetools') echo '\"{_DIGEST_NEW}\"' ;;\n"
+            "  'image inspect') case \"$*\" in\n"
+            f"    *RepoDigests*) echo '[\"{_REPO}@{_DIGEST_NEW}\"]' ;;\n"
+            "    *) echo img-1 ;; esac ;;\n"
+            f"  'ps -a') {_rows('exited')} ;;\n"
+            "  inspect\\ *) echo sha256:overlay-1 ;;\n"
+            "  *) exit 98 ;;\n"
+            "esac\nexit 0"
+        ),
+        "mise": f'printf "%s\\n" "$@" >> "{mise_log}"\ntouch "{gone}"\nexit 0',
+        "gh": "echo '[]'; exit 0",
+    }
+    for name, body in fakes.items():
+        script = bindir / name
+        script.write_text(f"#!/bin/sh\n{body}\n")
+        script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    monkeypatch.setenv("USER", "u")
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
+    monkeypatch.delenv("DEVCONTAINER_SSH_PORT", raising=False)
+
+    workspace = tmp_path / "dotfiles"  # `up` runs with the workspace as cwd
+    workspace.mkdir()
+
+    assert sync.sync_main(workspace) == 2
+    # `up` really ran (the lifecycle succeeded) before the late docker failure;
+    # rc 2 rather than 1 shows verification never ran either.
+    assert mise_log.read_text().splitlines() == ["run", "up"]
 
 
 def test_container_image_id_refuses_a_failed_inspect(
