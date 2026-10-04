@@ -1,0 +1,6 @@
+837:[2026-10-03T21:06:48.941Z] [bg] bg claimed-spare 787c84a4 (shell)
+839:[2026-10-03T21:07:27.861Z] [bg] bg claimed-spare d05956b8 (shell)
+841:[2026-10-03T21:07:30.808Z] [bg] bg claimed-spare 192d4d3b (shell)
+843:[2026-10-03T21:08:43.849Z] [bg] bg settled d05956b8 (killed)
+844:[2026-10-03T21:11:22.346Z] [bg] bg settled 787c84a4 (killed)
+845:[2026-10-03T21:11:22.586Z] [bg] bg settled 192d4d3b (killed)

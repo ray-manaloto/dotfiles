@@ -1,0 +1,1815 @@
+{
+ "nonce_shape": "zq<12 hex>",
+ "rows": [
+  {
+   "kind": "issues",
+   "role": "must-hit",
+   "query": "repo:anthropics/claude-code PreCompact",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 444,
+   "top": [
+    {
+     "title": "Add a PreClear hook event that fires before /clear wipes context",
+     "url": "https://github.com/anthropics/claude-code/issues/95199",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hooks: PreCompact/PostCompact/SessionStart(compact) fire for a subagent's compaction without agent fields; SubagentStop fires for internal summarizer calls with a never-created agent_transcript_path",
+     "url": "https://github.com/anthropics/claude-code/issues/91910",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] 2.1.286 idle compaction silently discards working context in long-running sessions; no opt-out, logged as \"manual\"",
+     "url": "https://github.com/anthropics/claude-code/issues/98747",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Feature request: a setting/env to choose the model used for context compaction (`compactModel` / `CLAUDE_CODE_COMPACT_MODEL`)",
+     "url": "https://github.com/anthropics/claude-code/issues/96316",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat: Add context-safety-net plugin to mitigate auto-compact context loss",
+     "url": "https://github.com/anthropics/claude-code/pull/80883",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Threshold-triggered auto-clear with handover doc + auto-resume (alternative to auto-compact)",
+     "url": "https://github.com/anthropics/claude-code/issues/90089",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Allow a user-designated skill/command as the autoCompact summarizer",
+     "url": "https://github.com/anthropics/claude-code/issues/90139",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] /resume inside a running session keeps stale CLAUDE.md and auto-memory context (claude --resume and /clear reload it)",
+     "url": "https://github.com/anthropics/claude-code/issues/97722",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Plugin auto-discovery loads invalid hook type causing /doctor diagnostics failure",
+     "url": "https://github.com/anthropics/claude-code/issues/93972",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Assistant text preceding a tool call is dropped from the transcript after auto-compaction",
+     "url": "https://github.com/anthropics/claude-code/issues/96950",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "known-absent",
+   "query": "repo:anthropics/claude-code zq4907d5582b23",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 0,
+   "top": []
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code \"session name\" hook",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 1193,
+   "top": [
+    {
+     "title": "CLI and mobile app keep divergent session names; they sync only at fresh-session creation",
+     "url": "https://github.com/anthropics/claude-code/issues/92605",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "SessionStart hook sessionTitle is persisted but never shown in the TUI session-name badge",
+     "url": "https://github.com/anthropics/claude-code/issues/80711",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Configurable peer-registration session name (per-project prefix) for cross-session messaging",
+     "url": "https://github.com/anthropics/claude-code/issues/88939",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Configurable naming convention for auto-generated session names",
+     "url": "https://github.com/anthropics/claude-code/issues/83455",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hooks cannot obtain the session display name that ListAgents reports and SendMessage accepts",
+     "url": "https://github.com/anthropics/claude-code/issues/97220",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Project-scoped session name prefix and color in settings.json (16th filing, please triage instead of stale-closing)",
+     "url": "https://github.com/anthropics/claude-code/issues/96309",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] /clear loses session name from prompt bar and spawns a distinct session",
+     "url": "https://github.com/anthropics/claude-code/issues/73340",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] VS Code: ListAgents name reverts to an auto-generated name after resuming a renamed session",
+     "url": "https://github.com/anthropics/claude-code/issues/98981",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Desktop app: show the active session name in the OS window title",
+     "url": "https://github.com/anthropics/claude-code/issues/91124",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Feature: Programmatic session/thread renaming via hooks or tools",
+     "url": "https://github.com/anthropics/claude-code/issues/40346",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code session_name hook",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 29,
+   "top": [
+    {
+     "title": "[BUG] /clear loses session name from prompt bar and spawns a distinct session",
+     "url": "https://github.com/anthropics/claude-code/issues/73340",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Add Windows Terminal as a split-pane backend for agent teams (teammateMode)",
+     "url": "https://github.com/anthropics/claude-code/issues/24384",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Setting to hide the session-name badge on the prompt box",
+     "url": "https://github.com/anthropics/claude-code/issues/87122",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "Feature Request: Include session_name in hook input JSON",
+     "url": "https://github.com/anthropics/claude-code/issues/36058",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Support slash commands (/clear, /compact) from Channels (Telegram/Discord)",
+     "url": "https://github.com/anthropics/claude-code/issues/37342",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Feature Request] Auto-generated session titles should populate explicit session name in prompt bar",
+     "url": "https://github.com/anthropics/claude-code/issues/85113",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "Add SessionRename (PreSessionRename / PostSessionRename) hook event",
+     "url": "https://github.com/anthropics/claude-code/issues/66561",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "Status line: include permission_mode in the stdin payload (mode changes already trigger a refresh, but the field is missing)",
+     "url": "https://github.com/anthropics/claude-code/issues/78557",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "statusLine: expose live permission mode (Shift+Tab toggle) in stdin payload",
+     "url": "https://github.com/anthropics/claude-code/issues/80282",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "[Bug] /compact fails with \"Usage credits required for 1M context\" even after /model set to Sonnet 4.6",
+     "url": "https://github.com/anthropics/claude-code/issues/63634",
+     "state": "closed",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code agent_type hook --agent",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 114,
+   "top": [
+    {
+     "title": "[BUG] SubagentStop can arrive with a different agent_id than SubagentStart (fresh id, empty agent_type, 2-7 s after parent Stop), leaving started subagents unmatched",
+     "url": "https://github.com/anthropics/claude-code/issues/89555",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Subagent frontmatter hooks: PreToolUse never fires on 2.1.258 (same hook in settings.json fires for the subagent)",
+     "url": "https://github.com/anthropics/claude-code/issues/95650",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hooks: PreCompact/PostCompact/SessionStart(compact) fire for a subagent's compaction without agent fields; SubagentStop fires for internal summarizer calls with a never-created agent_transcript_path",
+     "url": "https://github.com/anthropics/claude-code/issues/91910",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Forward the calling agent's id to MCP servers in tools/call _meta (subagents and Workflow agents share one connection)",
+     "url": "https://github.com/anthropics/claude-code/issues/99135",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Agent(agent_type) allowlist in tools has no effect inside a nested subagent definition",
+     "url": "https://github.com/anthropics/claude-code/issues/92259",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG]",
+     "url": "https://github.com/anthropics/claude-code/issues/88995",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "SubagentStop does not fire when a background subagent is killed via TaskStop or by \"Exit and stop tasks\"",
+     "url": "https://github.com/anthropics/claude-code/issues/92716",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "SubagentStop matcher is silently bypassed when agent_type is empty \u2014 agent-scoped hooks fire on every internal fork",
+     "url": "https://github.com/anthropics/claude-code/issues/87065",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] PreToolUse/PostToolUse inside a running subagent are sometimes reported under a different agent_id that has no SubagentStart, no agent_type, and never gets a SubagentStop",
+     "url": "https://github.com/anthropics/claude-code/issues/90662",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] claude -p --agent ignores the agent's frontmatter 'effort:' (hooks report session default)",
+     "url": "https://github.com/anthropics/claude-code/issues/82259",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code EnterWorktree hook cwd",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 114,
+   "top": [
+    {
+     "title": "[BUG] EnterWorktree should fire CwdChanged hooks",
+     "url": "https://github.com/anthropics/claude-code/issues/80692",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree does not propagate to PreToolUse hook subprocesses \u2014 hooks keep resolving against the original repo directory, not the worktree",
+     "url": "https://github.com/anthropics/claude-code/issues/87890",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree mid-session breaks Stop-hook execution (sandbox scope not updated, EPERM)",
+     "url": "https://github.com/anthropics/claude-code/issues/90104",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Desktop: EnterWorktree never updates the session record, so the branch chip shows the wrong branch (path:) or disappears (name:)",
+     "url": "https://github.com/anthropics/claude-code/issues/89717",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "ExitWorktree can't remove a worktree launched via --worktree (or entered via path:), so WorktreeRemove hook never fires and per-worktree resources leak",
+     "url": "https://github.com/anthropics/claude-code/issues/93676",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Background sessions from a non-git dir deadlock when any WorktreeCreate hook is configured (hooks can't decline)",
+     "url": "https://github.com/anthropics/claude-code/issues/73363",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree(path=...) to a valid but non-nested worktree reports success and moves Bash cwd, but the Write/Edit guard silently keeps the original binding",
+     "url": "https://github.com/anthropics/claude-code/issues/95389",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Emit OSC 9;9 / OSC 7 (working directory) when the session cwd changes",
+     "url": "https://github.com/anthropics/claude-code/issues/74408",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] /diff panel runs git without cwd, so it reads the launch directory instead of the session worktree (2.1.243)",
+     "url": "https://github.com/anthropics/claude-code/issues/89395",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree validates hook-created (non-git) worktrees against the git worktree list, refusing to enter them",
+     "url": "https://github.com/anthropics/claude-code/issues/66503",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code CLAUDE_PROJECT_DIR worktree",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 67,
+   "top": [
+    {
+     "title": "Desktop app: a session in a worktree loads skills from the main checkout, not the worktree's .claude/skills",
+     "url": "https://github.com/anthropics/claude-code/issues/99145",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Long-lived worktree sessions silently run stale hook scripts \u2014 add a drift signal and an explicit hook script source",
+     "url": "https://github.com/anthropics/claude-code/issues/97349",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] --worktree session enforces the launch checkout's permission rules instead of the worktree's .claude/settings.json",
+     "url": "https://github.com/anthropics/claude-code/issues/97836",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree does not propagate to PreToolUse hook subprocesses \u2014 hooks keep resolving against the original repo directory, not the worktree",
+     "url": "https://github.com/anthropics/claude-code/issues/87890",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Relative extraKnownMarketplaces directory paths resolve against the main checkout, not the active git worktree",
+     "url": "https://github.com/anthropics/claude-code/issues/91875",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hooks: add CLAUDE_AGENT_ROOT_DIR (worktree-aware root) \u2014 today absolute and relative hook paths are each broken in a different way",
+     "url": "https://github.com/anthropics/claude-code/issues/84723",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "change_directory leaves $CLAUDE_PROJECT_DIR at the launch project, and the resulting ENOENT silently erases every user prompt (exit 2 reads as deny)",
+     "url": "https://github.com/anthropics/claude-code/issues/92168",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "EnterWorktree validates hook-created (non-git) worktrees against the git worktree list, refusing to enter them",
+     "url": "https://github.com/anthropics/claude-code/issues/66503",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Claude in Chrome: name tab groups after the session instead of generic \"Claude\"",
+     "url": "https://github.com/anthropics/claude-code/issues/90966",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "PreToolUse Bash hook with relative command path can permanently deadlock the Bash tool for the rest of a session",
+     "url": "https://github.com/anthropics/claude-code/issues/91226",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code multiple sessions role orchestrator",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 63,
+   "top": [
+    {
+     "title": "Workflow tool: agent() sub-agent calls in a run returned content from an unrelated, concurrent session",
+     "url": "https://github.com/anthropics/claude-code/issues/96546",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Auto mode classifier blocks actions the user explicitly ordered in-session (merge, deploy, reading test credentials, verification reads)",
+     "url": "https://github.com/anthropics/claude-code/issues/98478",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] A declarative team definition for Agent Teams, with enforced role guardrails",
+     "url": "https://github.com/anthropics/claude-code/issues/89509",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "PermissionRequest hooks are never dispatched for agent-teams teammates (works for in-process subagents on the same build, 2.1.220)",
+     "url": "https://github.com/anthropics/claude-code/issues/82418",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Native context visibility for self-regulating multi-context workflows",
+     "url": "https://github.com/anthropics/claude-code/issues/18027",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Multi-device Cowork: Allow concurrent Cowork agents on multiple machines under a single account",
+     "url": "https://github.com/anthropics/claude-code/issues/43698",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Agent Teams: support per-teammate working directory, CLAUDE.md, and MCP configs",
+     "url": "https://github.com/anthropics/claude-code/issues/23669",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Cross-session coordination for independently-launched Claude Code sessions",
+     "url": "https://github.com/anthropics/claude-code/issues/76727",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Multi-agent collaboration across machines (Agent-to-Agent protocol)",
+     "url": "https://github.com/anthropics/claude-code/issues/28300",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Subagents default to claude-fable-5 while session model is Opus \u2014 silent, more-expensive default, ignores session model (no config selects it)",
+     "url": "https://github.com/anthropics/claude-code/issues/80902",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code handoff context threshold",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 152,
+   "top": [
+    {
+     "title": "[FEATURE] Threshold-triggered auto-clear with handover doc + auto-resume (alternative to auto-compact)",
+     "url": "https://github.com/anthropics/claude-code/issues/90089",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Native context visibility for self-regulating multi-context workflows",
+     "url": "https://github.com/anthropics/claude-code/issues/18027",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Bug] Large workflow warning thresholds not triggered for multi-agent workflows exceeding token limits",
+     "url": "https://github.com/anthropics/claude-code/issues/82101",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Bug] Usage attribution overstates skills with handoffs and inconsistent subagent handling",
+     "url": "https://github.com/anthropics/claude-code/issues/96138",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] 2.1.286 idle compaction silently discards working context in long-running sessions; no opt-out, logged as \"manual\"",
+     "url": "https://github.com/anthropics/claude-code/issues/98747",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hitting the weekly limit cost me a second subscription - session cost is invisible and the handoff is left to the user",
+     "url": "https://github.com/anthropics/claude-code/issues/93799",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Advisor turns roll up usage summed across iterations, doubling apparent context; auto-compact fires ~300-500K tokens early (subagents hit hardest)",
+     "url": "https://github.com/anthropics/claude-code/issues/84738",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "PDF page images add ~190KB/page to every subsequent request but are near-invisible in the context meter",
+     "url": "https://github.com/anthropics/claude-code/issues/81792",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "False-positive session abort on benign ACA cryptogram/cipher-solving vocabulary",
+     "url": "https://github.com/anthropics/claude-code/issues/93648",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "advisor() tool inflates reported input tokens by forwarding full transcript, triggering premature auto-compaction on extended context models",
+     "url": "https://github.com/anthropics/claude-code/issues/53065",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "repo:anthropics/claude-code session.measure",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 0,
+   "top": []
+  },
+  {
+   "kind": "issues",
+   "role": "saved:orch-issues-claude-code-claude-bg",
+   "query": "repo:anthropics/claude-code \"claude --bg\"",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 509,
+   "top": [
+    {
+     "title": "[FEATURE]  A user-scope setting to pre-trust directories, for scripted `claude --bg`",
+     "url": "https://github.com/anthropics/claude-code/issues/98006",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "claude --bg sessions inherit the daemon's environment (first terminal), not the calling shell's",
+     "url": "https://github.com/anthropics/claude-code/issues/98872",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Desktop: `claude --bg` sessions all land in \"Other\" when sidebar is grouped by Project, despite known cwd",
+     "url": "https://github.com/anthropics/claude-code/issues/98531",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Background agent sessions (claude --bg/claude agents): fast session termination, worker crash-loop on attach, and lost background-task completion records",
+     "url": "https://github.com/anthropics/claude-code/issues/75037",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Named Agent-tool teammates overwrite their lead's background job resumeSessionId; a respawn of the lead after a teammate's turn resumes the teammate's transcript",
+     "url": "https://github.com/anthropics/claude-code/issues/98252",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Bug] `claude stop <id>` removes session from list while Ctrl+X updates status to \"done\"",
+     "url": "https://github.com/anthropics/claude-code/issues/99146",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "claude --bg daemon idle-exit (5s) races client handshake \u2192 \"socket missing\"",
+     "url": "https://github.com/anthropics/claude-code/issues/64028",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Background session re-claimed with `(fleet)` comes back with launchd's bare PATH, not the environment it ran with",
+     "url": "https://github.com/anthropics/claude-code/issues/98477",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Windows: claude --bg / agent view refuses a trusted folder when the trust key's casing differs from disk, and the suggested fix never shows a prompt",
+     "url": "https://github.com/anthropics/claude-code/issues/97273",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Short-lived commands (`claude auth status`, `claude --bg \u2026`) start an OAuth refresh at init and exit without saving it, leaving the profile with a spent refresh token",
+     "url": "https://github.com/anthropics/claude-code/issues/95822",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "saved:orch-issues-claude-code-crosssessioninbound",
+   "query": "repo:anthropics/claude-code crossSessionInbound",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 62,
+   "top": [
+    {
+     "title": "Cross-session messages held for approval are indistinguishable from delivered ones at both sender and recipient",
+     "url": "https://github.com/anthropics/claude-code/issues/91372",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] CLI to send a cross-session message to a running session without a model turn, addressable by session id",
+     "url": "https://github.com/anthropics/claude-code/issues/99049",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[FEATURE] Scope cross-session messaging (ListAgents/SendMessage) to the session's project",
+     "url": "https://github.com/anthropics/claude-code/issues/92058",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG]  Cross-session send_message no longer reaches a busy recipient's turn (regression 2.1.227 \u2192 2.1.229)",
+     "url": "https://github.com/anthropics/claude-code/issues/86965",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Cross-session message delivery stopped surfacing in the recipient session \u2014 regression in claude-desktop \u2265 1.46388.2",
+     "url": "https://github.com/anthropics/claude-code/issues/94828",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Held-for-approval cross-session message to a background recipient has no approval UI \u2014 parked forever",
+     "url": "https://github.com/anthropics/claude-code/issues/85888",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Cross-session peer messages collapse to a one-line preview since 2.1.247",
+     "url": "https://github.com/anthropics/claude-code/issues/91362",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[DOCS] Desktop Code tab disables the CLI-native SendMessage, but the docs say cross-session messaging reaches terminal sessions",
+     "url": "https://github.com/anthropics/claude-code/issues/92314",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Desktop] Inter-session messages now render as a collapsed \"Received message from \u2026\" row \u2014 please add a setting to show them expanded inline",
+     "url": "https://github.com/anthropics/claude-code/issues/94722",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "SendMessage tool missing in desktop Code tab session while ListAgents shows peers (2.1.258, Windows)",
+     "url": "https://github.com/anthropics/claude-code/issues/92409",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "saved:orch-issues-claude-code-background-session",
+   "query": "repo:anthropics/claude-code background session",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 6113,
+   "top": [
+    {
+     "title": "[BUG] One claude CLI session backgrounds and/or gets confused with another session",
+     "url": "https://github.com/anthropics/claude-code/issues/97242",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Backgrounding a named session duplicates its name in the session list",
+     "url": "https://github.com/anthropics/claude-code/issues/87968",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "iOS app: routine session view disappears after backgrounding the app",
+     "url": "https://github.com/anthropics/claude-code/issues/93941",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Background sub-agent reported \"completed\" while its own background Bash task is still running",
+     "url": "https://github.com/anthropics/claude-code/issues/99259",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Desktop/VS Code sidebar: expanded session-group header row blends into its child session rows",
+     "url": "https://github.com/anthropics/claude-code/issues/96190",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Session name chip in statusline has no background color (plain text only)",
+     "url": "https://github.com/anthropics/claude-code/issues/97206",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Bash tool leaves orphaned background processes running after session crash/force-quit",
+     "url": "https://github.com/anthropics/claude-code/issues/96625",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[BUG] Desktop: per-session banner says background-task session will auto-archive, contradicting \"Archive inactive sessions: Never\"",
+     "url": "https://github.com/anthropics/claude-code/issues/95341",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Cross-session message delivery kills the recipient session's in-flight background Bash tasks",
+     "url": "https://github.com/anthropics/claude-code/issues/91139",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "[Bug] Session state inconsistency after daemon upgrade: resume refuses completed background session",
+     "url": "https://github.com/anthropics/claude-code/issues/84270",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "is:pr \"claude code\" session handoff hook",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 42113,
+   "top": [
+    {
+     "title": "project-handoff: Claude Code adapter, narrower script, handoff template",
+     "url": "https://github.com/duoduoler-ops/Table-skills/pull/6",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(session-handoffs): end-of-day handoff notes from every running Claude Code session",
+     "url": "https://github.com/developmentseed/skills/pull/13",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(terminal): session state comes from Claude Code hook events, not screen scraping",
+     "url": "https://github.com/qontinui/qontinui-runner/pull/1979",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Session budget kit: context guard + handoff + model routing",
+     "url": "https://github.com/NOVAHGREYWOLF/leadfuel-core/pull/5",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Add arto-commit-guard Claude Code mod",
+     "url": "https://github.com/artobuilds/arto-sales-copilot/pull/2",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(plugins): add wendy-mods Claude Code mod",
+     "url": "https://github.com/wendylabsinc/WendyOS/pull/2145",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Auto-handoff: no hook error, record pickups, desktop usage fallback",
+     "url": "https://github.com/anton-abyzov/specweave/pull/1976",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Automate handoff via compaction hooks",
+     "url": "https://github.com/jcdendrite/claude-config/pull/969",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "docs: verified current-state knowledge, Claude Code skills, harness runner",
+     "url": "https://github.com/MS-aesthetic/Race-Notes/pull/1",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Add agent harness: AGENTS.md, make check, Claude Code hooks, CI",
+     "url": "https://github.com/keyakizakap-alt/general-skills/pull/5",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "is:pr \"claude code\" orchestrator worker role session",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 7995,
+   "top": [
+    {
+     "title": "OS-49: Support Model-Aware Agent Routing for Claude Code /model",
+     "url": "https://github.com/luminous419/orca-skills/pull/37",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat: select named Claude Code profiles in agent pickers",
+     "url": "https://github.com/Untrivial-ai/agent-orchestrator/pull/5209",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(config): per-role worker environment profile (claude-code) (#2195)",
+     "url": "https://github.com/Untrivial-ai/agent-orchestrator/pull/2848",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Add model-tiered Claude Code orchestration (Opus supervisor + worker bots)",
+     "url": "https://github.com/taruntulsiyan321-cell/schoolflow-connect/pull/3",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "skill: rule zero, a worker off-switch so Ringer workers don't load the orchestrator playbook",
+     "url": "https://github.com/NateBJones-Projects/ringer/pull/138",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "fix(appliance): the rolling upgrade can run on a multi-node cluster (#1445)",
+     "url": "https://github.com/spatiumnorth/spatiumddi/pull/1449",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Agents ship inside the skill; researcher role; per-role model settings and comparison",
+     "url": "https://github.com/mazaawi123-ops/Ultimate-Orchestrator/pull/2",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "fix(orchestrate): Cursor review mode, read-only denials, rejection recovery, takeover (DOG-004..007, 010)",
+     "url": "https://github.com/howlcipher/howlplane/pull/139",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "CI watch: main (never merge)",
+     "url": "https://github.com/andrewforester/your-anima/pull/75",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat!: one command per session \u2014 steps inline, read-only subagents (v3.0.0)",
+     "url": "https://github.com/ajorobert/SpecPipeline/pull/36",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "\"claude code\" handoff \"context\" percent hook -repo:anthropics/claude-code",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 1545,
+   "top": [
+    {
+     "title": "feat(samuel): the 1 AM rule and the context-high handoff become hooks; dead style hook removed",
+     "url": "https://github.com/samosunaz/agent-skills/issues/70",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Plan: Claude Code + Codex subscription parity behind a shared harness seam",
+     "url": "https://github.com/leaflessbranch/cc-pacekeeper/issues/19",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Model comparisons: automate PR facts and Claude allowance collection",
+     "url": "https://github.com/onsager-ai/semon/issues/39",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "KEYFLOWOS Agent Control Room \u2014 ChatGPT \u2194 Claude Code",
+     "url": "https://github.com/SaCH-PRO/KEYFLOWOS/issues/80",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Execution plan (#58): complete L2, then drive L4\u2192L6 \u2014 full context handoff",
+     "url": "https://github.com/Huxpro/octane/issues/66",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(context)!: replace context ceiling guard with harness autocompact",
+     "url": "https://github.com/bdfinst/agentic-dev-team/pull/2239",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "feature: track context-window usage and nudge the session to hand off and clear at a threshold",
+     "url": "https://github.com/fmanimashaun/claude-skills/issues/1547",
+     "state": "closed",
+     "repo": null
+    },
+    {
+     "title": "Call the cancel endpoint eagerly when the editor abandons a stream",
+     "url": "https://github.com/RunanywhereAI/wally/issues/81",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "epic(v0.7.0): subtract the control plane and prove the smaller system",
+     "url": "https://github.com/rjmurillo/ai-agents/issues/5456",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Contextual intent coverage and server-orchestrated Opus learning with administrator approval",
+     "url": "https://github.com/alex-mextner/HyperCalendarBot/issues/334",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "issues",
+   "role": "query",
+   "query": "\"claude code\" coordinator lane worker session naming",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 1613,
+   "top": [
+    {
+     "title": "Train control: PRD delivery train state (coordinator-owned)",
+     "url": "https://github.com/countrymanprime/narration-utils/issues/509",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(coordinate): Claude workers start with the brief as argument and are supervised with SendMessage",
+     "url": "https://github.com/samosunaz/agent-skills/issues/66",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "win-native session_available() calls WTSGetActiveConsoleSessionId on wtsapi32 (it's in kernel32) \u2014 every win-native run crashes",
+     "url": "https://github.com/JDonaghy/code-coordinator/issues/3521",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Agent coordination board (Claude sessions: rules, status, hand-offs)",
+     "url": "https://github.com/ontola/atomic-plugins/issues/227",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Cold-start inventory: current agent roles, setup, and recovery",
+     "url": "https://github.com/Pukujan/multi-agent-modules/issues/1",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Hand-off: converged 2026-10-03 actions for the foundation records (GPT effort rule, token practice, OmniRoute, Pi, credentials, hindsight)",
+     "url": "https://github.com/seathatflowsinourveins/native-agent-stack/issues/624",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "macOS runtime backend-environment switcher (Production/Staging)",
+     "url": "https://github.com/manaflow-ai/cmux/pull/10398",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Per-handler scope ALL|MAIN|SUB: stop-handler goal ledger and failsafe cron must never fire in subagents",
+     "url": "https://github.com/Edmonds-Commerce-Limited/claude-code-hooks-daemon/issues/40",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "Issue #26: current-main CPU/CUDA operating-envelope study (measurement only, no src changes)",
+     "url": "https://github.com/KingAlejandro/MotionCorr-standalone/pull/109",
+     "state": "open",
+     "repo": null
+    },
+    {
+     "title": "feat(telephony): tel_makecall/tel_answer/tel_dropcall run on a boot-created worker pool (Part of #657)",
+     "url": "https://github.com/GlomarGadaffi/pocket-dial/pull/863",
+     "state": "open",
+     "repo": null
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "health",
+   "query": "repo:cli/cli filename:README.md",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 9,
+   "top": [
+    {
+     "title": "README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "docs/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/docs/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "acceptance/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/acceptance/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "docs/primer/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/docs/primer/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "docs/primer/components/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/docs/primer/components/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "docs/primer/foundations/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/docs/primer/foundations/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "script/api-host-gateway/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/script/api-host-gateway/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": "docs/primer/getting-started/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/docs/primer/getting-started/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    },
+    {
+     "title": ".github/extensions/terminal-mockup/README.md",
+     "url": "https://github.com/cli/cli/blob/6fc1c29d5477bfe71da7af290eb481c0df7811f1/.github/extensions/terminal-mockup/README.md",
+     "state": null,
+     "repo": "cli/cli"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "known-absent",
+   "query": "\"zq4907d5582b23\" filename:mise.toml",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 0,
+   "top": []
+  },
+  {
+   "kind": "code",
+   "role": "query",
+   "query": "\"agent_type\" PreCompact",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 11296,
+   "top": [
+    {
+     "title": "src/claude.ts",
+     "url": "https://github.com/nicolas1799/claude-slack-bot/blob/895d748fc90c5507dc7d4244024c4810e908eaff/src/claude.ts",
+     "state": null,
+     "repo": "nicolas1799/claude-slack-bot"
+    },
+    {
+     "title": "client.py",
+     "url": "https://github.com/AutoForgeAI/autoforge/blob/427c228ed1e15c5d9f5be4b8b15539034ce6c878/client.py",
+     "state": null,
+     "repo": "AutoForgeAI/autoforge"
+    },
+    {
+     "title": "adapters/codex.sh",
+     "url": "https://github.com/PeonPing/peon-ping/blob/8ef376602fa6ee19100e4632396463b5875f2672/adapters/codex.sh",
+     "state": null,
+     "repo": "PeonPing/peon-ping"
+    },
+    {
+     "title": "adapters/grok.ps1",
+     "url": "https://github.com/PeonPing/peon-ping/blob/8ef376602fa6ee19100e4632396463b5875f2672/adapters/grok.ps1",
+     "state": null,
+     "repo": "PeonPing/peon-ping"
+    },
+    {
+     "title": "adapters/grok.sh",
+     "url": "https://github.com/PeonPing/peon-ping/blob/8ef376602fa6ee19100e4632396463b5875f2672/adapters/grok.sh",
+     "state": null,
+     "repo": "PeonPing/peon-ping"
+    },
+    {
+     "title": "adapters/codex.ps1",
+     "url": "https://github.com/PeonPing/peon-ping/blob/8ef376602fa6ee19100e4632396463b5875f2672/adapters/codex.ps1",
+     "state": null,
+     "repo": "PeonPing/peon-ping"
+    },
+    {
+     "title": "README.md",
+     "url": "https://github.com/zebbern/claude-code-guide/blob/bf2adfa665a81092f8205e55797e14e0a30cc391/README.md",
+     "state": null,
+     "repo": "zebbern/claude-code-guide"
+    },
+    {
+     "title": "HOOKS.md",
+     "url": "https://github.com/elirantutia/vibeyard/blob/19bc19f0fac04f11e7d9e5cf68ed75ac7d291566/HOOKS.md",
+     "state": null,
+     "repo": "elirantutia/vibeyard"
+    },
+    {
+     "title": "CONTRIBUTING.md",
+     "url": "https://github.com/parcadei/Continuous-Claude-v3/blob/d07ff4b06b62f43771bc0c927d0211b734d6149e/CONTRIBUTING.md",
+     "state": null,
+     "repo": "parcadei/Continuous-Claude-v3"
+    },
+    {
+     "title": "book/src/part5/ch18.md",
+     "url": "https://github.com/ZhangHanDong/harness-engineering-from-cc-to-ai-coding/blob/e40e0feec02b90e308ccbfc7a8911d64118ccca0/book/src/part5/ch18.md",
+     "state": null,
+     "repo": "ZhangHanDong/harness-engineering-from-cc-to-ai-coding"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "query",
+   "query": "\"session_name\" handoff",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 11840,
+   "top": [
+    {
+     "title": "hooks/src/handoff-index.ts",
+     "url": "https://github.com/vibeeval/vibecosystem/blob/3b763b1fb288f57bfa3cce76ef18184b96461a78/hooks/src/handoff-index.ts",
+     "state": null,
+     "repo": "vibeeval/vibecosystem"
+    },
+    {
+     "title": "agentibridge/dispatch.py",
+     "url": "https://github.com/the-cloud-clockwork/agentibridge/blob/dbcd41f6c760a074f67d7298c3b38f1f63d19e05/agentibridge/dispatch.py",
+     "state": null,
+     "repo": "the-cloud-clockwork/agentibridge"
+    },
+    {
+     "title": "src/cli/handoff.rs",
+     "url": "https://github.com/nutthouse/tutti/blob/6b86cca7457364888032e6ff9c04f2a87fc14cb2/src/cli/handoff.rs",
+     "state": null,
+     "repo": "nutthouse/tutti"
+    },
+    {
+     "title": "src/bridge/mod.rs",
+     "url": "https://github.com/Lustyn/omp-gtk/blob/25b853c349b1ebb90a97992bca5e4b0590425869/src/bridge/mod.rs",
+     "state": null,
+     "repo": "Lustyn/omp-gtk"
+    },
+    {
+     "title": "teleclaude/session_cli.py",
+     "url": "https://github.com/ofir5300/teleclaude/blob/95e0cf6f3f621dabc2b3428ec93ef9a5de19afd4/teleclaude/session_cli.py",
+     "state": null,
+     "repo": "ofir5300/teleclaude"
+    },
+    {
+     "title": "orchestration/session-handoff.md",
+     "url": "https://github.com/kurniacf/lontar-method-ai-agent/blob/0b8e436067ec6a5752a78e30f0c89dc417bb3378/orchestration/session-handoff.md",
+     "state": null,
+     "repo": "kurniacf/lontar-method-ai-agent"
+    },
+    {
+     "title": ".opencode/command/handoff.md",
+     "url": "https://github.com/BNasraoui/opencode-orchestration/blob/c9a63cb1fc67630d4a5fc5170397589e3a0955b0/.opencode/command/handoff.md",
+     "state": null,
+     "repo": "BNasraoui/opencode-orchestration"
+    },
+    {
+     "title": "clawness/handoff.py",
+     "url": "https://github.com/fullymiddleaged/Clawness/blob/1e39e145fae6601b01d1930b8624750b22f1c2b7/clawness/handoff.py",
+     "state": null,
+     "repo": "fullymiddleaged/Clawness"
+    },
+    {
+     "title": "scripts/link.mjs",
+     "url": "https://github.com/Debsnil24/claude-link-plugin/blob/17d6e2995f9542060f81240827d79a7c19549fba/scripts/link.mjs",
+     "state": null,
+     "repo": "Debsnil24/claude-link-plugin"
+    },
+    {
+     "title": "scripts/handoff.sh",
+     "url": "https://github.com/trentisiete/endy/blob/65d2c4391b2175fc2dae87ce60badec3d212a29f/scripts/handoff.sh",
+     "state": null,
+     "repo": "trentisiete/endy"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "query",
+   "query": "\"claude --bg\" \"--agent\"",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 1140,
+   "top": [
+    {
+     "title": "crates/ccteam-harness/src/execution/claude_bg.rs",
+     "url": "https://github.com/firstintent/ccteam/blob/3d2960618c28b0a9af43b54834d665dcd5101623/crates/ccteam-harness/src/execution/claude_bg.rs",
+     "state": null,
+     "repo": "firstintent/ccteam"
+    },
+    {
+     "title": "10-cli/README.md",
+     "url": "https://github.com/luongnv89/claude-howto/blob/556af8d52327525d241f17574ef3f11976982fc8/10-cli/README.md",
+     "state": null,
+     "repo": "luongnv89/claude-howto"
+    },
+    {
+     "title": "docs/internals.md",
+     "url": "https://github.com/clonable-eden/cekernel/blob/932ac9093748c623a7f6d0a619da0e2f9198b29b/docs/internals.md",
+     "state": null,
+     "repo": "clonable-eden/cekernel"
+    },
+    {
+     "title": "crates/ccteam-core/src/claude_job.rs",
+     "url": "https://github.com/firstintent/ccteam/blob/3d2960618c28b0a9af43b54834d665dcd5101623/crates/ccteam-core/src/claude_job.rs",
+     "state": null,
+     "repo": "firstintent/ccteam"
+    },
+    {
+     "title": "README.md",
+     "url": "https://github.com/bjornj12/Orra-mcp/blob/42bdfef8cfef6aab289e728fee780088bc102eba/README.md",
+     "state": null,
+     "repo": "bjornj12/Orra-mcp"
+    },
+    {
+     "title": "CHANGELOG.md",
+     "url": "https://github.com/bjornj12/Orra-mcp/blob/42bdfef8cfef6aab289e728fee780088bc102eba/CHANGELOG.md",
+     "state": null,
+     "repo": "bjornj12/Orra-mcp"
+    },
+    {
+     "title": "commands/orra.md",
+     "url": "https://github.com/bjornj12/Orra-mcp/blob/42bdfef8cfef6aab289e728fee780088bc102eba/commands/orra.md",
+     "state": null,
+     "repo": "bjornj12/Orra-mcp"
+    },
+    {
+     "title": "plugins/review/skills/inbox/SKILL.md",
+     "url": "https://github.com/bendrucker/claude/blob/3ca2b1787108662833d01fb841febe6f912a4966/plugins/review/skills/inbox/SKILL.md",
+     "state": null,
+     "repo": "bendrucker/claude"
+    },
+    {
+     "title": "agents/orra.md",
+     "url": "https://github.com/bjornj12/Orra-mcp/blob/42bdfef8cfef6aab289e728fee780088bc102eba/agents/orra.md",
+     "state": null,
+     "repo": "bjornj12/Orra-mcp"
+    },
+    {
+     "title": "crates/ccteam-harness/src/adapter.rs",
+     "url": "https://github.com/firstintent/ccteam/blob/3d2960618c28b0a9af43b54834d665dcd5101623/crates/ccteam-harness/src/adapter.rs",
+     "state": null,
+     "repo": "firstintent/ccteam"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "saved:orch-code-claude-agents-json",
+   "query": "\"claude agents --json\"",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 5360,
+   "top": [
+    {
+     "title": "README.md",
+     "url": "https://github.com/zebbern/claude-code-guide/blob/bf2adfa665a81092f8205e55797e14e0a30cc391/README.md",
+     "state": null,
+     "repo": "zebbern/claude-code-guide"
+    },
+    {
+     "title": "docs/agent-view-policy.md",
+     "url": "https://github.com/Chachamaru127/claude-code-harness/blob/2b2b74805321089bd9b660a1064fa97556299703/docs/agent-view-policy.md",
+     "state": null,
+     "repo": "Chachamaru127/claude-code-harness"
+    },
+    {
+     "title": "README.md",
+     "url": "https://github.com/Cranot/claude-code-guide/blob/7e355fac26c94fb4efdde161de43da646773f1f9/README.md",
+     "state": null,
+     "repo": "Cranot/claude-code-guide"
+    },
+    {
+     "title": "docs/CLAUDE-feature-table.md",
+     "url": "https://github.com/Chachamaru127/claude-code-harness/blob/2b2b74805321089bd9b660a1064fa97556299703/docs/CLAUDE-feature-table.md",
+     "state": null,
+     "repo": "Chachamaru127/claude-code-harness"
+    },
+    {
+     "title": "scripts/prove-live-attach.js",
+     "url": "https://github.com/therealarthur/myrlin-workbook/blob/d70df18abae856f42300a2aa55da22ba1ee16ce5/scripts/prove-live-attach.js",
+     "state": null,
+     "repo": "therealarthur/myrlin-workbook"
+    },
+    {
+     "title": "config/claude/README.md",
+     "url": "https://github.com/dob323/session-kit/blob/3978d9845d6c5a2c2c64c1228c0d9d24c1ea4aff/config/claude/README.md",
+     "state": null,
+     "repo": "dob323/session-kit"
+    },
+    {
+     "title": "config/claude/attention_hook.sh",
+     "url": "https://github.com/dob323/session-kit/blob/3978d9845d6c5a2c2c64c1228c0d9d24c1ea4aff/config/claude/attention_hook.sh",
+     "state": null,
+     "repo": "dob323/session-kit"
+    },
+    {
+     "title": "docs/pinned-internal-formats.md",
+     "url": "https://github.com/dob323/session-kit/blob/3978d9845d6c5a2c2c64c1228c0d9d24c1ea4aff/docs/pinned-internal-formats.md",
+     "state": null,
+     "repo": "dob323/session-kit"
+    },
+    {
+     "title": "docs/notes/pm-bg-backend.md",
+     "url": "https://github.com/minchenlee/c9watch/blob/1ae72b3f0e5532ce63a2319803fb54105d907c0b/docs/notes/pm-bg-backend.md",
+     "state": null,
+     "repo": "minchenlee/c9watch"
+    },
+    {
+     "title": "src/brigade/claude_cloud.py",
+     "url": "https://github.com/escoffier-labs/brigade/blob/ac7c1e2562e6d62f392bf1af9cacf4ad48889050/src/brigade/claude_cloud.py",
+     "state": null,
+     "repo": "escoffier-labs/brigade"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "saved:orch-code-crosssessioninbound",
+   "query": "crossSessionInbound",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 2656,
+   "top": [
+    {
+     "title": "libs/backend/agent-sdk/src/lib/helpers/sdk-query-options-builder.ts",
+     "url": "https://github.com/Hive-Academy/ptah-extension/blob/f314a4f8adb327574d606245b7726a504292f3cb/libs/backend/agent-sdk/src/lib/helpers/sdk-query-options-builder.ts",
+     "state": null,
+     "repo": "Hive-Academy/ptah-extension"
+    },
+    {
+     "title": "src/features/permissions/claudecode-permissions.ts",
+     "url": "https://github.com/dyoshikawa/rulesync/blob/c6e559c7745358383d2e6170d10155ebc8d16b1e/src/features/permissions/claudecode-permissions.ts",
+     "state": null,
+     "repo": "dyoshikawa/rulesync"
+    },
+    {
+     "title": "src/diagnostics.ts",
+     "url": "https://github.com/WebisityStudio/claude-codex-mcp-bridge/blob/8f12c880cfdba73812b6ab7bc0f373fc467e0343/src/diagnostics.ts",
+     "state": null,
+     "repo": "WebisityStudio/claude-codex-mcp-bridge"
+    },
+    {
+     "title": "CATALOG.md",
+     "url": "https://github.com/luongnv89/claude-howto/blob/556af8d52327525d241f17574ef3f11976982fc8/CATALOG.md",
+     "state": null,
+     "repo": "luongnv89/claude-howto"
+    },
+    {
+     "title": "best-practice/claude-settings.md",
+     "url": "https://github.com/shanraisshan/claude-code-best-practice/blob/db9c5a404f23b94b72542d4d3ac256fe47c4e16e/best-practice/claude-settings.md",
+     "state": null,
+     "repo": "shanraisshan/claude-code-best-practice"
+    },
+    {
+     "title": "packages/cli/src/peerMessaging/inbound-policy-scope.ts",
+     "url": "https://github.com/QwenLM/qwen-code/blob/2c591ecc08a6fa080342f9b1b9f7f43215178cbb/packages/cli/src/peerMessaging/inbound-policy-scope.ts",
+     "state": null,
+     "repo": "QwenLM/qwen-code"
+    },
+    {
+     "title": "Anthropic/claude-code/skills/update-config/SKILL.md",
+     "url": "https://github.com/asgeirtj/system_prompts_leaks/blob/71634da7e6a8c32d5daad384bc0d27c0400f57d6/Anthropic/claude-code/skills/update-config/SKILL.md",
+     "state": null,
+     "repo": "asgeirtj/system_prompts_leaks"
+    },
+    {
+     "title": "system-prompts/data-cross-session-inbound-setting.md",
+     "url": "https://github.com/Piebald-AI/claude-code-system-prompts/blob/42962c339106c8bcc9dd477af5724fce66aa9dc5/system-prompts/data-cross-session-inbound-setting.md",
+     "state": null,
+     "repo": "Piebald-AI/claude-code-system-prompts"
+    },
+    {
+     "title": "docs/design/2026-09-17-workflow-name-only.md",
+     "url": "https://github.com/QwenLM/qwen-code/blob/2c591ecc08a6fa080342f9b1b9f7f43215178cbb/docs/design/2026-09-17-workflow-name-only.md",
+     "state": null,
+     "repo": "QwenLM/qwen-code"
+    },
+    {
+     "title": "09-advanced-features/README.md",
+     "url": "https://github.com/luongnv89/claude-howto/blob/556af8d52327525d241f17574ef3f11976982fc8/09-advanced-features/README.md",
+     "state": null,
+     "repo": "luongnv89/claude-howto"
+    }
+   ]
+  },
+  {
+   "kind": "code",
+   "role": "query",
+   "query": "\"used_percentage\" handoff",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 1552,
+   "top": [
+    {
+     "title": "server/src/session_chat_opencode/mirror.rs",
+     "url": "https://github.com/maddada/Ghostex/blob/993eba2f3b004d84083e2baaf2f04c37c35a23f0/server/src/session_chat_opencode/mirror.rs",
+     "state": null,
+     "repo": "maddada/Ghostex"
+    },
+    {
+     "title": "src/usage-handoff-hook.js",
+     "url": "https://github.com/yuliang615/claude-cache-guard/blob/74c4d886edf815d0ea2f11df9d7f734e3f202bd6/src/usage-handoff-hook.js",
+     "state": null,
+     "repo": "yuliang615/claude-cache-guard"
+    },
+    {
+     "title": "src/handoff.js",
+     "url": "https://github.com/yuliang615/claude-cache-guard/blob/74c4d886edf815d0ea2f11df9d7f734e3f202bd6/src/handoff.js",
+     "state": null,
+     "repo": "yuliang615/claude-cache-guard"
+    },
+    {
+     "title": "docs/SESSION-HANDOFF.md",
+     "url": "https://github.com/Pushedskydiver/CC-Checker-Web-Extension/blob/9d242b007e547d07b51b12848f75c95b883818b2/docs/SESSION-HANDOFF.md",
+     "state": null,
+     "repo": "Pushedskydiver/CC-Checker-Web-Extension"
+    },
+    {
+     "title": "aura-frog/hooks/compact-handoff.cjs",
+     "url": "https://github.com/nguyenthienthanh/aura-frog/blob/66d8b107286816c4fd4f6cc5f88f62c8d09623c8/aura-frog/hooks/compact-handoff.cjs",
+     "state": null,
+     "repo": "nguyenthienthanh/aura-frog"
+    },
+    {
+     "title": "docs/USERGUIDE.md",
+     "url": "https://github.com/ruvnet/ruflo/blob/d46358a3bc0678e01b2b102c1af4f1017b487a36/docs/USERGUIDE.md",
+     "state": null,
+     "repo": "ruvnet/ruflo"
+    },
+    {
+     "title": "wrapper/codex/src/app_server_context.ts",
+     "url": "https://github.com/sakuraiyuta/kaoiro/blob/44c3531a83fee7756c8be93b2d74246abd7ca9fa/wrapper/codex/src/app_server_context.ts",
+     "state": null,
+     "repo": "sakuraiyuta/kaoiro"
+    },
+    {
+     "title": "src/orchestration/handoff.ts",
+     "url": "https://github.com/Heretyc/subagent-mcp/blob/f8d627cbb549a236cd534da9601d446e676dda11/src/orchestration/handoff.ts",
+     "state": null,
+     "repo": "Heretyc/subagent-mcp"
+    },
+    {
+     "title": "src/hub/budget.ts",
+     "url": "https://github.com/STAIxBWLB/agent-hub/blob/ab16c7b32b0fdc1268079dd2c244532c0bb9bcf9/src/hub/budget.ts",
+     "state": null,
+     "repo": "STAIxBWLB/agent-hub"
+    },
+    {
+     "title": "specs/context-handoff.md",
+     "url": "https://github.com/MarcMao0819/starfix/blob/9f53499a12869d96b801411cf661ca1fa8ae9b52/specs/context-handoff.md",
+     "state": null,
+     "repo": "MarcMao0819/starfix"
+    }
+   ]
+  },
+  {
+   "kind": "discussions",
+   "role": "must-hit",
+   "query": "repo:cli/cli extension",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 94,
+   "top": [
+    {
+     "title": "Disabling extension download using github cli",
+     "url": "https://github.com/cli/cli/discussions/13622",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "gh-outagedeck: check GitHub and dependency status before debugging",
+     "url": "https://github.com/cli/cli/discussions/14084",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "gh-symlinks: extension for safely tracking symbolic links in git",
+     "url": "https://github.com/cli/cli/discussions/13550",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Want to manage the installed GitHub CLI Extensions in File",
+     "url": "https://github.com/cli/cli/discussions/10053",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Show and tell: a curated atlas for GitHub CLI extensions",
+     "url": "https://github.com/cli/cli/discussions/13569",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Attaching images in pull request",
+     "url": "https://github.com/cli/cli/discussions/4745",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Multiple gh-cli accounts on one machine",
+     "url": "https://github.com/cli/cli/discussions/4221",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Install an extension from a local folder",
+     "url": "https://github.com/cli/cli/discussions/12557",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "Cannot login due to GITHUB_TOKEN error message",
+     "url": "https://github.com/cli/cli/discussions/9094",
+     "repo": "cli/cli"
+    },
+    {
+     "title": "How can I change the model being used for GitHub Copilot CLI?",
+     "url": "https://github.com/cli/cli/discussions/10809",
+     "repo": "cli/cli"
+    }
+   ]
+  },
+  {
+   "kind": "discussions",
+   "role": "known-absent",
+   "query": "zq4907d5582b23",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 0,
+   "top": []
+  },
+  {
+   "kind": "discussions",
+   "role": "query",
+   "query": "\"claude code\" session handoff",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 345,
+   "top": [
+    {
+     "title": "Hot-swapping clio MCP updates without ending a Claude Code session",
+     "url": "https://github.com/Advance-Technologies-Foundation/clio/discussions/1643",
+     "repo": "Advance-Technologies-Foundation/clio"
+    },
+    {
+     "title": "Weftgate: new session, same project brain",
+     "url": "https://github.com/Avinash-Amudala/weftgate/discussions/13",
+     "repo": "Avinash-Amudala/weftgate"
+    },
+    {
+     "title": "\ud83d\udc4b Welcome to Grounder Discussions",
+     "url": "https://github.com/andrej-kolic/grounder/discussions/128",
+     "repo": "andrej-kolic/grounder"
+    },
+    {
+     "title": "Golden Path in the cockpit: from a section-addressable handoff to the graph observatory",
+     "url": "https://github.com/orgs/neomjs/discussions/19151",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "Lians: free local project continuity across Codex, Claude Code, and Cursor",
+     "url": "https://github.com/openai/codex/discussions/39282",
+     "repo": "openai/codex"
+    },
+    {
+     "title": "/discover: handoff trails skip the child-board port hop and fan out from the parent's rolled-up edges",
+     "url": "https://github.com/provenmap/community/discussions/4",
+     "repo": "provenmap/community"
+    },
+    {
+     "title": "v1.2.0 \u2014 Browser Companion, Web Control Dashboard & Cross-Model Handoff Suite",
+     "url": "https://github.com/Ashish6298/CONTINUUM/discussions/6",
+     "repo": "Ashish6298/CONTINUUM"
+    },
+    {
+     "title": "Welcome: tell us how your first try went",
+     "url": "https://github.com/automatis-tools/agents-can-communicate/discussions/180",
+     "repo": "automatis-tools/agents-can-communicate"
+    },
+    {
+     "title": "Session handoff: 25 PRs merged, 29 issues filed, and what the review panel actually caught (2026-09-23)",
+     "url": "https://github.com/wwind123/coding-review-agent-loop/discussions/1026",
+     "repo": "wwind123/coding-review-agent-loop"
+    },
+    {
+     "title": "Runbear MCP: turn a Claude Code workflow into a team agent",
+     "url": "https://github.com/modelcontextprotocol/.github/discussions/835",
+     "repo": "modelcontextprotocol/.github"
+    }
+   ]
+  },
+  {
+   "kind": "discussions",
+   "role": "query",
+   "query": "\"claude code\" orchestrator session role",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 153,
+   "top": [
+    {
+     "title": "Hot-swapping clio MCP updates without ending a Claude Code session",
+     "url": "https://github.com/Advance-Technologies-Foundation/clio/discussions/1643",
+     "repo": "Advance-Technologies-Foundation/clio"
+    },
+    {
+     "title": "Per-agent scoping for workspace instruction injection (dsh-agent-instructions)",
+     "url": "https://github.com/deepseek-ai/deepseek-harness/discussions/7361",
+     "repo": "deepseek-ai/deepseek-harness"
+    },
+    {
+     "title": "What is dot-agent-deck for?",
+     "url": "https://github.com/vfarcic/dot-agent-deck/discussions/1040",
+     "repo": "vfarcic/dot-agent-deck"
+    },
+    {
+     "title": "[Ideation Sandbox] The first-run journey: one provisioning ledger behind a CLI bootstrap and an in-cockpit setup path",
+     "url": "https://github.com/orgs/neomjs/discussions/18965",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "Let agents message existing sibling threads",
+     "url": "https://github.com/pingdotgg/t3code/discussions/7001",
+     "repo": "pingdotgg/t3code"
+    },
+    {
+     "title": "Intake: M2 \u2014 A Requirement Contributor can bring an idea to krill in plain language and watch a producer-role Agent turn it into spec entities through a recorded design session",
+     "url": "https://github.com/whale-net/everything/discussions/2536",
+     "repo": "whale-net/everything"
+    },
+    {
+     "title": "Zero-Read Orchestration Protocol: A complementary approach to agent orchestration",
+     "url": "https://github.com/wshobson/agents/discussions/439",
+     "repo": "wshobson/agents"
+    },
+    {
+     "title": "Own-work events (CI red, merged, changes requested) never reach the owning seat",
+     "url": "https://github.com/orgs/neomjs/discussions/19122",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "Golden Path in the cockpit: from a section-addressable handoff to the graph observatory",
+     "url": "https://github.com/orgs/neomjs/discussions/19151",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "Requirements: Add support for the google gemini code cli",
+     "url": "https://github.com/tinkermonkey/code-wrapper/discussions/63",
+     "repo": "tinkermonkey/code-wrapper"
+    }
+   ]
+  },
+  {
+   "kind": "discussions",
+   "role": "query",
+   "query": "\"claude code\" context threshold new session",
+   "rc": 0,
+   "rate_limited": false,
+   "count": 328,
+   "top": [
+    {
+     "title": "WhereMyTokens \u2014 Windows tray app for real-time Claude Code token monitoring",
+     "url": "https://github.com/affaan-m/ECC/discussions/1401",
+     "repo": "affaan-m/ECC"
+    },
+    {
+     "title": "dsh-statecore \u2014 auditable project memory: auto-ingest, auto-inject, five native tools, digest on the host model",
+     "url": "https://github.com/deepseek-ai/deepseek-harness/discussions/2146",
+     "repo": "deepseek-ai/deepseek-harness"
+    },
+    {
+     "title": "Proposal: self-healing for hung agent sessions (design from a working implementation)",
+     "url": "https://github.com/siteboon/claudecodeui/discussions/1454",
+     "repo": "siteboon/claudecodeui"
+    },
+    {
+     "title": "[Ideation Sandbox] The first-run journey: one provisioning ledger behind a CLI bootstrap and an in-cockpit setup path",
+     "url": "https://github.com/orgs/neomjs/discussions/18965",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "Goal-first delivery: the FM v1 board is the only source of lanes \u2014 substrate changes after the 2026-10-03 team reset",
+     "url": "https://github.com/orgs/neomjs/discussions/19384",
+     "repo": "neomjs/neo"
+    },
+    {
+     "title": "RFC: beacon-style memory loop \u2014 external evaluator hook, review gate, and Agent Skills output",
+     "url": "https://github.com/doobidoo/mcp-memory-service/discussions/1287",
+     "repo": "doobidoo/mcp-memory-service"
+    },
+    {
+     "title": "Codeman 1.31.0: your own model server in the Run menu, and waking a sleeping box",
+     "url": "https://github.com/Ark0N/Codeman/discussions/456",
+     "repo": "Ark0N/Codeman"
+    },
+    {
+     "title": "explain deeply the Git Integration",
+     "url": "https://github.com/limboo-ai/limboo/discussions/115",
+     "repo": "limboo-ai/limboo"
+    },
+    {
+     "title": "[new-rules] Reworking the agent harness based on Anthropic + Google papers \u2014 feedback wanted",
+     "url": "https://github.com/alvinunreal/oh-my-opencode-slim/discussions/999",
+     "repo": "alvinunreal/oh-my-opencode-slim"
+    },
+    {
+     "title": "Fable Session \u2014 2026-09-02: Can coupling lower the threshold? Pass 5's two-cell verdict, computed",
+     "url": "https://github.com/ryoji-info/FableComputer/discussions/124",
+     "repo": "ryoji-info/FableComputer"
+    }
+   ]
+  }
+ ]
+}
