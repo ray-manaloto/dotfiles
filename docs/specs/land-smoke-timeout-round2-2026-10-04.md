@@ -28,11 +28,11 @@ This is cold-review F2 (moby/moby#9098: killing `docker exec` does not terminate
 
 - `python/src/dotfiles_setup/container.py`
 - `tests/test_container.py`
-- `scripts/devcontainer-smoke.sh` (only if needed; bash budget applies: `python/src/dotfiles_setup/bash_budget.py`)
 - `.claude/rules/persistence-gate-retry.md`
 - `docs/specs/land-smoke-timeout-round2-2026-10-04.md` (this file; append a "Round 2 result" section only)
 
-Anything else is out of scope. If a fix requires another file, STOP and report it as dissent.
+`scripts/devcontainer-smoke.sh` is NOT in scope: it has zero bash-budget headroom (166/166, `bash_budget.py:92-97`),
+so the wrapper lives in the Python argv (M3). Anything else is out of scope. If a fix requires another file, STOP and report it as dissent.
 
 ## 3. Interfaces
 
@@ -46,6 +46,36 @@ Anything else is out of scope. If a fix requires another file, STOP and report i
   `timeout --kill-after=<k> <T_inner>`, with `T_inner` < host timeout. Verify in the image that `timeout` exists and
   that it signals the whole process group, including xdist workers and `bun` grandchildren. If it does not, use
   `setsid` plus a group kill, and say which in the result.
+
+## 3a. Design pins (premise-verify round 1, `docs/research/kb/reports/agents/premise-verifier-land-smoke-round2.md`)
+
+- **Slot and identity (M2/F3/F8):** `verify_latest` acquires `host_lock.HEAVY_GATE` ONLY when `run_smoke=True`. Under the
+  slot it resolves container id, mount destination and HEAD (re-resolve; do not reuse pre-slot values). It then calls
+  `_run_smoke(container_id, workspace_dest, *, lock_fd: int | None = None)`. The new keyword-only parameter is the only
+  signature change. `_run_smoke` passes `lock_fd` via `pass_fds`. F8's mutation = drop `pass_fds` in `_run_smoke`; a
+  test must observe that the child holds the fd and fail without it. The slot is held through the exec, the probe and
+  the reap (M5).
+- **Run identity (M4):** each smoke exec carries a fresh marker, `docker exec -e DOTFILES_SMOKE_RUN_ID=<uuid4> …`.
+  The pre-flight REFUSES (never kills) when any process in the container runs `devcontainer-smoke.sh`, whatever its
+  marker. The reap kills ONLY processes whose `/proc/<pid>/environ` carries THIS run's marker.
+- **Probe mechanism (M6):** probe and reap run through `docker exec <id> python3 -c <inline program>`. The program
+  reads `/proc/*/cmdline` and `/proc/*/environ`, excludes its own pid and its parent chain, and prints JSON. Verify
+  read-only that `python3` is on the image PATH (`docker exec <id> python3 --version`). If it is absent, STOP and
+  dissent. No `pgrep -f` (it self-matches).
+- **Timeout budget (M7):** with configured `T` (`DOTFILES_SMOKE_TIMEOUT_S`, default 1800):
+  - `kill_after = max(1, min(30, 0.1*T))`;
+  - `grace = max(2, min(60, 0.1*T))`;
+  - inner argv `timeout --kill-after=<kill_after>s <T>s scripts/devcontainer-smoke.sh`;
+  - host `subprocess` timeout = `T + kill_after + grace`.
+
+  So the inner wrapper always fires first. Tests use a `T` of a few seconds.
+- **Inner timeout exit (M1):** the `docker exec` rc 124 or 137 maps to `smoke timed out after <T> seconds (in-container
+  timeout): <tail>` with NO `stale base?` hint. The orphan probe and reap run on this path too. The host
+  `TimeoutExpired` path keeps its prefix and also probes and reaps.
+- **`timeout` implementation (P7):** Ubuntu 26.04 may ship uutils coreutils. Record `timeout --version` from the image
+  (read-only). Prove with a test that the fake honours group kill, and prove in-image only via the read-only version
+  probe. If `--kill-after` is unsupported, STOP and dissent.
+- **F5 (M9):** keep stdout and stderr separate, and prefer the first FAIL line, then the last 3 stdout lines.
 
 ## 4. Constraints and invariants
 
@@ -93,5 +123,8 @@ Anything else is out of scope. If a fix requires another file, STOP and report i
 | P4 | L | the test fixture sets `DOTFILES_SMOKE_TIMEOUT_S=0.1` | `tests/test_container.py:290` |
 | P5 | E | the incident's process tree: bash 84353, uv 85057, 4 xdist workers 85091-85103, live after 38 min | `docker exec 0eed9addeee6 ps` read 2026-10-04 ~15:25 CDT |
 | P6 | P | a killed `docker exec` client does not stop the in-container process | moby/moby#9098 (cold review F2) |
-| P7 | A | GNU `timeout` is in the image and signals its process group by default (no `--foreground`) | ASSUMED — lane must verify in-image (read-only `docker exec … timeout --version` is allowed) |
+| P7 | A | a coreutils `timeout` (GNU or uutils — record which) with `--kill-after` is in the image | ASSUMED — lane verifies read-only (`docker exec … timeout --version`); base `ubuntu:26.04` (`.devcontainer/Dockerfile:14`) |
+| P9 | I | re-entrant `held()` in the same pid yields `None` | `host_lock.py:171-179`, `:186-187` (premise-verify M2) |
+| P10 | L | `devcontainer-smoke.sh` 166 lines = budget 166 | `bash_budget.py:92-97` (premise-verify M3) |
+| P11 | I | the fake `docker` treats every exec as the smoke; `test_smoke_invalid_timeout_uses_bounded_default` asserts `observed == [1800.0]` — retarget it (host timeout is now `T+kill_after+grace`) | `tests/test_container.py:256-276`, `:354-363` |
 | P8 | I | main's `_run_smoke` takes no slot (the incident ran main code) | `python/src/dotfiles_setup/container.py:108-127` on main 64c6aae8 |
