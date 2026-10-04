@@ -50,7 +50,8 @@ cargo-binstall = "latest"
 # prefix per tool, duplicating libLLVM; apt shares one runtime across the tools.
 # mise has no prebuilt LLVM backend that avoids this duplication, so apt is the
 # native system-tools install. include-what-you-use stays conda: a major bump
-# is gated on conda-forge IWYU targeting that clang on both Linux architectures.
+# is gated on conda-forge IWYU targeting that clang on both Linux architectures,
+# plus release-branch freeze: tag/tag+1, apt build of tag/head, 14 quiet days.
 # Its exact pin is derived by llvm_major.iwyu_pin_for and parity-held to the apt
 # major. llvm-bump moves both pins; full parity stays red until mise run lock-image
 # regenerates the stale IWYU lock. cppcheck has no libLLVM dependency;

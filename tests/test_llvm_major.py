@@ -6,6 +6,7 @@ from __future__ import annotations
 import gzip
 import json
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,10 @@ SYSTEM = ".devcontainer/mise-system.toml"
 DOCKER = ".devcontainer/Dockerfile"
 VERSION = "1:22.1.8~++20260804082631+ca7933e47d3a-1~exp1~20260804082728.35"
 NEXT_VERSION = VERSION.replace("22.1.8", "23.1.0")
+NOW = datetime(2026, 10, 4, tzinfo=UTC)
+TAG22 = "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1"
+TAG23 = "85ac560262434c9ccfc0c183ec22d4138ed647fb"
+HEAD23 = "21ef2ddb806006eba611b8a769ae72e5f86f9418"
 PIN_TEXT = f"""[tools]
 "conda:include-what-you-use" = "0.26"
 [bootstrap.packages]
@@ -100,6 +105,14 @@ def releases(major: int) -> Callable[[], list[dict]]:
     """Supply one GA release and higher drafts/prereleases/RC/init tags."""
     return lambda: [
         {"tag_name": f"llvmorg-{major}.1.0", "draft": False, "prerelease": False},
+        *[
+            {
+                "tag_name": f"llvmorg-{candidate}.1.0",
+                "draft": False,
+                "prerelease": False,
+            }
+            for candidate in range(23, major)
+        ],
         {"tag_name": "llvmorg-99.1.0", "draft": True, "prerelease": False},
         {"tag_name": "llvmorg-98.1.0", "draft": False, "prerelease": True},
         {"tag_name": "llvmorg-97.1.0-rc1", "draft": False, "prerelease": False},
@@ -136,7 +149,12 @@ def iwyu_file(
 
 
 def network(
-    served: set[int], *, ready: int = 23, trunk: int = 24
+    served: set[int],
+    *,
+    ready: int = 23,
+    trunk: int = 24,
+    build: str = TAG22[:12],
+    release_date: datetime = datetime(2026, 7, 14, tzinfo=UTC),
 ) -> llvm_major.Fetcher:
     """A status-aware offline network with real-shaped indexes and IWYU files."""
 
@@ -150,15 +168,69 @@ def network(
         if url.endswith("Release"):
             major = int(url.split("/")[-2].rsplit("-", maxsplit=1)[1])
             return (
-                (200, f"Codename: llvm-toolchain-resolute-{major}\n".encode())
+                (
+                    200,
+                    (
+                        f"Codename: llvm-toolchain-resolute-{major}\n"
+                        f"Date: {release_date.strftime('%a, %d %b %Y %H:%M:%S %z')}\n"
+                    ).encode(),
+                )
                 if major in served
                 else (404, b"")
+            )
+        if "llvm-toolchain-resolute-" in url:
+            major = int(url.split("/")[-4].rsplit("-", maxsplit=1)[1])
+            version = f"1:{major}.1.8~++20260714082631+{build}-1~exp1~20260714082728.35"
+            return 200, gzip.compress(
+                f"Package: clang-{major}\nVersion: {version}\n\n".encode()
             )
         return 200, gzip.compress(
             f"Package: clang-{trunk}\nVersion: {trunk}.0\n\n".encode()
         )
 
     return fetch
+
+
+def github(
+    *,
+    head: str = TAG22,
+    tag_commit: str = TAG22,
+    ahead: int = 0,
+    release_data: list[dict] | None = None,
+) -> llvm_major.GitHubFetcher:
+    """Inject GitHub's public branch/peeled commit/compare response shapes."""
+
+    def gh(endpoint: str) -> dict | list[dict]:
+        if endpoint == "repos/llvm/llvm-project/releases":
+            return releases(22)() if release_data is None else release_data
+        if "/branches/" in endpoint:
+            return {"commit": {"sha": head}}
+        if "/commits/" in endpoint:
+            return {"sha": tag_commit}
+        if "/compare/" in endpoint:
+            return {"ahead_by": ahead}
+        pytest.fail(f"unexpected GitHub endpoint {endpoint}")
+
+    return gh
+
+
+def gh_output(argv: list[str], payload: dict | list) -> bytes:
+    """Model gh's included HTTP response independently from the JSON payload."""
+    body = json.dumps(payload).encode()
+    return b"HTTP/2.0 200 OK\r\n\r\n" + body if "--include" in argv else body
+
+
+@pytest.fixture
+def offline_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep CLI/bump integration controls offline at the actual gh boundary."""
+    boundary = github()
+
+    def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        assert argv[:2] == ["gh", "api"]
+        payload = [boundary(argv[-1])] if "--paginate" in argv else boundary(argv[-1])
+        return subprocess.CompletedProcess(argv, 0, gh_output(argv, payload), b"")
+
+    monkeypatch.setattr(llvm_major.subprocess, "run", run)
 
 
 @pytest.mark.parametrize(
@@ -180,7 +252,11 @@ def test_detect_gates(
     """Arm both fallback levels, the IWYU hold, and both valid trunk offsets."""
     ga, served, ready, trunk, target, held = case
     detection = llvm_major.detect(
-        repo, network(served, ready=ready, trunk=trunk), releases(ga)
+        repo,
+        network(served, ready=ready, trunk=trunk),
+        releases(ga),
+        gh=github(),
+        now=NOW,
     )
     assert detection.target == target
     assert detection.held_on == held
@@ -205,7 +281,13 @@ def test_detect_fail_loud(
     """No served/ready candidate or a failed cross-check never reselects."""
     ga, served, ready, trunk, message = case
     with pytest.raises((ValueError, RuntimeError), match=message):
-        llvm_major.detect(repo, network(served, ready=ready, trunk=trunk), releases(ga))
+        llvm_major.detect(
+            repo,
+            network(served, ready=ready, trunk=trunk),
+            releases(ga),
+            gh=github(),
+            now=NOW,
+        )
 
 
 def test_ga_filter_and_no_matches() -> None:
@@ -213,6 +295,265 @@ def test_ga_filter_and_no_matches() -> None:
     assert llvm_major.newest_ga_major(releases(23)) == 23
     with pytest.raises(ValueError, match="no GA"):
         llvm_major.newest_ga_major(lambda: releases(23)()[1:])
+
+
+@pytest.mark.parametrize("major", [22, 23])
+def test_freeze_live_shapes(major: int) -> None:
+    """The observed 22 control says yes; the observed moving 23 suite says no."""
+    frozen = major == 22
+    head = TAG22 if frozen else HEAD23
+    tag_commit = TAG22 if frozen else TAG23
+    build = TAG22[:12] if frozen else "67f4a076a097"
+    date = (
+        datetime(2026, 7, 14, tzinfo=UTC)
+        if frozen
+        else datetime(2026, 9, 22, tzinfo=UTC)
+    )
+    tag = "llvmorg-22.1.8" if frozen else "llvmorg-23.1.2"
+    state = llvm_major.freeze_state(
+        major,
+        "resolute",
+        network({major}, build=build, release_date=date),
+        github(
+            head=head,
+            tag_commit=tag_commit,
+            ahead=0 if frozen else 27,
+            release_data=[{"tag_name": tag, "draft": False, "prerelease": False}],
+        ),
+        now=NOW,
+    )
+    assert state.frozen is frozen
+    assert state.major == major
+    assert state.branch_head == head
+    assert state.tag == tag
+    assert state.tag_commit == tag_commit
+    assert state.apt_build == build
+    assert state.release_date == date
+    assert state.ahead_of_tag == (0 if frozen else 27)
+
+
+@pytest.mark.parametrize(
+    ("ahead", "build", "age", "expected"),
+    [
+        (0, TAG22[:12], timedelta(days=14), True),
+        (2, TAG22[:12], timedelta(days=14), False),
+        (1, TAG23[:12], timedelta(days=14), True),
+        (1, TAG22[:12], timedelta(days=14), True),
+        (0, "67f4a076a097", timedelta(days=14), False),
+        (0, TAG22[:12], timedelta(days=13), False),
+        (0, TAG22[:12], timedelta(days=14, microseconds=-1), False),
+        (0, TAG22[:12], timedelta(days=14, microseconds=1), True),
+        (0, TAG22[:12], timedelta(days=-1), False),
+    ],
+)
+def test_freeze_independent_conditions(
+    ahead: int, build: str, age: timedelta, *, expected: bool
+) -> None:
+    """Change one axis at a time, including both allowed commit identities."""
+    state = llvm_major.freeze_state(
+        22,
+        "resolute",
+        network({22}, build=build, release_date=NOW),
+        github(head=TAG23, ahead=ahead),
+        now=NOW + age,
+    )
+    assert state.frozen is expected
+
+
+@pytest.mark.parametrize(
+    "fault", ["version", "missing-date", "bad-date", "no-zone", "duplicate-date"]
+)
+def test_freeze_malformed_apt_evidence(fault: str) -> None:
+    """Unreadable build metadata raises instead of masquerading as a hold."""
+    boundary = network({22})
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        status, body = boundary(url)
+        if url.endswith("Release"):
+            if fault == "missing-date":
+                body = b"Codename: llvm-toolchain-resolute-22\n"
+            elif fault == "bad-date":
+                body = b"Date: not-a-date\n"
+            elif fault == "no-zone":
+                body = b"Date: Tue, 14 Jul 2026 00:00:00\n"
+            elif fault == "duplicate-date":
+                body += b"Date: Tue, 14 Jul 2026 00:00:00 +0000\n"
+        elif fault == "version":
+            body = gzip.compress(b"Package: clang-22\nVersion: invalid\n\n")
+        return status, body
+
+    with pytest.raises(ValueError, match=r"Date|date|apt version"):
+        llvm_major.freeze_state(22, "resolute", fetch, github(), now=NOW)
+
+
+@pytest.mark.parametrize("endpoint", ["branches", "commits", "compare"])
+def test_freeze_github_http_failures(
+    monkeypatch: pytest.MonkeyPatch, endpoint: str
+) -> None:
+    """Real gh adapter rejects 404s for every evidence endpoint, notably branches."""
+    boundary = github()
+
+    def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        if f"/{endpoint}/" in argv[-1]:
+            return subprocess.CompletedProcess(
+                argv, 1, b"", b"gh: Not Found (HTTP 404)"
+            )
+        payload = [boundary(argv[-1])] if "--paginate" in argv else boundary(argv[-1])
+        return subprocess.CompletedProcess(argv, 0, gh_output(argv, payload), b"")
+
+    monkeypatch.setattr(llvm_major.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="HTTP 404"):
+        llvm_major.freeze_state(
+            22,
+            "resolute",
+            network({22}),
+            llvm_major.default_gh,
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize("status", [301, 404, 500])
+@pytest.mark.parametrize("site", ["Release", "Packages.gz"])
+def test_freeze_apt_http_failures(status: int, site: str) -> None:
+    """Every non-200 in an asked freeze probe is an error, including 404."""
+    boundary = network({22})
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        return (status, b"") if url.endswith(site) else boundary(url)
+
+    with pytest.raises(RuntimeError, match=f"HTTP {status}"):
+        llvm_major.freeze_state(22, "resolute", fetch, github(), now=NOW)
+
+
+@pytest.mark.parametrize("status", [200, 201, 301, 500])
+def test_freeze_gh_requires_http_200(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    """Even a successful process must provide a 200 evidence response."""
+
+    def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        assert "--include" in argv
+        body = (
+            f"HTTP/2.0 {status} Status\n\n".encode()
+            + json.dumps({"sha": TAG22}).encode()
+        )
+        return subprocess.CompletedProcess(argv, 0, body, b"")
+
+    monkeypatch.setattr(llvm_major.subprocess, "run", run)
+    if status == 200:
+        assert llvm_major.default_gh(
+            "repos/llvm/llvm-project/commits/llvmorg-22.1.8"
+        ) == {"sha": TAG22}
+    else:
+        with pytest.raises(RuntimeError, match=f"HTTP {status}"):
+            llvm_major.default_gh("repos/llvm/llvm-project/commits/llvmorg-22.1.8")
+
+
+def test_freeze_numeric_latest_ga_tag() -> None:
+    """Newest means numeric major/minor/patch, with drafts and RCs excluded."""
+    tags = [
+        {"tag_name": tag, "draft": False, "prerelease": False}
+        for tag in (
+            "llvmorg-22.1.9",
+            "llvmorg-22.1.10",
+            "llvmorg-22.1.11-rc1",
+            "llvmorg-23.1.0",
+        )
+    ]
+    tags.extend(
+        [
+            {"tag_name": "llvmorg-22.2.0", "draft": True, "prerelease": False},
+            {"tag_name": "llvmorg-22.3.0", "draft": False, "prerelease": True},
+        ]
+    )
+    calls = []
+    boundary = github(release_data=tags)
+
+    def gh(endpoint: str) -> dict | list[dict]:
+        calls.append(endpoint)
+        return boundary(endpoint)
+
+    state = llvm_major.freeze_state(22, "resolute", network({22}), gh, now=NOW)
+    assert state.tag == "llvmorg-22.1.10"
+    assert "repos/llvm/llvm-project/commits/llvmorg-22.1.10" in calls
+    assert "repos/llvm/llvm-project/compare/llvmorg-22.1.10...release/22.x" in calls
+
+
+@pytest.mark.parametrize(
+    ("ready", "frozen", "target", "held_gates"),
+    [
+        (23, False, 22, "freeze"),
+        (22, False, 22, "IWYU, freeze"),
+        (22, True, 22, "IWYU"),
+        (23, True, 23, None),
+    ],
+)
+def test_detect_requires_both_gates(
+    repo: Path, ready: int, *, frozen: bool, target: int, held_gates: str | None
+) -> None:
+    """IWYU becoming ready must not lift the independent release freeze hold."""
+    detection = llvm_major.detect(
+        repo,
+        network({22, 23}, ready=ready),
+        releases(23),
+        gh=github(ahead=0 if frozen else 2),
+        now=NOW,
+    )
+    assert detection.target == target
+    assert detection.frozen == {23: frozen}
+    assert detection.iwyu_ready == {23: ready == 23}
+    assert set(detection.freeze_evidence) == {23}
+    if held_gates is None:
+        assert detection.held_on is None
+    else:
+        assert detection.held_on == 23
+        assert detection.reason.startswith(f"23 GA+served, held: {held_gates};")
+        assert "release/23.x" in detection.reason
+        assert "built 2026-07-14" in detection.reason
+
+
+def test_detect_never_regates_pin(repo: Path) -> None:
+    """A served current pin stays usable without any compatibility/freeze probe."""
+    boundary = network({22})
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        assert "anaconda" not in url
+        assert "llvm-toolchain-resolute-22/main/" not in url
+        return boundary(url)
+
+    def gh(endpoint: str) -> dict:
+        pytest.fail(f"pinned major was re-gated: {endpoint}")
+
+    detection = llvm_major.detect(repo, fetch, releases(22), gh=gh, now=NOW)
+    assert detection.target == 22
+    assert detection.freeze_evidence == {}
+    assert detection.frozen == {}
+    assert detection.iwyu_ready == {}
+
+
+def test_detect_reuses_release_snapshot(repo: Path) -> None:
+    """Selection and freeze read one GA list and the same Release response."""
+    calls = []
+    ga_calls = []
+    boundary = network({22, 23})
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        calls.append(url)
+        return boundary(url)
+
+    def ga() -> list[dict]:
+        ga_calls.append(True)
+        return releases(23)()
+
+    detection = llvm_major.detect(repo, fetch, ga, gh=github(), now=NOW)
+    assert detection.target == 23
+    assert ga_calls == [True]
+    assert (
+        calls.count(
+            "https://apt.llvm.org/resolute/dists/llvm-toolchain-resolute-23/Release"
+        )
+        == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -770,6 +1111,7 @@ def test_plan_rejects_incomplete_inventory(repo: Path, fault: str) -> None:
         (set(), 23, 23, 1),
     ],
 )
+@pytest.mark.usefixtures("offline_gh")
 def test_cli_detect(
     repo: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -801,8 +1143,11 @@ def test_cli_detect(
         assert json.loads(output.out)["pinned"] == 22
 
 
+@pytest.mark.usefixtures("offline_gh")
 def test_cli_held_bump_changes_nothing(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The real bump dispatch's held path returns zero and preserves all bytes."""
     before = {
@@ -1114,12 +1459,18 @@ def detected_bump_fetcher() -> llvm_major.Fetcher:
     return fetch
 
 
+@pytest.mark.usefixtures("offline_gh")
 def test_detected_bump_moves_iwyu_and_defers_only_lock(
-    repo: Path, capsys: pytest.CaptureFixture[str]
+    repo: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     old_lock = (repo / ".devcontainer/mise-system.lock").read_bytes()
     assert (
-        llvm_major.bump_main(repo, fetch=detected_bump_fetcher(), releases=releases(23))
+        llvm_major.bump_main(
+            repo,
+            fetch=detected_bump_fetcher(),
+            releases=releases(23),
+        )
         == 0
     )
     output = capsys.readouterr().out
@@ -1148,7 +1499,9 @@ def test_detected_bump_counts_iwyu_rewrite(repo: Path, *, duplicate: bool) -> No
         )
     assert llvm_major.parity_violations(repo) == []
     before = tree_bytes(repo)
-    detection = llvm_major.detect(repo, detected_bump_fetcher(), releases(23))
+    detection = llvm_major.detect(
+        repo, detected_bump_fetcher(), releases(23), gh=github(), now=NOW
+    )
     with pytest.raises(
         ValueError,
         match=f"IWYU pin: expected exactly one rewrite, got {2 if duplicate else 0}",
@@ -1165,7 +1518,8 @@ def test_cli_detect_markdown_held(
 
     def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
         if argv[0] == "gh":
-            body = json.dumps([releases(23)()]).encode()
+            payload = [releases(23)()] if "--paginate" in argv else github()(argv[-1])
+            body = gh_output(argv, payload)
         else:
             status, payload = fetch(argv[-1])
             body = payload + f"\n{status}".encode()
@@ -1185,5 +1539,10 @@ def test_cli_detect_markdown_held(
         "Target: 22",
         "Held on: 23",
         "23 GA+served, held: IWYU",
+        "| Major | Release head | Latest GA tag |",
+        "| 23 |",
+        TAG22,
+        "llvmorg-23.1.0",
+        "Frozen:",
     ):
         assert field in report

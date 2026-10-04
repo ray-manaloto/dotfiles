@@ -1,9 +1,9 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Detect GA LLVM majors, gate on IWYU, and keep consumers tied to the pins.
+"""Detect GA LLVM majors, gate on IWYU/freeze, and keep consumers tied to pins.
 
 gh provides authenticated pagination, curl preserves HTTP status, and apt_repo
 uses Debian's index parser. None owns the repository's GA + served + dual-arch
-IWYU policy or its active/commented pin inventory; only that policy lives here.
+IWYU/freeze policy or its pin inventory; only that repository policy lives here.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
+from functools import cache
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
@@ -29,6 +32,7 @@ if TYPE_CHECKING:
 
 Fetcher = Callable[[str], tuple[int, bytes]]
 ReleaseFetcher = Callable[[], list[dict]]
+GitHubFetcher = Callable[[str], dict | list[dict]]
 
 _SYSTEM = ".devcontainer/mise-system.toml"
 _DOCKER = ".devcontainer/Dockerfile"
@@ -42,11 +46,27 @@ _PIN = re.compile(
     re.MULTILINE,
 )
 _APT_LLVM_VERSION = re.compile(r"^\d+:\d+(?:\.\d+)*~\+\+\d{14}\+[0-9a-f]+-1~exp1~")
+_APT_BUILD = re.compile(r"\+([0-9a-f]{12})-1~exp1~")
+_FREEZE_AGE = timedelta(days=14)
 _PACKAGE_SECTION = re.compile(r"(?ms)^\[bootstrap\.packages\]\s*\n(.*?)(?=^\[|\Z)")
 _LITERAL = re.compile(
     r"/usr/lib/llvm-\d+\b|llvm-toolchain-[\w%{}.-]+-\d+\b|"
     r"(?:apt:)?clang-\d+\b"
 )
+
+
+@dataclass(frozen=True)
+class Freeze:
+    """One candidate major's release-branch and live suite freeze evidence."""
+
+    major: int
+    branch_head: str
+    tag: str
+    tag_commit: str
+    ahead_of_tag: int
+    apt_build: str
+    release_date: datetime
+    frozen: bool
 
 
 @dataclass(frozen=True)
@@ -62,6 +82,8 @@ class Detection:
     iwyu_ready: dict[int, bool]
     held_on: int | None
     reason: str
+    frozen: dict[int, bool] = field(default_factory=dict)
+    freeze_evidence: dict[int, Freeze] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -147,6 +169,52 @@ def fetch_releases() -> list[dict]:
         msg = f"gh releases failed: {result.stderr.decode(errors='replace').strip()}"
         raise RuntimeError(msg)
     return [release for page in json.loads(result.stdout) for release in page]
+
+
+def default_gh(endpoint: str) -> dict | list[dict]:
+    """Read a GitHub object through authenticated gh; HTTP failures raise."""
+    if endpoint == "repos/llvm/llvm-project/releases":
+        return fetch_releases()
+    result = subprocess.run(
+        ["gh", "api", "--include", endpoint],
+        capture_output=True,
+        check=False,
+        timeout=120,
+    )
+    if result.returncode:
+        msg = f"gh {endpoint} failed: {result.stderr.decode(errors='replace').strip()}"
+        raise RuntimeError(msg)
+    headers, separator, body = result.stdout.replace(b"\r\n", b"\n").partition(b"\n\n")
+    status = re.match(rb"HTTP/\S+ (\d{3})\b", headers)
+    if not separator or status is None:
+        msg = f"gh {endpoint}: missing HTTP status"
+        raise ValueError(msg)
+    if int(status[1]) != HTTPStatus.OK:
+        msg = f"gh {endpoint}: HTTP {int(status[1])}, expected 200"
+        raise RuntimeError(msg)
+    payload = json.loads(body)
+    if not isinstance(payload, dict):
+        msg = f"gh {endpoint}: expected a JSON object"
+        raise TypeError(msg)
+    return payload
+
+
+def _gh_object(endpoint: str, gh: GitHubFetcher) -> dict:
+    """Validate the object shape before reading branch/commit/compare evidence."""
+    payload = gh(endpoint)
+    if not isinstance(payload, dict):
+        msg = f"gh {endpoint}: expected a JSON object"
+        raise TypeError(msg)
+    return payload
+
+
+def _gh_releases(gh: GitHubFetcher) -> list[dict]:
+    """Read the same paginated GA list supplied to the candidate detector."""
+    payload = gh("repos/llvm/llvm-project/releases")
+    if not isinstance(payload, list):
+        msg = "gh releases: expected a JSON list"
+        raise TypeError(msg)
+    return payload
 
 
 def _package_section(text: str) -> str:
@@ -263,20 +331,134 @@ def codename_for_base_image(root: Path, fetch: Fetcher) -> str:
     raise ValueError(msg)
 
 
-def newest_ga_major(fetch_releases: ReleaseFetcher) -> int:
-    """Select the greatest GA major, excluding draft, RC and init releases."""
-    majors = []
+def _ga_tags(fetch_releases: ReleaseFetcher) -> dict[tuple[int, int, int], str]:
+    """Index GA tags by numeric version, excluding draft, RC and init releases."""
+    tags = {}
     for release in fetch_releases():
         if release.get("prerelease") is False and release.get("draft") is False:
             match = re.fullmatch(
-                r"llvmorg-(\d+)\.\d+\.\d+", release.get("tag_name", "")
+                r"llvmorg-(\d+)\.(\d+)\.(\d+)", release.get("tag_name", "")
             )
             if match:
-                majors.append(int(match.group(1)))
-    if not majors:
+                tags[(int(match[1]), int(match[2]), int(match[3]))] = match.group(0)
+    if not tags:
         msg = "no GA llvmorg-MAJOR.MINOR.PATCH releases found"
         raise ValueError(msg)
-    return max(majors)
+    return tags
+
+
+def newest_ga_major(fetch_releases: ReleaseFetcher) -> int:
+    """Select the greatest GA major, excluding draft, RC and init releases."""
+    return max(_ga_tags(fetch_releases))[0]
+
+
+def _commit_sha(value: object, site: str) -> str:
+    """Require full commit identities rather than an unchecked prefix."""
+    if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{40}", value) is None:
+        msg = f"{site}: expected a full commit SHA"
+        raise ValueError(msg)
+    return value
+
+
+def _suite_freeze_build(
+    major: int, codename: str, fetch: Fetcher
+) -> tuple[str, datetime]:
+    """Read the live clang build and timezone-aware Release Date using apt_repo."""
+    suite = apt_repo.llvm_suite(codename, major)
+    release = _body(
+        f"https://apt.llvm.org/{codename}/dists/{suite}/Release", fetch
+    ).decode()
+    dates = [
+        line.removeprefix("Date: ")
+        for line in release.splitlines()
+        if line.startswith("Date: ")
+    ]
+    if len(dates) != 1:
+        msg = f"Release {suite}: expected exactly one Date line"
+        raise ValueError(msg)
+    release_date = parsedate_to_datetime(dates[0])
+    if release_date.tzinfo is None:
+        msg = f"Release {suite}: Date must have a timezone"
+        raise ValueError(msg)
+    packages = apt_repo.available_packages(
+        apt_repo.RepoQuery.for_llvm(major, dist=codename),
+        fetcher=lambda url: _body(url, fetch),
+    )
+    versions = [
+        package.version for package in packages if package.name == f"clang-{major}"
+    ]
+    if len(versions) != 1:
+        msg = f"Release {suite}: expected exactly one clang-{major} version"
+        raise ValueError(msg)
+    version = versions[0]
+    match = _APT_BUILD.search(version)
+    if (
+        _APT_LLVM_VERSION.match(version) is None
+        or re.match(rf"\d+:{major}\.", version) is None
+        or match is None
+    ):
+        msg = f"unparsable clang-{major} apt version {version!r}"
+        raise ValueError(msg)
+    return match.group(1), release_date.astimezone(UTC)
+
+
+def freeze_state(
+    major: int,
+    codename: str,
+    fetch: Fetcher,
+    gh: GitHubFetcher,
+    *,
+    now: datetime,
+) -> Freeze:
+    """Require tag/tag+1, an apt build of tag/head, and at least 14 quiet days.
+
+    GitHub exposes commit comparisons and apt exposes build metadata, but neither
+    supplies this repository's combined readiness rule. Reuse the detector's
+    release snapshot when supplied; a missing branch or unreadable probe raises.
+    """
+    tags = {
+        version: tag
+        for version, tag in _ga_tags(lambda: _gh_releases(gh)).items()
+        if version[0] == major
+    }
+    if not tags:
+        msg = f"no GA llvmorg-{major} tag found"
+        raise ValueError(msg)
+    if now.tzinfo is None:
+        msg = "freeze clock must have a timezone"
+        raise ValueError(msg)
+    tag = tags[max(tags)]
+    repo = "repos/llvm/llvm-project"
+    branch = f"release/{major}.x"
+    head = _commit_sha(
+        _gh_object(f"{repo}/branches/{branch}", gh)["commit"]["sha"], branch
+    )
+    tag_commit = _commit_sha(_gh_object(f"{repo}/commits/{tag}", gh)["sha"], tag)
+    ahead = _gh_object(f"{repo}/compare/{tag}...{branch}", gh)["ahead_by"]
+    if type(ahead) is not int or ahead < 0:
+        msg = f"{branch}: ahead_by must be a nonnegative integer"
+        raise ValueError(msg)
+    build, release_date = _suite_freeze_build(major, codename, fetch)
+    frozen = (
+        ahead <= 1
+        and build in {tag_commit[:12], head[:12]}
+        and now - release_date >= _FREEZE_AGE
+    )
+    return Freeze(major, head, tag, tag_commit, ahead, build, release_date, frozen)
+
+
+def _freeze_summary(evidence: Freeze) -> str:
+    """Explain all freeze axes in a single line, including a held apt build."""
+    relation = (
+        "matches"
+        if evidence.apt_build in {evidence.tag_commit[:12], evidence.branch_head[:12]}
+        else "\u2260"
+    )
+    return (
+        f"release/{evidence.major}.x {evidence.ahead_of_tag} ahead of {evidence.tag}; "
+        f"apt build {evidence.apt_build} {relation} tag/head; "
+        f"built {evidence.release_date.date()}"
+    )
 
 
 def suite_served(codename: str, major: int, fetch: Fetcher) -> bool:
@@ -400,43 +582,60 @@ def trunk_major(codename: str, fetch: Fetcher) -> int:
 
 
 def _target_reason(
-    codename: str, pinned: int, newest: int, served: dict[int, bool], fetch: Fetcher
-) -> tuple[int, dict[int, bool], int | None, str]:
-    """Apply the IWYU hold to every served candidate without re-gating P."""
+    pinned: int,
+    newest: int,
+    served: dict[int, bool],
+    ready: dict[int, bool],
+    evidence: dict[int, Freeze],
+) -> tuple[int, int | None, str]:
+    """Apply both independent gates to every served candidate without re-gating P."""
     candidates = [major for major, available in served.items() if available]
     if not candidates:
-        msg = f"no suite served in [{pinned}, {newest}] for {codename}"
+        msg = f"no suite served in [{pinned}, {newest}]"
         raise RuntimeError(msg)
-    ready = {major: iwyu_ready(major, fetch) for major in candidates if major > pinned}
-    eligible = [major for major in candidates if major == pinned or ready[major]]
+    eligible = [
+        major
+        for major in candidates
+        if major == pinned or (ready[major] and evidence[major].frozen)
+    ]
     if not eligible:
-        msg = "pinned suite is gone and all served replacements are IWYU-blocked"
+        msg = (
+            "pinned suite is gone and all served replacements are "
+            "IWYU-blocked or freeze-blocked"
+        )
         raise RuntimeError(msg)
     target = max(eligible)
     served_target = max(candidates)
     held = served_target if served_target > target else None
     if held is not None:
+        gates = []
+        if not ready[held]:
+            gates.append("IWYU")
+        if not evidence[held].frozen:
+            gates.append("freeze")
         reason = (
-            f"{held} GA+served, held: IWYU (conda-forge include-what-you-use "
-            f"has no version whose newest builds on both Linux architectures "
-            f"target libllvm{held})"
+            f"{held} GA+served, held: {', '.join(gates)}; "
+            f"{_freeze_summary(evidence[held])}"
         )
     elif served[newest]:
         reason = f"M={newest} served"
     else:
-        reason = (
-            f"M={newest} not served for {codename}; "
-            f"highest served in [P, M-1] = {target}"
-        )
-    return target, ready, held, reason
+        reason = f"M={newest} not served; highest served in [P, M-1] = {target}"
+    return target, held, reason
 
 
 def detect(
     root: Path,
     fetch: Fetcher = default_fetcher,
     releases: ReleaseFetcher = fetch_releases,
+    *,
+    gh: GitHubFetcher = default_gh,
+    now: datetime | None = None,
 ) -> Detection:
-    """Detect using GA + served + IWYU, with trunk assertions that never select."""
+    """Detect using GA + served + IWYU + freeze; trunk assertions never select."""
+    fetch = cache(fetch)
+    releases = cache(releases)
+    now = datetime.now(UTC) if now is None else now
     pinned = pinned_major((root / _SYSTEM).read_text())
     codename = codename_for_base_image(root, fetch)
     newest = newest_ga_major(releases)
@@ -447,9 +646,21 @@ def detect(
         major: suite_served(codename, major, fetch)
         for major in range(pinned, newest + 1)
     }
-    target, ready, held, reason = _target_reason(
-        codename, pinned, newest, served, fetch
-    )
+    candidates = [
+        major for major, available in served.items() if available and major > pinned
+    ]
+    ready = {major: iwyu_ready(major, fetch) for major in candidates}
+
+    def github(endpoint: str) -> dict | list[dict]:
+        if endpoint == "repos/llvm/llvm-project/releases":
+            return releases()
+        return gh(endpoint)
+
+    evidence = {
+        major: freeze_state(major, codename, fetch, github, now=now)
+        for major in candidates
+    }
+    target, held, reason = _target_reason(pinned, newest, served, ready, evidence)
     trunk = trunk_major(codename, fetch)
     if trunk - 1 not in {newest, newest + 1}:
         msg = f"trunk cross-check: K-1={trunk - 1} outside {{M, M+1}} for M={newest}"
@@ -458,7 +669,17 @@ def detect(
         msg = f"trunk cross-check: numbered suite for trunk {trunk} is served"
         raise ValueError(msg)
     return Detection(
-        codename, pinned, newest, target, served, trunk, ready, held, reason
+        codename,
+        pinned,
+        newest,
+        target,
+        served,
+        trunk,
+        ready,
+        held,
+        reason,
+        frozen={major: state.frozen for major, state in evidence.items()},
+        freeze_evidence=evidence,
     )
 
 
@@ -835,16 +1056,26 @@ def detect_main(
                     ("newest_ga", "Newest GA"),
                     ("served", "Served"),
                     ("iwyu_ready", "IWYU ready"),
+                    ("frozen", "Frozen"),
                     ("target", "Target"),
                     ("held_on", "Held on"),
                     ("reason", "Reason"),
                 )
             )
+            + "\n\n| Major | Release head | Latest GA tag | Tag commit | Ahead | "
+            "Apt build | Release Date (UTC) | Frozen |\n"
+            + "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+            + "\n".join(
+                f"| {state.major} | {state.branch_head} | {state.tag} | "
+                f"{state.tag_commit} | {state.ahead_of_tag} | {state.apt_build} | "
+                f"{state.release_date.isoformat()} | {state.frozen} |"
+                for state in detection.freeze_evidence.values()
+            )
             + "\n"
         )
     else:
         report = (
-            json.dumps(data, indent=2) + "\n"
+            json.dumps(data, indent=2, default=lambda value: value.isoformat()) + "\n"
             if json_output
             else detection.reason + "\n"
         )
@@ -906,7 +1137,13 @@ def bump_main(
 ) -> int:
     """Print a plan or write an eligible bump; an IWYU hold changes no files."""
     try:
-        return _bump(root, dry_run=dry_run, major=major, fetch=fetch, releases=releases)
+        return _bump(
+            root,
+            dry_run=dry_run,
+            major=major,
+            fetch=fetch,
+            releases=releases,
+        )
     except (
         OSError,
         ValueError,
