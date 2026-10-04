@@ -25,7 +25,7 @@ library, zero-bash-logic) in the same change.
 | `gh run watch <id>` (hand-rolled CI wait) | `mise run land -- <PR#>` (watches main CI via --json buckets); one-shot: `gh run view <id> --json conclusion` |
 | `gh pr checks … --watch` (hand-rolled CI wait) | `mise run ship` arms auto-merge and returns; wait for the merge with `mise run bounded-wait -- --deadline <s> --cmd 'test "$(gh pr view <n> --json state --jq .state)" = MERGED'`, then `mise run land -- <n>`; one-shot read: `gh pr checks <n> --json name,bucket` |
 | autofix artifact recovery by hand | `mise run autofix-apply -- <run-id>` |
-| `gh workflow run` / `gh run rerun` | `mise run gha-dispatch -- <wf>` / `mise run gha-rerun -- <id>` |
+| `gh workflow run` / `gh run rerun` | `mise run gha-dispatch -- <wf>` / `mise run gha-rerun -- <id>`. ⚠️ `gha-rerun` IS `gh run rerun --failed` (`mise.toml` `[tasks.gha-rerun]`): when ONLY `manifest` failed it rebuilds the index with a new digest and the next `promote` fails stale — run a FULL `gh run rerun <id>` instead (#1046) |
 | `npx <tool>` | the mise-pinned binary directly |
 | `chezmoi apply/update` on the Mac host | nothing — devcontainer-only |
 | `git commit --no-verify` / `-n` / `-nm`, `git push --no-verify` | nothing — fix what the hook reports. pre-commit is what runs `no_commit_to_branch`; pre-push runs the suite. Git skips a hook BEFORE it exists as a process, so no hook can catch its own suppression and this guard is the only layer (#400). `git push -n` is `--dry-run` and stays allowed |
