@@ -708,7 +708,7 @@ description = "Project doctor: does the declared setup (doctor.toml) match reali
 run = 'uv run --project python dotfiles-setup doctor'
 
 [tasks.dag-tick]
-description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD and stop lingering DONE. WEDGED is log-only in this slice (#590)"
+description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD; never stops a node (a DONE session may be an idle coordinator waiting for messages, 2026-10-03). WEDGED is log-only in this slice (#590)"
 # Thin caller (zero-bash-logic); logic in
 # python/src/dotfiles_setup/dag_tick.py. Fired every 60s by the
 # dev.mise.dotfiles-dag-tick LaunchAgent declared below
