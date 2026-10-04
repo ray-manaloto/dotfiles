@@ -3,18 +3,22 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
 import textwrap
 import time
+import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 import pytest
 
@@ -68,6 +72,8 @@ class _FakeDocker:
             ]
             return _cp(json.dumps(payload))
         if cmd[:2] == ["docker", "exec"]:
+            if "/usr/bin/python3" in cmd:
+                return _cp('{"pids": [], "reaped": 0}')
             self.smoke_command = cmd
             return _cp(self.smoke_out, returncode=self.smoke_rc)
         msg = f"unexpected command: {cmd}"
@@ -104,12 +110,15 @@ def test_all_green_when_fresh(
     assert "label=dotfiles.workspace=" in " ".join(runner.docker_ps_command)
     assert arch_label in runner.docker_ps_command
     assert runner.smoke_command is not None
-    assert runner.smoke_command == [
-        "docker",
-        "exec",
+    assert runner.smoke_command[:3] == ["docker", "exec", "-e"]
+    uuid.UUID(runner.smoke_command[3].removeprefix("DOTFILES_SMOKE_RUN_ID="))
+    assert runner.smoke_command[4:] == [
         "--workdir",
         "/workspaces/dotfiles",
         "cafef00dbeef",
+        "timeout",
+        "--kill-after=30s",
+        "1800s",
         "scripts/devcontainer-smoke.sh",
     ]
 
@@ -198,11 +207,17 @@ def test_main_returns_0_when_all_green(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """Real subprocess boundaries and isolated state; never reach Docker."""
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    git = shutil.which("git", path=os.defpath)
+    assert git is not None
+    (bindir / "git").symlink_to(git)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     for command in (
@@ -222,8 +237,6 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         ],
     ):
         subprocess.run(command, check=True, capture_output=True)
-    bindir = tmp_path / "bin"
-    bindir.mkdir()
     docker = bindir / "docker"
     docker.write_text(
         f"#!{sys.executable}\n"
@@ -236,9 +249,16 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         from pathlib import Path
 
         args = sys.argv[1:]
+        root = Path(os.environ["SMOKE_STATE"])
+        identity_file = root / "identity"
+        identity = (json.loads(identity_file.read_text()) if identity_file.exists()
+                    else {"id": "cafef00dbeef", "dest": "/workspaces/fixture"})
+        if args[0] in {"ps", "inspect"}:
+            with (root / "identity-queries").open("a") as log:
+                log.write(json.dumps(args) + "\n")
         if args[0] == "ps":
-            print("cafef00dbeef\trunning\tfixture"
-                  if "--format" in args else "cafef00dbeef")
+            print(identity["id"] + "\trunning\tfixture"
+                  if "--format" in args else identity["id"])
         elif args[0] == "buildx":
             print(json.dumps("sha256:fixture"))
         elif args[:2] == ["image", "inspect"]:
@@ -250,10 +270,15 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             if args[-1] == "{{json .Mounts}}":
                 print(json.dumps([{"Type": "bind",
                                    "Source": os.environ["SMOKE_WORKSPACE"],
-                                   "Destination": "/workspaces/fixture"}]))
+                                   "Destination": identity["dest"]}]))
             else:
                 print("sha256:fixture-overlay")
         elif args[0] == "exec":
+            import shutil
+            import signal
+            import subprocess
+
+            root = Path(os.environ["SMOKE_STATE"])
             path = Path(os.environ["DOTFILES_LOCK_DIR"]) / "heavy-gate.lock"
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a+") as handle:
@@ -263,17 +288,116 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                     state = "busy"
                 else:
                     state = "free"
+            with (root / "calls").open("a") as log:
+                log.write(json.dumps({"args": args, "slot": state}) + "\n")
+            proc = root / "proc"
+            proc.mkdir(exist_ok=True)
+            if "/usr/bin/python3" in args:
+                if os.environ.get("SMOKE_PROBE_ERROR") or (
+                    args[-2] == "reap" and os.environ.get("SMOKE_REAP_ERROR")
+                ):
+                    print("proc unavailable", file=sys.stderr)
+                    sys.exit(2)
+                program = args[args.index("-c") + 1]
+                sys.argv = ["probe", *args[-2:]]
+                # Execute the shipped scanner against a Docker-boundary proc sandbox.
+                # Actual signal delivery is retained; proc disappearance follows kill.
+                if os.environ.get("SMOKE_PROTECTED"):
+                    for pid, parent in [(os.getpid(), os.getppid()), (os.getppid(), 0)]:
+                        row = proc / str(pid)
+                        row.mkdir(exist_ok=True)
+                        (row / "stat").write_text(f"{pid} (probe) S {parent}")
+                        (row / "cmdline").write_bytes(b"devcontainer-smoke.sh")
+                        (row / "environ").write_bytes(
+                            f"DOTFILES_SMOKE_RUN_ID={args[-1]}".encode() + b"\0")
+                native_read_bytes = Path.read_bytes
+                def read_bytes(path):
+                    if (os.environ.get("SMOKE_UNREADABLE") and
+                            path.name == "cmdline" and path.parent.name == "999999"):
+                        raise PermissionError("isolated proc command read denied")
+                    return native_read_bytes(path)
+                Path.read_bytes = read_bytes
+                native_kill = os.kill
+                pidfds = {}
+                def pidfd_open(pid):
+                    fd = os.open(proc / str(pid) / "environ", os.O_RDONLY)
+                    pidfds[fd] = pid
+                    if os.environ.get("SMOKE_PID_RECYCLED"):
+                        (proc / str(pid) / "environ").write_bytes(b"OTHER_RUN=1")
+                    return fd
+                def send_signal(fd, sig):
+                    pid = pidfds[fd]
+                    if pid != int((root / "child-pid").read_text()):
+                        message = f"attempt to kill protected/foreign pid {pid}"
+                        raise RuntimeError(message)
+                    if os.environ.get("SMOKE_SURVIVOR"):
+                        return
+                    native_kill(pid, sig)
+                    shutil.rmtree(proc / str(pid))
+                os.pidfd_open = pidfd_open
+                signal.pidfd_send_signal = send_signal
+                exec(program.replace('Path("/proc")', f"Path({str(proc)!r})"))
+                sys.exit(0)
             Path(os.environ["SMOKE_LOCK_PROBE"]).write_text(state)
-            if os.environ.get("SMOKE_MODE") == "timeout":
-                output = os.environ.get(
-                    "SMOKE_OUTPUT", "starting suite\nstill running\n")
-                os.write(1, output.encode())
-                os.write(2, b"partial stderr\xff\n")
-                time.sleep(5)
-            print("FAIL: wrong image identity"
-                  if os.environ.get("SMOKE_MODE") == "failure"
-                  else "devcontainer smoke: tiers 1-3 OK")
-            sys.exit(1 if os.environ.get("SMOKE_MODE") == "failure" else 0)
+            inherited = []
+            for fd in range(3, 256):
+                try:
+                    if os.fstat(fd).st_ino == path.stat().st_ino:
+                        inherited.append(fd)
+                except OSError:
+                    pass
+            (root / "fds").write_text(json.dumps(inherited))
+            marker = next(arg.split("=", 1)[1] for arg in args
+                          if arg.startswith("DOTFILES_SMOKE_RUN_ID="))
+            (root / "marker").write_text(marker)
+            os.environ["DOTFILES_SMOKE_RUN_ID"] = marker
+            mode = os.environ.get("SMOKE_MODE", "success")
+            if mode in {"timeout", "inner124", "inner137", "inner_group"}:
+                child_ready = root / "child-ready"
+                grand_path = root / "grand-pid"
+                setup = ""
+                if mode == "inner_group":
+                    setup = (
+                        "import subprocess, sys; "
+                        "grand = subprocess.Popen([sys.executable, '-c', "
+                        f"'import time; time.sleep(60)', {str(grand_path)!r}]); "
+                        f"Path({str(grand_path)!r}).write_text(str(grand.pid)); "
+                    )
+                child = subprocess.Popen(
+                    [sys.executable, "-c",
+                     "import time; from pathlib import Path; " + setup +
+                     f"Path({str(child_ready)!r}).touch(); time.sleep(60)"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                deadline = time.monotonic() + 20
+                while not child_ready.exists() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                if not child_ready.exists():
+                    raise SystemExit("child handshake failed")
+                row = proc / str(child.pid)
+                row.mkdir()
+                (row / "stat").write_text(f"{child.pid} (smoke child) S 0")
+                (row / "cmdline").write_bytes(b"uv\0pytest\0")
+                (row / "environ").write_bytes(
+                    f"DOTFILES_SMOKE_RUN_ID={marker}".encode() + b"\0")
+                (root / "child-pid").write_text(str(child.pid))
+                (root / "ready").touch()
+                os.write(1, os.environ.get(
+                    "SMOKE_OUTPUT", "starting suite\nstill running\n").encode())
+                os.write(2, b"old stderr warning\xff\n")
+                if mode == "timeout":
+                    time.sleep(60)
+                if mode == "inner_group" and "timeout" in args:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    child.wait(timeout=20)
+                    shutil.rmtree(row)
+                sys.exit(137 if mode == "inner137" else 124)
+            stdout = os.environ.get("SMOKE_OUTPUT", "devcontainer smoke: tiers 1-3 OK")
+            stderr = os.environ.get("SMOKE_STDERR", "")
+            print("FAIL: wrong image identity" if mode == "failure" else stdout)
+            print(stderr, file=sys.stderr)
+            sys.exit(1 if mode in {"failure", "diagnostic"} else 0)
         else:
             raise SystemExit(f"unexpected docker args: {args}")
     """)
@@ -287,9 +411,27 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64")
     monkeypatch.setenv("SMOKE_WORKSPACE", str(workspace))
     monkeypatch.setenv("SMOKE_LOCK_PROBE", str(tmp_path / "lock-probe"))
-    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setenv("SMOKE_STATE", str(state))
+    monkeypatch.setenv("DOTFILES_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("DOTFILES_LOCK_HOLDER_HEAVY_GATE", raising=False)
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "30")
     monkeypatch.setenv("DOTFILES_HEAVY_GATE_WAIT", "0")
-    return workspace
+    yield workspace
+    for name in ("child-pid", "grand-pid"):
+        child_pid = state / name
+        if child_pid.exists():
+            pid = child_pid.read_text()
+            command = subprocess.run(
+                ["ps", "-p", pid, "-o", "command="],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if str(state) in command.stdout:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(int(pid), signal.SIGKILL)
 
 
 @pytest.mark.parametrize("entrypoint", ["checks", "verify", "sync"])
@@ -301,6 +443,7 @@ def test_smoke_timeout_public_paths(
 ) -> None:
     """A real sleeping docker becomes a bounded Check/rc, never a traceback."""
     monkeypatch.setenv("SMOKE_MODE", "timeout")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
     if entrypoint == "checks":
         check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
         assert check.ok is False
@@ -314,7 +457,11 @@ def test_smoke_timeout_public_paths(
         assert "sync: verification failed" in detail
     assert "smoke timed out after 0.1 seconds" in detail
     assert "still running" in detail
-    assert "partial stderr" in detail
+    assert "old stderr" not in detail
+    assert "reaped 1 in-container processes" in detail
+    state = Path(os.environ["SMOKE_STATE"])
+    assert (state / "ready").exists()
+    assert not (state / "proc" / (state / "child-pid").read_text()).exists()
     assert "dev-rebuild" not in detail
     assert "Traceback" not in detail
     assert Path(os.environ["SMOKE_LOCK_PROBE"]).read_text() == "busy"
@@ -351,7 +498,7 @@ def test_smoke_invalid_timeout_uses_bounded_default(
 
     def recording[**P, R](run: Callable[P, R]) -> Callable[P, R]:
         def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
-            if args and isinstance(args[0], list) and args[0][:2] == ["docker", "exec"]:
+            if args and isinstance(args[0], list) and "timeout" in args[0]:
                 observed.append(kwargs.get("timeout"))
             return run(*args, **kwargs)
 
@@ -360,7 +507,7 @@ def test_smoke_invalid_timeout_uses_bounded_default(
     monkeypatch.setattr(subprocess, "run", recording(subprocess.run))
     monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", configured)
     assert container.verify_latest_main(smoke_system) == 0
-    assert observed == [1800.0]
+    assert observed == [1890.0]
 
 
 def test_smoke_timeout_output_is_bounded(
@@ -368,6 +515,7 @@ def test_smoke_timeout_output_is_bounded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SMOKE_MODE", "timeout")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1")
     monkeypatch.setenv("SMOKE_OUTPUT", "old line\n" + "x" * 6000 + "\nlast line")
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
     assert check.ok is False
@@ -414,7 +562,7 @@ def test_smoke_slot_contention_and_descendant_reentry(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     ) as holder:
         try:
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + 30
             while not ready.exists() and time.monotonic() < deadline:
                 time.sleep(0.01)
             assert ready.exists()
@@ -425,11 +573,291 @@ def test_smoke_slot_contention_and_descendant_reentry(
             assert "dev-rebuild" not in detail
             assert not Path(os.environ["SMOKE_LOCK_PROBE"]).exists()
             release.touch()
-            stdout, stderr = holder.communicate(timeout=5)
+            stdout, stderr = holder.communicate(timeout=30)
             assert holder.returncode == 0, stderr
             assert "PASS  smoke-tiers-1-3" in stdout
         finally:
             release.touch()
-            holder.communicate(timeout=5)
+            holder.communicate(timeout=30)
     with host_lock.held(host_lock.HEAVY_GATE, "after holder", wait_s=0):
         pass
+
+
+class _SmokeCall(TypedDict):
+    args: list[str]
+    slot: str
+
+
+def _smoke_calls() -> list[_SmokeCall]:
+    path = Path(os.environ["SMOKE_STATE"]) / "calls"
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def _proc_row(root: Path, pid: int, *, command: str, marker: str) -> Path:
+    row = root / "proc" / str(pid)
+    row.mkdir(parents=True)
+    (row / "stat").write_text(f"{pid} (fixture) S 0")
+    (row / "cmdline").write_bytes(command.encode() + b"\0")
+    (row / "environ").write_bytes(f"DOTFILES_SMOKE_RUN_ID={marker}".encode() + b"\0")
+    return row
+
+
+@pytest.mark.parametrize("mode", ["inner124", "inner137", "inner_group"])
+def test_inner_timeout_and_marker_cleanup(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """The inner timeout and reap are visible through the public gate."""
+    monkeypatch.setenv("SMOKE_MODE", mode)
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "3")
+    monkeypatch.setenv("SMOKE_PROTECTED", "1")
+    root = Path(os.environ["SMOKE_STATE"])
+    unrelated = _proc_row(root, 999999, command="pytest", marker="other-run")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert "smoke timed out after 3 seconds (in-container timeout):" in check.detail
+    assert "dev-rebuild" not in check.detail
+    expected_reaped = 0 if mode == "inner_group" else 1
+    assert f"reaped {expected_reaped} in-container processes" in check.detail
+    assert unrelated.exists()
+    assert (root / "ready").exists()
+    assert not (root / "proc" / (root / "child-pid").read_text()).exists()
+    calls = _smoke_calls()
+    assert all(call["slot"] == "busy" for call in calls)
+    exec_args = next(call["args"] for call in calls if "--workdir" in call["args"])
+    assert exec_args[-4:] == [
+        "timeout",
+        "--kill-after=1s",
+        "3s",
+        "scripts/devcontainer-smoke.sh",
+    ]
+    assert calls[-1]["args"][-2] == "reap"
+    assert len(json.loads((root / "fds").read_text())) == 1
+    if mode == "inner_group":
+        grand_pid = (root / "grand-pid").read_text()
+        status = subprocess.run(
+            ["ps", "-p", grand_pid, "-o", "stat="],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert status.returncode != 0 or status.stdout.strip().startswith("Z")
+
+
+@pytest.mark.parametrize("marker", ["", "other-run"])
+def test_preflight_refuses_existing_smoke_without_killing(
+    smoke_system: Path, marker: str
+) -> None:
+    root = Path(os.environ["SMOKE_STATE"])
+    row = _proc_row(
+        root, 999999, command="bash scripts/devcontainer-smoke.sh", marker=marker
+    )
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert check.detail == "smoke already running in cafef00dbeef (pids 999999)"
+    assert row.exists()
+    assert not (root / "marker").exists()
+    assert len(_smoke_calls()) == 1
+    assert _smoke_calls()[0]["args"][-2] == "probe"
+
+
+@pytest.mark.parametrize("mode", ["timeout", "inner124", "inner137"])
+def test_timeout_reports_survivors(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    monkeypatch.setenv("SMOKE_MODE", mode)
+    monkeypatch.setenv("SMOKE_SURVIVOR", "1")
+    monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "0.1" if mode == "timeout" else "3")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    pid = (Path(os.environ["SMOKE_STATE"]) / "child-pid").read_text()
+    assert check.ok is False
+    assert f"ORPHANS REMAIN: pids {pid}" in check.detail
+    assert "dev-rebuild" not in check.detail
+
+
+def test_smoke_probe_failure_refuses_launch(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SMOKE_PROBE_ERROR", "1")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert check.detail == "smoke process probe failed: proc unavailable"
+    assert not (Path(os.environ["SMOKE_STATE"]) / "marker").exists()
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected"),
+    [
+        (
+            "early\nfinal one\nfinal two\nfinal three",
+            "old stderr warning",
+            "final one | final two | final three",
+        ),
+        ("FAIL: first\nFAIL: second\nlast", "FAIL: stderr", "FAIL: first"),
+        ("last stdout", "FAIL: stderr", "FAIL: stderr"),
+        ("", "first\nsecond\nthird\nfourth", "second | third | fourth"),
+    ],
+)
+def test_smoke_diagnostics_keep_streams_separate(
+    smoke_system: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stdout: str,
+    stderr: str,
+    expected: str,
+) -> None:
+    monkeypatch.setenv("SMOKE_MODE", "diagnostic")
+    monkeypatch.setenv("SMOKE_OUTPUT", stdout)
+    monkeypatch.setenv("SMOKE_STDERR", stderr)
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert check.detail == f"{expected} — stale base? `mise run dev-rebuild`"
+
+
+def test_smoke_marker_changes_between_runs(smoke_system: Path) -> None:
+    root = Path(os.environ["SMOKE_STATE"])
+    assert container.verify_latest_main(smoke_system) == 0
+    first = uuid.UUID((root / "marker").read_text())
+    assert container.verify_latest_main(smoke_system) == 0
+    second = uuid.UUID((root / "marker").read_text())
+    assert first.version == second.version == 4
+    assert first != second
+    assert len(json.loads((root / "fds").read_text())) == 1
+
+
+def test_identity_resolved_after_slot_and_fast_check_ignores_slot(
+    smoke_system: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A waiting public CLI sees the id, mount and commit changed during wait."""
+    root = Path(os.environ["SMOKE_STATE"])
+    stderr_path = tmp_path / "waiting-stderr"
+    src = Path(__file__).parent.parent / "python" / "src"
+    monkeypatch.setenv("PYTHONPATH", str(src))
+    env = dict(os.environ)
+    env.pop("DOTFILES_LOCK_HOLDER_HEAVY_GATE", None)
+    env["DOTFILES_HEAVY_GATE_WAIT"] = "30"
+    child = (
+        "from pathlib import Path; "
+        "from dotfiles_setup.container import verify_latest_main; "
+        f"raise SystemExit(verify_latest_main(Path({str(smoke_system)!r})))"
+    )
+    with (
+        stderr_path.open("w+") as stderr,
+        host_lock.held(host_lock.HEAVY_GATE, "identity-changing holder", wait_s=0),
+    ):
+        fast_env = {**env, "DOTFILES_HEAVY_GATE_WAIT": "0"}
+        fast = subprocess.run(
+            [sys.executable, "-c", child.replace(")))", "), run_smoke=False))")],
+            env=fast_env,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert fast.returncode == 0, fast.stderr
+        assert "smoke-tiers-1-3" not in fast.stdout
+        (root / "identity-queries").unlink()
+        process = subprocess.Popen(
+            [sys.executable, "-c", child],
+            stdout=subprocess.PIPE,
+            stderr=stderr,
+            text=True,
+            env=env,
+        )
+        try:
+            deadline = time.monotonic() + 30
+            while (
+                "waiting for heavy-gate" not in stderr_path.read_text()
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            assert "waiting for heavy-gate" in stderr_path.read_text()
+            assert not (root / "identity-queries").exists()
+            (root / "identity").write_text(
+                json.dumps({"id": "decafbadcafe", "dest": "/workspaces/new"})
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(smoke_system),
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.com",
+                    "commit",
+                    "--allow-empty",
+                    "-qm",
+                    "new head",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            head = subprocess.run(
+                ["git", "-C", str(smoke_system), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        except BaseException:
+            process.kill()
+            process.communicate(timeout=30)
+            raise
+    try:
+        stdout, _ = process.communicate(timeout=30)
+        assert process.returncode == 0, stderr_path.read_text()
+        assert "decafbadcafe up" in stdout
+        assert "/workspaces/new" in stdout
+        assert head[:8] in stdout
+        call = next(call for call in _smoke_calls() if "--workdir" in call["args"])
+        assert call["args"][call["args"].index("--workdir") + 1 :][:2] == [
+            "/workspaces/new",
+            "decafbadcafe",
+        ]
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=30)
+
+
+def test_marker_rechecked_after_process_identity_is_bound(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A process whose marker changes before signaling is never killed."""
+    monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("SMOKE_PID_RECYCLED", "1")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    root = Path(os.environ["SMOKE_STATE"])
+    pid = (root / "child-pid").read_text()
+    assert check.ok is False
+    assert "reaped 0 in-container processes" in check.detail
+    assert (root / "proc" / pid / "environ").read_bytes() == b"OTHER_RUN=1"
+    os.kill(int(pid), 0)
+
+
+def test_reap_failure_reports_cleanup_unverified(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SMOKE_MODE", "inner124")
+    monkeypatch.setenv("SMOKE_REAP_ERROR", "1")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert "ORPHANS REMAIN: process reap unverified (proc unavailable)" in check.detail
+    assert "dev-rebuild" not in check.detail
+
+
+def test_unreadable_process_command_refuses_launch(
+    smoke_system: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An inaccessible process cannot establish that no smoke is running."""
+    root = Path(os.environ["SMOKE_STATE"])
+    row = _proc_row(
+        root, 999999, command="bash scripts/devcontainer-smoke.sh", marker="other-run"
+    )
+    monkeypatch.setenv("SMOKE_UNREADABLE", "1")
+    check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
+    assert check.ok is False
+    assert check.detail == (
+        "smoke process probe failed: process probe unreadable: pid 999999"
+    )
+    assert row.exists()
+    assert not (root / "marker").exists()
+    assert len(_smoke_calls()) == 1

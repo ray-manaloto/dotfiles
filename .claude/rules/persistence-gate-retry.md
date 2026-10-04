@@ -48,7 +48,12 @@ Detail: `docs/rules-evidence/persistence-gate-retry.md`.
 | `FAIL: installed-tool set drifted across stop/up` | real defect | triage `mise-system.toml` ↔ runtime drift |
 | `FAIL: in-volume canary missing` | real defect | home-volume mount regression — investigate volume name / mount opts |
 | `R[123] ... not works` | real defect | the corresponding R-invariant regressed; do NOT retry without diagnosing |
-| `FAIL smoke-tiers-1-3` inside `mise run land`, while `mise run smoke` standalone is rc=0 | environmental | retry `land` once — see "The land-smoke transient" below |
+| `FAIL smoke-tiers-1-3` inside `mise run land`, while a safely scheduled standalone smoke is rc=0 | possibly environmental | retry once only after excluding live smoke and unresolved orphans — see below |
+| `smoke timed out after <T> seconds` (including `(in-container timeout)`) | bounded verify-latest smoke failure | inspect diagnostics and reap result; exclude live smoke before any retry, not `dev-rebuild` |
+| `smoke host heavy-slot wait timed out` | host contention | inspect the slot holder; do not launch standalone smoke to bypass the wait |
+| `smoke already running in <id12> (pids …)` | pre-flight refusal | do not retry or start standalone smoke alongside it; inspect the existing run, which pre-flight never kills |
+| `smoke process probe failed: …` | cleanup/pre-flight uncertainty | diagnose the failed Docker or process probe before retrying; refusal is deliberate |
+| `ORPHANS REMAIN: pids …` (or probe/reap failure detail) | unresolved timeout cleanup | inspect the reported processes and resolve cleanup before retrying; marker reap targets only this run |
 | `fatal: detected dubious ownership in repository at '/workspaces/<clone>'` | real defect | should no longer occur after #1183; retry once to retain timing evidence, then verify the scoped `safe.directory` stanza was rendered and applied |
 | `<tool>@latest: no versions found for <tool> matching date filter` (every pass identical) | real defect | do NOT retry — the candidate set is empty (a registry/backend change against `minimum_release_age`); more passes cannot help |
 
@@ -79,23 +84,41 @@ pytest passed 5,023 tests in 823.64 seconds, then tiers 1-3 passed. The second,
 `verify-latest` smoke timed out after 1,800 seconds and escaped as a traceback.
 See `docs/specs/land-smoke-timeout-2026-10-04.md` for the recorded evidence.
 
-`verify-latest` now reports smoke timeouts as a failed `smoke-tiers-1-3` Check,
-with seconds and the last three partial-output lines (capped at 2,000 characters),
-so `sync` and `land` return their normal nonzero status. Timeout failures receive
-no stale-base/rebuild hint. `DOTFILES_SMOKE_TIMEOUT_S` can override the 1,800-second
-default; invalid, nonfinite or nonpositive values retain that default.
+For `verify-latest` with `run_smoke=True`, smoke timeouts become a failed
+`smoke-tiers-1-3` Check. Thus the plain verification path in `sync`/`land` returns
+its normal nonzero status. This guarantee does not cover lifecycle smoke,
+standalone `mise run smoke`, or the full `verify-local` path; those lack this
+wrapper's slot and typed timeout. Lifecycle result reuse remains deferred (F4),
+and slot/timeout coverage for the other paths remains deferred (F6).
 
-The `docker exec` smoke takes the existing host heavy slot to avoid competing
-with host gates. An inherited slot is reused; waiting remains bounded by the
-slot's normal timeout. A slot-wait timeout is a failed Check identifying the
-wait, without a rebuild hint. Lifecycle smoke has no same-run container-ID and
-HEAD proof, so verification still runs it again; no reuse is claimed.
+Timeout diagnostics prefer the first stdout `FAIL` line, then the first stderr
+`FAIL` line if stdout has none; otherwise they use the last three stdout lines
+(stderr only if stdout is empty), capped at 2,000 characters. The streams remain
+separate; this does not claim a merged chronology. Both timeout paths report
+the configured `<T>`, without a stale-base/rebuild hint.
+`DOTFILES_SMOKE_TIMEOUT_S` overrides the 1,800-second default; invalid, nonfinite
+or nonpositive values retain that default.
 
-**The discriminating probe is `mise run smoke` on its own.** If it returns rc=0 with
-tiers 1-3 OK, retry `land` once. Diagnose slot-wait timeouts as host contention and
-smoke timeouts from their partial output and host load. A timeout alone does not
-prove a stale image or a container defect. If standalone smoke fails the same
-checks, triage those checks before retrying.
+Only this verification smoke takes or reuses the host heavy slot. Container id,
+mount destination and HEAD are re-resolved under the slot, which stays held
+through exec, process probe and reap. The smoke child inherits the slot fd when
+present. A bounded slot-wait timeout is a failed Check without a rebuild hint.
+
+Pre-flight refuses any live `devcontainer-smoke.sh` process, regardless of its
+marker; it never kills existing work. Each new run has a fresh
+`DOTFILES_SMOKE_RUN_ID`. In-container `timeout --kill-after` uses `<T>` plus a
+kill-after budget; the host timeout adds grace so the inner wrapper fires first.
+Both host timeout and inner rc 124/137 probe and reap only processes carrying
+this run's marker, reporting `reaped N in-container processes` or
+`ORPHANS REMAIN: pids …`. Marker reap is the cleanup backstop. Accepted residual:
+rc 137 from a child OOM/SIGKILL is also classified as a timeout.
+
+**Exclude live smoke and unresolved orphans before a retry or standalone probe.**
+Do not bypass a busy host slot with `mise run smoke`; safely schedule that probe
+only after confirming no competing heavy run. If it returns rc=0 with tiers 1-3
+OK, retry `land` once. Diagnose timeouts from diagnostics and host load; they
+alone do not prove a stale image or container defect. If standalone smoke fails
+the same checks, triage those checks before retrying.
 
 ⚠️ **The expensive wrong move for a timeout is `mise run dev-rebuild`.** The old
 generic hint led toward a ~21.5GB pull even when the base was current. Non-timeout
