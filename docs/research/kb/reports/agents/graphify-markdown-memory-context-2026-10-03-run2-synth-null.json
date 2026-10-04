@@ -1,0 +1,743 @@
+{
+  "summary": "Fan a research question out to many sources via `mise run research-fanout`, deep-read the best hits cheaply, synthesize once on Opus, and refute the load-bearing claims one by one.",
+  "agentCount": 14,
+  "logs": [
+    "Plan: 1 fanout run(s); 7 code search(es); sourceDive=true",
+    "Mandatory: 1 dependency run(s) over 1 repo(s); 0/4 link(s) mirrored; 0 mandatory gap(s)",
+    "[read:1/1] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "[read-link:1] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "[read-link:2] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "[source-dive] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "Read: 0 claim(s) from 4 reader(s) (4 caller link(s)); 7 unread",
+    "[synthesize] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "[retrospect] failed: You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+    "Retrospect: the retrospect agent returned nothing usable — no proposal written"
+  ],
+  "result": {
+    "status": "synth-null",
+    "statuses": [
+      "synth-null"
+    ],
+    "stageGaps": [],
+    "mandatoryGaps": [],
+    "fanoutGaps": [],
+    "plan": {
+      "runs": [
+        {
+          "query": "graphify obsidian vault markdown memory",
+          "sources": [
+            "exa",
+            "firecrawl-developer",
+            "last30days",
+            "context7"
+          ],
+          "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/.agent/kb/raw/research-fanout/graphify-obsidian-vault-markdown-memory/manifest.json",
+          "rc": 0
+        }
+      ],
+      "codeSearchProbe": {
+        "line": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:06:48.036505+00:00\",\"kind\":\"probe\",\"manifest\":\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/.agent/kb/raw/research-fanout/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/plan/code-search.json\",\"probe_out\":\".agent/kb/raw/research-fanout/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/plan/code-search.json\",\"probes\":[{\"count\":21,\"http_status\":200,\"incomplete_results\":false,\"kind\":\"code-search\",\"query\":\"repo:Graphify-Labs/graphify frontmatter language:python\",\"rate_limited\":false,\"rc\":0,\"role\":\"query\"},{\"count\":2,\"http_status\":200,\"incomplete_results\":false,\"kind\":\"code-search\",\"query\":\"repo:Graphify-Labs/graphify filename:serve.py score\",\"rate_limited\":false,\"rc\":0,\"role\":\"query\"},{\"count\":409,\"http_status\":200,\"incomplete_results\":false,\"kind\":\"code-search\",\"query\":\"repo:Graphify-Labs/graphify import language:python\",\"rate_limited\":false,\"rc\":0,\"role\":\"must-hit\"},{\"count\":2,\"http_status\":200,\"incomplete_results\":false,\"kind\":\"code-search\",\"query\":\"repo:Graphify-Labs/graphify filename:serve.py import\",\"rate_limited\":false,\"rc\":0,\"role\":\"must-hit\"},{\"count\":0,\"http_status\":200,\"incomplete_results\":false,\"kind\":\"code-search\",\"query\":\"repo:Graphify-Labs/graphify qvx7pl3kzr9wm2\",\"rate_limited\":false,\"rc\":0,\"role\":\"known-absent\"}]}"
+      },
+      "rationale": "Source dive at the installed graphifyy 0.9.73 (python/.venv/.../graphify). Prior claim CONFIRMED for the keyless/AST path. extractors/markdown.py extract_markdown emits only a page node (node_kind page, carrying parsed YAML frontmatter under the 'frontmatter' key) and heading nodes, plus contains/references edges from inline links, ref-defs and wikilinks (including wikilinks inside frontmatter) and inline-code-span mentions resolved to code symbols; prose bodies produce no nodes, and fenced blocks are skipped. serve.py _score_query scores only norm_label, label_tokens, source_file, node 'rationale', node 'attributes' (tier #3625), node id; there is NO reference to 'frontmatter' in serve.py, export.py query paths, build.py, analyze.py, cli.py or llm.py search logic, so frontmatter description: is not searched (it is stored but unscored, and the page node label is just the filename). Bodies are indexed ONLY indirectly: the LLM semantic-extraction path (doc files in detect.DOC_EXTENSIONS: .md .mdx .qmd .txt .rst .html .yaml) produces concept nodes and a 'rationale' string that the rationale tier (#2293) matches for why-questions, so prose recall depends on running semantic extraction, not on the AST mode. Caveat: my claim that semantic mode is what indexes prose is from reading the scorer and the cli semantic-cache code, not from running an LLM extraction (no API key run, unverified live). Real GitHub examples found by fanout (manifests, items not individually fetched or verified beyond titles): issue #613 Graphify-Labs/graphify 'Connector for Noema cortex traces, skip LLM extraction, use frontmatter as ground truth' (a feature request, which itself implies frontmatter is not used as truth today); repos albertludi/second-brain-claude, silveimar/graphify, ATLAS-DEV78423/Graphify-Updated-Obsidian, Brucesquared2/claude-code-memory-setup, plus blogs charlieautomates.com and stork.ai on Graphify+Obsidian+Claude; none read in depth. context7 errored (exited 1), a named gap. github-discussions and github-releases returned empty_verified for the mandatory dependency stage. Code-search probe: query counts 21 and 2 beside must-hit 409 and 2 and known-absent 0, so the probe discriminates; the frontmatter hits were not re-fetched individually. Not run: no live graphify query against a markdown corpus control arm was executed, so the 'frontmatter not searched' conclusion rests on source reading only (an arm to run: build a graph over two .md files, one with a unique frontmatter description token and one with a unique body token, query both, and expect 0 hits for each in keyless mode).",
+      "sourceDive": true
+    },
+    "triage": {
+      "read": [
+        {
+          "url": "manifest.json (obsidian-vault-markdown-memory)",
+          "why": "Read; sources exa, firecrawl-developer, last30days ok; context7 error"
+        },
+        {
+          "url": "manifest.json (deps/Graphify-Labs--graphify/1)",
+          "why": "Read; github-issues ok (4), discussions and releases empty_verified"
+        }
+      ],
+      "hits": [
+        {
+          "url": "https://github.com/Graphify-Labs/graphify/issues/613",
+          "title": "Connector for Noema cortex traces: skip LLM extraction, use frontmatter as ground truth",
+          "sources": [
+            "github-issues"
+          ]
+        },
+        {
+          "url": "https://github.com/Graphify-Labs/graphify",
+          "title": "Graphify-Labs/graphify (repo, README)",
+          "sources": [
+            "exa",
+            "last30days",
+            "firecrawl-developer (lowercase variant)"
+          ]
+        },
+        {
+          "url": "https://raw.githubusercontent.com/safishamsi/graphify/main/README.md",
+          "title": "graphify README (raw, old org)",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/safishamsi/graphify/blob/v4/graphify/skill.md",
+          "title": "graphify skill.md at v4",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/Graphify-Labs/graphify/issues/2217",
+          "title": "Semantic extraction: model-invented source_file bypasses #1895 filter",
+          "sources": [
+            "github-issues"
+          ]
+        },
+        {
+          "url": "https://github.com/albertludi/second-brain-claude",
+          "title": "albertludi/second-brain-claude",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/silveimar/graphify",
+          "title": "silveimar/graphify (fork)",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/ATLAS-DEV78423/Graphify-Updated-Obsidian",
+          "title": "Graphify-Updated-Obsidian (Obsidian-first fork)",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/Brucesquared2/claude-code-memory-setup",
+          "title": "Brucesquared2/claude-code-memory-setup",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://www.stork.ai/blog/the-ai-brain-that-never-forgets",
+          "title": "Build an AI Second Brain with Graphify, Obsidian, and Claude",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://charlieautomates.com/blog/claude-code-knowledge-graph-graphify-obsidian/",
+          "title": "Claude Code Knowledge Graph Setup (Graphify + Obsidian)",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://ai-tldr.dev/tools/graphify/",
+          "title": "graphify AI/TLDR",
+          "sources": [
+            "exa"
+          ]
+        },
+        {
+          "url": "https://github.com/Graphify-Labs/graphify/pull/3168",
+          "title": "Fix Svelte, JS destructuring, Rust use-declaration extraction",
+          "sources": [
+            "github-issues"
+          ]
+        },
+        {
+          "url": "https://github.com/Graphify-Labs/graphify/pull/251",
+          "title": "feat: add Hermes platform support",
+          "sources": [
+            "github-issues"
+          ]
+        },
+        {
+          "url": "https://github.com/ctxrs/graf",
+          "title": "graf (Rust graphify alternative)",
+          "sources": [
+            "last30days"
+          ]
+        },
+        {
+          "url": "https://github.com/zachsaw/graphify-csharp",
+          "title": "Graphify C#",
+          "sources": [
+            "last30days"
+          ]
+        }
+      ],
+      "unverifiedEmpty": [
+        "context7 (status error: exited 1, no results)",
+        "code-search probe 'repo:Graphify-Labs/graphify frontmatter language:python' returned count 21 but its hits are not in the manifests and were not read",
+        "code-search probe 'filename:serve.py score' count 2, not read"
+      ]
+    },
+    "failedReads": [
+      "https://github.com/Graphify-Labs/graphify/pull/2875",
+      "https://github.com/Graphify-Labs/graphify/pull/3348",
+      "https://github.com/Graphify-Labs/graphify/pull/1064",
+      "https://github.com/Graphify-Labs/graphify/blob/main/graphify/skill.md",
+      "manifest.json (obsidian-vault-markdown-memory)",
+      "manifest.json (deps/Graphify-Labs--graphify/1)",
+      "Graphify-Labs/graphify (source at the latest release tag)"
+    ],
+    "codeSearch": [
+      {
+        "query": "repo:Graphify-Labs/graphify frontmatter language:python",
+        "role": "query",
+        "source": "planner",
+        "count": 21,
+        "rc": 0,
+        "rateLimited": false,
+        "armed": true
+      },
+      {
+        "query": "repo:Graphify-Labs/graphify filename:serve.py score",
+        "role": "query",
+        "source": "planner",
+        "count": 2,
+        "rc": 0,
+        "rateLimited": false,
+        "armed": true
+      },
+      {
+        "query": "repo:Graphify-Labs/graphify import language:python",
+        "role": "must-hit",
+        "source": "planner",
+        "count": 409,
+        "rc": 0,
+        "rateLimited": false
+      },
+      {
+        "query": "repo:Graphify-Labs/graphify filename:serve.py import",
+        "role": "must-hit",
+        "source": "planner",
+        "count": 2,
+        "rc": 0,
+        "rateLimited": false
+      },
+      {
+        "query": "repo:Graphify-Labs/graphify qvx7pl3kzr9wm2",
+        "role": "known-absent",
+        "source": "planner",
+        "count": 0,
+        "rc": 0,
+        "rateLimited": false
+      },
+      {
+        "query": "repo:cli/cli filename:README.md",
+        "role": "health",
+        "source": "workflow",
+        "count": 9,
+        "rc": 0,
+        "rateLimited": false
+      },
+      {
+        "query": "repo:Graphify-Labs/graphify filename:README.md",
+        "role": "must-hit",
+        "source": "workflow",
+        "count": 6,
+        "rc": 0,
+        "rateLimited": false
+      }
+    ],
+    "codeSearchNotes": [],
+    "codeSearchGaps": [],
+    "dependencyRuns": [
+      {
+        "repo": "Graphify-Labs/graphify",
+        "query": "graphify markdown memory frontmatter",
+        "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/.agent/kb/raw/research-fanout/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/deps/Graphify-Labs--graphify/1/manifest.json",
+        "fresh": true,
+        "ok": true,
+        "requiredFailed": []
+      }
+    ],
+    "mirror": [
+      {
+        "url": "https://github.com/Graphify-Labs/graphify/pull/2875",
+        "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/1.md",
+        "rc": 1,
+        "bytes": 0,
+        "reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |"
+      },
+      {
+        "url": "https://github.com/Graphify-Labs/graphify/pull/3348",
+        "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/2.md",
+        "rc": 1,
+        "bytes": 0,
+        "reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |"
+      },
+      {
+        "url": "https://github.com/Graphify-Labs/graphify/pull/1064",
+        "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/3.md",
+        "rc": 1,
+        "bytes": 0,
+        "reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |"
+      },
+      {
+        "url": "https://github.com/Graphify-Labs/graphify/blob/main/graphify/skill.md",
+        "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/4.md",
+        "rc": 1,
+        "bytes": 0,
+        "reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |"
+      }
+    ],
+    "mirrorGaps": [
+      "https://github.com/Graphify-Labs/graphify/pull/2875: not mirrored (Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |)",
+      "https://github.com/Graphify-Labs/graphify/pull/3348: not mirrored (Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |)",
+      "https://github.com/Graphify-Labs/graphify/pull/1064: not mirrored (Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |)",
+      "https://github.com/Graphify-Labs/graphify/blob/main/graphify/skill.md: not mirrored (Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |)"
+    ],
+    "claims": [],
+    "routing": [
+      {
+        "node": "plan+fetch",
+        "agentType": "general-purpose",
+        "model": "sonnet",
+        "effort": "medium"
+      },
+      {
+        "node": "deps:Graphify-Labs/graphify",
+        "agentType": "general-purpose",
+        "model": "sonnet",
+        "effort": "low"
+      },
+      {
+        "node": "mirror:1/4",
+        "agentType": "general-purpose",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "mirror:2/4",
+        "agentType": "general-purpose",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "mirror:3/4",
+        "agentType": "general-purpose",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "mirror:4/4",
+        "agentType": "general-purpose",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "triage",
+        "agentType": "Explore",
+        "model": "sonnet",
+        "effort": "low"
+      },
+      {
+        "node": "mirror-index",
+        "agentType": "general-purpose",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "read-link:1",
+        "agentType": "Explore",
+        "model": "sonnet",
+        "effort": "low"
+      },
+      {
+        "node": "read-link:2",
+        "agentType": "Explore",
+        "model": "sonnet",
+        "effort": "low"
+      },
+      {
+        "node": "read:1/1",
+        "agentType": "Explore",
+        "model": "haiku",
+        "effort": "(default)"
+      },
+      {
+        "node": "source-dive",
+        "agentType": "general-purpose",
+        "model": "sonnet",
+        "effort": "medium"
+      },
+      {
+        "node": "synthesize",
+        "agentType": "general-purpose",
+        "model": "opus",
+        "effort": "high"
+      },
+      {
+        "node": "retrospect",
+        "agentType": "Explore",
+        "model": "sonnet",
+        "effort": "low"
+      }
+    ],
+    "retrospect": {
+      "status": "retrospect-null",
+      "path": null
+    }
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Plan"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Dependencies"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 3,
+      "title": "Mirror"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 4,
+      "title": "Triage"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 5,
+      "title": "Read"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 6,
+      "title": "Synthesize"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 7,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 8,
+      "title": "Advise"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 9,
+      "title": "Retrospect"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "plan+fetch",
+      "phaseIndex": 1,
+      "phaseTitle": "Plan",
+      "agentId": "af4bd20d3acdb7793",
+      "model": "claude-sonnet-5-5",
+      "state": "done",
+      "startedAt": 1791075916745,
+      "queuedAt": 1791075916728,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Source dive at the installed graphifyy 0.9.73 (python/.venv…",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076071594,
+      "tokens": 145154,
+      "toolCalls": 15,
+      "durationMs": 154849,
+      "resultPreview": "{\"runs\":[{\"query\":\"graphify obsidian vault markdown memory\",\"sources\":[\"exa\",\"firecrawl-developer\",\"last30days\",\"context7\"],\"manifest\":\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/.agent/kb/raw/research-fanout/graphify-obsidian-vault-markdown-memory/manifest.json\",\"rc\":0}],\"codeSearchProbe\":{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:06:48.0365…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "deps:Graphify-Labs/graphify",
+      "phaseIndex": 2,
+      "phaseTitle": "Dependencies",
+      "agentId": "a84755358692f1a1a",
+      "model": "claude-sonnet-5-5",
+      "state": "done",
+      "startedAt": 1791075916759,
+      "queuedAt": 1791075916751,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:05:47.960077+00:0…",
+      "promptPreview": "MANDATORY DEPENDENCY-REPO STAGE for Graphify-Labs/graphify: it runs whatever any planner chose. QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or …",
+      "promptFramed": true,
+      "lastProgressAt": 1791075954889,
+      "tokens": 106722,
+      "toolCalls": 3,
+      "durationMs": 38130,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:05:47.960077+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/.agent/kb/raw/research-fanout/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/deps/Graphify-Labs--graphify/probe.json\\\",\\\"probe_out\\\":\\\".agent/kb/raw/research-fanout/research--…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "mirror:1/4",
+      "phaseIndex": 3,
+      "phaseTitle": "Mirror",
+      "agentId": "a13b81a51934e15cf",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "done",
+      "startedAt": 1791075916762,
+      "queuedAt": 1791075916760,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:05:41.092143+00:0…",
+      "promptPreview": "MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, never piped (the probe\nruns the pinned firecrawl itself and measures what landed):\n  mise run research-fanout -- --probe-out '/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10…",
+      "promptFramed": true,
+      "lastProgressAt": 1791075950218,
+      "tokens": 76880,
+      "toolCalls": 2,
+      "durationMs": 33454,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:05:41.092143+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/1.probe.json\\\",\\\"probe_out\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/ha…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "mirror:2/4",
+      "phaseIndex": 3,
+      "phaseTitle": "Mirror",
+      "agentId": "a2beddb29a645977c",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "done",
+      "startedAt": 1791075916762,
+      "queuedAt": 1791075916760,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:05:28.202922+00:0…",
+      "promptPreview": "MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, never piped (the probe\nruns the pinned firecrawl itself and measures what landed):\n  mise run research-fanout -- --probe-out '/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10…",
+      "promptFramed": true,
+      "lastProgressAt": 1791075937448,
+      "tokens": 76843,
+      "toolCalls": 2,
+      "durationMs": 17805,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:05:28.202922+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/2.probe.json\\\",\\\"probe_out\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/ha…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "mirror:3/4",
+      "phaseIndex": 3,
+      "phaseTitle": "Mirror",
+      "agentId": "a1f0ea36bdd2cf470",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "done",
+      "startedAt": 1791075916763,
+      "queuedAt": 1791075916761,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:05:28.200329+00:0…",
+      "promptPreview": "MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, never piped (the probe\nruns the pinned firecrawl itself and measures what landed):\n  mise run research-fanout -- --probe-out '/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10…",
+      "promptFramed": true,
+      "lastProgressAt": 1791075943925,
+      "tokens": 76867,
+      "toolCalls": 2,
+      "durationMs": 24281,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:05:28.200329+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/3.probe.json\\\",\\\"probe_out\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/ha…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "mirror:4/4",
+      "phaseIndex": 3,
+      "phaseTitle": "Mirror",
+      "agentId": "a40c75a52dfcc3b6d",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "done",
+      "startedAt": 1791075916764,
+      "queuedAt": 1791075916761,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:05:28.203346+00:0…",
+      "promptPreview": "MANDATORY MIRROR STAGE: save one caller link as an agent-optimized offline copy. Run exactly, never piped (the probe\nruns the pinned firecrawl itself and measures what landed):\n  mise run research-fanout -- --probe-out '/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10…",
+      "promptFramed": true,
+      "lastProgressAt": 1791075937861,
+      "tokens": 76738,
+      "toolCalls": 2,
+      "durationMs": 18217,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:05:28.203346+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/4.probe.json\\\",\\\"probe_out\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/ha…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "triage",
+      "phaseIndex": 4,
+      "phaseTitle": "Triage",
+      "agentId": "a6c6951883d27eeeb",
+      "agentType": "Explore",
+      "model": "claude-sonnet-5-5",
+      "state": "done",
+      "startedAt": 1791076073454,
+      "queuedAt": 1791076073441,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076094434,
+      "tokens": 32747,
+      "toolCalls": 4,
+      "durationMs": 20980,
+      "resultPreview": "{\"read\":[{\"url\":\"manifest.json (obsidian-vault-markdown-memory)\",\"why\":\"Read; sources exa, firecrawl-developer, last30days ok; context7 error\"},{\"url\":\"manifest.json (deps/Graphify-Labs--graphify/1)\",\"why\":\"Read; github-issues ok (4), discussions and releases empty_verified\"}],\"hits\":[{\"url\":\"https://github.com/Graphify-Labs/graphify/issues/613\",\"title\":\"Connector for Noema cortex traces: skip LLM…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "mirror-index",
+      "phaseIndex": 3,
+      "phaseTitle": "Mirror",
+      "agentId": "aeb89a7599e575df4",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "done",
+      "startedAt": 1791076073443,
+      "queuedAt": 1791076073441,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PROBE-JSON {\"generated_at\":\"2026-10-04T01:08:00.251842+00:0…",
+      "promptPreview": "Write the offline-mirror index for /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/reports/agents/graphify-markdown-memory-context-2026-10-03.md. Run exactly, never piped (the probe renders the README from the\nmirror probes on disk; do not fetch or write anything yourself):\n  mise run research-fanout -- --probe-out '/Users/rmanaloto/dev/gith…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076087598,
+      "tokens": 77058,
+      "toolCalls": 2,
+      "durationMs": 14154,
+      "resultPreview": "{\"line\":\"PROBE-JSON {\\\"generated_at\\\":\\\"2026-10-04T01:08:00.251842+00:00\\\",\\\"kind\\\":\\\"probe\\\",\\\"manifest\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/README.probe.json\\\",\\\"probe_out\\\":\\\"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktre…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 9,
+      "label": "read-link:1",
+      "phaseIndex": 5,
+      "phaseTitle": "Read",
+      "agentId": "ab0fe1825f98b7c95",
+      "agentType": "Explore",
+      "model": "claude-sonnet-5-5",
+      "state": "error",
+      "startedAt": 1791076095385,
+      "queuedAt": 1791076095372,
+      "attempt": 1,
+      "lastToolName": "Bash",
+      "lastToolSummary": "cd /tmp 2>/dev/null; for n in 2875 3348 1064; do echo \"=== …",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076110520,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 23367,
+      "toolCalls": 1,
+      "durationMs": 15133
+    },
+    {
+      "type": "workflow_agent",
+      "index": 10,
+      "label": "read-link:2",
+      "phaseIndex": 5,
+      "phaseTitle": "Read",
+      "agentId": "af381c356ef9ccc17",
+      "agentType": "Explore",
+      "model": "claude-sonnet-5-5",
+      "state": "error",
+      "startedAt": 1791076095386,
+      "queuedAt": 1791076095372,
+      "attempt": 1,
+      "lastToolName": "Bash",
+      "lastToolSummary": "gh api repos/Graphify-Labs/graphify/contents/graphify/skill…",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076111104,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 23068,
+      "toolCalls": 2,
+      "durationMs": 14092
+    },
+    {
+      "type": "workflow_agent",
+      "index": 11,
+      "label": "read:1/1",
+      "phaseIndex": 5,
+      "phaseTitle": "Read",
+      "agentId": "a4e6a22846b09dbce",
+      "agentType": "Explore",
+      "model": "claude-haiku-4-5-20251001",
+      "state": "error",
+      "startedAt": 1791076095386,
+      "queuedAt": 1791076095372,
+      "attempt": 1,
+      "lastToolName": "Bash",
+      "lastToolSummary": "find /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.age…",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076102140,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 15019,
+      "toolCalls": 1,
+      "durationMs": 6753
+    },
+    {
+      "type": "workflow_agent",
+      "index": 12,
+      "label": "source-dive",
+      "phaseIndex": 5,
+      "phaseTitle": "Read",
+      "agentId": "aad96dc9467611d8e",
+      "model": "claude-sonnet-5-5",
+      "state": "error",
+      "startedAt": 1791076095384,
+      "queuedAt": 1791076095372,
+      "attempt": 1,
+      "lastToolName": "Bash",
+      "lastToolSummary": "cd \"${TMPDIR:-/tmp}\" && TAG=$(gh api repos/Graphify-Labs/gr…",
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076118911,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 101909,
+      "toolCalls": 1,
+      "durationMs": 23527
+    },
+    {
+      "type": "workflow_agent",
+      "index": 13,
+      "label": "synthesize",
+      "phaseIndex": 6,
+      "phaseTitle": "Synthesize",
+      "agentId": "a5a8eb8d812b1fafd",
+      "model": "claude-opus-5-5[1m]",
+      "state": "error",
+      "startedAt": 1791076118920,
+      "queuedAt": 1791076118913,
+      "attempt": 1,
+      "promptPreview": "QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semantic extraction) index prose? Co…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076119762,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 842
+    },
+    {
+      "type": "workflow_agent",
+      "index": 14,
+      "label": "retrospect",
+      "phaseIndex": 9,
+      "phaseTitle": "Retrospect",
+      "agentId": "abc791a782450179d",
+      "agentType": "Explore",
+      "model": "claude-sonnet-5-5",
+      "state": "error",
+      "startedAt": 1791076119775,
+      "queuedAt": 1791076119763,
+      "attempt": 1,
+      "promptPreview": "A research sweep just ended. QUESTION: How do people use graphify (Graphify-Labs/graphify, formerly safishamsi/graphify, PyPI graphifyy) to reduce agent context over markdown/notes/memory directories (Claude Code auto-memory, Obsidian vaults)? Does graphify index markdown BODY text and frontmatter (e.g. description:) for query, or only titles/headings/links? Which modes (keyless/AST vs LLM semanti…",
+      "promptFramed": true,
+      "lastProgressAt": 1791076120373,
+      "error": "You've hit your weekly limit · resets Oct 7 at 7am (America/Chicago)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 598
+    }
+  ],
+  "totalTokens": 832372,
+  "totalToolCalls": 37
+}

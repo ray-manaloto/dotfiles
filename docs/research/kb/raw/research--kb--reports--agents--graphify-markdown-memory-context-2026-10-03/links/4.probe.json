@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-10-04T01:05:28.203346+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/4.probe.json",
+  "probe_out": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/4.probe.json",
+  "probes": [
+    {
+      "bytes": 0,
+      "http_status": 0,
+      "kind": "mirror",
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03n/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03/links/4.md",
+      "rc": 1,
+      "reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value. |",
+      "url": "https://github.com/Graphify-Labs/graphify/blob/main/graphify/skill.md"
+    }
+  ]
+}
