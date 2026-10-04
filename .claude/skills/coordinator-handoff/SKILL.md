@@ -56,8 +56,9 @@ Run `.claude/skills/session-handoff/SKILL.md` in full, under its
   isolated session; never redirect Bash into main while in EnterWorktree.
   Launch ship as a harness background run
   with a file-captured rc (its push carries the ssh keepalive). If another
-  ship holds the host slot, push the branch now and put its ship at the head
-  of the queue.
+  ship holds the host slot, do NOT push: `ship` holds the slot across gates
+  AND push (`pr.py` ship path). Put this ship at the head of the queue; the
+  overlap available is remote CI of the previous PR with this ship's gates.
 - Bring `.agent/plans/main-checkout-ship-queue.md` up to date.
 - Skip §6's resume line: there is no `/clear`.
 

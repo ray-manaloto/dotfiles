@@ -277,3 +277,10 @@ Control arms:
 - [mycelium-hq/ai-brain-starter](https://github.com/mycelium-hq/ai-brain-starter) — `skills/graphify/SKILL.md`, read and mirrored.
 - [garrytan/gbrain](https://github.com/garrytan/gbrain) — named in ai-brain-starter as the source of the pattern; not read.
 - [cli/cli](https://github.com/cli/cli) — used only as the code-search health control.
+
+---
+
+**Coordinator annotation (f5b237, 2026-10-04, after Ray's rulings):** (1) `links/1.md` is NOT in the tree. It was dropped
+as a named gap (betterleaks `generic-password` at its line 754; Ray chose drop over allowlist). The citations to it above
+resolve to the URL in `links/README.md` row 1. (2) The drafted comment was posted on PR #3636 with Ray's approval:
+https://github.com/Graphify-Labs/graphify/pull/3636#issuecomment-5983019536
