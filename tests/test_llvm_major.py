@@ -6,6 +6,7 @@ from __future__ import annotations
 import gzip
 import json
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 import pytest
 from dotfiles_setup import apt_pins, llvm_major, main
 from dotfiles_setup.image import _parse_apt_llvm_version
+from dotfiles_setup.llvm_major import _freeze_summary
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -217,7 +219,12 @@ def github(
 def gh_output(argv: list[str], payload: dict | list) -> bytes:
     """Model gh's included HTTP response independently from the JSON payload."""
     body = json.dumps(payload).encode()
-    return b"HTTP/2.0 200 OK\r\n\r\n" + body if "--include" in argv else body
+    return (
+        b"HTTP/2.0 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n"
+        b"X-Github-Request-Id: ABCD:1234:5678:9ABC\r\n\r\n" + body
+        if "--include" in argv
+        else body
+    )
 
 
 @pytest.fixture
@@ -290,6 +297,24 @@ def test_detect_fail_loud(
         )
 
 
+def test_detect_no_suite_names_codename(repo: Path) -> None:
+    """An empty candidate set reports the distribution being probed."""
+    with pytest.raises(
+        RuntimeError, match=r"no suite served in \[22, 23\] for resolute"
+    ):
+        llvm_major.detect(repo, network(set()), releases(23), gh=github(), now=NOW)
+
+
+def test_detect_fallback_names_codename(repo: Path) -> None:
+    """The non-held fallback retains its original distribution diagnostic."""
+    detection = llvm_major.detect(
+        repo, network({22}), releases(23), gh=github(), now=NOW
+    )
+    assert detection.reason == (
+        "M=23 not served for resolute; highest served in [P, M-1] = 22"
+    )
+
+
 def test_ga_filter_and_no_matches() -> None:
     """RC/init/prerelease/draft records cannot select a new major."""
     assert llvm_major.newest_ga_major(releases(23)) == 23
@@ -336,9 +361,9 @@ def test_freeze_live_shapes(major: int) -> None:
     ("ahead", "build", "age", "expected"),
     [
         (0, TAG22[:12], timedelta(days=14), True),
-        (2, TAG22[:12], timedelta(days=14), False),
+        (2, TAG23[:12], timedelta(days=14), False),
         (1, TAG23[:12], timedelta(days=14), True),
-        (1, TAG22[:12], timedelta(days=14), True),
+        (1, TAG22[:12], timedelta(days=14), False),
         (0, "67f4a076a097", timedelta(days=14), False),
         (0, TAG22[:12], timedelta(days=13), False),
         (0, TAG22[:12], timedelta(days=14, microseconds=-1), False),
@@ -349,15 +374,115 @@ def test_freeze_live_shapes(major: int) -> None:
 def test_freeze_independent_conditions(
     ahead: int, build: str, age: timedelta, *, expected: bool
 ) -> None:
-    """Change one axis at a time, including both allowed commit identities."""
+    """Tag+1 requires apt to have built head; a tag build is still moving."""
+    state = llvm_major.freeze_state(
+        22,
+        "resolute",
+        network({22}, build=build, release_date=NOW),
+        github(head=TAG22 if ahead == 0 else TAG23, ahead=ahead),
+        now=NOW + age,
+    )
+    assert state.frozen is expected
+
+
+@pytest.mark.parametrize(
+    ("ahead", "build", "age", "relation", "frozen"),
+    [
+        (1, TAG22[:12], 14, "\u2260", False),
+        (1, TAG23[:12], 14, "matches", True),
+        (2, TAG23[:12], 14, "matches", False),
+        (1, TAG23[:12], 13, "matches", False),
+    ],
+)
+def test_freeze_summary_build_relation(
+    ahead: int, build: str, age: int, relation: str, *, frozen: bool
+) -> None:
+    """Build relation follows condition (b), independently of the other gates."""
     state = llvm_major.freeze_state(
         22,
         "resolute",
         network({22}, build=build, release_date=NOW),
         github(head=TAG23, ahead=ahead),
-        now=NOW + age,
+        now=NOW + timedelta(days=age),
     )
-    assert state.frozen is expected
+    assert state.frozen is frozen
+    assert f"apt build {build} {relation} head" in _freeze_summary(state)
+    assert "suite published 2026-10-04 (Release Date)" in _freeze_summary(state)
+
+
+@pytest.mark.parametrize("matches", [False, True])
+def test_freeze_summary_uses_recorded_build_match(*, matches: bool) -> None:
+    """Changing the gate result must change the summary without another predicate."""
+    state = llvm_major.freeze_state(22, "resolute", network({22}), github(), now=NOW)
+    evidence = replace(state, apt_matches_head=matches)
+    relation = "matches" if matches else "\u2260"
+    assert f"apt build {TAG22[:12]} {relation} head" in _freeze_summary(evidence)
+
+
+@pytest.mark.parametrize("site", ["branches", "commits"])
+@pytest.mark.parametrize("sha", [TAG22[:12], "g" * 40, "a" * 39, "a" * 41, None])
+def test_freeze_rejects_invalid_commit_sha(site: str, sha: str | None) -> None:
+    """Malformed branch or tag identities raise rather than silently holding."""
+    boundary = github()
+
+    def gh(endpoint: str) -> dict | list[dict]:
+        if f"/{site}/" in endpoint:
+            return {"commit": {"sha": sha}} if site == "branches" else {"sha": sha}
+        return boundary(endpoint)
+
+    with pytest.raises(ValueError, match="expected a full commit SHA"):
+        llvm_major.freeze_state(22, "resolute", network({22}), gh, now=NOW)
+
+
+def test_freeze_rejects_naive_clock() -> None:
+    """A naive caller clock is invalid even with timezone-aware Release metadata."""
+    with pytest.raises(ValueError, match="freeze clock must have a timezone"):
+        llvm_major.freeze_state(
+            22, "resolute", network({22}), github(), now=NOW.replace(tzinfo=None)
+        )
+
+
+def test_freeze_rejects_missing_major_ga() -> None:
+    """Valid GA releases for another major cannot stand in for this major's tag."""
+    with pytest.raises(ValueError, match="no GA llvmorg-22 tag found"):
+        llvm_major.freeze_state(
+            22, "resolute", network({22}), github(release_data=releases(23)()), now=NOW
+        )
+
+
+@pytest.mark.parametrize("ahead", [-1, "1", 1.0, True, None])
+def test_freeze_rejects_invalid_ahead_by(ahead: object) -> None:
+    """Neither negative counts nor non-integers can become freeze evidence."""
+    boundary = github()
+
+    def gh(endpoint: str) -> dict | list[dict]:
+        return {"ahead_by": ahead} if "/compare/" in endpoint else boundary(endpoint)
+
+    with pytest.raises(ValueError, match="ahead_by must be a nonnegative integer"):
+        llvm_major.freeze_state(22, "resolute", network({22}), gh, now=NOW)
+
+
+@pytest.mark.parametrize("count", [0, 2])
+def test_freeze_rejects_clang_count(count: int) -> None:
+    """The suite's amd64 Packages index must supply exactly one clang version."""
+    boundary = network({22})
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        if url.endswith("Packages.gz"):
+            entries = "\n\n".join(
+                f"Package: clang-22\nVersion: {VERSION}" for _ in range(count)
+            )
+            return 200, gzip.compress((entries + "\n\n").encode())
+        return boundary(url)
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"llvm-toolchain-resolute-22/main/binary-amd64/Packages\.gz: "
+            r"expected exactly one clang-22 version"
+        ),
+    ):
+        llvm_major.freeze_state(22, "resolute", fetch, github(), now=NOW)
 
 
 @pytest.mark.parametrize(
@@ -426,15 +551,24 @@ def test_freeze_apt_http_failures(status: int, site: str) -> None:
 
 
 @pytest.mark.parametrize("status", [200, 201, 301, 500])
+@pytest.mark.parametrize("newline", ["\n", "\r\n"])
 def test_freeze_gh_requires_http_200(
-    monkeypatch: pytest.MonkeyPatch, status: int
+    monkeypatch: pytest.MonkeyPatch, status: int, newline: str
 ) -> None:
     """Even a successful process must provide a 200 evidence response."""
 
     def run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
         assert "--include" in argv
         body = (
-            f"HTTP/2.0 {status} Status\n\n".encode()
+            newline.join(
+                [
+                    f"HTTP/2.0 {status} {'OK' if status == 200 else 'Status'}",
+                    "Content-Type: application/json; charset=utf-8",
+                    "X-Github-Request-Id: ABCD:1234:5678:9ABC",
+                    "",
+                    "",
+                ]
+            ).encode()
             + json.dumps({"sha": TAG22}).encode()
         )
         return subprocess.CompletedProcess(argv, 0, body, b"")
@@ -508,8 +642,15 @@ def test_detect_requires_both_gates(
     else:
         assert detection.held_on == 23
         assert detection.reason.startswith(f"23 GA+served, held: {held_gates};")
-        assert "release/23.x" in detection.reason
-        assert "built 2026-07-14" in detection.reason
+        assert "freeze: release/23.x" in detection.reason
+        assert "suite published 2026-07-14 (Release Date)" in detection.reason
+        if ready == 22:
+            assert (
+                "IWYU: conda-forge include-what-you-use has no version whose "
+                "newest builds on both Linux architectures target libllvm23; freeze: "
+            ) in detection.reason
+        else:
+            assert "; IWYU:" not in detection.reason
 
 
 def test_detect_never_regates_pin(repo: Path) -> None:
@@ -1457,6 +1598,68 @@ def detected_bump_fetcher() -> llvm_major.Fetcher:
         return gates(url)
 
     return fetch
+
+
+@pytest.mark.parametrize(
+    ("version", "rebuilt"),
+    [
+        (NEXT_VERSION, False),
+        (NEXT_VERSION.replace(TAG22[:12], HEAD23[:12]), True),
+        ("1:23.1.0", True),
+        (NEXT_VERSION.replace(TAG22[:12], HEAD23[:12]) + TAG22[:12], True),
+    ],
+)
+def test_plan_rechecks_detected_apt_build(
+    repo: Path, version: str, *, rebuilt: bool
+) -> None:
+    """Fresh target inventories must embed the exact build that passed detection."""
+    boundary = detected_bump_fetcher()
+    detection = llvm_major.detect(repo, boundary, releases(23), gh=github(), now=NOW)
+    assert detection.target == 23
+    assert detection.freeze_evidence[23].apt_build == TAG22[:12]
+    names = {name.replace("22", "23") for name in llvm_major.llvm_pins(PIN_TEXT)}
+    indexes = plan_network(names, version=version)
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        return indexes(url) if url.endswith("Packages.gz") else boundary(url)
+
+    before = tree_bytes(repo)
+    if rebuilt:
+        with pytest.raises(
+            RuntimeError, match="apt rebuilt -23 since detection; re-run"
+        ):
+            llvm_major.plan_bump(repo, detection, fetch)
+    else:
+        plan = llvm_major.plan_bump(repo, detection, fetch)
+        assert {value for value, _ in plan.pins.values()} == {NEXT_VERSION}
+    assert tree_bytes(repo) == before
+
+
+@pytest.mark.usefixtures("offline_gh")
+def test_detected_bump_refuses_apt_rebuild(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The real bump path reports a rebuild race before changing any bytes."""
+    boundary = detected_bump_fetcher()
+    reads = 0
+
+    def fetch(url: str) -> tuple[int, bytes]:
+        nonlocal reads
+        status, body = boundary(url)
+        if "llvm-toolchain-resolute-23/" in url and url.endswith("Packages.gz"):
+            reads += 1
+            if reads > 1:
+                body = gzip.compress(
+                    gzip.decompress(body).replace(
+                        TAG22[:12].encode(), HEAD23[:12].encode()
+                    )
+                )
+        return status, body
+
+    before = tree_bytes(repo)
+    assert llvm_major.bump_main(repo, fetch=fetch, releases=releases(23)) == 1
+    assert "apt rebuilt -23 since detection; re-run" in capsys.readouterr().err
+    assert tree_bytes(repo) == before
 
 
 @pytest.mark.usefixtures("offline_gh")

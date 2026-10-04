@@ -67,6 +67,7 @@ class Freeze:
     apt_build: str
     release_date: datetime
     frozen: bool
+    apt_matches_head: bool
 
 
 @dataclass(frozen=True)
@@ -388,7 +389,10 @@ def _suite_freeze_build(
         package.version for package in packages if package.name == f"clang-{major}"
     ]
     if len(versions) != 1:
-        msg = f"Release {suite}: expected exactly one clang-{major} version"
+        msg = (
+            f"{suite}/main/binary-amd64/Packages.gz: "
+            f"expected exactly one clang-{major} version"
+        )
         raise ValueError(msg)
     version = versions[0]
     match = _APT_BUILD.search(version)
@@ -410,7 +414,7 @@ def freeze_state(
     *,
     now: datetime,
 ) -> Freeze:
-    """Require tag/tag+1, an apt build of tag/head, and at least 14 quiet days.
+    """Require tag/tag+1, an apt build of head, and at least 14 quiet days.
 
     GitHub exposes commit comparisons and apt exposes build metadata, but neither
     supplies this repository's combined readiness rule. Reuse the detector's
@@ -439,25 +443,28 @@ def freeze_state(
         msg = f"{branch}: ahead_by must be a nonnegative integer"
         raise ValueError(msg)
     build, release_date = _suite_freeze_build(major, codename, fetch)
-    frozen = (
-        ahead <= 1
-        and build in {tag_commit[:12], head[:12]}
-        and now - release_date >= _FREEZE_AGE
+    apt_matches_head = build == head[:12]
+    frozen = ahead <= 1 and apt_matches_head and now - release_date >= _FREEZE_AGE
+    return Freeze(
+        major,
+        head,
+        tag,
+        tag_commit,
+        ahead,
+        build,
+        release_date,
+        frozen,
+        apt_matches_head,
     )
-    return Freeze(major, head, tag, tag_commit, ahead, build, release_date, frozen)
 
 
 def _freeze_summary(evidence: Freeze) -> str:
     """Explain all freeze axes in a single line, including a held apt build."""
-    relation = (
-        "matches"
-        if evidence.apt_build in {evidence.tag_commit[:12], evidence.branch_head[:12]}
-        else "\u2260"
-    )
+    relation = "matches" if evidence.apt_matches_head else "\u2260"
     return (
         f"release/{evidence.major}.x {evidence.ahead_of_tag} ahead of {evidence.tag}; "
-        f"apt build {evidence.apt_build} {relation} tag/head; "
-        f"built {evidence.release_date.date()}"
+        f"apt build {evidence.apt_build} {relation} head; "
+        f"suite published {evidence.release_date.date()} (Release Date)"
     )
 
 
@@ -582,16 +589,17 @@ def trunk_major(codename: str, fetch: Fetcher) -> int:
 
 
 def _target_reason(
-    pinned: int,
-    newest: int,
+    codename: str,
+    span: tuple[int, int],
     served: dict[int, bool],
     ready: dict[int, bool],
     evidence: dict[int, Freeze],
 ) -> tuple[int, int | None, str]:
     """Apply both independent gates to every served candidate without re-gating P."""
+    pinned, newest = span
     candidates = [major for major, available in served.items() if available]
     if not candidates:
-        msg = f"no suite served in [{pinned}, {newest}]"
+        msg = f"no suite served in [{pinned}, {newest}] for {codename}"
         raise RuntimeError(msg)
     eligible = [
         major
@@ -615,12 +623,22 @@ def _target_reason(
             gates.append("freeze")
         reason = (
             f"{held} GA+served, held: {', '.join(gates)}; "
-            f"{_freeze_summary(evidence[held])}"
+            + (
+                "IWYU: conda-forge include-what-you-use has no version whose "
+                "newest builds on both Linux architectures "
+                f"target libllvm{held}; "
+                if not ready[held]
+                else ""
+            )
+            + f"freeze: {_freeze_summary(evidence[held])}"
         )
     elif served[newest]:
         reason = f"M={newest} served"
     else:
-        reason = f"M={newest} not served; highest served in [P, M-1] = {target}"
+        reason = (
+            f"M={newest} not served for {codename}; "
+            f"highest served in [P, M-1] = {target}"
+        )
     return target, held, reason
 
 
@@ -660,7 +678,9 @@ def detect(
         major: freeze_state(major, codename, fetch, github, now=now)
         for major in candidates
     }
-    target, held, reason = _target_reason(pinned, newest, served, ready, evidence)
+    target, held, reason = _target_reason(
+        codename, (pinned, newest), served, ready, evidence
+    )
     trunk = trunk_major(codename, fetch)
     if trunk - 1 not in {newest, newest + 1}:
         msg = f"trunk cross-check: K-1={trunk - 1} outside {{M, M+1}} for M={newest}"
@@ -941,6 +961,14 @@ def _rewrite_once(
     return rewritten
 
 
+def _require_detected_build(version: str, evidence: Freeze) -> None:
+    """Refuse a fresh apt version built from a different detection commit."""
+    build = _APT_BUILD.search(version)
+    if build is None or build.group(1) != evidence.apt_build:
+        msg = f"apt rebuilt -{evidence.major} since detection; re-run"
+        raise RuntimeError(msg)
+
+
 def plan_bump(
     root: Path, detection: Detection, fetch: Fetcher, *, explicit_control: bool = False
 ) -> BumpPlan:
@@ -957,6 +985,8 @@ def plan_bump(
         raise ValueError(msg)
     pins = _mapped_pins(before[_SYSTEM], pinned, target)
     version = _index_version(detection.codename, target, set(pins), fetch)
+    if not explicit_control and target > pinned:
+        _require_detected_build(version, detection.freeze_evidence[target])
     pins = {name: (version, active) for name, (_, active) in pins.items()}
     old = llvm_pins(before[_SYSTEM])
     counts = dict.fromkeys(old, 0)
@@ -1135,7 +1165,7 @@ def bump_main(
     fetch: Fetcher = default_fetcher,
     releases: ReleaseFetcher = fetch_releases,
 ) -> int:
-    """Print a plan or write an eligible bump; an IWYU hold changes no files."""
+    """Print a plan or write an eligible bump; IWYU/freeze holds change no files."""
     try:
         return _bump(
             root,
