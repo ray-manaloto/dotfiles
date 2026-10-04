@@ -1499,6 +1499,22 @@ paths = [
 per_path_tokens = { "hk.pkl" = ['pin_parity"', 'dotfiles-setup pin-parity"'], "python/src/dotfiles_setup/main.py" = ['"pin-parity",', '"pin-parity": lambda'], "python/src/dotfiles_setup/pin_parity.py" = ['def pin_parity_main(', 'def check_tool('], "tests/test_pin_parity.py" = ['def test_pattern_matching_nothing_fails('], "pin-parity.toml" = ['[tools.chezmoi]', '[tools.hk]', '[tools.mise]'], ".claude/skills/pin-parity/SKILL.md" = ['A pattern that matches nothing FAILS'] }
 
 [[suite]]
+name = "workflow.research-saved-search-wiring"
+description = "Saved searches bind the sweep Save phase to the task, engine, tests and skill."
+category = "workflow"
+check_type = "static"
+handler = "require_tokens"
+paths_required = true
+paths = [
+    "mise.toml",
+    ".claude/workflows/research-sweep-run.js",
+    "python/src/dotfiles_setup/saved_searches.py",
+    "tests/test_saved_searches.py",
+    ".claude/skills/research-sweep/SKILL.md",
+]
+per_path_tokens = { "mise.toml" = ["[tasks.research-saved-search]", "python -m dotfiles_setup.saved_searches'"], ".claude/workflows/research-sweep-run.js" = ["const SAVED_PATH =", "phase('Save')", "kind === 'saved-search-record'"], "python/src/dotfiles_setup/saved_searches.py" = ["def record_main(", "def rerun_main(", "def status_main("], "tests/test_saved_searches.py" = ["def test_record_never_saves_known_absent("], ".claude/skills/research-sweep/SKILL.md" = ["mise run research-saved-search -- rerun"] }
+
+[[suite]]
 name = "workflow.bash-logic-enforcement"
 description = "Zero-bash-logic policy wiring: the `bash_logic_budget` hk step must stay wired to the python enforcer end-to-end — hk.pkl shells out to `dotfiles-setup bash-budget`, main.py registers the subcommand, the bash_budget module (allowlist + per-file growth budget) + its tests exist, and the rule doc records the policy. The check LOGIC lives in python so the enforcer does not itself violate the policy it enforces; this contract asserts the whole chain so it can't drift out."
 category = "workflow"

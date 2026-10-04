@@ -39,6 +39,10 @@ dependencies = [
     # direction is dotfiles → KB only; the KB never learns about its consumers.
     "kb-setup @ git+https://github.com/ray-manaloto/knowledge-base@e8fe42ae208fbae227e733d38356416223d83ba7",
     "msgspec>=0.21.1",
+    # TOML WRITER for saved_searches (#1502). The stdlib `tomllib` only reads, and
+    # `msgspec.toml.encode` raises ImportError without tomli_w (measured
+    # 2026-10-03), so the only alternative was a hand-rolled emitter.
+    "tomli-w>=1.2.0",
 ]
 
 [project.scripts]
@@ -232,6 +236,12 @@ target-python-version = "3.14"
 # Explicit ruff formatters: the default (black+isort) is deprecated upstream,
 # and these run the venv's ruff with hk's own config.
 formatters = ["ruff-check", "ruff-format"]
+# Runs AFTER those: rewrites `from msgspec import` to `from dotfiles_setup.codec
+# import`, because only the codec may import msgspec (#1502; the in-container
+# ship caught two generated modules crossing that boundary).
+# A comma-separated STRING, not a list: 0.83.0's config validator calls
+# `.split(",")` on it (a list raised AttributeError, measured 2026-10-03).
+custom-formatters = "dotfiles_setup.codegen_imports"
 # Without it every run stamps a timestamp, so `--check` can never pass.
 disable-timestamp = true
 # `extra-fields = "forbid"` reaches msgspec output ONLY through the generic
@@ -260,3 +270,15 @@ input = "../schemas/drift-verdict.schema.json"
 output = "src/dotfiles_setup/generated/drift_verdict.py"
 custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
 """Generated drift-verdict enum; edit the schema and rerun `mise run codegen`."""'''
+
+[tool.datamodel-codegen.jobs.saved-search-file]
+input = "../schemas/saved-search-file.schema.json"
+output = "src/dotfiles_setup/generated/saved_search_file.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated saved-search file models; edit the schema and rerun codegen."""'''
+
+[tool.datamodel-codegen.jobs.saved-search-snapshot]
+input = "../schemas/saved-search-snapshot.schema.json"
+output = "src/dotfiles_setup/generated/saved_search_snapshot.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated saved-search snapshot models; edit the schema and rerun codegen."""'''

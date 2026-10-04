@@ -105,6 +105,30 @@ this repo use this skill and do not import `kb_setup.research`
   directory; outside `docs/` it is the file name); a `.`/`..` path segment or a
   dot-only slug is refused.
 
+  **Saved searches** (#1502) are recorded automatically on every exit before
+  Retrospect, independently of its setting. One haiku command records executed
+  queries from fresh dependency manifests, planner manifests, and code probes
+  into `docs/research/saved-searches/<report-slug>.toml`. Known-absent tokens are
+  never saved; reruns generate fresh controls. Saving adds `savedSearches`
+  (`written`, `not-written`, `save-null`, `no-line`, `mismatch`, or `skipped`)
+  without changing sweep status. `saveSearches: false` disables recording.
+  Generated files merge repeat observations; curated files are never overwritten.
+
+  Re-run a saved file with `mise run research-saved-search -- rerun FILE`
+  (optional `--id ID`, `--snapshot-dir DIR`, `--report PATH`, `--timeout S`).
+  The report diffs counts and NEW/GONE URLs against the previous snapshot or
+  recorded baseline. Snapshots stay in `.agent/kb/raw/saved-searches/`; reruns
+  leave TOML unchanged. Code calls are paced and zeros need fresh controls.
+  Code search ranks by best match with no date sort, so a top-`limit` window
+  never sees a new example ranked below it. So a code `query` watch defaults to
+  `collect = "all"`: it pages every hit (up to GitHub's 1000 cap; above it the
+  run is `uncollectable`) and diffs the full repo+path set. Set
+  `collect = "top"` to opt one out; controls always use the top window.
+  `mise run research-saved-search -- status [PATH ...]` reports cadence-based
+  staleness, defaulting to `docs/research/saved-searches/`.
+  Older report-only code rows can be imported with the `record` subcommand's
+  `--code-search 'query=QUERY'` (also `must-hit`, `health`, or `readme`).
+
   **Retrospect** (#1502) ends every run, early exits included: a READ-ONLY
   Explore agent records what was hard and proposes tuning, and a haiku writer
   saves it to `docs/research/kb/reports/agents/research-sweep-retrospect-<slug>.md`

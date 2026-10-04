@@ -70,14 +70,18 @@ import msgspec
 import msgspec.inspect
 
 __all__ = [
+    "UNSET",
     "AlreadyNativeError",
     "Format",
+    "Meta",
     "Struct",
+    "UnsetType",
     "UnsupportedTypeError",
     "dec_hook",
     "decode",
     "enc_hook",
     "encode",
+    "field",
     "register",
     "schema",
     "unregister",
@@ -86,6 +90,14 @@ __all__ = [
 #: The model base exported alongside the operations that consume those models.
 #: Keeping this alias here lets model modules honor the single msgspec boundary.
 Struct = msgspec.Struct
+#: The other names a GENERATED model declares with (`X | UnsetType = UNSET`,
+#: `Annotated[int, Meta(ge=-1)]`, `field(...)`). datamodel-codegen emits
+#: `from msgspec import ...` for them; `dotfiles_setup.codegen_imports` rewrites
+#: that to this module, so generated code keeps the single boundary too (#1502).
+UNSET = msgspec.UNSET
+UnsetType = msgspec.UnsetType
+Meta = msgspec.Meta
+field = msgspec.field
 
 #: Turns an unsupported instance into something msgspec can encode.
 _Encoder = Callable[[Any], Any]

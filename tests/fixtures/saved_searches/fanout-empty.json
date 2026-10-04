@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-10-03T01:50:43.856089+00:00",
+  "out_dir": "fixtures/fanout-empty",
+  "policy_version": null,
+  "query": "llvm apt.llvm.org version detect",
+  "repo": "jdx/mise",
+  "request_id": null,
+  "sources": [
+    {
+      "control": {
+        "count": 10,
+        "query": "mise"
+      },
+      "elapsed_s": 0.9482402499997988,
+      "items": [],
+      "raw_file": "fixtures/fanout-empty/github-issues.raw",
+      "raw_sha256": "c9938edecb99d754b2d039ac9eec320a94c769b6a6417921e2dcbef9e2fe01a0",
+      "reason": null,
+      "source": "github-issues",
+      "status": "empty_verified"
+    },
+    {
+      "control": {
+        "count": 10,
+        "query": "mise"
+      },
+      "elapsed_s": 1.331333749985788,
+      "items": [],
+      "raw_file": "fixtures/fanout-empty/github-discussions.raw",
+      "raw_sha256": "e56779ec134a9f8d1d081cbb18e643fab4abb2dbcbc9b45057d681aa549f358e",
+      "reason": null,
+      "source": "github-discussions",
+      "status": "empty_verified"
+    },
+    {
+      "control": {
+        "count": 1,
+        "query": "jdx/mise"
+      },
+      "elapsed_s": 3.050178999954369,
+      "items": [],
+      "raw_file": "fixtures/fanout-empty/github-releases.raw",
+      "raw_sha256": "f6dcb7be16a373daba862ce3c527cc9be5afdbbd0eb1db802cd297e6b81ea69a",
+      "reason": null,
+      "source": "github-releases",
+      "status": "empty_verified"
+    }
+  ],
+  "strict_five": false
+}
