@@ -124,6 +124,15 @@ const READ_BATCH = 3                                                // URLs per 
 const VERIFY_MAX = Number.isInteger(A.verifyMax) ? A.verifyMax : 5  // claims refuted
 const SOURCES = ['github-issues', 'github-discussions', 'github-releases', 'exa', 'context7',
   'firecrawl-developer', 'firecrawl-search', 'last30days']
+const FAILURE_CODES = new Set(['credits-exhausted', 'prerequisite', 'http-error', 'invalid-json', 'shape-error', 'provider-failure', 'process-failed', 'timeout', 'request-failed', 'credential-invalid', 'canary-failed', 'canary-empty', 'no-canary', 'not-found', 'redirected', 'empty-output', 'io-error', 'other'])
+const WORKFLOW_CODES = new Set(['probe-missing', 'invalid-probe'])
+const PROVISIONAL_ROUTES = { exa: [], context7: [], 'firecrawl-developer': [], 'firecrawl-search': ['serper', 'serpapi'] }
+const MIRROR_ROUTES = ['firecrawl', 'webclaw']
+const MAX_PROBE_ENTRIES = 8
+const REQUIRED_FAILED = new RegExp(`^(${SOURCES.join('|')}): (ok|empty_verified|empty_unverified|error|skipped|not run|invalid|no manifest|unreadable)( \\((${[...FAILURE_CODES].join('|')})\\))?$`)
+const requiredFailed = value => Array.isArray(value) && value.length <= MAX_PROBE_ENTRIES
+  ? value.map(entry => typeof entry === 'string' && REQUIRED_FAILED.test(entry) ? entry : 'unrecognised required_failed entry')
+  : ['unrecognised required_failed entry']
 // The mandatory dependency-repo stage (12): every repo the question is about, searched on GitHub.
 // Every one of these must answer (ok / empty_verified) — the probe reads each from the manifest (#1473).
 const DEP_SOURCES = 'github-issues,github-discussions,github-releases'
@@ -478,7 +487,7 @@ const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
     if (q !== null && ran !== q) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${ran}")`)
     if (q === null && ran.startsWith('<')) mandatoryGaps.push(`dependency-repo stage for ${r}: the question-terms placeholder "${ran}" ran verbatim, so ${r} was not searched for the QUESTION`)
     else if (q === null && REPO_NAMES.includes(asName(ran))) mandatoryGaps.push(`dependency-repo stage for ${r}: question-terms query "${ran}" is a repo name, so ${r} was not searched for the QUESTION`)
-    const failed = (Array.isArray(m.required_failed) ? m.required_failed : ['required_failed missing'])
+    const failed = requiredFailed(m.required_failed)
       .filter(f => !disabled.some(d => f.startsWith(`${d}:`)))
     // #1473: releases answering must not hide an issues search that failed.
     if (failed.length) mandatoryGaps.push(`dependency-repo stage for ${r}: "${ran}" — ${failed.join('; ')}`)
@@ -492,15 +501,26 @@ const mirror = LINKS.map((url, i) => {
   if (!m) {
     const why = mirrorResults[i] === null ? 'agent reported nothing (null)' : `no PROBE-JSON line for ${mirrorProbeOut(i + 1)}`
     mandatoryGaps.push(`mirror stage for ${url}: ${why}`)
-    return { url, path, rc: null, bytes: 0, reason: `mirror ${why}` }
+    return { url, path, rc: null, bytes: 0, code: 'probe-missing' }
   }
-  // The probe's own reason wins: a 404 page comes back rc=0 WITH bytes, and it is not a mirror.
-  return { url, path, rc: m.rc, bytes: m.bytes, reason: m.reason || (m.rc === 0 && m.bytes > 0 ? '' : `rc=${m.rc}, ${m.bytes} bytes`),
-    route: m.route, provisional: m.provisional === true, primaryReason: m.primary_reason || '' }
+  if (!MIRROR_ROUTES.includes(m.route) || !(m.code === '' || FAILURE_CODES.has(m.code)) ||
+      !Number.isInteger(m.rc) || !Number.isInteger(m.bytes) || typeof m.provisional !== 'boolean' ||
+      (m.code === '' && !(m.rc === 0 && m.bytes >= 0))) {
+    mandatoryGaps.push(`mirror stage for ${url}: probe row failed validation`)
+    return { url, path, rc: null, bytes: 0, code: 'invalid-probe' }
+  }
+  return { url, path, rc: m.rc, bytes: m.bytes, code: m.code === '' && m.bytes === 0 ? 'empty-output' : m.code,
+    httpStatus: Number.isInteger(m.http_status) ? m.http_status : null,
+    route: m.route, provisional: m.provisional }
 })
-const mirrored = m => m.rc === 0 && m.bytes > 0 && !m.reason
+const mirrored = m => m.rc === 0 && m.bytes > 0 && !m.code
+const codeText = m => {
+  const code = m.code === 'http-error' && Number.isInteger(m.httpStatus) && m.httpStatus >= 100 && m.httpStatus <= 599
+    ? `http-error ${m.httpStatus}` : FAILURE_CODES.has(m.code) || WORKFLOW_CODES.has(m.code) ? m.code : 'invalid-probe'
+  return m.route === 'webclaw' ? `credits-exhausted; webclaw ${code}` : code
+}
 // A link firecrawl could not fetch is the WORLD, not the process: a named gap, not a mandatory one.
-const mirrorGaps = mirror.filter(m => m.rc !== null && m.reason).map(m => `${m.url}: not mirrored (${m.reason})`)
+const mirrorGaps = mirror.filter(m => m.rc !== null && m.code).map(m => `${m.url}: not mirrored (${codeText(m)})`)
 // Code search = the planner's rows + the search-health control + one README control per searched repo.
 const answered = c => c.rc === 0 && !c.rateLimited && !c.incomplete && c.count >= 0
 const outcome = c => (c.rateLimited ? 'was RATE-LIMITED (HTTP 403/429), not 0'
@@ -516,7 +536,7 @@ else if (depProbes.length && depProbes[0] !== null && !healthRow) mandatoryGaps.
 const RATE_LIMIT_STATUS = [403, 429]
 const repoCheckGap = (r, ex) => {
   if (!ex) return `could not check ${r} via the repos API (no repo-check probe row)`
-  const fullName = typeof ex.full_name === 'string' ? ex.full_name.trim() : ''
+  const fullName = typeof ex.full_name === 'string' && REPO_SHAPE.test(ex.full_name.trim()) ? ex.full_name.trim() : ''
   if (ex.http_status === 404) return `dependency repo ${r} not found via the repos API (HTTP 404)`
   if (ex.http_status !== 200 || ex.rc !== 0 || !fullName) return `could not check ${r} via the repos API (HTTP ${ex.http_status}${RATE_LIMIT_STATUS.includes(ex.http_status) ? ' — rate-limited or forbidden' : ''}${ex.http_status === 200 ? `, rc=${ex.rc}, fullName "${fullName}"` : ''})`
   // The API follows a rename (jdx/rtx -> jdx/mise, rc=0) while search under the old name returns 0.
@@ -632,10 +652,17 @@ if (planManifests.length && planManifestProbe === null) {
   fanoutGaps.push('planner provisional check did not run')
   mandatoryGaps.push('planner provisional check did not run')
 }
-const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m =>
-  (Array.isArray(m.provisional) ? m.provisional : []).map(line => `${m.path}: ${line}`))
+const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m => {
+  if (!Array.isArray(m.provisional) || m.provisional.length > MAX_PROBE_ENTRIES || m.provisional_invalid === true ||
+      !m.provisional.every(e => e && typeof e.source === 'string' && Object.hasOwn(PROVISIONAL_ROUTES, e.source) &&
+        (e.route === null || PROVISIONAL_ROUTES[e.source].includes(e.route)))) {
+    mandatoryGaps.push(`${m.path}: provisional projection failed validation`)
+    return []
+  }
+  return m.provisional.map(e => `${m.path}: ${e.source}${e.route ? ` via ${e.route}` : ' skipped'} (credits-exhausted)`)
+})
 const provisionalRoutes = [...new Set([
-  ...mirror.filter(m => m.provisional && mirrored(m)).map(m => `${m.url}: mirrored via ${m.route} (${m.primaryReason})`),
+  ...mirror.filter(m => m.provisional && mirrored(m)).map(m => `${m.url}: mirrored via webclaw (credits-exhausted)`),
   ...manifestProvisional(planManifestProbe),
   ...depProbes.flatMap(manifestProvisional),
 ])]
@@ -676,7 +703,7 @@ for (let i = 0; i < LINKS.length; i += READ_BATCH) {
     'Only a link marked NO MIRROR is read live — and say in each of its claims that the mirror failed.', ...READ_RULES,
     ...batch.map(u => {
       const m = mirror[LINKS.indexOf(u)]
-      return mirrored(m) ? `- ${u}  (mirror: ${m.path}, ${m.bytes} bytes)` : withFetch(u, `NO MIRROR: ${m.reason}`)
+      return mirrored(m) ? `- ${u}  (mirror: ${m.path}, ${m.bytes} bytes)` : withFetch(u, `NO MIRROR: ${codeText(m)}`)
     }),
   ].join('\n'), { schema: CLAIMS }) })
 }

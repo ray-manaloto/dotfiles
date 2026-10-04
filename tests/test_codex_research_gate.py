@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -382,3 +383,199 @@ def test_provisional_stop_names_each_source_and_route_once(
         assert "decision" not in continued
     else:
         assert result == {}
+
+
+def _projection_receipt(tmp_path: Path, prose: str) -> tuple[dict[str, object], Path]:
+    """Create bound evidence for the real hook, including a skipped fallback."""
+    base: dict[str, object] = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+    )
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    path = _hook_manifest(directory)
+    data = json.loads(path.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "firecrawl-search")
+    attempts = []
+    for route, payload, status, reason in (
+        (
+            "firecrawl-search",
+            {
+                "http_status": None,
+                "rc": 1,
+                "body": "",
+                "stderr_redacted": "Insufficient credits " + prose,
+            },
+            "skipped",
+            "Insufficient credits " + prose,
+        ),
+        (
+            "serper",
+            {
+                "http_status": 400,
+                "rc": None,
+                "body": json.dumps({"message": "Not enough credits " + prose}),
+                "stderr_redacted": "",
+            },
+            "skipped",
+            "Not enough credits " + prose,
+        ),
+        (
+            "serpapi",
+            {"organic_results": [{"link": "https://primary.test"}]},
+            "ok",
+            None,
+        ),
+    ):
+        raw = json.dumps(payload).encode()
+        label = "primary" if route == "firecrawl-search" else route
+        evidence = directory / f"firecrawl-search.{label}.raw"
+        evidence.write_bytes(raw)
+        attempts.append(
+            {
+                "route": route,
+                "status": status,
+                "reason": reason,
+                "raw_file": str(evidence),
+                "raw_sha256": hashlib.sha256(raw).hexdigest(),
+            }
+        )
+    Path(row["raw_file"]).write_bytes(raw)
+    row.update(
+        route="serpapi",
+        provisional=True,
+        reason=prose,
+        raw_sha256=hashlib.sha256(raw).hexdigest(),
+        attempts=attempts,
+    )
+    path.write_text(json.dumps(data))
+    return base, path
+
+
+def test_projection_stop_exact_reason_and_prose_invariance(tmp_path: Path) -> None:
+    """T1/T2: transport and manifest prose never change the continuation."""
+    reasons = []
+    for n in range(2):
+        sentinel = "hook-diagnostic-" + uuid.uuid4().hex
+        base, _ = _projection_receipt(tmp_path / str(n), sentinel)
+        result = _invoke(tmp_path / str(n), {**base, "hook_event_name": "Stop"})
+        assert result["decision"] == "block"
+        assert result["reason"] == (
+            "Research receipt PROVISIONAL (credit-exhausted provider). "
+            "Name PROVISIONAL and each of "
+            "these in the answer: firecrawl-developer; firecrawl-search via serpapi."
+        )
+        assert sentinel not in json.dumps(result)
+        reasons.append(result["reason"])
+    assert reasons[0] == reasons[1]
+
+
+@pytest.mark.parametrize("invalid", ["route", "source"])
+def test_projection_stop_invalid_identifiers(tmp_path: Path, invalid: str) -> None:
+    """T4: route and non-metered source controls pin distinct fixed errors."""
+    sentinel = "invalid-id-" + uuid.uuid4().hex
+    base, path = _projection_receipt(tmp_path, sentinel)
+    data = json.loads(path.read_text())
+    if invalid == "route":
+        row = next(r for r in data["sources"] if r["source"] == "firecrawl-search")
+        row["route"] = "serper; " + sentinel
+        expected = "firecrawl-search invalid fallback route"
+    else:
+        row = next(r for r in data["sources"] if r["source"] == "github-issues")
+        raw = b'{"http_status":402,"rc":null,"body":"","stderr_redacted":""}'
+        primary = path.parent / "github-issues.primary.raw"
+        primary.write_bytes(raw)
+        Path(row["raw_file"]).write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        row.update(
+            status="skipped",
+            items=[],
+            provisional=True,
+            skip_reason="credits-exhausted",
+            raw_sha256=digest,
+            attempts=[
+                {
+                    "route": "github-issues",
+                    "status": "skipped",
+                    "raw_file": str(primary),
+                    "raw_sha256": digest,
+                }
+            ],
+        )
+        expected = "github-issues invalid provisional source"
+    path.write_text(json.dumps(data))
+    result = _invoke(tmp_path, {**base, "hook_event_name": "Stop"})
+    assert result["decision"] == "block"
+    assert str(result["reason"]).startswith(f"Research coverage failed: {expected}.")
+    assert sentinel not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    ("message", "active", "blocked"),
+    [
+        ("PROVISIONAL exactly", False, True),
+        ("PROVISIONAL exa", False, False),
+        (None, False, True),
+        (None, True, False),
+        ("RESEARCH INCOMPLETE: earlier failure", True, False),
+    ],
+)
+def test_projection_stop_exa_token_boundary(
+    tmp_path: Path, message: str | None, *, active: bool, blocked: bool
+) -> None:
+    """T3/T5: exactly cannot acknowledge exa through a substring match."""
+    base, path = _projection_receipt(tmp_path, "ordinary prose")
+    data = json.loads(path.read_text())
+    for row in data["sources"]:
+        if row["source"] in {"firecrawl-search", "firecrawl-developer"}:
+            row.update(
+                provisional=False,
+                route=None,
+                status="ok",
+                skip_reason=None,
+                items=[{"url": "https://primary.test"}],
+            )
+            payload = (
+                {"success": True, "data": {"web": [{"url": "https://primary.test"}]}}
+                if row["source"] == "firecrawl-search"
+                else {"success": True, "results": [{"url": "https://primary.test"}]}
+            )
+            raw = json.dumps(payload).encode()
+            Path(row["raw_file"]).write_bytes(raw)
+            row["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        if row["source"] == "exa":
+            raw = b'{"http_status":402,"rc":null,"body":"","stderr_redacted":""}'
+            primary = path.parent / "exa.primary.raw"
+            primary.write_bytes(raw)
+            Path(row["raw_file"]).write_bytes(raw)
+            digest = hashlib.sha256(raw).hexdigest()
+            row.update(
+                status="skipped",
+                items=[],
+                provisional=True,
+                skip_reason="credits-exhausted",
+                raw_sha256=digest,
+                attempts=[
+                    {
+                        "route": "exa",
+                        "status": "skipped",
+                        "raw_file": str(primary),
+                        "raw_sha256": digest,
+                    }
+                ],
+            )
+    path.write_text(json.dumps(data))
+    result = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": message,
+            "stop_hook_active": active,
+        },
+    )
+    assert (result.get("decision") == "block") is blocked

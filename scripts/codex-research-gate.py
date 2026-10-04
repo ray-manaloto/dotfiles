@@ -104,7 +104,7 @@ def _on_submit(event: dict[str, object], marker: Path) -> dict[str, object]:
 def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
-        if verdict.provisional:
+        if verdict.provisional_entries:
             message = event.get("last_assistant_message")
             tokens = [
                 token
@@ -120,13 +120,15 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
             )
             if named or event.get("stop_hook_active") is True:
                 return {}
+            listed = "; ".join(
+                entry.source + (f" via {entry.route}" if entry.route else "")
+                for entry in verdict.provisional_entries
+            )
             return {
                 "decision": "block",
                 "reason": "Research receipt PROVISIONAL "
-                "(credit-exhausted provider): "
-                + "; ".join(verdict.provisional)
-                + ". Name PROVISIONAL and every source, plus via <route> for each "
-                "substituted source, in the answer.",
+                "(credit-exhausted provider). Name PROVISIONAL and each of "
+                f"these in the answer: {listed}.",
             }
         return {}
     reason = verdict.reason

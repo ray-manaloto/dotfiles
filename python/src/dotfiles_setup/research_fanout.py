@@ -110,6 +110,87 @@ class SkipReason(Enum):
     CREDITS_EXHAUSTED = "credits-exhausted"
 
 
+class FailureCode(Enum):
+    """Closed set of model-visible codes, independent of provider text."""
+
+    CREDITS_EXHAUSTED = "credits-exhausted"
+    PREREQUISITE = "prerequisite"
+    HTTP_ERROR = "http-error"
+    INVALID_JSON = "invalid-json"
+    SHAPE_ERROR = "shape-error"
+    PROVIDER_FAILURE = "provider-failure"
+    PROCESS_FAILED = "process-failed"
+    TIMEOUT = "timeout"
+    REQUEST_FAILED = "request-failed"
+    CREDENTIAL_INVALID = "credential-invalid"
+    CANARY_FAILED = "canary-failed"
+    CANARY_EMPTY = "canary-empty"
+    NO_CANARY = "no-canary"
+    NOT_FOUND = "not-found"
+    REDIRECTED = "redirected"
+    EMPTY_OUTPUT = "empty-output"
+    IO_ERROR = "io-error"
+    OTHER = "other"
+
+
+_PREREQUISITE_TEXTS = frozenset(
+    {
+        "needs --repo",
+        "needs gh",
+        "EXA_API_KEY not inherited; run through fnox exec",
+        "needs ctx7",
+        "needs firecrawl",
+        "needs last30days script",
+        "SERPER_API_KEY not inherited; run through fnox exec",
+        "SERP_API_KEY not inherited; run through fnox exec",
+    }
+)
+
+
+def failure_code(
+    reason: object, *, status: object, skip_reason: object = None
+) -> FailureCode | None:
+    """Project producer literals to finite codes; never return diagnostic text."""
+    if status in (Status.OK.value, Status.EMPTY_VERIFIED.value):
+        return None
+    if skip_reason == SkipReason.CREDITS_EXHAUSTED.value:
+        return FailureCode.CREDITS_EXHAUSTED
+    if skip_reason == SkipReason.PREREQUISITE.value or (
+        status == Status.SKIPPED.value
+        and isinstance(reason, str)
+        and reason in _PREREQUISITE_TEXTS
+    ):
+        return FailureCode.PREREQUISITE
+    if not isinstance(reason, str):
+        return FailureCode.OTHER
+    if re.fullmatch(r"HTTP \d{3}", reason):
+        return FailureCode.HTTP_ERROR
+    literals = {
+        "invalid JSON": FailureCode.INVALID_JSON,
+        "unexpected response shape": FailureCode.SHAPE_ERROR,
+        "unexpected discussions search shape": FailureCode.SHAPE_ERROR,
+        "unexpected JSON shape": FailureCode.SHAPE_ERROR,
+        "unexpected fallback response shape": FailureCode.SHAPE_ERROR,
+        "response contained errors": FailureCode.SHAPE_ERROR,
+        "provider reported failure": FailureCode.PROVIDER_FAILURE,
+        "timed out": FailureCode.TIMEOUT,
+        "request failed": FailureCode.REQUEST_FAILED,
+        "response too large": FailureCode.REQUEST_FAILED,
+        "incomplete response": FailureCode.REQUEST_FAILED,
+        "canary failed": FailureCode.CANARY_FAILED,
+        "canary returned 0 items": FailureCode.CANARY_EMPTY,
+        "no canary": FailureCode.NO_CANARY,
+        "script disappeared": FailureCode.NOT_FOUND,
+        "unknown source": FailureCode.NOT_FOUND,
+    }
+    code = literals.get(reason, FailureCode.OTHER)
+    if re.match(r"^exited -?\d+: ", reason):
+        code = FailureCode.PROCESS_FAILED
+    elif reason.startswith("invalid credential header for "):
+        code = FailureCode.CREDENTIAL_INVALID
+    return code
+
+
 CREDIT_METERED_SOURCES = frozenset(
     {"exa", "context7", "firecrawl-developer", "firecrawl-search"}
 )
@@ -145,6 +226,22 @@ def is_credit_exhaustion(http_status: int | None, text: str) -> bool:
     if http_status is None:
         return bool(_CREDIT_TEXT.search(text))
     return False
+
+
+def _fallback_credit(http_status: int | None, body: str) -> bool:
+    """Re-derive fallback exhaustion from failing transport and top-level fields."""
+    if http_status is None or _HTTP_OK <= http_status < _HTTP_REDIRECT:
+        return False
+    if is_credit_exhaustion(http_status, body):
+        return True
+    try:
+        payload = json.loads(body)
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and any(
+        isinstance(payload.get(key), str) and _FALLBACK_CREDIT_TEXT.search(payload[key])
+        for key in ("message", "error")
+    )
 
 
 @dataclass(frozen=True)
@@ -1338,7 +1435,7 @@ def _attempt_credit(attempt: _Attempt) -> bool:
     return is_credit_exhaustion(status, text)
 
 
-def _primary_envelope(attempt: _Attempt) -> bytes:
+def _transport_envelope(attempt: _Attempt) -> bytes:
     return json.dumps(
         {
             "http_status": attempt.http_status,
@@ -1389,7 +1486,7 @@ def _credit_result(
     source: str, request: FanoutRequest, primary: _Attempt, run: _CreditRun
 ) -> _Fetch:
     boundaries, deadline, started = run.boundaries, run.deadline, run.started
-    envelope = _primary_envelope(primary)
+    envelope = _transport_envelope(primary)
     reason = _redact_request_text(
         primary.stderr_redacted.strip()
         or primary.raw.decode(errors="replace").strip()
@@ -1425,12 +1522,8 @@ def _credit_result(
         final = _fallback_attempt(fallback, request, run)
         fallback_status = Status.ERROR
         fallback_reason = final.error
-        # Only fallback attempts accept these provider phrases at any status.
-        # Serper's exhaustion status is unverified; primary status gating stays.
-        fallback_credit = _FALLBACK_CREDIT_TEXT.search(
-            final.raw.decode(errors="replace")
-        )
-        if final.error and (_attempt_credit(final) or fallback_credit):
+        body_text = final.raw.decode(errors="replace")
+        if final.error and _fallback_credit(final.http_status, body_text):
             fallback_status = Status.SKIPPED
             fallback_reason = (
                 final.raw.decode(errors="replace").strip() or final.error
@@ -1461,7 +1554,11 @@ def _credit_result(
                 None,
             )
         )
-        evidence.append(final.raw)
+        evidence.append(
+            _transport_envelope(final)
+            if fallback_status is Status.SKIPPED
+            else final.raw
+        )
         if fallback_status in {Status.OK, Status.EMPTY_VERIFIED}:
             status, route, reason = fallback_status, fallback, None
             break
@@ -1977,22 +2074,27 @@ class StrictVerdict:
 def _provisional_line(row: dict[str, object]) -> str:
     source = str(row.get("source", "unknown"))
     attempts = row.get("attempts")
-    primary_reason = str(row.get("reason") or "credits-exhausted")
     errors = []
     if isinstance(attempts, list) and attempts:
-        primary = attempts[0]
-        if isinstance(primary, dict):
-            primary_reason = str(primary.get("reason") or primary_reason)
-        errors = [
-            f"{a.get('route')}: {a.get('reason')}"
-            for a in attempts[1:]
-            if isinstance(a, dict)
-            and a.get("status") in {Status.ERROR.value, Status.SKIPPED.value}
-        ]
+        for attempt in attempts[1:]:
+            if not isinstance(attempt, dict) or attempt.get("status") not in {
+                Status.ERROR.value,
+                Status.SKIPPED.value,
+            }:
+                continue
+            if attempt.get("status") == Status.SKIPPED.value:
+                code = (
+                    FailureCode.CREDITS_EXHAUSTED
+                    if attempt.get("raw_file")
+                    else FailureCode.PREREQUISITE
+                )
+            else:
+                code = failure_code(attempt.get("reason"), status=attempt.get("status"))
+            errors.append(f"{attempt.get('route')}: {code.value if code else ''}")
     line = (
-        f"{source} via {row['route']} (credits-exhausted: {primary_reason})"
+        f"{source} via {row['route']} (credits-exhausted)"
         if row.get("route")
-        else f"{source} skipped: credits-exhausted ({primary_reason}); "
+        else f"{source} skipped: credits-exhausted; "
         + (
             "no fallback succeeded"
             if _FALLBACK_ROUTES.get(source)
@@ -2063,13 +2165,10 @@ def _credit_attempts(
             raise _ReceiptError(message)
         seen.append(route)
         if attempt.get("raw_file") is None:
-            if (
-                route == source
-                or attempt.get("raw_sha256") is not None
-                or attempt.get("status") != Status.SKIPPED.value
-            ):
+            if route == source:
                 message = "missing attempt evidence"
                 raise _ReceiptError(message)
+            _validate_fallback_prerequisite(attempt, str(route))
             continue
         label = "primary" if route == source else route
         raw = _bound_raw(
@@ -2079,10 +2178,40 @@ def _credit_attempts(
         )
         if route == source:
             primary_raw = raw
+        elif attempt.get("status") == Status.SKIPPED.value:
+            _validate_fallback_credit(raw)
     return attempts, primary_raw
 
 
-def _credit_envelope(raw: bytes) -> _Attempt:
+def _validate_fallback_prerequisite(attempt: dict[str, object], route: str) -> None:
+    if (
+        attempt.get("raw_sha256") is not None
+        or attempt.get("status") != Status.SKIPPED.value
+        or attempt.get("reason")
+        != f"{_FALLBACK_KEYS[route]} not inherited; run through fnox exec"
+    ):
+        message = "invalid fallback prerequisite skip"
+        raise _ReceiptError(message)
+
+
+def _validate_fallback_credit(raw: bytes) -> None:
+    try:
+        transport = _decode_transport_envelope(raw)
+    except ValueError:
+        message = "fallback credit skip does not re-derive"
+        raise _ReceiptError(message) from None
+    if (
+        type(transport.http_status) is not int
+        or transport.rc is not None
+        or not _fallback_credit(
+            transport.http_status, transport.raw.decode(errors="replace")
+        )
+    ):
+        message = "fallback credit skip does not re-derive"
+        raise _ReceiptError(message)
+
+
+def _decode_transport_envelope(raw: bytes) -> _Attempt:
     envelope = _decode_json(raw)
     if (
         not isinstance(envelope, dict)
@@ -2097,7 +2226,7 @@ def _credit_envelope(raw: bytes) -> _Attempt:
     ):
         message = "malformed primary transport"
         raise _ReceiptError(message)
-    attempt = _Attempt(
+    return _Attempt(
         (),
         envelope["body"].encode(),
         "provider failure",
@@ -2105,6 +2234,10 @@ def _credit_envelope(raw: bytes) -> _Attempt:
         rc=rc,
         stderr_redacted=envelope["stderr_redacted"],
     )
+
+
+def _credit_envelope(raw: bytes) -> _Attempt:
+    attempt = _decode_transport_envelope(raw)
     if not _attempt_credit(attempt):
         message = "credit-exhaustion evidence does not re-derive"
         raise _ReceiptError(message)
@@ -2428,7 +2561,9 @@ def _repo_check_probe(
         "http_status": response.status,
         # Trimmed: a stray newline must never read as a rename (round-4 L5).
         "full_name": full_name.strip()
-        if response.status == _HTTP_OK and isinstance(full_name, str)
+        if response.status == _HTTP_OK
+        and isinstance(full_name, str)
+        and _REPO_SHAPE.fullmatch(full_name.strip())
         else "",
         "rate_limited": response.rate_limited,
         # A DISABLED tracker is the world, not a failed search: a repo with
@@ -2479,18 +2614,36 @@ def _fanout_manifest_probe(
         "sources": {},
         "required_failed": [],
         "provisional": [],
+        "provisional_invalid": False,
     }
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         rows = manifest["sources"]
-        statuses = {r["source"]: (r["status"], r.get("reason")) for r in rows}
+        statuses = {
+            r["source"]: (r["status"], r.get("reason"), r.get("skip_reason"))
+            for r in rows
+            if isinstance(r, dict)
+            and isinstance(r.get("source"), str)
+            and r["source"] in _SOURCE_NAMES
+        }
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
         row["required_failed"] = [f"{name}: {reason}" for name in required]
         return row
-    row["provisional"] = [
-        _provisional_line(r) for r in rows if r.get("provisional") is True
-    ]
+    provisional = []
+    for candidate in rows:
+        if not isinstance(candidate, dict) or candidate.get("provisional") is not True:
+            continue
+        source, route = candidate.get("source"), candidate.get("route")
+        if (
+            isinstance(source, str)
+            and source in CREDIT_METERED_SOURCES
+            and (route is None or route in _FALLBACK_ROUTES.get(source, ()))
+        ):
+            provisional.append({"source": source, "route": route})
+        else:
+            row["provisional_invalid"] = True
+    row["provisional"] = provisional[: len(_SOURCE_NAMES)]
     age = _manifest_age(manifest, clock)
     row["query"] = manifest.get("query")
     row["age_s"] = None if age is None else round(age, 1)
@@ -2502,38 +2655,59 @@ def _fanout_manifest_probe(
         and -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s
         and (expect_request_id is None or row["request_id"] == expect_request_id)
     )
-    row["sources"] = {name: status for name, (status, _) in statuses.items()}
+    status_values = tuple(s.value for s in Status)
+    row["sources"] = {
+        name: status if status in status_values else "invalid"
+        for name, (status, _, _) in statuses.items()
+    }
     successful = {Status.OK.value, Status.EMPTY_VERIFIED.value}
     failed = []
     for name in required:
-        status, reason = statuses.get(name, (None, None))
-        if status not in successful:
-            detail = f" ({reason})" if reason else ""
-            failed.append(f"{name}: {status or 'not run'}{detail}")
-    row["required_failed"] = failed
+        status, reason, skip = statuses.get(name, (None, None, None))
+        if status not in tuple(successful):
+            projected_status = (
+                "not run"
+                if status is None
+                else status
+                if status in status_values
+                else "invalid"
+            )
+            code = failure_code(reason, status=status, skip_reason=skip)
+            detail = f" ({code.value})" if code else ""
+            failed.append(f"{name}: {projected_status}{detail}")
+    row["required_failed"] = failed[: len(_SOURCE_NAMES)]
     return row
 
 
 def _webclaw_mirror(
     url: str, path: Path, runner: Runner, timeout: float
-) -> tuple[int, str]:
+) -> tuple[int, str, str]:
     try:
         completed = runner(
             ["webclaw", "-f", "json", url], timeout=timeout, env=child_env.clean_env()
         )
     except FileNotFoundError:
-        return _RC_NOT_FOUND, "credits-exhausted; webclaw not found on PATH"
+        return (
+            _RC_NOT_FOUND,
+            "credits-exhausted; webclaw not found on PATH",
+            FailureCode.NOT_FOUND.value,
+        )
     except subprocess.TimeoutExpired:
-        return _RC_TIMEOUT, "credits-exhausted; webclaw timed out"
+        return (
+            _RC_TIMEOUT,
+            "credits-exhausted; webclaw timed out",
+            FailureCode.TIMEOUT.value,
+        )
     if completed.returncode != 0:
         return (
             completed.returncode,
             f"credits-exhausted; webclaw rc={completed.returncode}",
+            FailureCode.PROCESS_FAILED.value,
         )
     return _write_webclaw_mirror(completed.stdout or b"", url, path)
 
 
-def _write_webclaw_mirror(raw: bytes, url: str, path: Path) -> tuple[int, str]:
+def _write_webclaw_mirror(raw: bytes, url: str, path: Path) -> tuple[int, str, str]:
     try:
         payload = _decode_json(raw)
         content = payload.get("content") if isinstance(payload, dict) else None
@@ -2551,15 +2725,26 @@ def _write_webclaw_mirror(raw: bytes, url: str, path: Path) -> tuple[int, str]:
             actual.netloc.casefold(),
             actual.path.rstrip("/"),
         ):
-            return 0, "credits-exhausted; webclaw redirected to " + _redact_text(
-                str(final), dict(os.environ)
+            return (
+                0,
+                "credits-exhausted; webclaw redirected to "
+                + _redact_text(str(final), dict(os.environ)),
+                FailureCode.REDIRECTED.value,
             )
         if not isinstance(markdown, str) or not markdown.strip():
-            return 0, "credits-exhausted; webclaw rc=0, empty markdown"
+            return (
+                0,
+                "credits-exhausted; webclaw rc=0, empty markdown",
+                FailureCode.EMPTY_OUTPUT.value,
+            )
         path.write_text(_redact_text(markdown, dict(os.environ)), encoding="utf-8")
     except ValueError:
-        return 0, "credits-exhausted; webclaw output was not JSON"
-    return 0, ""
+        return (
+            0,
+            "credits-exhausted; webclaw output was not JSON",
+            FailureCode.INVALID_JSON.value,
+        )
+    return 0, "", ""
 
 
 def _mirror_probe(
@@ -2572,7 +2757,7 @@ def _mirror_probe(
         "path": str(path),
         "route": "firecrawl",
         "provisional": False,
-        "primary_reason": "",
+        "detail": {"reason": "", "primary_reason": ""},
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2583,10 +2768,15 @@ def _mirror_probe(
             "rc": 1,
             "http_status": 0,
             "bytes": 0,
-            "reason": f"cannot prepare {path}: {type(exc).__name__}",
+            "code": FailureCode.IO_ERROR.value,
+            "detail": {
+                "reason": f"cannot prepare {path}: {type(exc).__name__}",
+                "primary_reason": "",
+            },
         }
     env = child_env.clean_env(keep=frozenset({"FIRECRAWL_API_KEY"}))
     status = 0
+    primary_reason = ""
     deadline = _Deadline.after(timeout)
     try:
         completed = runner(
@@ -2608,10 +2798,11 @@ def _mirror_probe(
             (completed.stdout or b"").decode(errors="replace"), env
         ).encode()
         reason = next((p.strip() for p in redacted.splitlines() if p.strip()), "")
+        code = FailureCode.PROCESS_FAILED.value if rc else ""
         failure_payload = False
         claimed_status = None
         if rc == 0:
-            status, markdown, reason = _scrape_payload(raw)
+            status, markdown, reason, code = _scrape_payload(raw)
             try:
                 payload = _decode_json(raw)
                 failure_payload = (
@@ -2631,45 +2822,67 @@ def _mirror_probe(
             claimed_status, redacted + "\n" + raw.decode(errors="replace")
         )
         if credit:
-            row["primary_reason"] = (
-                redacted.strip() or raw.decode(errors="replace")
-            ).replace("\n", " | ")[-300:]
+            primary_reason = (redacted.strip() or raw.decode(errors="replace")).replace(
+                "\n", " | "
+            )[-300:]
             row["route"] = "webclaw"
-            rc, reason = _webclaw_mirror(url, path, runner, deadline.remaining())
+            rc, reason, code = _webclaw_mirror(url, path, runner, deadline.remaining())
             status = 0
             row["provisional"] = rc == 0 and not reason
     except subprocess.TimeoutExpired, TimeoutError:
         rc, reason = _RC_TIMEOUT, "timed out"
+        code = FailureCode.TIMEOUT.value
     except FileNotFoundError:
         rc, reason = _RC_NOT_FOUND, "firecrawl not found on PATH"
+        code = FailureCode.NOT_FOUND.value
     size = path.stat().st_size if path.is_file() else 0
     if not reason and not (rc == 0 and size > 0):
         reason = f"rc={rc}, {size} bytes"
-    return {**row, "rc": rc, "http_status": status, "bytes": size, "reason": reason}
+        code = (
+            FailureCode.EMPTY_OUTPUT.value
+            if rc == 0
+            else FailureCode.PROCESS_FAILED.value
+        )
+    return {
+        **row,
+        "rc": rc,
+        "http_status": status,
+        "bytes": size,
+        "code": code,
+        "detail": {"reason": reason, "primary_reason": primary_reason},
+    }
 
 
-def _scrape_payload(raw: bytes) -> tuple[int, str, str]:
+def _scrape_payload(raw: bytes) -> tuple[int, str, str, str]:
     """(HTTP status, markdown, failure reason) from `firecrawl scrape --json`."""
     try:
         payload = _decode_json(raw)
     except ValueError:
-        return 0, "", "firecrawl output was not JSON"
+        return 0, "", "firecrawl output was not JSON", FailureCode.INVALID_JSON.value
     if isinstance(payload, dict) and payload.get("success") is False:
-        return 0, "", "firecrawl reported failure"
+        return 0, "", "firecrawl reported failure", FailureCode.PROVIDER_FAILURE.value
     data = payload.get("data", payload) if isinstance(payload, dict) else None
     if not isinstance(data, dict):
-        return 0, "", "unexpected firecrawl JSON shape"
+        return 0, "", "unexpected firecrawl JSON shape", FailureCode.SHAPE_ERROR.value
     metadata = data.get("metadata")
     status = metadata.get("statusCode") if isinstance(metadata, dict) else None
     status = status if isinstance(status, int) else 0
     markdown = data.get("markdown")
     markdown = markdown if isinstance(markdown, str) else ""
     reason = f"HTTP {status}" if status >= _HTTP_CLIENT_ERROR else ""
-    return status, markdown, reason
+    return status, markdown, reason, FailureCode.HTTP_ERROR.value if reason else ""
 
 
 def _cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _mirror_code(row: dict[str, object]) -> str:
+    code = row.get("code")
+    if not isinstance(code, str) or code not in ("", *(c.value for c in FailureCode)):
+        message = "invalid mirror code"
+        raise ValueError(message)
+    return code
 
 
 def _mirror_index_probe(
@@ -2686,6 +2899,7 @@ def _mirror_index_probe(
         try:
             data = json.loads((directory / f"{n}.probe.json").read_text("utf-8"))
             mirror = next(p for p in data["probes"] if p["kind"] == "mirror")
+            code = _mirror_code(mirror)
             age = _manifest_age(data, clock)
             if age is None or not -_MANIFEST_CLOCK_SKEW_S <= age <= max_age_s:
                 missing += 1
@@ -2708,7 +2922,7 @@ def _mirror_index_probe(
                     Path(mirror["path"]).name,
                     mirror["rc"],
                     mirror["bytes"],
-                    mirror["reason"],
+                    code,
                     mirror.get("route", ""),
                 )
             )
@@ -2736,10 +2950,12 @@ def _mirror_index_probe(
             "failure whatever its size. Every value below is read from the "
             "`<n>.probe.json` beside it. When firecrawl answered credit exhaustion "
             "the link was fetched with `webclaw -f json` instead "
-            "(route `webclaw`, provisional)."
+            "(route `webclaw`, provisional). The failure code is a fixed value; "
+            "diagnostics are in each "
+            "`<n>.probe.json` `detail`."
         ),
         "",
-        "| n | url | file | rc | bytes | failure reason | route |",
+        "| n | url | file | rc | bytes | failure code | route |",
         "|---|---|---|---|---|---|---|",
         *("| " + " | ".join(_cell(v) for v in row) + " |" for row in rows),
     ]
@@ -2908,6 +3124,8 @@ def _probe_main(spec: _ProbeSpec, boundaries: _ProbeBoundaries) -> int:
             f"research-fanout: could not write probe output ({type(exc).__name__})\n"
         )
         return 1
+    probes = [{k: v for k, v in probe.items() if k != "detail"} for probe in probes]
+    payload["probes"] = probes
     sys.stdout.write(f"{spec.manifest}\n")
     for probe in probes:
         rest = {k: v for k, v in probe.items() if k != "kind"}
@@ -2923,14 +3141,19 @@ def _probe_main(spec: _ProbeSpec, boundaries: _ProbeBoundaries) -> int:
 def _print_summary(manifest_path: Path, results: list[SourceResult]) -> None:
     sys.stdout.write(f"{manifest_path}\n")
     for result in results:
-        detail = result.reason
+        code = failure_code(
+            result.reason,
+            status=result.status.value,
+            skip_reason=result.skip_reason.value if result.skip_reason else None,
+        )
+        detail = code.value if code else None
+        if code is FailureCode.PREREQUISITE and result.reason in _PREREQUISITE_TEXTS:
+            detail = f"prerequisite: {result.reason}"
         if result.provisional:
             row = json.loads(json.dumps(asdict(result), default=_json_default))
             line = _provisional_line(row)
             if result.route:
-                prefix = f"{result.source} via {result.route} (credits-exhausted: "
-                replacement = f"via {result.route}; {result.source} credits-exhausted ("
-                detail = "provisional: " + line.replace(prefix, replacement, 1)
+                detail = "provisional: " + line
             else:
                 detail = line.removeprefix(result.source + " ")
         reason = f"  [{detail}]" if detail else ""
