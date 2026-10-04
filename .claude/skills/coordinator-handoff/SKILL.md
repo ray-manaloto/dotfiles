@@ -74,6 +74,8 @@ returned rc 2 on 2026-10-03.
 The successor launches with `worktree.bgIsolation: "none"` to edit main-checkout
 planning files directly, but must still branch before editing tracked files
 (do-not #9, `branch_guard`).
+The coordinator write guard confines main-checkout writes to gitignored paths;
+enter a linked worktree before editing any other repository file.
 
 It records the census of this session's live heavy runs, as defined by
 `HEAVY_COMMAND_RE` in `python/src/dotfiles_setup/coordinator_handoff.py`, then starts

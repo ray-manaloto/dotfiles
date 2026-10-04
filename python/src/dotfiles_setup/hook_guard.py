@@ -44,7 +44,12 @@ import re
 import sys
 from dataclasses import dataclass
 
-from dotfiles_setup import ask_quality, branch_guard, script_guard
+from dotfiles_setup import (
+    ask_quality,
+    branch_guard,
+    coordinator_write_guard,
+    script_guard,
+)
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
 
 
@@ -1076,6 +1081,7 @@ def _read_command() -> str:
 def decide_payload(
     tool_name: str,
     tool_input: dict[str, object],
+    session_id: str | None = None,
 ) -> str | None:
     """Deny reason for a pending tool call, dispatched on ``tool_name``.
 
@@ -1089,9 +1095,11 @@ def decide_payload(
     if branch_guard.handles(tool_name):
         # Branch first: writing on the default branch is the more fundamental
         # violation, and its reason names the fix (branch, then re-run). The
-        # script guard is the second opinion on the same write.
-        policy_reason = branch_guard.decide(tool_input) or script_guard.decide(
-            tool_input
+        # Coordinator confinement follows branch protection, then script policy.
+        policy_reason = (
+            branch_guard.decide(tool_input)
+            or coordinator_write_guard.decide(tool_input, session_id)
+            or script_guard.decide(tool_input)
         )
     else:
         policy_reason = decide(str(tool_input.get("command", "")))
@@ -1105,8 +1113,13 @@ def pretooluse_main() -> int:
     contract); a crash here would fail OPEN (hook errors do not block),
     which is the acceptable failure mode for a redirect guard.
     """
-    tool_name, tool_input, _ = _read_payload()
-    reason = decide_payload(tool_name, tool_input)
+    tool_name, tool_input, payload = _read_payload()
+    session_id = payload.get("session_id")
+    reason = decide_payload(
+        tool_name,
+        tool_input,
+        session_id=session_id if isinstance(session_id, str) else None,
+    )
     if reason is not None:
         sys.stdout.write(deny_output(reason))
     return 0

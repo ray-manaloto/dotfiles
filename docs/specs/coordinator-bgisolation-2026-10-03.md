@@ -10,6 +10,8 @@ The failure this prevents: Claude Code's background-session isolation refuses th
 
 Lanes (non-coordinator `--bg` sessions) MUST keep worktree isolation.
 
+Follow-up: [coordinator main-checkout write guard](coordinator-main-checkout-guard-2026-10-03.md) confines coordinator writes there to gitignored paths.
+
 ## 2. Files
 
 - `python/src/dotfiles_setup/coordinator_handoff.py`: the launch `--settings` JSON.

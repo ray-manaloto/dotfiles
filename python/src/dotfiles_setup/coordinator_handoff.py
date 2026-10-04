@@ -42,7 +42,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from dotfiles_setup import handoff_inbox, reap
+from dotfiles_setup import handoff_inbox, reap, session_common
 from dotfiles_setup.session_common import (
     HANDOFF_INBOX,
     PROJECT,
@@ -74,6 +74,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+COORDINATOR_NAME_RE = session_common.COORDINATOR_NAME_RE
 COORDINATOR_FEATURE = "coordinator"
 
 ENV_LIMIT = "DOTFILES_COORDINATOR_HANDOFF_PCT"
