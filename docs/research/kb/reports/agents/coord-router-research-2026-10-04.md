@@ -237,3 +237,65 @@ subsumed (both are consumers: the specialists call 10; the shipper runs 25).
 - [notdp/hive](https://github.com/notdp/hive) — PR #255 mods version gating
 - [devohmycode/claude-mods](https://github.com/devohmycode/claude-mods) — PR #1 claude-message-mod
 - GitHub topic searches: claude-code-mods, claude-code-plugin, claude-code-plugins, claude-mods, function-hooks, claude-code-mod, claude-mod, claude-code-hooks (457 repos, raw jsonl)
+
+## 8. S0 live probe results (Ray GO "no slot needed", 2026-10-04 ~20:15-20:35 CDT, claude 2.1.289)
+
+Eight throwaway `claude --bg` sessions (`s0-*`, all stopped after), auto mode,
+probe mod loaded with `--plugin-dir`. Every event below is in
+`raw/coord-router/s0-probe/events.jsonl` (66+ rows); mods in `s0-probe/mod{,2}/`.
+
+| # | Question | Result | Evidence / control |
+|---|---|---|---|
+| P0 | Does a `--plugin-dir` mod load in a `--bg` session? | YES — `session.start` logged in every probed session | `*-1-start.json` rows |
+| P1 | Which event carries a local peer message? | **BOTH**: `session.receive` (origin `peer`) fires first, then `prompt.submit` (origin `peer`). Text = `<cross-session-message from=… from-name=… from-mode=…>` envelope. | e865ff62-3-receive + -4-prompt |
+| P2 | Does a bg model's `SendMessage` raise `session.send`? | YES, origin `{kind:"model"}`; direct send `isDelivered:true` | 16bf92f0-3-send / -4-send-result |
+| P2b | Do hooks re-enter on readdress (loop)? | NO — one `send` row per call | 7b520f1a-3-send only |
+| **P2c** | **Does `session.send` readdress work under auto mode?** | **NO (blocker)** — `isDelivered:false`, "The server-side auto mode classifier gave no verdict … hard failure". Control: the SAME session class sending DIRECT to the same target → delivered. | 7b520f1a-4-send-readdressed-result vs 16bf92f0-4 |
+| P3 | Send cap on plugin `$.session.send`? | NONE seen — 12/12 back-to-back forwards `isDelivered:true`, all received | e865ff62-30-burst-results; sink receive rows 3-15 |
+| **P5** | **PreToolUse `updatedInput` on `SendMessage` (settings hook, no mod)?** | **YES** — `to:"s0-alias"` rewritten to `s0-recv`, delivered under auto mode; receiver got it from the sender's real name | `s0-probe/pretool.log`; e865ff62 receive "S0 PROBE P5 via pretool alias" |
+| Fail arm | Alias with no router | `{"success":false,"message":"No agent named 's0-alias' is reachable…"}` — loud | s0-nomod transcript |
+| S3 | Forward-then-consume at `session.receive` | WORKS — forward `isDelivered:true`, `{consumed}` returned, and **no `prompt.submit` followed** (the model never saw it); a non-matching message passed through (receive + prompt) | a5e5f97d-3..8 |
+| P4 | Skills-dir mod in a linked worktree lane | NOT PROBED — moot for the primary path after P5 (settings hooks load from tracked `.claude/settings.json` in every worktree) | — |
+
+**Design consequence:** the PRIMARY router is a native **PreToolUse settings
+hook** on `SendMessage` returning `updatedInput` — python only, no TypeScript,
+works under auto mode, and rides the existing `scripts/pretooluse-guard.sh` →
+`hook_guard` entry point. The mod is needed only for the receive-side safety
+net (S3), which is proven to work.
+
+## 9. Offline LLM classifier measurement (Ray: "Yes, measure now", 2026-10-04 ~21:00 CDT)
+
+Corpus: the 163 primary messages of `raw/coord-router/inbound-sample-2026-10-04.jsonl`
+(run 0eb2302f, single-reviewer labels from FULL bodies). Classifier input:
+sender name + `text_first_300` only, labels hidden; rubric = the gold rubric
+(`raw/coord-router/classifier-eval/rubric-and-format.txt`); `claude -p
+--tools ""`, 4 batches ≤41, `@` neutralised. Per-message predictions:
+`classifier-eval/predictions.jsonl`; scoring: `classifier-eval/score.txt`.
+
+- **Haiku could not run**: after one successful batch, every haiku call —
+  including the control "Reply with the single word ok." from an empty dir —
+  returned "Prompt is too long", while the same control on sonnet returned
+  "ok". The session's base context (user-level CLAUDE.md/skills/plugins/hooks)
+  exceeds haiku's window. **Design consequence: a router-agent session cannot
+  be a default-context haiku session**; it needs a slim context (a dedicated
+  `--settings`/`--bare` profile) or sonnet. Haiku batch 0 alone (41 msgs):
+  50% conditional misroute at any threshold — not used.
+- **Sonnet**, raw agreement 101/163 (62%):
+
+| Confidence cut | Offload | Correct | Misroute (all) | Misroute (of routed) |
+|---|---:|---:|---:|---:|
+| none | 36.2% | 24.5% | 11.7% | 32.2% (mostly shipper→handoff-scribe, 10) |
+| ≥0.80 | 11.0% | 10.4% | 0.6% | 5.6% |
+| ≥0.85 | 9.2% | 9.2% | 0.0% | 0.0% |
+
+Cost $1.49 for 163 messages in 4 batched calls (≈$0.009/message batched; a
+per-message `claude -p` turn costs far more — anthropics/claude-code#99049
+measured $0.15–0.28). Limits: 300-char excerpts vs full-body labels, one run,
+one labeller, prefix sample. The production router agent reads the FULL
+message, so these are a floor, not a ceiling.
+
+**Reading for Ray:** keywords alone 1.2%; a confidence-gated LLM ~10% with
+~0 misroutes; ungated 36% with 1-in-3 of routed messages wrong. The ceiling
+is 58%. The largest error class is the shipper-vs-handoff-scribe boundary
+("READY <sha>" reports), which a narrow sender report contract fixes better
+than a classifier.

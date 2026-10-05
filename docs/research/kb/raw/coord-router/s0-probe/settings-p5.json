@@ -1,0 +1,1 @@
+{"hooks": {"PreToolUse": [{"matcher": "SendMessage", "hooks": [{"type": "command", "command": "python3 /Users/rmanaloto/.claude/jobs/fc5ba9a3/tmp/s0/pretool.py /Users/rmanaloto/.claude/jobs/fc5ba9a3/tmp/s0/pretool.log"}]}]}}

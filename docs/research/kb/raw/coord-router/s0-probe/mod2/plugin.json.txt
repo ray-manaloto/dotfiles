@@ -1,0 +1,1 @@
+{ "name": "s0probe2", "version": "0.1.0", "description": "coord-router S0 probe: log/readdress cross-session messages" }

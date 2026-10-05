@@ -1,9 +1,15 @@
-# Coordinator router + standing specialists (design rev 2, 2026-10-04)
+# Coordinator router + standing specialists (design rev 3, 2026-10-04)
 
-Status: DRAFT rev 2, NOT ratified. Rev 1 was reviewed by sdlc-team run 20bbca95
+Status: DRAFT rev 3, NOT ratified; measured-majority acceptance is BLOCKED.
+This is an evidence-backed interface correction, not an implemented router or
+a claim that the free-text objective has been achieved. Required exact-grammar,
+declared-sender, actual-helper and LLM measurements remain separate acceptance
+requirements in `coord-router-freetext-2026-10-04.md`.
+Rev 1 was reviewed by sdlc-team run 20bbca95
 (`docs/research/kb/reports/agents/sdlc-review-coord-router-20bbca95.md`, Block 7)
 and by premise-verifier (`premise-verifier-coord-router-2026-10-04.md`). Both
-said "correct the spec before implementation"; this revision applies them.
+said "correct the spec before implementation". Rev 2 corrected those findings;
+rev 3 applies the revised free-text brief and saved S0 sender-hook evidence.
 Research: `coord-router-research-2026-10-04.md`. Inventory:
 `coord-router-inventory-2026-10-04.md`.
 
@@ -38,45 +44,56 @@ line anchors drift because the queue is prepended; quote the ruling text.
   `candidate-ready`, `promote --expected-epoch`, durable event
   append/read/ack/reconcile; owns `role_state.py`, `session_common.py`,
   `handoff_inbox.py`, `coordinator_handoff.py` changes.
-- **relay-rule-r2** owns supersession-aware resolution and the retired-session
-  relay (`handoff-relay-rule-r2-2026-10-04.md:103`).
+- **relay-rule-r2** is the intended owner of supersession-aware resolution and
+  retired-session relay. The formerly cited
+  `handoff-relay-rule-r2-2026-10-04.md` is absent in this checkout; its precise
+  interface is **UNBUILT / dependency unverified**, not a source premise.
 
 **Therefore this lane does NOT own role identity, epochs, the roster, or the
 durable inbox.** It owns three things on top of PR2: (1) routing POLICY —
-message → role; (2) the sender-side TRANSPORT adapter (a mod) so lanes stop
+message → role; (2) the native sender hook so lanes stop
 choosing an address; (3) the SPECIALIST ROLES and their standing briefs.
 
-## Architecture (rev 2)
+## Architecture (rev 3; proposed interfaces are UNBUILT)
 
 ```
- lane (Claude) ─SendMessage(to:"coordinator")─► coord-router mod (sender, session.send)
-                                                   │ python: coord-router route  → role
+ lane (Claude) ─SendMessage(to:"coordinator", free text)─► native PreToolUse
+                                                   │ pretooluse-guard.sh → hook_dispatch → Python routing branch
+                                                   │ PR2 durable ingress ID → coord-router route → role
                                                    │ python: role resolve <role> (PR2) → concrete name @ epoch
                                                    ▼
-                                     readdressed `to` (engine re-judges)  ──► specialist / coordinator
+                                     updatedInput.to (original body retained) ──► specialist / coordinator
  lane (codex, KB, devcontainer, unmodded Claude) ─► mise run coord-router submit (PR2 durable event append)
                                                    └─ optional native notify of the resolved session
  every route/submit = one PR2 event with message id, repo, hop count; the event log is the custody record
 ```
 
-- Alias `coordinator` resolves at the SENDER. A sender without the mod gets a
+- Alias `coordinator` resolves at the SENDER. A sender without the hook gets a
   loud refusal ("no agent named coordinator"); its documented recovery is
   `mise run coord-router submit` (durable), never a guessed name.
 - Fallback `route_to` is always a CONCRETE resolved name, never the alias.
 - Retired-session precedence: a message from a retired coordinator to its
   successor (relay-rule-r2) is passthrough, never re-routed to a specialist.
-- Repository identity travels with every message (`repo: dotfiles|knowledge-base`);
-  bare `SHIP`/`MERGED #N` is rejected by the grammar.
-- Container sessions: OUT OF SCOPE v1 (no Claude messaging bridge into the
-  container — `.devcontainer/devcontainer.json:129`); they use `submit` only if
+- Repository identity is derived from verified main-checkout/session metadata
+  or supplied by `submit`; ordinary lane prose need not repeat it. Missing or
+  conflicting identity cannot authorize a repository specialist action.
+- No keyword grammar is required of lanes. Helpers may attach authenticated
+  operation metadata; raw text, mixed requests, and relays remain supported.
+- Container sessions: OUT OF SCOPE v1 by Ray's ruling; they use `submit` only if
   the main checkout's state is reachable, otherwise the coordinator via Ray.
 
 ## Ranked specs — order S0 → S1 → S4 → S2 → S3 → S5 (sdlc review §5)
 
-### S0 — live probe (Ray GO required; no repo code)
+### S0 — saved live probe (historical Ray GO; no new sessions here)
 
-Throwaway `claude --bg --plugin-dir <scratch mod>` sender + receiver(s) on
-2.1.289, isolated names. Measure: P1 which event carries a local peer message
+Saved experiment: Claude Code 2.1.289, auto mode, isolated names. P2 mod
+readdress was refused (`s0-probe/events.jsonl:7-8`), while direct delivery
+worked (`:11-14`); P5 native full-input PreToolUse rewrite reached the receiver
+(`:68-69`, `pretool.py:6-7`). See research report §8. This fixes the primary
+transport choice; P4 production worktree inheritance remains unmeasured.
+
+Original probe inventory retained for future verification scope: P1 which
+event carries a local peer message
 (`session.receive` vs `prompt.submit`, anthropics/claude-code#99417); P2 a bg
 model's `SendMessage` raises `session.send` and `next({...e,to})` is honoured;
 P2b hooks run ONCE per send (no re-entry on readdress — loop question); P3
@@ -88,33 +105,104 @@ PreToolUse `updatedInput` on `SendMessage` as the settings-hook alternative
 
 ### S1 — routing policy over PR2 (`coord_router.py`), DEPENDS ON PR2
 
-1. **Objective:** one deterministic answer to "which role handles this
-   message", so no lane decides routing and no LLM turn is spent on transport.
+1. **Objective:** ordinary free-text coordinator-bound reports reach the
+   appropriate standing specialist without lanes learning grammar. Acceptance
+   requires correctly routing more than 50% of every validated corpus record
+   off-coordinator, with zero observed specialist misroutes on a held-out
+   sample; report raw off-coordinator coverage, both error denominators, and
+   abstentions separately. This is a corpus-scoped criterion, not a forecast of
+   future traffic or a guarantee of zero runtime errors. It is BLOCKED until
+   all required candidate tiers and the actual combined chain are measured.
 2. **Files:** `python/src/dotfiles_setup/coord_router.py`, `main.py`
-   (`add_subcommands`/`main` per `main.py:1786-1800`, dispatch entry like
+   (registration precedent `_add_session_mod_subcommands`,
+   `main.py:1786-1800`, dispatch entry like
    `:3013-3016`), `mise.toml` (`[tasks.coord-router]` like `[tasks.session-start]`
    `:1713-1717`), `schemas/coord-router-route.schema.json`, generated model +
    `[tool.datamodel-codegen]` job in `python/pyproject.toml`,
    `tests/test_coord_router.py`.
-3. **Interfaces:** `coord-router route` (stdin `{to, text, repo, sender, message_id, hops}`
-   → `{role, route_to, epoch, rule, reason, passthrough}`), calling PR2's
-   `role resolve`; `coord-router submit` (stdin same + body → PR2 event append,
-   returns event id); `coord-router grammar --json` (the table, for docs/tests).
+3. **Interfaces (UNBUILT):** `coord-router submit` accepts ordinary text plus
+   sender and repository metadata, allocates or validates a PR2 ingress ID,
+   appends the original body before notification, and returns an event ID.
+   `coord-router route` reads `{to, text, repo, sender, message_id, hops,
+   envelope?}` and returns `{role, route_to, epoch, tier, reason,
+   confidence, policy_version, model_revision?, passthrough, event_id}`.
+   Python calls PR2 `role resolve`; it owns the entire acceptance chain.
+   The native hook uses the same policy in-process rather than paying a full
+   CLI startup per send. `coord-router grammar --json` exposes any optional
+   compatibility grammar; rev 2 did not define a complete table.
+
+   Proposed chain, pending measurement and ratification:
+   (0) preserve non-coordinator addresses, retired→successor relays,
+   recovery events, and `hops ≥ 1`; coordinator-only writer/admission
+   decisions and ambiguous mixed responsibilities stay with coordinator;
+   (1) accept helper envelope metadata only with validated operation/schema
+   and trusted provenance, never a destination copied from gold labels;
+   (2) match an optional, explicitly published legacy grammar;
+   (3) accept a sender default only from an independently declared narrow
+   report contract and only for that report type; a lane name is not authority
+   for every message; (4) optionally classify residual free text in Python;
+   (5) unsure, conflicting, invalid, timed-out or unsupported input → concrete
+   resolved coordinator. No tier may grant a slot, shipping custody or queue
+   writer admission merely by routing.
+
+   Tier 4 is **disabled pending evaluation**. If selected, use a Python
+   Anthropic SDK call with fixed labels `{slot-arbiter, shipper,
+   question-batcher, handoff-scribe, coordinator}` plus explicit `abstain`,
+   a versioned prompt/model, and a validated confidence field. A self-score
+   must be calibrated on held-out labels before setting an acceptance
+   threshold; `$.model.classify` supplies no confidence. Auth would be native
+   `ANTHROPIC_API_KEY` for this SDK route, independently verified by presence
+   and a real call; neither CLI login nor Exa/Firecrawl injection proves that
+   credential exists. No credential is read into the audit body.
+
+   Every decision is cached by PR2 message ID with original policy/model/prompt
+   revision, label, confidence (`null` for non-probabilistic tiers), reason,
+   tier, repository, sender, hop and disposition in the PR2 event. Replays
+   reuse the decision; notification resolves the current role epoch. Stable
+   hook-call identity requires a verified public field or persisted ingress
+   receipt; identical text alone is never a deduplication key. The native
+   message transport is not assumed to supply `repo`, `message_id`, or `hops`.
+
+   `coord-router return --message-id ID --reason TEXT` is a proposed one-call
+   recovery: append a return event retaining the original body/ID, notify the
+   current coordinator, increment the hop and bypass specialist reclassification.
+   A return does not undo effects; reconcile completed/uncertain obligations
+   before retrying. No specialist availability or notification receipt may
+   erase the pending durable event. A queued send is not completion/ack.
+
+   Deterministic tiers and cache hits add zero model-call cost. Classifier
+   cost must report measured usage and billing basis per message:
+   `(input_tokens × input_rate + output_tokens × output_rate) / 1e6`, with
+   retries included. Numeric latency, threshold and cost are UNMEASURED.
+   The 20-second native hook budget includes ingress, classification, role
+   resolution and serialization; an enabled model call needs a shorter bounded
+   deadline and measured headroom, otherwise coordinator fallback.
 4. **Constraints:** no own roster/epoch/inbox (PR2's); resolves main-checkout
    state via `session_common.main_checkout` (`:183-203`), never cwd; never
    drops; unknown → coordinator (concrete name); passthrough for non-alias,
    non-coordinator `to`, for retired→successor relays, and when `hops ≥ 1`;
    dedup by `message_id`; repo required.
-5. **Verification:** isolated public-CLI tests: grammar rows, passthrough,
-   retired precedence, dedup, hop bound, repo missing → coordinator. **Fail
-   arms:** delete the SLOT row → slot test fails; drop the hop check → a
-   loop test re-routes and fails.
+5. **Verification (future; not run by this docs task):** independent hand
+   labels from full inbound bodies, at least 150 deduplicated messages across
+   five October 3/4 coordinator sessions, positive-control delivery present,
+   declared corpus/sampling bias, policy frozen before held-out evaluation.
+   Report standalone and incremental-chain coverage/error for all four tiers;
+   helper counterfactuals are separate from an actual helper run. Exercise the
+   public CLI/native hook with isolated PR2 state: precedence, metadata absence,
+   ambiguity, classifier timeout, duplicate/replay, unavailable role and return.
+   **Fail arms:** remove free-text handling → correct offload falls at/below 50%;
+   override coordinator-only decisions → corresponding gold errors appear;
+   remove return bypass/hop bound → the same ID loops and fails; erase pending
+   custody after send refusal → reconcile cannot recover the original body.
 6. **Commit:** lane.
-7. **PREMISES:** L `COORDINATOR_NAME_RE` — `session_common.py:41`; I
-   `main_checkout` — `session_common.py:183-203`; I PR2 `role resolve`
-   (UNBUILT — dependency); A grammar vocabulary: needs a labelled sample of
-   inbound lane messages (the queue records outputs, not inputs) — collect from
-   transcripts before ratifying.
+7. **PREMISES:** L `COORDINATOR_NAME_RE` —
+   `python/src/dotfiles_setup/session_common.py:41`; I `main_checkout` —
+   same file `:183-203`; I PR2 role/event interfaces **UNBUILT**, proposed in
+   `docs/research/kb/reports/agents/sdlc-review-coordinator-roles-a3d6e816.md:206-214`;
+   E classifier output lacks confidence —
+   `docs/research/kb/raw/coord-router/mod-api-session-send-receive.d.ts.txt:458-476`;
+   A declared sender contracts, helper provenance, calibrated threshold and
+   measured-majority chain remain acceptance blockers, not available interfaces.
 
 ### S4 — standing specialist roles (briefs + launch via PR2), DEPENDS ON PR2
 
@@ -142,43 +230,83 @@ PreToolUse `updatedInput` on `SendMessage` as the settings-hook alternative
    revival pattern, not self-succession); A `--role` CLI shape per
    `watcher-handoff-plan-2026-10-03.md:31-38` (prefix form).
 
-### S2 — sender-side mod (`session.send`)
+### S2 — native sender-side PreToolUse hook (Python), DEPENDS ON S1/PR2
 
-1. **Objective:** every dotfiles Claude session's `SendMessage` to
-   `coordinator` lands on the right role with zero coordinator tokens.
-2. **Files:** `.claude/skills/coord-router/{.claude-plugin/plugin.json,hooks/hooks.json,hooks/register.ts,SKILL.md}`,
-   generated mirror `.agents/skills/coord-router/SKILL.md` (`mise run skills-mirror`),
-   bun harness `tests/fixtures/coord_router_hook/harness.ts` +
-   `tests/test_coord_router_hook.py` (precedent
-   `tests/test_coordinator_handoff_hook.py:11,36-39`). **Prerequisite:** refresh
-   vendored `.claude/types/claude-code.d.ts` (2.1.277, no `SessionSendInput`)
-   via `mise run schema-vendor-refresh` to ≥2.1.289, or `fnhook_gates`
-   tsc fails.
-3. **Interfaces:** `on('session.send')`: alias/coordinator-name `to` →
-   `$.process.run(uv … coord-router route, {stdin, cwd, timeoutMs: 60_000})`
-   → `next({...e, to: route_to})`; else `next(e)`. Status `router <role>` /
-   `router ERROR`. `export const register: Register` (typed, `fnhook_gates.py:320-335`).
-4. **Constraints:** fail-open = `next(e)` (alias then refused loudly → caller
-   uses `submit`); never refuse; never key on `origin.plugin`; if S0 P5 shows
-   PreToolUse `updatedInput` covers the same sends, prefer the native settings
-   hook and keep the mod only for `$.session.send` coverage.
-5. **Verification:** `claude plugin validate --strict`; bun harness under
-   pytest; live arm from S0 setup. **Fail arm:** remove readdress → alias
-   refused.
-6. **Commit:** lane.
-7. **PREMISES:** I `session.send` re-judge — types 2.1.289 :4208-4219,
-   :11006-11035; P `$.process.run` → python — `coordinator-handoff/hooks/register.ts:116-131`;
-   A loads in every lane (S0 P4); A raised for bg model sends (S0 P2).
+1. **Objective:** tested model `SendMessage` calls addressed to coordinator
+   enter the Python policy before delivery. S0 supports this transport choice;
+   it does not establish production availability, majority coverage, SDK sends,
+   or inheritance across every linked worktree. No TypeScript sender decider.
+2. **Files (future implementation scope, not this docs task):**
+   `.claude/settings.json` matcher, `python/src/dotfiles_setup/hook_dispatch.py`,
+   the S1 policy module and public-hook tests; reuse
+   `scripts/pretooluse-guard.sh`. Extend the existing Python dispatch rather
+   than adding a second hook process. `hook_guard` remains the payload/deny
+   helper; its existing deny-reason return type is not an `updatedInput` API.
+3. **Interfaces (UNBUILT):** add `SendMessage` to the native settings matcher;
+   wrapper → `hook_dispatch` → new Python route branch. Parse the full native
+   payload with `hook_guard.parse_payload`, resolve verified repository and
+   sender context, map native `tool_use_id` to a PR2 ingress ID, append custody,
+   route/cache, resolve concrete name/epoch, emit
+   `{"hookSpecificOutput":{"hookEventName":"PreToolUse",
+   "updatedInput":{...original_tool_input,"to":route_to}}}`.
+   This notation describes an object copy, not Python/JSON implementation.
+   Preserve message text, summary and every unrelated field: `updatedInput`
+   replaces the complete tool input. Omit any permission-decision override;
+   existing safety denials retain precedence. Pass unrelated tools/addresses
+   through their current public behavior.
+4. **Constraints:** keep the current 20-second settings-hook ceiling; measure
+   startup/state/fallback headroom before enabling a model tier. Classification
+   timeout returns a persisted coordinator decision while time remains.
+   A whole-hook timeout discards its output and normal permissions continue;
+   it does **not** automatically reroute to coordinator. Pre-registered PR2
+   custody, reconcile and a loud `submit` recovery are required for incomplete
+   sends. If failure precedes custody, preserve the original call and expose
+   the failed ingress rather than claim durable acceptance. Alias refusal
+   requires `submit`; never guess a concrete name. SDK defaults (long timeout
+   and automatic retries) must be explicitly bounded before any hook inference.
+   Native peer `msg_id` and sender `tool_use_id` are different identities:
+   their PR2 mapping remains UNBUILT. Do not assume this hook covers plugin
+   `$.session.send`; S3 is a separately optional receive safety net.
+5. **Verification (future, not run here):** isolated real repositories and PR2
+   state, public hook stdin/stdout and actual model-send integration. Assert
+   full-input preservation, unchanged denies, concrete fallback, one ingress ID,
+   replay, expired hook budget and pending-custody recovery. **Fail arms:**
+   remove matcher/dispatch branch → alias still fails; emit only `to` → body/
+   summary preservation fails; remove durable append → refusal leaves no
+   recoverable obligation; remove denial precedence → an existing denied call
+   is incorrectly admitted. A production worktree-inheritance arm remains
+   required; saved S0 alone does not satisfy it.
+6. **Commit:** lane, only after PR2 and measured-policy acceptance; none here.
+7. **PREMISES:** L matcher/20-second timeout — `.claude/settings.json:72-77`;
+   L current wrapper invokes dispatch — `scripts/pretooluse-guard.sh:35-40`;
+   L dispatch excludes `SendMessage` and ignores unmapped tools —
+   `python/src/dotfiles_setup/hook_dispatch.py:39,50-72`;
+   I payload parser/deny-only helper —
+   `python/src/dotfiles_setup/hook_guard.py:1044-1073,1081-1125`;
+   E full-input native rewrite —
+   `docs/research/kb/raw/coord-router/s0-probe/pretool.py:6-7`, delivered receiver
+   `events.jsonl:68-69`; E mod readdress refusal — same `events.jsonl:7-8`;
+   I PR2 custody/role resolution and native→PR2 ID mapping **UNBUILT**;
+   A production loading, timeout recovery and all-sender coverage remain
+   unverified. These anchors name existing evidence, not an implemented branch.
 
-### S3 — receive-side safety net (only if S0 justifies it)
+### S3 — optional receive-side safety net (separate from native S2)
 
-Same mod, coordinator sessions only: `session.receive` / `prompt.submit` with
+Separate transport mod, coordinator sessions only: `session.receive` / `prompt.submit` with
 origin `peer`/`peer-send-message` → `route` → `$.session.send` → consume ONLY
 when the result is `{isDelivered: true}` (types :11074-11094), else `next(e)`;
 dedup by message id; never forward a retired-session relay. Note: it cannot
 rescue an alias send (refused before delivery) — it only covers senders that
 used the concrete coordinator name. If S0 P1 shows `prompt.submit` delivery,
 `{drop}` leaves a notice row (#99417) — acceptable, measured.
+
+Saved S0 shows forward-then-consume for a matching peer message and passthrough
+for a non-match (`s0-probe/events.jsonl:72-79`). Production PR2 custody,
+identity mapping and dedup are still UNBUILT. A consumed message must have
+durable custody and a delivered forward; on either failure keep the original.
+This tier may use TypeScript as transport only; Python still decides. It cannot
+be counted as a measured sender-chain contribution from the saved transport
+probe alone.
 
 ### S5 — saved-search `repositories` kind (independent, lowest priority)
 
@@ -197,3 +325,12 @@ the discussions GraphQL; `_SOURCE_KINDS` :78-82; diff on `html_url` urls
 - S0 probe: "GO, no slot needed (Recommended)".
 - Asking Ray: "Batcher + watcher (Recommended)" — the watcher's direct alert stays.
 - Containers: "Out of scope v1 (Recommended)".
+- Classifier (2026-10-04 ~20:55): "Router agent session (Recommended)" — the
+  PreToolUse hook sends any message it cannot place to a standing router
+  session (the decider agent), which forwards to a specialist or the
+  coordinator.
+- Measure first: "Yes, measure now (Recommended)" — result in
+  `docs/research/kb/reports/agents/coord-router-research-2026-10-04.md` §9:
+  sonnet ≥0.80 confidence ≈11% offload / 0.6% misroute on 300-char excerpts;
+  ungated 36% / 11.7%; haiku cannot run with the default session context, so
+  the router session needs a slim context profile.
