@@ -319,6 +319,31 @@ the discussions GraphQL; `_SOURCE_KINDS` :78-82; diff on `html_url` urls
 `updated` top-window churn yields false GONE: page fully (≤1000 cap) or mark
 `uncollectable`. Fail arm: known topic → 0 marks the run unverified.
 
+## Delivery custody ↔ spec 04 authority-bound commands (Ray ruling 80d2f842, 2026-10-04 21:25)
+
+Ray ruled that authority-bound command IDs go into the ph04, coord-router and
+#1692 contracts. Each GO carries a command id, the receiver, the coordinator's
+authority, the spec revision and the lease generation. The receiver ACKs it and
+rejects duplicates and GOs from a superseded coordinator. HOLD keeps precedence.
+Evidence: `.claude/worktrees/handoff-2026-10-04p/docs/research/kb/reports/agents/sdlc-unsent-prompt-review-80d2f842-2026-10-04.md` §(c).
+
+The split was agreed with the process-hardening lane on 2026-10-04:
+
+| Owner | Owns |
+|---|---|
+| Spec 04 stage 2 (process-hardening) | `GrantRecord` and `AckRecord` types, the lease-generation counter under `lock_dir()`, the durable seen-command-id set, and receiver-side validation in `slot run --grant` against an injected `resolve_current_coordinator() -> CoordinatorIdentity \| Unknown` |
+| coord-router (this spec) | transport and custody of the GO and the ACK only. Both travel as PR2 durable events, routed by ROLE and never by a stale session name. The router validates nothing about authority. |
+| R-a3 PR2 + relay-rule / #1692 | the real authority resolver: `role resolve coordinator` returns role, name, session_id and epoch |
+
+Proposed alignment (it is not a router-owned type):
+1. command id = the PR2 ingress/event ID, so transport dedup and 04's
+   seen-set key on one value. If 04 ships before PR2, 04 mints the id and PR2
+   adopts it.
+2. `CoordinatorIdentity` = PR2's coordinator role binding. "Coordinator
+   authority" means the epoch. `Unknown` means HOLD, never accept.
+3. An enqueued or delivered GO is not an ACK. Only 04's `AckRecord` closes a
+   grant, and the router carries that record back to the granting role.
+
 ## Ray rulings (2026-10-04, AskUserQuestion answers, verbatim labels)
 
 - Build order: "Build on PR2 (Recommended)".
