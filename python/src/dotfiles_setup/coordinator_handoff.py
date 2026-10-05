@@ -132,7 +132,10 @@ _REDIRECT_RE = re.compile(
 #: The handoff section the old coordinator queues every open question into
 #: (ruling 12). A level-2 heading; the section ends at the next level-2 one.
 _QUEUED_HEADING_RE = re.compile(
-    r"^##\s+Queued questions\s*$", re.MULTILINE | re.IGNORECASE
+    r"^##[ \t]+Queued questions\b[^\n]*$", re.MULTILINE | re.IGNORECASE
+)
+_ANY_QUEUED_HEADING_RE = re.compile(
+    r"^#+[^\n]*\bqueued questions\b[^\n]*$", re.MULTILINE | re.IGNORECASE
 )
 _NEXT_H2_RE = re.compile(r"^##\s", re.MULTILINE)
 
@@ -438,7 +441,7 @@ def transcript_path(session_id: str, projects_dir: Path) -> Path | None:
 
 
 def queued_questions(handoff_text: str) -> str | None:
-    """The body of the handoff's ``## Queued questions`` section, if non-empty."""
+    """The non-empty H2 section body, allowing qualifiers after its title."""
     heading = _QUEUED_HEADING_RE.search(handoff_text)
     if heading is None:
         return None
@@ -446,6 +449,14 @@ def queued_questions(handoff_text: str) -> str | None:
     following = _NEXT_H2_RE.search(rest)
     body = (rest if following is None else rest[: following.start()]).strip()
     return body or None
+
+
+def _unparsed_queued_heading(handoff_text: str) -> str | None:
+    """Quote a heading mentioning queued questions when no valid H2 exists."""
+    if _QUEUED_HEADING_RE.search(handoff_text) is not None:
+        return None
+    heading = _ANY_QUEUED_HEADING_RE.search(handoff_text)
+    return heading.group().rstrip() if heading is not None else None
 
 
 # ── census ───────────────────────────────────────────────────────────────────
@@ -643,6 +654,7 @@ class BriefContext:
     state_dir: Path
     heavy_runs: tuple[HeavyRun, ...] = ()
     queued: str | None = None
+    unparsed_queued_heading: str | None = None
 
 
 def successor_brief(ctx: BriefContext) -> str:
@@ -661,9 +673,17 @@ def successor_brief(ctx: BriefContext) -> str:
         )
     else:
         run_lines = "  - none recorded"
-    queued = ctx.queued or (
-        "none found — confirm the handoff's `## Queued questions` section in step 1"
-    )
+    if ctx.queued:
+        queued = ctx.queued
+    elif ctx.unparsed_queued_heading:
+        queued = (
+            "WARNING: queued-questions heading exists but could not be parsed: "
+            f"`{ctx.unparsed_queued_heading}` — inspect the handoff in step 1"
+        )
+    else:
+        queued = (
+            "none found — confirm the handoff's `## Queued questions` section in step 1"
+        )
     return f"""\
 You are the NEW dotfiles coordinator. You take over from `{ctx.old_name}` \
 (session {ctx.old_session_id}), which handed off automatically at its context \
@@ -908,6 +928,7 @@ def _launch_locked(
             state_dir=state_dir.resolve(),
             heavy_runs=runs,
             queued=queued_questions(handoff_text),
+            unparsed_queued_heading=_unparsed_queued_heading(handoff_text),
         )
     )
     argv = launch_argv(name, brief)

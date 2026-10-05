@@ -320,6 +320,49 @@ def test_queued_questions_section_is_extracted_to_the_next_h2() -> None:
     )
 
 
+def test_queued_questions_verbatim_04t_heading_is_extracted() -> None:
+    """The real handoff qualifier must not silently discard Ray's questions."""
+    text = (
+        "# Handoff\n\n## Queued questions (put each to Ray; none asked yet this "
+        "session except the watcher stop)\n\n1. Restart H3?\n\n## Next\n- Later\n"
+    )
+    assert ch.queued_questions(text) == "1. Restart H3?"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Queued questions — qualifier",
+        "## Queued questions: qualifier",
+        "## Queued questions - qualifier",
+        "##\tqUeUeD QuEsTiOnS (qualifier)",
+    ],
+)
+def test_queued_questions_qualified_headings_keep_subheadings(heading: str) -> None:
+    """Qualifiers stay on the heading line; H3 remains in the section body."""
+    text = f"{heading}\n\n### Q1\n1. Restart H3?\n\n## Next\n- Later\n"
+    assert ch.queued_questions(text) == "### Q1\n1. Restart H3?"
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "## Queued questionsXYZ",
+        "## Queued questions_extra",
+        "## Not queued questions",
+        "# Queued questions",
+        "### Queued questions",
+        "##Queued questions",
+        "##\nQueued questions",
+    ],
+)
+def test_queued_questions_rejects_wrong_titles_and_heading_boundaries(
+    heading: str,
+) -> None:
+    """Neither an embedded title nor the wrong level is a queued H2 section."""
+    assert ch.queued_questions(f"{heading}\n1. Restart H3?\n## Next\n") is None
+
+
 @pytest.mark.parametrize(
     "text", ["# Handoff\n\n## Gotchas\n- g\n", "## Queued questions\n\n## Next\n"]
 )
@@ -519,6 +562,94 @@ def test_launch_dry_run_prints_argv_from_the_main_checkout(
     assert "DRY RUN" in output
     assert runner.calls == []
     assert not (tmp_path / "state" / f"{SESSION}.json").exists()
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "# Queued questions",
+        "### Queued questions",
+        "###### Queued questions (waiting)",
+        "##Queued questions",
+        "## Not queued questions",
+        "### Pending QUEUED QUESTIONS: waiting",
+    ],
+)
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_launch_brief_warns_and_quotes_unparsed_queued_heading(
+    tmp_path: Path, checkouts: tuple[Path, Path], handoff: Path, heading: str
+) -> None:
+    """A heading we cannot parse is visible through the public launch brief."""
+    text = f"# Handoff\n\n{heading}\n1. Restart H3?\n\n## Next\n"
+    handoff.write_text(text, encoding="utf-8")
+    assert ch.queued_questions(text) is None
+    lines: list[str] = []
+    deps = _deps(tmp_path, checkouts[1], lines, runner=_Recorder(0))
+
+    assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 0
+
+    argv = json.loads("".join(lines).split("\n", 1)[0].removeprefix("argv: "))
+    brief = argv[6]
+    assert (
+        "WARNING: queued-questions heading exists but could not be parsed: "
+        f"`{heading}` — inspect the handoff in step 1"
+    ) in brief
+    assert "none found" not in brief
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# Handoff\n\n## Gotchas\n- g\n",
+        "# Handoff\nNo queued questions are recorded.\n",
+        "## Queued questions\n\n## Next\n",
+        "## Queued questions (waiting)\n\n## Next\n",
+    ],
+)
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_launch_brief_preserves_absent_or_empty_queued_questions_text(
+    tmp_path: Path, checkouts: tuple[Path, Path], handoff: Path, text: str
+) -> None:
+    """No heading, prose mentions, and an empty valid section keep the fallback."""
+    handoff.write_text(text, encoding="utf-8")
+    lines: list[str] = []
+    deps = _deps(tmp_path, checkouts[1], lines, runner=_Recorder(0))
+
+    assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 0
+
+    argv = json.loads("".join(lines).split("\n", 1)[0].removeprefix("argv: "))
+    brief = argv[6]
+    assert (
+        "none found — confirm the handoff's `## Queued questions` section in step 1"
+    ) in brief
+    assert "could not be parsed" not in brief
+
+
+@pytest.mark.usefixtures("coordinator_jobs")
+def test_launch_brief_extracts_qualified_section_despite_other_queued_headings(
+    tmp_path: Path, checkouts: tuple[Path, Path], handoff: Path
+) -> None:
+    """An unrelated wrong-level mention must not override a valid section."""
+    handoff.write_text(
+        "# Handoff\n\n### Queued questions\nOld note\n\n"
+        "## Queued questions: awaiting Ray\n\n1. Restart H3?\n\n## Next\n- Later\n",
+        encoding="utf-8",
+    )
+    lines: list[str] = []
+    deps = _deps(tmp_path, checkouts[1], lines, runner=_Recorder(0))
+
+    assert ch.launch(handoff, SESSION, dry_run=True, deps=deps) == 0
+
+    argv = json.loads("".join(lines).split("\n", 1)[0].removeprefix("argv: "))
+    brief = argv[6]
+    assert (
+        "Queued questions from the handoff (put each to Ray in the QUESTIONS format):\n"
+        "1. Restart H3?\n"
+    ) in brief
+    assert "none found" not in brief
+    assert "could not be parsed" not in brief
+    assert "Old note" not in brief
+    assert "- Later" not in brief
 
 
 @pytest.mark.usefixtures("coordinator_jobs")
