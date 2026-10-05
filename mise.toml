@@ -939,6 +939,10 @@ description = "Prove every pinned [bootstrap.packages] version still resolves (~
 # devcontainer lifecycle, so `do-not.md` #3 does not apply.
 run = 'uv run --project python dotfiles-setup apt-pins'
 
+[tasks.instruction-total]
+description = "Check aggregate eager instruction characters against the 140,000-character budget"
+run = 'uv run --project python dotfiles-setup instruction-total'
+
 [tasks.instructions-report]
 description = "InstructionsLoaded observer report (#917): eager / fired / never-fired rules"
 # Thin caller per zero-bash-logic; logic in

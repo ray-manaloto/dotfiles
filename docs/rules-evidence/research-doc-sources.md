@@ -166,3 +166,52 @@ _Named in the extracted text but **not** resolved during this extraction (carrie
 over from the rule, not re-probed): `jdx/mise`, `twpayne/chezmoi`, and the
 mintlify / Context7 endpoints above. The probe results are dated; re-run them
 before relying on a negative._
+
+
+## From the rule: Never mcp2cli a per-repo mintlify MCP URL — probe history
+
+`mcp2cli https://mintlify.com/<owner>/<repo>/mcp <tool>` was once step 2
+of this chain. **It does not work.** Those URLs are GET-only *preview
+descriptors*: a `curl GET` returns a plausible JSON tool-schema, while
+the POST `mcp2cli` sends returns `404`. There is no server behind them,
+and an API key does not unlock one (Mintlify keys are org-scoped).
+
+
+## From the rule: The chain — offline-source worked lookup
+
+    ```bash
+    KB=~/dev/github/ray-manaloto/knowledge-base/sources
+    CC=$KB/agent-harness-docs/docs/claude-code   # cited as `$CC/...` elsewhere
+    grep -rn "<topic>" "$CC/"
+    ```
+
+
+## From the rule: The chain — examples of harness questions
+
+    **This is where every question about how the harness itself behaves is
+    answered** — hook events and their matcher values, settings precedence and
+    reload semantics, tool input schemas, permission modes, the SDK surface.
+    Anything of the form *"does Claude Code do X"* is a **step-00 question**,
+    and reaching the web for it is a step you already had cheaper.
+
+
+## From the rule: MCP lanes — measured schema-cost audit
+
+Claude Code presents MCP tools **deferred — names only**, loading a schema on
+demand via `ToolSearch` (measured 33× smaller than eager schemas), so a
+registration's context cost is small; never refuse one on context grounds.
+Method and per-server table: `docs/rules-evidence/research-doc-sources.md`.
+
+
+## From the rule: MCP lanes — audit cost interpretation
+
+The residual cost is small and the same either way. What actually differs
+between the lanes is whether you control the alternative.
+
+
+## From the rule: MCP lanes — revised schema-tax rationale
+
+The asymmetry is deliberate, but **the reason is simplicity, not context spend.**
+In lane 1 registration buys a capability we cannot build; in lane 2 it buys
+something a `curl` already does, while adding a spawned process, a version to
+pin, an auth path and a failure mode for the doctor to police.

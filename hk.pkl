@@ -694,6 +694,12 @@ local allSteps = new Mapping<String, Config.Step> {
     check = "uv run --project python kb-setup md-budget"
   }
 
+  // Aggregate eager instruction characters, including @import closures.
+  // Always run: an imported instruction may live outside .claude/rules/.
+  ["instruction_total"] {
+    check = "uv run --project python dotfiles-setup instruction-total"
+  }
+
   // --- No global skill leakage (presence assertion for project-scoped
   //     mcp2cli + mintlify reference skills). Asserts that the
   //     project-local SKILL.md files exist; a commit that deletes them

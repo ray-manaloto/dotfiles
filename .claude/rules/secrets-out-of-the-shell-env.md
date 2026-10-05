@@ -22,9 +22,7 @@ in 0.03s is the arm that rules a lock out. What blocks is an *authorization*
 dialog for an item a non-GUI process may not read — nothing can answer it. The
 discriminating arm is the same command with an isolated config dir.
 
-The `gh:github.com` and `doppler-cli` keychain entries are present (recreated
-after a 2026-08-02 deletion; `security find-generic-password -s` rc=0, bogus
-name rc=44, re-measured 2026-09-24), so **the hang risk is live**: never wire a
+The `gh:github.com` and `doppler-cli` keychain entries are present, so **the hang risk is live**: never wire a
 mise `credential_command` to `gh auth token` or `fnox get` (fnox is
 Doppler-primary for these names and shells out to the `doppler` CLI).
 Deleting the entries is an OPERATOR action that needs its own triage — find
@@ -33,9 +31,7 @@ what recreates them first. Evidence:
 
 ⚠️ **This reaches fnox: its doppler provider SHELLS OUT to the `doppler` CLI**
 (error text `Doppler: command failed` — a subprocess failure). A hung `doppler`
-hangs every **uncached** Doppler read, on every shell prompt. That is why
-`AGE_PRIVATE_KEY` would not declare until the `doppler-cli` entry was gone — two
-attempts auto-rolled-back and the declaration was wrongly blamed.
+hangs every **uncached** Doppler read, on every shell prompt.
 
 ## Rules
 
@@ -43,8 +39,7 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    `printenv`, not `export -p`, not a debug log that includes them. If you need
    one for diagnosis, write it to the scratchpad and delete it. ⚠️ **No secret
    scanner can read one**: mise packs the whole delta into `__MISE_DIFF` (zlib +
-   base64), and compression destroys the patterns scanners match on — measured
-   gitleaks 2 → 0, betterleaks 1 → 0 on the same content in two forms. That gap
+   base64), and compression destroys the patterns scanners match on. That gap
    is why `no_env_dump` exists and why it is deliberately glob-less.
 2. **No process-level confinement.** Secrets live in the shell by decision, so
    `fnox exec` is not a confinement boundary — the parent shell already has
@@ -71,9 +66,7 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
 7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
    value.** Every gate above guards a *file write* or a *spawn*; none guards the
    output of a command an agent runs, and that output lands in the session
-   transcript. Measured 2026-08-02: a `${(P)k}` expansion meant as a presence flag
-   printed four live credential values, and all four had to be rotated. They were
-   the four `env = true` opt-ins. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
+   transcript. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
    `printenv VAR >/dev/null` and read the rc; never interpolate the value into a
    format string "just to check". Gap tracked in #474, still OPEN: one shape is
    now gated (below), every other shape is carried by this rule alone.
@@ -95,10 +88,7 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
 
 8. **⚠️ A FILE can be the credential, and "it's config" is not evidence.** Rule 7
-   guards a *variable*; on 2026-09-13 the leak came through a **file**, so nothing
-   could have fired. `~/.agentsview/config.toml` was described as holding feature
-   flags, and a `cat` of it put an `auth_token` and a `cursor_secret` in the
-   transcript. **The description was the whole error** — an unknown dotfile in a
+   guards a *variable*; an unknown dotfile in a
    tool's own directory is a credential store until proven otherwise, and the tool
    most likely to hold one is the tool you have not read the source of.
 
@@ -121,10 +111,7 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
      `cat` — a reader allowlist is walked around by the next spelling. Still string
      matching, so still evadable; treat it as a second line, never the first.
 
-   Both arms were verified live, on an **absent** covered path so a failed rule
-   could not leak: `cat ~/.netrc` → *denied* (not "No such file"), `Read` of
-   `~/.aws/credentials` → *denied*, while a normal `cat` of a repo file still
-   worked. Project-scoped by decision, so it binds sessions in this repo only.
+   Project-scoped by decision, so it binds sessions in this repo only.
 
 ## See also
 

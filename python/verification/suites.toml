@@ -1405,6 +1405,57 @@ tokens = [
 ]
 
 [[suite]]
+name = "workflow.instruction-total-enforcement"
+description = "The aggregate eager instruction budget must remain wired through the hk step, mise task, and public CLI registration and dispatch. Whole-line assertions reject commented-out commands. The shared kb_setup.md_budget import and resolver/classifier call sites must remain present, alongside isolated tests for both limit outcomes, unscoped-rule inclusion, the default limit, and deleted or commented-out wiring."
+category = "workflow"
+check_type = "static"
+handler = "require_lines"
+paths_required = true
+paths = [
+    "hk.pkl",
+    "mise.toml",
+    "python/src/dotfiles_setup/main.py",
+    "python/src/dotfiles_setup/instruction_total.py",
+    "tests/test_instruction_total.py",
+]
+per_path_lines = { "hk.pkl" = [
+    '["instruction_total"] {',
+    'check = "uv run --project python dotfiles-setup instruction-total"',
+], "mise.toml" = [
+    '[tasks.instruction-total]',
+    "run = 'uv run --project python dotfiles-setup instruction-total'",
+], "python/src/dotfiles_setup/main.py" = [
+    '"instruction-total",',
+    '_add_instruction_total_subcommand(subparsers)',
+    '"instruction-total": lambda: sys.exit(',
+    'instruction_total_main(',
+], "python/src/dotfiles_setup/instruction_total.py" = [
+    'from kb_setup.md_budget import classify, has_paths_frontmatter, resolve_imports',
+    'members.update(path.resolve() for path in resolve_imports(entry, root))',
+    'if classify(relative) != "rule_unscoped":',
+    'if not has_paths_frontmatter(path.read_text(encoding="utf-8")):',
+], "tests/test_instruction_total.py" = [
+    'def test_cli_limit_arms(',
+    '[(44, 0, False), (43, 0, False), (42, 1, True)],',
+    'assert result.returncode == expected_rc, result.stderr',
+    'assert decode(result.stdout.encode(), dict) == {',
+    'def test_cli_counts_unscoped_rules(eager_tree: Path) -> None:',
+    'assert with_unscoped_rule.returncode == 1, with_unscoped_rule.stderr',
+    'assert without_unscoped_rule.returncode == 0, without_unscoped_rule.stderr',
+    'def test_cli_default_limit(eager_tree: Path) -> None:',
+    'EXPECTED_DEFAULT_LIMIT = 140_000',
+    'assert default_pass.returncode == 0, default_pass.stderr',
+    'assert decode(default_pass.stdout.encode(), dict)["limit"] == EXPECTED_DEFAULT_LIMIT',
+    'assert default_fail.returncode == 1, default_fail.stderr',
+    'def test_wiring_contract_rejects_missing_or_commented_lines(',
+    'assert line_baseline["status"] == "passed", line_baseline',
+    'assert line_mutation["status"] == "failed", line_mutation',
+    'def test_wiring_contract_rejects_missing_paths(',
+    'assert path_baseline["status"] == "passed", path_baseline',
+    'assert path_mutation["status"] == "failed", path_mutation',
+] }
+
+[[suite]]
 name = "eval.tier1-runner-wiring"
 description = "Tier-1 eval wiring (#354 PR 2). Tier 0 asks whether a thing is DECLARED; tier 1 asks whether it RESOLVES, and the gap between those is exactly what #354 cost — a lane named in doctrine, in both repos, with a passing contract, whose CLI is not installed. This contract asserts the whole chain exists so tier 1 cannot silently stop running: the `eval` mise task, the CLI subcommand, this repo's cases module, its tests, and the `Gate(\"eval\")` entry that puts it in the ship gates. The RUNNER is deliberately NOT bound here — it is `kb_setup.evals`, lives in the knowledge-base repo, and is covered by ITS tests; naming a path outside this tree could only ever fail (`paths_required` is strict, #299). What binds it instead is the SHA-pinned kb-setup dependency plus the `tier1.shared-engine-resolves` case, which imports it at run time. Same shape as `workflow.md-budget-enforcement`: bind the seam that survives here."
 category = "eval"
