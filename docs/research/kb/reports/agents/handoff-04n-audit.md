@@ -1,0 +1,33 @@
+# Handoff 04n audit (Explore subagent of coordinator a629f1c6, 2026-10-04 ~20:25 CDT) — verbatim
+
+## Audit: transcript adfcae85 (1112 lines) vs handoff 04n, the ship-queue top blocks and the task_plan "Coordinator block — adfcae85" (task_plan.md:2825)
+
+This was a read-only audit, so I persisted nothing. Please save this report yourself. Times are CDT; the transcript records UTC (subtract 5 h). The handoff commit 598eaedb is at 20:02:09 (jsonl L1054).
+
+1. **INCORRECT: the land-smoke r3 re-ship would ship the wrong commit.** Handoff: "`fix/land-smoke-timeout` @ e02c169f … coordinator re-ships from MAIN checkout". Transcript L819: the lane says "Committed e02c169f on fix/land-smoke-timeout (on top of 995fb0df)". Live git disagrees. The branch ref `fix/land-smoke-timeout` is still at **995fb0df**, which is the version whose ship failed with rc=1. e02c169f exists only as a **detached HEAD** in `.claude/worktrees/land-smoke-timeout`. Correction: "e02c169f is on a detached HEAD; the branch is still 995fb0df. Before the main-checkout re-ship, have the lane run `git branch -f fix/land-smoke-timeout e02c169f` (or `switch -C`) and confirm the branch tip is e02c169f."
+2. **INCORRECT: ph01 branch name.** Handoff table: `feat/ph01-capacity-dispatch`. That branch does not exist. The launch at L909 runs `s/ph17-hermetic/ph01-capacity/g` before the dispatch substitution, so the brief really reads `-b feat/ph01-capacity-mise` (ph01-brief.md:6). L1082 relay: "branch feat/ph01-capacity-mise @ 963d9bf1". After the handoff the branch moved to **8925f572** (20:06, "persist rev2 premise-verifier record"). Correction: "`feat/ph01-capacity-mise` (wt .claude/worktrees/ph01-capacity) @ 8925f572; SLOT ph01 REQUESTED 20:04 (L1082), relayed to the successor (L1087), not granted."
+3. **VAGUE: who holds the SLOT, and the missing relay-rule rc.** The handoff says relay-rule-r2 holds the slot, which is correct: GO was sent at 19:44 (L822, "Run the full gates … on b0d6699f … Report each rc and release"), not "~19:50". No message from relay-rule-r2 arrives after L822, so **its gate rcs were never reported to adfcae85**. Correction: "SLOT GO to relay-rule-r2 at 19:44; rcs not reported as of retirement (20:06); successor must ask the lane for its rcs and slot release by name." The lane still addresses adfcae85.
+4. **INCORRECT/stale: instruction-budget is already committed.** Handoff: "`fix/instruction-budget` (132,221 chars, uncommitted→commit before gates)". Git shows `fix/instruction-budget` @ **834f4aab** (19:37, "trim eager instruction total under the 150k harness limit + gate"), wt .claude/worktrees/instruction-budget. Correction: "committed 834f4aab; gates and the Opus orphaned-run review are still owed."
+5. **LOST: the gfy-T3 SLOT request.** At L960 (~19:59) gfy-T3 sends "SLOT REQUEST gfy-T3 … 16 targeted tests pass … Waiting for 'SLOT gfy-T3 GO'", and L974 replies QUEUED after relay-rule → instruction-budget → gfy-T1. The work is **uncommitted**: `feat/graphify-fleet` is still at base cd66147e and the gfy-t3 worktree has 10 dirty paths. Correction: "gfy-T3 (b7504dee) REQUESTED; impl uncommitted in wt gfy-t3; it must commit before gates."
+6. **VAGUE: lane ids and states missing from the table.** gfy-T1 = bdb7ae44, 71d071f0, REQUESTED at L844 and QUEUED at L846. gfy-T10 = b7109a82, launched after Ray accepted graphify folder trust (L916). ph17 = c6ce77dd, REQUESTED at L977 on `feat/ph17-hermetic-mise` @ 8c829565 (that SHA is correct). coord-router: `research/coord-router` has no commits yet (still at cd66147e).
+7. **LOST (after the handoff): the process-hardening docs-commit ask.** At L1098 the lane sends "SLOT process-hardening REQUEST (docs commit only) … 02 rev 3, 04 rev 3, 19 rev 3 … Committing releases spec 03"; L1108 relays it to the successor. Git: `feat/process-hardening` is now **28153e99** (20:07, "specs 02/04/19 rev 3, 03 rev 2.1"). Correction: "process-hardening @ 28153e99; spec 03 dispatchable (may run in a SEPARATE worktree parallel to 01/02, per L900); 02/04/19 in premise verification; verifier order 01→02→03→20, one writer per checkout (shared pyproject.toml)."
+8. **INCORRECT: where D7 was ruled.** The handoff files D7 under "AskUserQuestion in session adfcae85". L739 says "D7 (Ray, AskUserQuestion in this lane)", meaning the graphify-plan lane. Correction: "D7 ruled in the graphify-plan lane; adfcae85 ruled it Ray-only (L742)."
+9. **VAGUE: Ray's Q3 ruling is cut short.** The L558 answer also tells the lanes to "search github issues/prs/discussions and saved github searches", and the coord-router brief carries that (brief:7,10). Add "research includes anthropics/claude-code issues/PRs/discussions + this repo's saved searches."
+10. **LOST: promises the old coordinator made to lanes.**
+    - L823 to land-smoke-r3: "I'll send you the PR# then. Leave the branch alone."
+    - L742 to graphify-plan: "kb-ship is queued … I'll tell you when it merges."
+    - L742, also to graphify-plan: D7 command blocks come back to Ray through the coordinator.
+    - L742, also to graphify-plan: ab3b9238 is coordinator-shipped and the lane must not ship it.
+    - L930 to process-hardening: "Ask me for the docs-commit GO when 02 rev 3 and 04 rev 3 are ready." That GO is now pending through the relay in item 7.
+    - L867: the pgrep→host-slot-free replacement waits for land-smoke-r3 to be on main.
+11. **OK (verified):** No heavy runs are left open. The old coordinator launched two background jobs (L87 wait-ship and L599 ship-04m), and both completed rc 0 (L556, L766). #1691 was opened at 19:35 and is MERGED as of 19:42 per gh. No other PR was opened after 19:30. The land-smoke r3 first ship was rc=1 with no PR. The 04n handoff itself is UNSHIPPED (598eaedb).
+12. **INCORRECT/stale: the task_plan adfcae85 block.**
+    - It still says "graphify-plan (7815f274, ready to ship)" and "Ray decisions D1–D4 owed". Change these to "ab3b9238 final; D1–D7 ruled".
+    - It still says "land-smoke ship (running)". Change to "rc=1 → fixed e02c169f (detached, see item 1)".
+    - It still says "04m ship running". Change to "#1691 MERGED 19:42".
+    - It needs one more line: "20:04–20:06 retired adfcae85 relayed ph01 SLOT REQUEST + process-hardening docs-commit ask to successor `dotfiles-20261004T200342.056321000-05.coordinator` (a629f1c6), which acked at L1119 'relay received (ph01 queued). Lanes notified.'"
+13. **VAGUE: the ship-queue 19:35 block** lists "process-hardening 8e69cc00(+)". The current SHA is 28153e99 (it was f58349cc at handoff). Also add gfy-T3 and ph01 to the 20:05 block, with ph01's branch named `-mise`.
+
+## GitHub repos touched
+
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — local git refs and `gh` PR state for #1691
