@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ray-manaloto/dotfiles/schemas/graphify-fleet.schema.json",
+  "title": "FleetPlan",
+  "description": "Graphify pin state across dotfiles, KB and host, with ordered steps.",
+  "$comment": "One document carries both verbs: `status` prints it with an empty `steps`, `plan` fills `steps`. Every probe that could not answer is UNVERIFIABLE with its reason, never silently current (probes-need-a-control-arm.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["upstream", "legs", "fork_probe", "verdict", "steps"],
+  "properties": {
+    "upstream": {"$ref": "#/$defs/Upstream"},
+    "legs": {"type": "array", "items": {"$ref": "#/$defs/Leg"}},
+    "fork_probe": {"$ref": "#/$defs/ForkProbe"},
+    "verdict": {"$ref": "#/$defs/LegState"},
+    "steps": {"type": "array", "items": {"$ref": "#/$defs/PlanStep"}}
+  },
+  "$defs": {
+    "LegName": {
+      "description": "One independently pinned graphify surface.",
+      "type": "string",
+      "enum": ["dotfiles", "kb", "host"]
+    },
+    "LegState": {
+      "description": "Currency of a leg against the upstream latest release.",
+      "type": "string",
+      "enum": ["current", "behind", "drift", "unverifiable"]
+    },
+    "Upstream": {
+      "description": "The newest upstream graphify release, or why it is unknown.",
+      "type": "object",
+      "required": ["repo", "version", "error"],
+      "properties": {
+        "repo": {"type": "string"},
+        "version": {"type": ["string", "null"]},
+        "error": {"type": ["string", "null"]}
+      }
+    },
+    "PinSite": {
+      "description": "One place a graphify version or revision is recorded.",
+      "type": "object",
+      "required": ["location", "value"],
+      "properties": {
+        "location": {"type": "string"},
+        "value": {"type": ["string", "null"]}
+      }
+    },
+    "Leg": {
+      "description": "One pinned surface, its sites, and every finding about it.",
+      "type": "object",
+      "required": ["name", "state", "version", "sites", "findings"],
+      "properties": {
+        "name": {"$ref": "#/$defs/LegName"},
+        "state": {"$ref": "#/$defs/LegState"},
+        "version": {"type": ["string", "null"]},
+        "sites": {"type": "array", "items": {"$ref": "#/$defs/PinSite"}},
+        "findings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "ForkProbe": {
+      "description": "Whether upstream now ships the fork's features natively.",
+      "type": "object",
+      "required": ["tag", "feature_hits", "control_hits", "native", "error"],
+      "properties": {
+        "tag": {"type": ["string", "null"]},
+        "feature_hits": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "control_hits": {"type": ["integer", "null"], "minimum": 0},
+        "native": {"type": ["boolean", "null"]},
+        "error": {"type": ["string", "null"]}
+      }
+    },
+    "PlanStep": {
+      "description": "One ordered action; human-gated steps are printed, never run.",
+      "type": "object",
+      "required": ["leg", "summary", "commands", "human_gate", "runnable"],
+      "properties": {
+        "leg": {"$ref": "#/$defs/LegName"},
+        "summary": {"type": "string"},
+        "commands": {"type": "array", "items": {"type": "string"}},
+        "human_gate": {"type": "boolean"},
+        "runnable": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -282,3 +282,9 @@ input = "../schemas/saved-search-snapshot.schema.json"
 output = "src/dotfiles_setup/generated/saved_search_snapshot.py"
 custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
 """Generated saved-search snapshot models; edit the schema and rerun codegen."""'''
+
+[tool.datamodel-codegen.jobs.graphify-fleet]
+input = "../schemas/graphify-fleet.schema.json"
+output = "src/dotfiles_setup/generated/graphify_fleet.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated graphify-fleet models; edit the schema and rerun `mise run codegen`."""'''

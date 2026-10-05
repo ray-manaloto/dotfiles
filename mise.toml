@@ -861,6 +861,16 @@ description = "Read-only Graphify lock/install/PATH/stamp/skill currency check"
 env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify check'
 
+[tasks.graphify-fleet]
+description = "Graphify pins across dotfiles, KB and host: status | plan | apply --leg <dotfiles|kb|host>"
+# Thin caller (zero-bash-logic); logic in graphify_fleet.py. status/plan are
+# read-only (one `gh release view`; the KB and fork are read from local refs,
+# never fetched). apply --leg dotfiles delegates to graphify-upgrade; --leg host
+# only PRINTS; --leg kb refuses until T8. Same ambient-PATH capture as
+# graphify-check, so the host leg sees the user-global pin, not the uv venv.
+env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
+run = 'uv run --project python dotfiles-setup graphify-fleet'
+
 [tasks.graphify-affected]
 description = "Blast radius: reverse-traverse the graph for what breaks if <node> changes"
 # Thin caller (zero-bash-logic); logic in

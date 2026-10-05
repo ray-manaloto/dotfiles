@@ -98,6 +98,7 @@ from dotfiles_setup.graphify_currency import (
     graphify_update_main,
     graphify_upgrade_main,
 )
+from dotfiles_setup.graphify_fleet import graphify_fleet_main
 from dotfiles_setup.graphify_hook import hook_guard_main
 from dotfiles_setup.graphify_skill import graphify_skill_refresh_main
 from dotfiles_setup.handoff_check import main as handoff_check_main
@@ -1258,6 +1259,10 @@ def _add_graphify_subcommands(
     Args:
         subparsers: The parent subparsers action to attach graphify commands to.
     """
+    subparsers.add_parser(
+        "graphify-fleet",
+        help="Graphify pins across dotfiles, KB and host (status|plan|apply --leg)",
+    ).add_argument("fleet_argv", nargs=argparse.REMAINDER)
     graphify_parser = subparsers.add_parser(
         "graphify", help="Query the project knowledge graph (host-only, #310)"
     )
@@ -3035,6 +3040,9 @@ def _build_command_handlers(
             plugin_health_e2e_main(project_root=project_root)
         ),
         "graphify": lambda: handle_graphify(args, project_root),
+        "graphify-fleet": lambda: sys.exit(
+            graphify_fleet_main(args.fleet_argv, project_root)
+        ),
         "dependency-ownership": lambda: sys.exit(
             dependency_ownership_main(project_root)
         ),
