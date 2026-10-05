@@ -30,13 +30,19 @@ policy; the ``verify-container-latest`` task is a thin caller.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import logging
+import math
+import os
 import subprocess
 import sys
+import time
+import uuid
 from typing import TYPE_CHECKING
 
+from dotfiles_setup import host_lock
 from dotfiles_setup.devcontainer_names import resolve_names
 
 if TYPE_CHECKING:
@@ -47,6 +53,8 @@ logger = logging.getLogger(__name__)
 # Smoke can take minutes (tier 2 runs pytest, tier 3 links + runs sanitizers
 # and reaches github over ssh); bound it so a hang surfaces instead of blocking.
 _SMOKE_TIMEOUT_S = 1800.0
+_SMOKE_TIMEOUT_ELAPSED_RATIO = 0.9
+_SMOKE_PROCESS_ERROR_LIMIT = 500
 
 
 @dataclasses.dataclass(frozen=True)
@@ -59,10 +67,16 @@ class Check:
 
 
 def _run(
-    cmd: list[str], *, timeout: float | None = None
+    cmd: list[str], *, timeout: float | None = None, pass_fds: tuple[int, ...] = ()
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        cmd, capture_output=True, text=True, check=False, timeout=timeout
+        cmd,
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+        timeout=timeout,
+        pass_fds=pass_fds,
     )
 
 
@@ -105,25 +119,237 @@ def _bind_mount_dest(container_id: str, workspace: Path) -> str | None:
     return None
 
 
-def _run_smoke(container_id: str, workspace_dest: str) -> tuple[bool, str]:
-    res = _run(
-        [
-            "docker",
-            "exec",
-            "--workdir",
-            workspace_dest,
-            container_id,
-            "scripts/devcontainer-smoke.sh",
-        ],
-        timeout=_SMOKE_TIMEOUT_S,
+# Executed with the image's system Python, not the mise shim. The same scanner
+# protects the probing process and its ancestor chain on both operations.
+_SMOKE_PROCESSES_PROGRAM = """
+import json
+import os
+import signal
+import sys
+import time
+from pathlib import Path
+
+proc = Path("/proc")
+mode, marker = sys.argv[1:]
+protected = {os.getpid()}
+parent = os.getppid()
+while parent and parent not in protected:
+    protected.add(parent)
+    try:
+        stat = (proc / str(parent) / "stat").read_text()
+        parent = int(stat.rsplit(") ", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        break
+
+def matching():
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) in protected:
+            continue
+        try:
+            state = (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0]
+            if state == "Z":
+                continue
+            if mode == "probe":
+                argv = (entry / "cmdline").read_bytes().split(b"\\0")
+                selected = bool(argv) and (
+                    os.path.basename(argv[0]) == b"devcontainer-smoke.sh"
+                    or (os.path.basename(argv[0]) in {b"bash", b"sh"}
+                        and len(argv) > 1
+                        and os.path.basename(argv[1]) == b"devcontainer-smoke.sh")
+                )
+            else:
+                environment = (entry / "environ").read_bytes().split(b"\\0")
+                selected = ("DOTFILES_SMOKE_RUN_ID=" + marker).encode() in environment
+            if selected:
+                found.append(int(entry.name))
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except PermissionError:
+            if mode == "probe":
+                raise SystemExit("process probe unreadable: pid " + entry.name)
+            continue
+    return sorted(found)
+
+pids = matching()
+reaped = set()
+if mode == "reap":
+    for attempt in range(3):
+        for pid in pids:
+            try:
+                fd = os.pidfd_open(pid)
+                try:
+                    # Bind signals to the kernel process identity, then recheck
+                    # its marker. A recycled numeric pid cannot redirect SIGKILL.
+                    current = (proc / str(pid) / "environ").read_bytes().split(b"\\0")
+                    if ("DOTFILES_SMOKE_RUN_ID=" + marker).encode() in current:
+                        signal.pidfd_send_signal(fd, signal.SIGKILL)
+                        reaped.add(pid)
+                finally:
+                    os.close(fd)
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+        if not pids:
+            break
+        time.sleep(0.1)
+        pids = matching()
+print(json.dumps({"pids": pids, "reaped": len(reaped)}))
+"""
+
+
+def _smoke_process_error(message: str) -> str:
+    """Keep bounded diagnostics without including the inline scanner program."""
+    for program in (
+        _SMOKE_PROCESSES_PROGRAM,
+        repr(_SMOKE_PROCESSES_PROGRAM),
+        json.dumps(_SMOKE_PROCESSES_PROGRAM),
+    ):
+        message = message.replace(program, "[inline scanner]")
+    return message.strip()[:_SMOKE_PROCESS_ERROR_LIMIT]
+
+
+def _smoke_processes(
+    container_id: str, *, marker: str = "", lock_fd: int | None = None
+) -> tuple[list[int], int, str]:
+    """Probe script names or reap only this marker; fail closed on probe errors."""
+    try:
+        result = _run(
+            [
+                "docker",
+                "exec",
+                container_id,
+                "/usr/bin/python3",
+                "-c",
+                _SMOKE_PROCESSES_PROGRAM,
+                "reap" if marker else "probe",
+                marker,
+            ],
+            timeout=10,
+            pass_fds=() if lock_fd is None else (lock_fd,),
+        )
+        if result.returncode:
+            return (
+                [],
+                0,
+                _smoke_process_error(result.stderr) or f"exit {result.returncode}",
+            )
+        payload = json.loads(result.stdout)
+        pids = payload["pids"]
+        reaped = payload["reaped"]
+        if not isinstance(pids, list) or not all(isinstance(pid, int) for pid in pids):
+            return [], 0, "invalid process list"
+        if not isinstance(reaped, int):
+            return [], 0, "invalid reap count"
+    except subprocess.TimeoutExpired as exc:
+        return (
+            [],
+            0,
+            _smoke_process_error(
+                f"process {'reap' if marker else 'probe'} "
+                f"timed out after {exc.timeout:g} seconds"
+            ),
+        )
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        return [], 0, _smoke_process_error(str(exc))
+    return pids, reaped, ""
+
+
+def _smoke_output(
+    stdout: str | bytes | None, stderr: str | bytes | None, *, timed_out: bool
+) -> str:
+    """Prefer FAIL; use stdout for timeouts and combined streams for completed runs."""
+    streams = [
+        part.decode(errors="replace") if isinstance(part, bytes) else part or ""
+        for part in (stdout, stderr)
+    ]
+    for stream in streams:
+        for line in stream.splitlines():
+            if "FAIL" in line:
+                return line[-2000:]
+    lines = (
+        streams[0].strip().splitlines() or streams[1].strip().splitlines()
+        if timed_out
+        else (streams[0] + streams[1]).strip().splitlines()
     )
+    return " | ".join(lines[-3:])[-2000:] or (
+        "no partial output" if timed_out else "smoke failed (no output)"
+    )
+
+
+def _smoke_timeout_detail(
+    container_id: str, marker: str, *, lock_fd: int | None
+) -> str:
+    pids, reaped, error = _smoke_processes(container_id, marker=marker, lock_fd=lock_fd)
+    if error:
+        return f"ORPHANS REMAIN: process reap unverified ({error})"
+    if pids:
+        return "ORPHANS REMAIN: pids " + ", ".join(map(str, pids))
+    return f"reaped {reaped} in-container processes"
+
+
+def _run_smoke(
+    container_id: str, workspace_dest: str, *, lock_fd: int | None = None
+) -> tuple[bool, str]:
+    timeout = _SMOKE_TIMEOUT_S
+    try:
+        configured = float(os.environ.get("DOTFILES_SMOKE_TIMEOUT_S", timeout))
+    except ValueError:
+        configured = timeout
+    if math.isfinite(configured) and configured > 0:
+        timeout = configured
+    pids, _, error = _smoke_processes(container_id, lock_fd=lock_fd)
+    if error:
+        return False, f"smoke process probe failed: {error}"
+    if pids:
+        return False, (
+            f"smoke already running in {container_id[:12]} "
+            f"(pids {', '.join(map(str, pids))})"
+        )
+    marker = str(uuid.uuid4())
+    kill_after = max(1, min(30, 0.1 * timeout))
+    grace = max(2, min(60, 0.1 * timeout))
+    started = time.monotonic()
+    try:
+        res = _run(
+            [
+                "docker",
+                "exec",
+                "-e",
+                f"DOTFILES_SMOKE_RUN_ID={marker}",
+                "--workdir",
+                workspace_dest,
+                container_id,
+                "timeout",
+                f"--kill-after={kill_after:g}s",
+                f"{timeout:g}s",
+                "scripts/devcontainer-smoke.sh",
+            ],
+            timeout=timeout + kill_after + grace,
+            pass_fds=() if lock_fd is None else (lock_fd,),
+        )
+    except subprocess.TimeoutExpired as exc:
+        cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
+        return False, (
+            f"smoke timed out after {timeout:g} seconds: "
+            f"{_smoke_output(exc.stdout, exc.stderr, timed_out=True)}; {cleanup}"
+        )
     if res.returncode == 0:
         return True, "tiers 1-3 OK"
-    combined = (res.stdout + res.stderr).strip().splitlines()
-    # Surface the first FAIL line if present, else the tail.
-    fails = [line for line in combined if "FAIL" in line]
-    tail = fails[:1] or combined[-3:]
-    return False, " | ".join(tail) if tail else "smoke failed (no output)"
+    if res.returncode in {124, 137}:
+        elapsed = time.monotonic() - started
+        cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
+        timed_out = elapsed >= _SMOKE_TIMEOUT_ELAPSED_RATIO * timeout
+        status = (
+            f"smoke timed out after {timeout:g} seconds (in-container timeout)"
+            if timed_out
+            else f"smoke exited with rc {res.returncode}"
+        )
+        output = _smoke_output(res.stdout, res.stderr, timed_out=timed_out)
+        return False, f"{status}: {output}; {cleanup}"
+    return False, (
+        f"{_smoke_output(res.stdout, res.stderr, timed_out=False)}"
+        " — stale base? `mise run dev-rebuild`"
+    )
 
 
 def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
@@ -132,6 +358,30 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
     Returns the ordered list of checks. Short-circuits the remaining checks
     when no container is running (there is nothing to validate).
     """
+    slot = (
+        host_lock.held(host_lock.HEAVY_GATE, f"container smoke {workspace}")
+        if run_smoke
+        else contextlib.nullcontext()
+    )
+    try:
+        with slot as lock_fd:
+            return _verify_latest_under_slot(
+                workspace, run_smoke=run_smoke, lock_fd=lock_fd
+            )
+    except host_lock.HostLockTimeoutError as exc:
+        return [
+            Check(
+                "smoke-tiers-1-3",
+                ok=False,
+                detail=f"smoke host heavy-slot wait timed out: {exc}",
+            )
+        ]
+
+
+def _verify_latest_under_slot(
+    workspace: Path, *, run_smoke: bool, lock_fd: int | None
+) -> list[Check]:
+    """Resolve every identity from current state after acquiring the host slot."""
     branch = _host_branch(workspace)
     head = _host_head(workspace)
     logger.info("verify-latest: branch=%s HEAD=%s", branch, head[:8])
@@ -181,16 +431,12 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
     )
 
     if run_smoke and dest is not None:
-        smoke_ok, smoke_detail = _run_smoke(container_id, dest)
+        smoke_ok, smoke_detail = _run_smoke(container_id, dest, lock_fd=lock_fd)
         checks.append(
             Check(
                 "smoke-tiers-1-3",
                 ok=smoke_ok,
-                detail=(
-                    smoke_detail
-                    if smoke_ok
-                    else f"{smoke_detail} — stale base? `mise run dev-rebuild`"
-                ),
+                detail=smoke_detail,
             )
         )
 
