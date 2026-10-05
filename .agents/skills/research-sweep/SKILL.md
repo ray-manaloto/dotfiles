@@ -172,6 +172,15 @@ this repo use this skill and do not import `kb_setup.research`
    only for sentiment questions. Done when every run's manifest path and real
    exit code are written into the report's Evidence section (and appended to
    `findings.md` when the planning files are enabled).
+   **GitHub topics** (Ray, 2026-10-04): when the question is "how do others
+   build X", also sweep the topics in `docs/research/github-topics.toml` that
+   fit it — `gh api -X GET search/repositories -f q='topic:<name>' -f
+   sort=updated` — with a fresh nonexistent topic as the known-absent arm (it
+   must return `total_count` 0). Record each repo you cite as an `[[example]]`
+   with the topics IT applied; a topic seen on two or more relevant examples
+   becomes a `[[topic]]` row with `origin = "discovered"`, so the list grows
+   from what examples actually use. Saved-search reruns cannot watch
+   repositories yet, so re-sweep topics by hand until that kind exists.
 2. **Triage.** Read each manifest and its `<source>.json` files. Dedup by URL,
    rank primary sources (source code, merged PRs, maintainer answers, release
    notes) above secondary ones, and pick at most six URLs to deep-read.

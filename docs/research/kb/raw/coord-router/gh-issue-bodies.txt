@@ -1,0 +1,344 @@
+######## #94000
+[FEATURE] Cross-session send cap (10 per human input) is not configurable and ignores inbound human-originated messages
+state=open created=2026-09-13T13:57:21Z comments=5
+## Summary
+
+In the Claude Desktop app (Code tab), cross-session messaging (`ccd_session_mgmt` `send_message`) stops after 10 sends with:
+
+> Not delivered: this session has already messaged Claude Desktop sessions 10 times since your user last typed here, which looks like sessions messaging each other automatically. Paused until your user's next message in this session.
+
+The only reset is a human typing in the paused session. Messages arriving *from* other sessions do not reset it, and neither do scheduled wakeups or task notifications.
+
+## Why this is a problem
+
+We run a small coordinator topology: one session talks to the human, a second session dispatches work to an external agent (through an MCP bridge) and reports results back. The reporting session is intentionally autonomous for hours, so it hits the cap in the first afternoon and every report after that is silently dropped on the sender side (the sender sees the refusal; the receiver sees nothing). The workaround is a human typing a no-op line in the paused session, which is exactly the kind of babysitting the autonomous session was meant to remove.
+
+The loop guard itself is a good idea. The problem is that it cannot be tuned, and that the reset condition ignores every non-human signal.
+
+## Requests (any one of these would help)
+
+1. **Make the cap configurable** in `settings.json` or managed settings (e.g. `crossSessionSendLimit`, per-session, default 10). Setting it higher should still keep the guard, just for a different burst size.
+2. **Let an inbound human-originated message reset the counter** — a message that was itself sent within a session where the human typed recently — so a human touching one session counts for the pair.
+3. **Document the number and the reset condition** on the cross-session messaging page. Today the docs only say the send is refused when "a rapid burst reaches what the inbox accepts".
+4. **Surface the paused state to the receiving side** (a one-line notice or a `list_sessions` field) so the receiver knows reports are being dropped instead of assuming silence.
+
+## Environment
+
+- Claude Desktop (Code tab) on Windows 11, Claude Code 2.1.266 (the same string is present in 2.1.260).
+- Two sessions on the same machine, same project, both in bypass-permissions mode. Remote Control off.
+
+## Observed timeline (one day)
+
+- Session B started at 12:04 with no human input afterwards; its sends to session A were refused from 16:01 onward.
+- Session A's sends to B kept being delivered (as user turns in B) without resetting B's counter.
+- A human typing one line in B at ~22:5x resumed sends; the cap was hit again within the evening.
+
+
+######## #89462
+Feature request: durable agent addresses + store-and-forward for cross-session messaging
+state=open created=2026-08-25T08:02:17Z comments=0
+Running a multi-session agent team (15+ Claude Code sessions coordinating via one repo).
+
+Problem: Agents can't reliably message each other. No stable addresses (session
+names rotate on restart), no mailbox for idle sessions (messages to sleeping
+sessions are lost or unsendable), and sends can fail silently (green receipt,
+nothing delivered).
+
+Workaround today: identity via a hand-maintained hello log, delivery via
+appending blocks to markdown files, confirmation via "recipient echo only",
+human as router of last resort.
+
+Ask: durable agent addresses + store-and-forward messaging with real delivery
+receipts (delivered/read, errors instead of silent loss). Wake-on-message for
+idle sessions would remove the human from the loop entirely.
+
+######## #97220
+Hooks cannot obtain the session display name that ListAgents reports and SendMessage accepts
+state=open created=2026-09-25T17:49:22Z comments=0
+## Summary
+
+Hooks receive `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET`, and `CLAUDE_CODE_MESSAGING_TOKEN`, but not the session display name that `ListAgents` reports and `SendMessage` accepts as an address. That name is the only string that can be used to address a session, and it is unobtainable from a hook by any route I could find: it is not in the environment, not on disk, and not retrievable over the messaging socket.
+
+The practical consequence is that a hook cannot label anything — a terminal title, a status line, a dashboard record — with a name that a human could then act on.
+
+## Environment
+
+- Claude Code 2.1.235
+- VS Code extension `anthropic.claude-code-2.1.282-darwin-arm64`
+- macOS 26.5 (arm64)
+
+## Motivation
+
+I run several concurrent sessions across four repos and route work between them with `SendMessage`. To do that I have to know the target's name, e.g. `diffusitron-react-native-cf`. Today the only way to learn it is to run `ListAgents` and read the list, which does not tell me which terminal tab or window is which.
+
+The obvious fix on my side is to put the name in the terminal title from a `SessionStart` hook, so that reading a tab gives me a string I can hand to another session directly. That is not currently possible.
+
+## What is available to a hook
+
+```
+CLAUDE_CODE_SESSION_ID=6f3649b7-a23e-4618-ab32-28aed74c9504   # present
+CLAUDE_CODE_MESSAGING_SOCKET=/tmp/cc-socks/85667.sock         # present
+CLAUDE_CODE_MESSAGING_TOKEN=<redacted>                        # present
+CLAUDE_CODE_SESSION_NAME                                      # does not exist
+```
+
+For the same session, `ListAgents` reports:
+
+```
+diffusitron-react-native-a5 [9f82cd]
+```
+
+Note that `a5` is not derivable from the session id, and the ref `9f82cd` is a third distinct value. I checked md5/sha1/sha256 of the session id against the ref; none match. So the name cannot be computed from what a hook already has.
+
+## What I checked
+
+**Not in any environment variable.** Grepping the binary for `CLAUDE_CODE_[A-Z_]*(NAME|SESSION|MESSAGING)` yields `CLAUDE_CODE_PROJECT_DIR_NAME`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_REMOTE_SESSION_ID`, `CLAUDE_CODE_MESSAGING_SOCKET`, `CLAUDE_CODE_MESSAGING_TOKEN` and similar, but nothing carrying the display name.
+
+**Not on disk.**
+
+- `~/.claude/projects/<slug>/sessions-index.json` — entries carry `created`, `fileMtime`, `firstPrompt`, `fullPath`, `gitBranch`, `isSidechain`, `messageCount`, `modified`, `projectPath`, `sessionId`, `summary`. The `summary` is the auto-generated conversation title (e.g. "Workflow gate browser is…"), not the addressable name.
+- `~/.claude/ide/*.lock` — `authToken`, `ideName`, `pid`, `runningInWindows`, `transport`, `workspaceFolders`. IDE identity only.
+- Transcript `.jsonl` metadata — `sessionId`, `cwd`, `gitBranch`, `version`. The name appears in some transcripts only as prose inside message text, never as a field.
+- `/tmp/cc-socks/<pid>.sock` — a zero-byte socket file; the filename encodes the pid, nothing more.
+
+**Not retrievable over the messaging socket.** This was the most promising route, since a hook has both the socket path and the auth token. The binary contains the verbs `whoami`, `identify`, and `list_agents`, and contains the auth handshake already shell-quoted:
+
+```
+{"type":"auth","token":"'"$CLAUDE_CODE_MESSAGING
+######## #91105
+[BUG] Cross-session SendMessage returns {"success":true} for a ListAgents-supplied address that routes nowhere — silent drop, no error
+state=open created=2026-09-01T00:27:42Z comments=0
+### Preflight Checklist
+
+- [x] I have searched existing issues. This is related to but distinct from #85497, #90243 and #84768 — see "Related" below.
+- [x] This is a single bug report
+- [x] I am using the latest version of Claude Code
+
+### Environment
+
+- Claude Code 2.1.247, macOS (Darwin 25.6.0), zsh
+- Two interactive sessions on the same machine, both in `bypassPermissions` mode
+- Cross-session peer messaging over unix sockets in `/tmp/cc-socks/`
+
+### Summary
+
+`ListAgents` advertised a peer address whose suffix does not route. `SendMessage` to that address
+returned `{"success":true}` with a `msg_id` and delivered nothing. The same session was reachable
+in the same minute via its `uds:` socket path.
+
+The distinguishing feature versus the existing reports: in #85497 and #90243 an unreachable peer
+produces an explicit `No agent named '<name>' is reachable` error. **Here the failure is silent in
+both directions** — the sender receives a success receipt with a message id, the recipient never
+learns a message existed, and there is no error, retry, or dead letter anywhere in the path.
+
+### Steps to reproduce (as observed)
+
+1. Session A and Session B, same machine, both in bypass mode.
+2. B's permission mode changed: Remote Control attached, B dropped out of bypass, then was restored
+   to bypass.
+3. A calls `ListAgents` **in the same turn as the send**. Roster returns B as `<slug>-53 [3de9d6]`.
+4. A calls `SendMessage` to `<slug>-53 [3de9d6]` → `{"success":true,"msg_id":"ee7bd86d-..."}`.
+5. Nothing arrives in B. Confirmed by direct human inspection of B's session. B had taken several
+   tool rounds since the send, so this was not a message waiting to drain.
+6. B sends to A → **arrives intact**. The wrapper reports B's own address as `<slug>-5a`, with
+   `from-mode="bypass"`.
+7. A replies to `uds:/tmp/cc-socks/<pid>.sock`, taken from the inbound `from=` → **delivered on the
+   first attempt**, confirmed in B's session.
+
+The roster's suffix (`-53`) and B's actual address (`-5a`) disagreed at the same instant, and only
+the socket path routed. `ListAgents` continued returning the non-routing suffix across repeated
+calls spanning ~20 minutes.
+
+### Expected
+
+- `SendMessage` to an address that cannot be delivered should return an error — as it already does
+  on the `No agent named '<name>' is reachable` path — rather than `success: true` with a `msg_id`.
+- `ListAgents` should not advertise an address that does not route.
+
+### Actual
+
+- `success: true` plus a `msg_id`, message silently discarded.
+- The roster served a stale/incorrect suffix for a live, healthy peer.
+
+### Supporting measurements
+
+- 37 sockets in `/private/tmp/cc-socks/`; **35 have a live owning PID**, 2 orphaned from ~8h
+  earlier. The recipient's socket was alive with a current mtime. The transport was healthy — this
+  is a name-resolution and error-reporting fault sitting above a working transport.
+- Socket basename equals the owning PID. `lsof -a -p <pid> -d cwd` maps each socket to its
+  session's working directory, which produced a correct 6-of-6 peer map at a moment when the roster
+  did not.
+
+### Workaround
+
+Resolve peers from the socket layer instead of the roster:
+
+```bash
+for s in /private/tmp/cc-socks/*.sock; do
+  p=$(basename "$s" .sock); ps -p "$p" >/dev/null 2>&1 || con
+######## #99049
+[FEATURE] CLI to send a cross-session message to a running session without a model turn, addressable by session id
+state=open created=2026-10-02T19:14:29Z comments=0
+## Problem
+
+A local process that is not a Claude Code model turn — a script, a hook, or another coding agent running on the same machine — has no way to deliver a message to a running Claude Code session. Cross-session messaging exists (`ListAgents` / `SendMessage`, `crossSessionInbound`), but it can only be reached from inside a session, through a model tool call.
+
+The only workaround is to start a headless `claude -p --allowedTools ListAgents,SendMessage` whose sole job is to call `SendMessage`. I measured it: it works (the message arrives in an idle session and starts its turn), but every message costs 10–15 s and a paid model turn (~$0.15–0.28 on the default model) for what is a transport operation. The model also has to map a name, because a session's `local_<uuid>` host id is rejected by `SendMessage` as "not reachable" (see #88970).
+
+## Proposal
+
+A non-interactive command that needs no model turn, for example:
+
+```
+claude send <target> <text>        # or --message-file <path>
+```
+
+- `<target>`: the session id (the `sessionId` in `~/.claude/sessions/<pid>.json`), the host id (`local_<uuid>`), or the `ListAgents` name.
+- It reuses the per-session messaging socket and key that already exist, with the same semantics as `SendMessage`: `crossSessionInbound`, permission-mode holds, delivery notices.
+- It returns an exit code and a JSON result (`delivered` / `held` / `refused` / `not reachable`, plus the message id), so scripts can act on it.
+- Optionally, `claude agents --json` could include each session's messaging address, so callers don't have to guess the name.
+
+## Why
+
+- Other agents and hooks could coordinate with Claude Code sessions deterministically and cheaply. For example, a hook could tell an idle session that a teammate left it a message, without paying for a model turn.
+- Model turns would no longer be spent on pure transport.
+- The address would be stable. The session id never changes; names and titles drift (#90338, #86736).
+
+## Related
+
+- #88970 — `local_<uuid>` is unreachable from the `ListAgents` / `SendMessage` namespace
+- #90338 — no shared identifier between a session's messaging name and its title
+- #92058 — scoping cross-session messaging
+
+Environment: Windows 11, Claude Code 2.1.286 (desktop app sessions and CLI).
+
+
+######## #91870
+Mods - make Claude 10x more extensible
+state=open created=2026-09-03T18:00:23Z comments=242
+## Community Micro-Update: Oct 1, 2026
+
+We're live! We're rapidly working down the latest elements of feedback folks have posted. Thank you all again for being amazing stewards of this new extensibility affordance. 🚀
+
+# Community Update: Sep 9, 2026
+
+> **AI;DR**: We're shipping in N weeks.
+
+Thank you all for the positive feedback, and especially for the insightful, high-signal feedback that has materially shaped our design.
+
+We're now committed to shipping function hooks, on the scale of weeks in lieu of days or months. As well, from a product perspective, we are going to be calling this functionality "Claude Mods". The engineering term of art 'function hook' will still exist as the documented implementation primitive Mods are built on. A mod is just a plugin that uses function hooks, nothing is changing there. Hopefully the ontology is not too confusing.
+
+We're still rapidly iterating on the interface, design, etc. but much of the semantics are now set in place, and we don't anticipate as many breaking changes as our first week. Therefore, we've made available our [source listings](https://github.com/anthropics/claude-code/tree/main/mods) for our first three built-in mods, perusable here. Our intent is to take further extant features as they exist in CC today and migrate them to mod form.
+
+Finally, I'm sharing here a cheat sheet reference that enumerates some affordances on v267/v268 (today / tomorrow). As well, I may now publicly acknowledge that any folks who want to test and give feedback may use `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude`.
+
+We are still iterating and it is only more important for the community to engage and give critical feedback to ensure this ends up in the right shape. Thank you all.
+
+<img width="2400" height="1600" alt="Image" src="https://github.com/user-attachments/assets/2fad9a87-d37f-4e00-9d4e-1aadf9326e77" />
+
+# Original Post: Sep 3, 2026
+
+### Hi folks! ✨
+
+> **AI;DR**: Function Hooks let you modify CC very deeply, while still being safe through side-effect tracking over a parameterized $ object, and while composing neatly using a registration-order-based 'next' continuation model a la Express, or Koa.
+
+I was asked to get feedback from the community regarding an internal proposal we have.
+
+Basically, it would be neat if you could hook into CC using TypeScript functions a la Express (or Koa!), and basically change whatever you want. So that's what we're proposing. In the workplace, admins will be able to change what they want too, including _your_ ability to change things, to a very fine level of programmatic detail.
+
+You should even be able to modify how components get rendered. We use React across the board, so why not utilize that fact?
+
+There's a [technical architecture doc](https://github.com/user-attachments/files/31802150/EXTERNAL.Function.Hooks.Core.Architecture.pdf), that goes through some of the design. As well, I made a few videos for internal folks so they could see how it might feel, which I'm sharing here too. I've tried to ensure that they're informative and engaging.
+
+Algebraically, this is just an effect-parameterized endomorphic continuation model for plugins.
+
+**If you want this, please engage here** - the response from the community likely dictates whether this ships or not. The **`$`** sigil isn't negotiable though, I follow a [more ancient god](https://jquery.com/).
+
+# Basic Series
+
+You can
+######## #99417
+[FEATURE] Mods: let a prompt.submit hook consume a prompt silently (no "Prompt dropped by a hook" row)
+state=open created=2026-10-04T11:43:54Z comments=0
+### Preflight Checklist
+
+- [x] I have searched [existing requests](https://github.com/anthropics/claude-code/issues?q=is%3Aissue%20label%3Aenhancement) and this feature hasn't been requested yet
+- [x] This is a single feature request (not multiple features)
+
+### Problem Statement
+
+A mod that refuses a prompt in a `prompt.submit` hook (`return { drop: reason }`) always leaves a system row in the transcript: `Prompt dropped by a hook: <reason>`. There is no way for the plugin to drop a prompt silently.
+
+That makes one class of mod noisy by design: a mod whose whole job is to *hold* incoming prompts quietly and deliver them later. Our case is a `/dnd` (Do Not Disturb) mod. While it is on, it holds everything that is not from the operator (Monitor and background task notifications, crons and `/loop`, peer pings, relays), so the operator can read what the agent just wrote in peace, and delivers all of it as one batch when DND ends. A live test held 3 Monitor events and 1 peer ping and delivered them correctly. But the transcript showed one `Prompt dropped by a hook: dnd` row per held message, which is exactly the interruption DND exists to remove.
+
+The other delivery path already has the right semantics: `session.receive` → `{ consumed }` keeps a delivery out of the session and leaves **no** row. Local notifications (`task-notification`, `scheduled-trigger`, `peer`, …) however arrive through `prompt.submit` (in our test a peer ping arrived there with origin `peer`, not through `session.receive`), and there the only refusal is `drop`.
+
+What we tried on 2.1.288, none of which removes the row:
+
+- `PromptSubmitResult.drop` is the only refusal variant; its doc: *"The text is shown to the user as the reason."*
+- The row is a `session.append` with `door: 'notice'`: `{"type":"system","name":"informational","content":[{"type":"text","text":"Prompt dropped by a hook: <reason>"}]}`. It is not a render site, so `ui.render` cannot skip drawing it.
+- `session.append` hook rewriting `content` to `[]`: accepted, but the row is shown as `(no content)`.
+- `session.append` hook answering without `next`: skipped (*"returned an answer without next (the row is kept)"*). Per `SessionAppendResult`, only a plugin's own append (door `note`) may be refused.
+
+Our current workaround is to rewrite the notice text to a short line (`🔕 held · task-notification · 3 waiting`). It is less noisy, but it is still one row per held message, and the docs note that the screen may show the original text briefly before the rewrite lands.
+
+### Proposed Solution
+
+Let a `prompt.submit` hook consume a prompt without leaving a transcript row, mirroring `session.receive`:
+
+```ts
+on('prompt.submit', async ($, e, next) => {
+  if (shouldHold(e)) {
+    await stash(e)
+    return { consumed: 'dnd' }   // prompt does not enter, no row; reason goes to the debug log only
+  }
+  return next(e)
+})
+```
+
+`drop` keeps its current, visible behaviour, which is the right default for a refusal the user should notice.
+
+### Alternative Solutions
+
+- `{ drop: reason, silent: true }` on the existing variant.
+- Allow a `session.append` hook to refuse a `notice` row that was raised by a drop from a hook of the same plugin (narrower than letting plugins refuse arbitrary engine notices).
+
+Either works for us. `{ consumed }` seems the cleanest because `sessio
+######## #76727
+Cross-session coordination for independently-launched Claude Code sessions
+state=open created=2026-07-11T17:21:36Z comments=23
+## Summary
+
+Heavy users who run **many independently-launched Claude Code sessions against one repo with one shared working tree** have no first-party coordination story. The only real primitive is a PreToolUse `deny` hook — a build-it-yourself kit — and that kit has silent holes (below). I spent a day measuring what actually collides between sessions on my own machine and building guards for it; sharing the findings because one of them would change how a first-party version should be built.
+
+**Setup:** solo dev, Windows 11, one Python repo, ~20 git worktrees, routinely 15–20 concurrent sessions (VS Code extension + Desktop app).
+
+**Caveat, stated up front:** this is one machine, one repo, one unusually parallel developer. The measurements are real but n=1. Offered as evidence, not a general claim.
+
+---
+
+## The finding I'd most want you to see
+
+**If you ship a "don't build in the shared checkout" guard, key it on the write's TARGET PATH, not on the session's cwd.** The obvious design is wrong.
+
+Measured over 30 days of my own transcripts: 166 sessions ran with `cwd` = the shared primary checkout. Of their 13,782 Edit/Write calls:
+
+| Writes | Share | What it is |
+|-------:|:-----:|------------|
+| 6,075 | 44% | wrote **into the primary's tree** — the actual problem |
+| 4,010 | 29% | wrote into a **worktree by absolute path** — already correct |
+
+The second row is the trap. Nearly a third of writes come from a session *sitting* in the primary that correctly writes *into a worktree* by absolute path. A cwd-keyed gate can't tell those apart and would have denied all 4,010 of them. Where a session **sits** is irrelevant; only where it **writes** matters. I got this wrong on my first design — and so did every design I generated before measuring.
+
+**Same theme, secondary:** a deny that just refuses causes the model to thrash or route around it (e.g. shell redirect). A deny that **names the exact command to run** causes self-correction — in a live test under `bypassPermissions`, a blocked session ran the worktree-creation script itself and landed its edit in the new worktree without being told to.
+
+---
+
+## Bugs / silent failures (these cost me the most time)
+
+These are why the DIY PreToolUse approach is unsafe today — they share a theme, **enforcement that can be off without saying so.** The first two are filed as a companion bug report with full repro: #76726.
+
+1. **A subagent's permission denials don't surface to the parent** — parent result comes back with `permission_denials: []` while the fan-out wrote nothing. Fails *silent*, not *safe*. (#76726)
+2. **A subagent's hook payload carries the PARENT's `session_id`** — session-keyed locks/claim registries are silently broken for subagents. (#76726)
+3. **Malformed hook output silently no-ops.** A bare `{"permissionDecision":"deny"}` without the `hookSpecificOutput` wrapper does nothing — the tool runs, no warning. (Filed as #4669 / #37210, closed as not planned.) "Your guard is off and nothing tells you" is a bad default. Related: a hook whose script path is missing exits non-zero-but-not-2, which also lets the tool run silently.
+4. **Docs gap, load-bearing:** the docs don't state whether hooks fire for subagent tool calls, or what `session_id` they carry. That single fact determines whether **any** hook-based enforcement has a hole in it. I had to 

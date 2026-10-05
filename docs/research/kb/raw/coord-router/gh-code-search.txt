@@ -1,0 +1,36 @@
+## code: "session.receive" consumed
+total=2576
+  spring-projects/spring-framework/framework-docs/modules/ROOT/pages/web/webflux-websocket.adoc
+  nodejs/node/doc/api/quic.md
+  denoland/deno/ext/node/ops/http2/session.rs
+  ohdearquant/lionagi/docs/api/team.md
+  roc-lang/roc/src/base/post_check_task_executor.zig
+  ericbuess/claude-code-docs/docs/plugins__mods__api.md
+  pydantic/pydantic-ai/pydantic_ai_slim/pydantic_ai/realtime/google.py
+  AstrBotDevs/AstrBot/astrbot/dashboard/services/chunked_upload_service.py
+  tsl0922/ttyd/html/.yarn/patches/zmodem.js-npm-0.1.10-e5537fa2ed.patch
+  Vip-Augus/spring-analysis-note/src/docs/asciidoc/web/webflux-websocket.adoc
+## code: "session.send" "next(" language:TypeScript
+total=131
+  koishijs/koishi/packages/core/src/middleware.ts
+  can1357/oh-my-pi/packages/coding-agent/src/tools/browser/tracing.ts
+  jupyterlab/jupyterlab/packages/debugger/src/service.ts
+  cline/cline/sdk/packages/core/src/cloud/controller.ts
+  CherryHQ/cherry-studio/src/main/features/browser/mcp/controller.ts
+  Kilo-Org/kilocode/packages/kilo-vscode/src/services/browser-automation/browser-network.ts
+  koishijs/koishi/packages/core/src/session.ts
+  palindromed/Bot-HandOff/handoff.ts
+  palindromed/Bot-HandOff/commands.ts
+  can1357/oh-my-pi/packages/coding-agent/src/tools/browser/tab-worker.ts
+## code: "session.receive" repo:anthropics/claude-code
+total=0
+## control-absent
+total=0
+## mods dir
+README.md
+agents-md
+diff
+sec-default
+telemetry
+tsconfig.json
+types

@@ -1,0 +1,68 @@
+## repo:anthropics/claude-code "SendMessage" hook
+total=242
+  #97220 [open] Hooks cannot obtain the session display name that ListAgents reports and SendMessage accepts
+  #99049 [open] [FEATURE] CLI to send a cross-session message to a running session without a model turn, addressable by session id
+  #92058 [open] [FEATURE] Scope cross-session messaging (ListAgents/SendMessage) to the session's project
+  #98981 [open] [BUG] VS Code: ListAgents name reverts to an auto-generated name after resuming a renamed session
+  #97782 [open] [harness] Subagent lifecycle invisible to hooks: resumes log no start, reports delivered twice, tool-written files carry no caller identity
+  #94222 [open] [FEATURE] Mark a subagent killed by a usage limit as resumable, and keep it listed after a session restart
+  #96225 [open] SubagentHandback from an in-process teammate's subagent fails with "the agent that spawned you is no longer running" while the teammate is alive (auto mode, 2.1.280)
+  #97819 [open] [harness] Lead session has no live view of subagent cost, and subagents have no default channel back to the lead
+## repo:anthropics/claude-code "cross-session" route
+total=318
+  #93515 [open] ListAgents / cross-session messaging: expose user-assigned session titles
+  #95954 [open] Cross-session teammate/subagent messages leak between unrelated Claude Code sessions
+  #89462 [open] Feature request: durable agent addresses + store-and-forward for cross-session messaging
+  #93805 [open] Opt-in setting to relax cross-session content filtering for same-machine fleets
+  #76727 [open] Cross-session coordination for independently-launched Claude Code sessions
+  #87023 [open] Field report: cross-session memory in Claude Code, at multi-agent scale
+  #91105 [open] [BUG] Cross-session SendMessage returns {"success":true} for a ListAgents-supplied address that routes nowhere — silent drop, no error
+  #86531 [open] /rename renames other concurrent sessions (cross-session title contamination, no resume involved)
+## repo:anthropics/claude-code "session.receive"
+total=4
+  #99417 [open] [FEATURE] Mods: let a prompt.submit hook consume a prompt silently (no "Prompt dropped by a hook" row)
+  #96336 [open] Desktop: a turn a plugin starts with $.prompt.submit on an idle session is not shown until the user sends a message
+  #91870 [open] Mods - make Claude 10x more extensible
+  #14279 [closed] [TypeScript V2 SDK] Tool execution requires approval despite permissionMode: 'bypassPermissions' and allowDangerouslySkipPermissions: true
+## repo:anthropics/claude-code "SendMessage" PreToolUse
+total=79
+  #97782 [open] [harness] Subagent lifecycle invisible to hooks: resumes log no start, reports delivered twice, tool-written files carry no caller identity
+  #97799 [open] [harness] worktree-agent-resume: A completed worktree-isolated agent cannot be resumed by message (No transcript found) although names are said
+  #92289 [open] [BUG] Claude Desktop blocks CLI-native SendMessage, breaking subagent continuation
+  #90662 [open] [BUG] PreToolUse/PostToolUse inside a running subagent are sometimes reported under a different agent_id that has no SubagentStart, no agent_type, and never gets a SubagentStop
+  #92314 [open] [DOCS] Desktop Code tab disables the CLI-native SendMessage, but the docs say cross-session messaging reaches terminal sessions
+  #88203 [open] PreToolUse hook + background subagent: tools in the notification-woken turn are cancelled as "user doesn't want to take this action"
+  #92258 [open] SendMessage/ListAgents cross-session peer messaging broken after CCD 2.1.258 -> 2.1.260 update (Windows desktop app)
+  #94887 [open] [BUG] Desktop SSH session + Remote Control: while the laptop sleeps, claude.ai connectors are unusable from the phone because they execute inside the sleeping Desktop app — answering the PreToolUse permission hook is not enough
+## repo:anthropics/claude-code inbound message hook
+total=90
+  #94000 [open] [FEATURE] Cross-session send cap (10 per human input) is not configurable and ignores inbound human-originated messages
+  #97220 [open] Hooks cannot obtain the session display name that ListAgents reports and SendMessage accepts
+  #44380 [open] Channel messages don't wake idle sessions (--channels plugin)
+  #94918 [open] [FEATURE] Add API/webhook (event) trigger for Claude Cowork tasks — not just schedule cadence
+  #77252 [open] Remote Control: long-idle desktop-app sessions go stale — mobile shows "Connected" but submitted prompts silently vanish after ~60s
+  #96226 [open] Lead session exits cleanly seconds after a teammate approves a shutdown_request (2.1.280, in-process teammate)
+  #96250 [open] [BUG] Classifier blocking appropriate work - MCP to Claude Code connector (Windows)
+  #93720 [open] [BUG] Messages posted to a session's own inbox socket render the full peer envelope instead of the collapsed preview
+## repo:anthropics/claude-code "agent teams" router
+total=14
+  #95563 [open] Agent tool honours a `name` parameter that the schema shown to the model omits
+  #77595 [closed] Agent teams: SendMessage duplicates the message body ~3x per call (model-invented `content` field + result echo)
+  #63015 [open] [Bug] Auto-compact never triggers despite statusline reporting "100% context used" (v2.1.153, Max sub, 200K mode)
+  #32110 [closed] Agent Teams: Support per-teammate model configuration
+  #46987 [open] [BUG]  API Error: Stream idle timeout - partial response received - multiple time today
+  #33949 [open] SSE streaming hangs indefinitely (no timeout) + ESC cannot fully cancel (queue auto-restart) — root cause analysis with fix proposals
+  #38053 [closed] [FEATURE]  Hot context injection for running agent pools
+  #32598 [closed] Feature Request: Automatic agent routing based on task context
+## repo:anthropics/claude-code "PreToolUse"
+total=3594
+  #99366 [open] Nonblocking PreToolUse hook failures repeat, truncate stderr, and never reach the agent
+  #97977 [open] PostToolUse hooks never fire from the desktop Code-tab surface
+  #84364 [open] fix(hookify): fail closed on exceptions in pretooluse hook
+  #99221 [open] [BUG] hookify fails with "Expecting ',' delimiter" on long PowerShell commands
+  #98046 [open] User-level hooks are skipped in untrusted workspaces; they should run regardless of trust
+  #98376 [open] [BUG] managed-settings.json "hooks" key is silently ignored (PreToolUse hooks never registered)
+  #95774 [open] PreToolUse hook systemMessage never renders (rendered:false) — invisible in plan-approval dialog
+  #80211 [open] PreToolUse hooks for deterministic compliance enforcement (FERPA, workflow gates)
+## repo:anthropics/claude-code "zqv10381xk"
+total=0
