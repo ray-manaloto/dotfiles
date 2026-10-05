@@ -1,0 +1,7 @@
+model sonnet (claude -p, 4 batches of <=41, text_first_300 only, blind to labels)
+raw label agreement: 101 /163
+th=0.0: offload 59/163=36.2% | correct 40/163=24.5% | misroute-all 19/163=11.7% | cond 32.2% | specialist-msgs left on coordinator 43/94 | routed {'slot-arbiter': 20, 'handoff-scribe': 25, 'shipper': 14} | errors [('shipper->handoff-scribe', 10), ('coordinator->handoff-scribe', 4), ('coordinator->shipper', 3), ('coordinator->slot-arbiter', 1), ('slot-arbiter->handoff-scribe', 1)]
+th=0.8: offload 18/163=11.0% | correct 17/163=10.4% | misroute-all 1/163=0.6% | cond 5.6% | specialist-msgs left on coordinator 76/94 | routed {'slot-arbiter': 9, 'handoff-scribe': 8, 'shipper': 1} | errors [('shipper->handoff-scribe', 1)]
+th=0.85: offload 15/163=9.2% | correct 15/163=9.2% | misroute-all 0/163=0.0% | cond 0.0% | specialist-msgs left on coordinator 79/94 | routed {'slot-arbiter': 8, 'handoff-scribe': 7} | errors []
+th=0.9: offload 11/163=6.7% | correct 11/163=6.7% | misroute-all 0/163=0.0% | cond 0.0% | specialist-msgs left on coordinator 83/94 | routed {'handoff-scribe': 6, 'slot-arbiter': 5} | errors []
+th=0.95: offload 5/163=3.1% | correct 5/163=3.1% | misroute-all 0/163=0.0% | cond 0.0% | specialist-msgs left on coordinator 89/94 | routed {'handoff-scribe': 4, 'slot-arbiter': 1} | errors []

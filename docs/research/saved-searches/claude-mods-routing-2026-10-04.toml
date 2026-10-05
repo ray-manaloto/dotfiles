@@ -1,0 +1,65 @@
+# Claude Code mods (function hooks) and cross-session message routing prior art,
+# measured 2026-10-04 by the coord-router lane (Ray: "search github repos
+# issues/prs/discussions and create a saved github search ... for examples").
+# Rerun: mise run research-saved-search -- rerun docs/research/saved-searches/claude-mods-routing-2026-10-04.toml
+# anthropics/claude-code has has_discussions=false (gh api repos/anthropics/claude-code),
+# so no discussions watch applies there. Repository/topic discovery is NOT a
+# saved-search kind yet (code/issues/discussions/releases only); the topic seeds
+# and the topics example repos carry live in docs/research/github-topics.toml.
+# Every {nonce} is fresh per rerun.
+schema_version = 1
+
+[[watch]]
+id = "claude-code-mods-messaging-issues-prs"
+kind = "issues"
+origin = "topic:claude-mods-coordinator-router"
+question = "Which claude-code issues and PRs cover mods/function hooks intercepting or routing cross-session messages?"
+cadence = "weekly"
+tags = ["claude-code", "mods", "function-hooks", "SendMessage", "cross-session", "router"]
+limit = 20
+queries = [
+  'repo:anthropics/claude-code "session.receive"',
+  'repo:anthropics/claude-code "session.send"',
+  'repo:anthropics/claude-code mods SendMessage',
+  'repo:anthropics/claude-code "function hooks" message',
+  'repo:anthropics/claude-code "cross-session" route',
+  'repo:anthropics/claude-code "crossSessionInbound"',
+]
+control_hit = 'repo:anthropics/claude-code "Mods - make Claude 10x more extensible"'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id = "claude-code-cross-session-delivery-defects"
+kind = "issues"
+origin = "topic:claude-mods-coordinator-router"
+question = "Which open defects affect cross-session delivery a router depends on (send caps, silent drops, durable addresses, display names)?"
+cadence = "weekly"
+tags = ["claude-code", "cross-session", "SendMessage", "delivery", "defects"]
+limit = 20
+queries = [
+  'repo:anthropics/claude-code "SendMessage" silent',
+  'repo:anthropics/claude-code "cross-session" cap',
+  'repo:anthropics/claude-code "durable agent addresses"',
+  'repo:anthropics/claude-code "ListAgents" name hook',
+  'repo:anthropics/claude-code "notify_when_idle"',
+]
+control_hit = 'repo:anthropics/claude-code "store-and-forward"'
+control_absent = 'repo:anthropics/claude-code "{nonce}"'
+
+[[watch]]
+id = "claude-mods-ecosystem-issues-prs"
+kind = "issues"
+origin = "topic:claude-mods-coordinator-router"
+question = "Outside anthropics/claude-code, which mod repos discuss session.receive/session.send or multi-session routing?"
+cadence = "weekly"
+tags = ["mods", "function-hooks", "ecosystem", "multi-agent"]
+limit = 20
+queries = [
+  '"session.receive" claude',
+  '"session.send" claude mod',
+  # dropped 2026-10-04: 'claude mod "SendMessage" route' (880 hits, top 20 dominated by windhawk-mods noise)
+  'repo:kbrdn1/claude-crosstalk session',
+  'repo:tsurutanmen/session-bridge session',
+]
+control_hit = 'repo:anthropics/claude-code "session.receive"'
+control_absent = '"{nonce}" claude mod'

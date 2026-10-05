@@ -1,0 +1,482 @@
+           *
+           * It runs through every hook but the calling one, then core: a summary
+           * and the kept messages in the transcript's place. Resolves `{ skip }`
+           * when a hook vetoed it; rejects while a turn runs.
+           *
+           * @example
+           * const { skip } = await $.session.compact({ instructions: "the plan" })
+           */
+          compact: EventCalls['session']['compact'];
+          /**
+           * Sends a plain-text message to another agent or session: the event
+           * `session.send`, the model's SendMessage tool's own call and delivery.
+           *
+           * `to` is the tool's spelling (a name, an agent id, a received `from`
+           * address) or `{ sessionId }` / `{ agentId }`; framed at the receiver as a
+           * peer's, `origin.plugin` naming this plugin there. Resolves once queued.
+           *
+           * @example
+           * const sent = await $.session.send({ to: { sessionId }, text: "ok" })
+           * @example
+           * await $.session.send({ to: { agentId }, text: "stop after this file" })
+           */
+          send: EventCalls['session']['send'];
+          /**
+           * Appends a row to a conversation of the session: the event
+           * `session.append`, the engine's own call for every row it keeps.
+           *
+           * A user-role row the person does not see as typed or a notice, of text
+           * blocks alone in this release (else refused with the reason): listed at
+           * once. `{ deny: reason }` when a plugin above refused it, nothing stored.
+           *
+           * @example
+           * await $.session.append({ message: { type: "user", content: [note] } })
+           */
+          append: (args: SessionAppendArgs) => Promise<SessionAppendResult>;
+          /**
+-----
+       *
+       * Observe. The first is awaited: a `$.tool.register` is listed by turn one.
+       * A later one runs its hooks alone: an enable, a worker respawn, or a reload
+       * (changed modules only; all if one hooks `engine.create`/`plugin.register`).
+       *
+       * @example
+       * on("session.start", ($, e, next) => $.tool.register(t).then(() => next(e)))
+       */
+      'session.start': SessionStartInput;
+      /**
+       * Fires when a delivery reaches the session (a relay's event, a peer's
+       * message, a Remote Control prompt), before it is queued; `{ text }`.
+       *
+       * Rewrite with `next({ ...e, text })`, or return `{ consumed: reason }` to
+       * take it: nothing is queued, shown or read by the model. `origin`,
+       * `event` and `agentId` pass on as received; `session.send` is its dual.
+       *
+       * @example
+       * on("session.receive", { origin: "peer" }, () => ({ consumed: "muted" }))
+       */
+      'session.receive': SessionReceiveInput;
+      /**
+       * Fires once per row a conversation of this session keeps (a prompt, a
+       * response block, a tool result, a notice), before it is stored.
+       *
+       * `next({ ...e, message })` rewrites `content`: stored and sent after. The
+       * screen, an SDK stream or Remote Control may show the row just before its
+       * rewrite; the model and the transcript file never read that form.
+       *
+       * @example
+       * on("session.append", { door: "tool-result" }, ($, e, n) => n(scrub(e)))
+       */
+      'session.append': SessionAppendInput;
+      /**
+       * Fires when a plain-text message is about to leave this conversation for
+       * another agent or session (the SendMessage tool, or `$.session.send`).
+       *
+       * `e.origin` says who sends, `e.agentId` which loop. Rewrite `text` or
+       * readdress `to` with `next` (a new `to` is judged again); `{ isDelivered:
+       * false, reason }` without `next` refuses it. `next(e)` resolves queued.
+       *
+       * @example
+       * on("session.send", ($, e, next) => next({ ...e, text: redact(e.text) }))
+       */
+      'session.send': SessionSendInput;
+      /**
+       * Fires when the conversation is about to be compacted (`/compact`, the
+       * threshold, a plugin, or ahead of time); `next(e)` resolves `{ messages }`.
+       *
+       * Rewrite `instructions` or `messages` on the way down, the messages on
+       * the way up, or answer `{ messages }` of your own; `{ skip: reason }`
+       * leaves the conversation as it is. `trigger` passes on as received.
+       *
+       * @example
+       * on("session.compact", { trigger: "precompute" }, () => ({ skip: "off" }))
+       */
+-----
+      untrustedKeys: readonly string[];
+  };
+
+  /**
+   * The input of `session.receive`: one inbound delivery, sanitized, before it
+   * is queued (a relay's event, a peer's message, a message for an agent).
+   */
+  export type SessionReceiveInput = {
+      /**
+       * Where the delivery came from, as the bridge classified it; the key a
+       * matcher narrows on. `next(e)` passes it on as received.
+       */
+      origin: SessionReceiveOrigin;
+      /**
+       * The delivery's body as the model would read it (a content-block
+       * delivery's text blocks, joined).
+       */
+      text: string;
+      /**
+       * The external-event wake the text parsed as (`source` `github` for a
+       * subscribed pull request's event); passed on as received.
+       *
+       * Present only for a delivery the server itself rendered as a wake (a
+       * webhook relay, the session inbox), by its asserted origin; anyone else's
+       * wake-shaped text stays `text`. Its `untrustedKeys` name third-party text.
+       */
+      event?: SessionReceiveEvent;
+      /**
+       * The id of the loop the delivery is for, when it is one of this session's
+       * agents (`$.agent.list()` lists it); absent for the main conversation's.
+       *
+       * Pinned: a rewrite that changes it is refused. An agent's message raises
+       * `session.send` with the sender's `agentId`, then this with the receiver's
+       * inside its turn, where a hook awaiting its own `$.prompt.submit` hangs.
+       *
+       * @example
+       * on("session.receive", { agentId: worker }, ($, e) => ({ consumed: "no" }))
+       */
+      agentId?: string;
+  };
+
+  /**
+   * Where an inbound delivery came from, as the bridge classified it from the
+   * server's stamps: `prompt.submit`'s `e.origin`, less what never arrives.
+   */
+  export type SessionReceiveOrigin = {
+      /**
+       * `bridge` the user's own from a Remote Control client; `unclassified`
+       * one nobody could place; the rest as at `prompt.submit`.
+       *
+       * `task-notification` a relay's event or a trigger.
+       */
+      kind: 'bridge' | 'task-notification' | 'scheduled-trigger' | 'peer-send-message' | 'projects-relay' | 'slack-ping' | 'unclassified';
+  } | {
+      /**
+       * `peer` another session's or agent's model; `coordinator` the main
+       * conversation to an agent of its own.
+       */
+      kind: 'peer' | 'coordinator';
+      /**
+       * Which plugin's `$.session.send` composed it, AS THE SENDER SAYS;
+       * absent for a message the sending model wrote itself.
+       *
+       * A claim over a same-user channel, exactly as trustworthy as the
+       * sender's name: name it in a log line, never key a guard on it.
+       */
+      plugin?: string;
+  } | {
+      /**
+       * A delivery through this session's agent-team mailbox: `coordinator`
+       * from the lead's harness, `peer` from a teammate's or when unverified.
+       */
+      kind: 'peer' | 'coordinator';
+      /**
+       * Which plugin's `$.session.send` composed it, as the mailbox entry
+       * says; absent for a message the sending model wrote itself.
+       */
+      plugin?: string;
+      /**
+       * The sending member's name in the team (`team-lead` for the lead):
+       * the harness's stamp when `isVerified`, else whatever the writer put.
+       *
+       * @example
+       * on("session.receive", { origin: { teammate: "researcher" } }, hook)
+       */
+      teammate: string;
+      /**
+       * Whether this process's harness wrote the mailbox entry itself (an
+       * in-process teammate's or the lead's own send).
+       *
+       * `false`: read from the team's inbox file with nothing to check it
+       * against (a teammate in its own pane, the person editing the file, any
+       * same-user process); in an all-in-process team, one no member sent.
+       *
+       * @example
+       * on("session.receive", { origin: { isVerified: false } }, hook)
+       */
+      isVerified: boolean;
+  };
+
+  /**
+   * What a `session.receive` hook returns and what `next(e)` resolves to: the
+   * delivery that was queued, `{ text }`, or `{ consumed: reason }`.
+   *
+   * `next(e)` resolves once the delivery is queued; a hook answering without
+   * `next` queues nothing.
+   */
+  export type SessionReceiveResult = {
+      /**
+       * The body the delivery was queued with; from core, `e.text` as it
+       * arrived at the bottom.
+       *
+       * A rewrite passes it down, `next({ ...e, text })`.
+       */
+      text: string;
+      consumed?: undefined;
+  } | {
+      /**
+       * Takes the delivery, answered without `next`: it is not queued, not
+       * written to the transcript and never reaches the model.
+       *
+       * The reason is logged, the plugin named.
+       */
+      consumed: string;
+      text?: undefined;
+  };
+
+  /**
+   * What `$.session.repo()` answers: the repository's root and its origin remote,
+   * when the session is in one.
+   */
+  export type SessionRepo = {
+      /**
+       * The repository's root, absolute: the main working tree's for a worktree.
+       */
+      root: string;
+      /**
+       * The `origin` remote's URL as git has it (push URL preferred), or null when
+       * the repository has none.
+       */
+      remote: string | null;
+      /**
+       * Whether the remote is one of the repositories this build treats as its
+       * own; false in a build that has none or when the remote is unrecognized.
+       *
+       * The engine matches the build's own list of repositories with its
+       * hardened remote parser. A plugin reads this to behave differently in a
+       * public repository; which repositories are the build's is its to say.
+       */
+      internal: boolean;
+      /**
+       * The repository the allowlist matched, as `owner/name`; null when
+       * `internal` is false.
+       *
+       * A working copy without a remote that the engine still recognises is
+       * named by its own checkout configuration; a remote's name is its path.
+       */
+      name: string | null;
+  };
+
+  /**
+   * How to come back to the session that ended: what `claude --resume` takes.
+   */
+  export type SessionResume = {
+      /**
+       * What `claude --resume <id>` takes, the ending session's own.
+       *
+       * It resumes a session that wrote a transcript: one that never ran a
+       * prompt, or ran with persistence off, left nothing under this id.
+       */
+      id: string;
+  };
+
+  /**
+   * Whom `$.session.send` addresses: a recipient as the SendMessage tool
+   * names one (a string), or a session or an agent of this session by id.
+   *
+   * The engine spells the two id forms the tool's way before the send, and a
+   * `session.send` hook reads that spelling on `e.to`: `{ agentId }` as the
+   * id (a live teammate's as its name), `{ sessionId }` as its address.
+   */
+  export type SessionSendAddress = string | {
+      /**
+       * One of the person's own sessions: what its `$.session.id()` answers
+       * on this machine, or a Remote Control or cloud id (`session_...`).
+       *
+       * A session that is not running now is not delivered to: the result
+       * says so.
+       */
+      sessionId: string;
+  } | {
+      /**
+       * A subagent or teammate of this session: the id `$.agent.list()`
+       * lists and `agent.spawn` answered.
+       *
+       * A finished subagent is resumed from its transcript with the message,
+       * as the tool does. A live teammate's `teammateId` reaches it too.
+       */
+      agentId: string;
+  };
+
+  /**
+   * `session.send`'s input as a plugin's `$.session.send(args)` takes it:
+   * `origin` (the calling plugin) and `agentId` are the engine's to set.
+   */
+  export type SessionSendArgs = {
+      /**
+       * The recipient: the tool's own spelling (a name, an agent id, a received
+       * `from` address), or `{ sessionId }` / `{ agentId }`.
+       */
+      to: SessionSendAddress;
+      /**
+       * The message's text, non-empty.
+       */
+      text: string;
+  };
+
+  /**
+   * The input of `session.send`: one plain-text message about to leave this
+   * conversation for another agent or session; the dual of `session.receive`.
+   */
+  export type SessionSendInput = {
+      /**
+       * Whom it goes to, as the SendMessage tool spells a recipient: a name as
+       * ListAgents lists it, an agent id, or a received `from` address.
+       *
+       * A plugin's `{ sessionId }` or `{ agentId }` arrives already spelled so.
+       * `next({ ...e, to })` readdresses it, judged again as the tool judges a
+       * send there; a name nobody carries is refused after the hooks.
+       */
+      to: string;
+      /**
+       * The message's text as the recipient will read it inside the engine's
+       * envelope; `next({ ...e, text })` is what is sent, with no new approval.
+       */
+      text: string;
+      /**
+       * Who is sending: the model through its SendMessage tool, or a plugin
+       * through `$.session.send`. Pinned: a rewrite that changes it is refused.
+       */
+      origin: SessionSendOrigin;
+      /**
+       * The id of the loop sending, when a subagent's or teammate's model sends
+       * (`$.agent.list()` lists it); absent for the main conversation's send.
+       *
+       * Pinned: the agent axis, not the origin. A message between two subagents
+       * carries the sender's id here and reaches the receiver's
+       * `session.receive` with that loop's own `agentId`.
+       */
+      agentId?: string;
+  };
+
+  /**
+   * Who is sending at `session.send`: the model through its SendMessage tool,
+   * or a plugin through `$.session.send`; stamped by the engine, pinned.
+   *
+   * The receiver's `session.receive` reads a plugin's name on its own
+   * `e.origin.plugin`, beside the `peer` or `coordinator` kind it keeps.
+   */
+  export type SessionSendOrigin = {
+      /**
+       * The model's own SendMessage tool call, in the main conversation or
+       * in a subagent's or teammate's loop (`e.agentId` says which).
+       */
+      kind: 'model';
+  } | {
+      /**
+       * A plugin's `$.session.send`, its `$.tool.call` of SendMessage, or the
+       * model inside an agent it spawned; its other hooks still see it.
+       */
+      kind: 'plugin';
+      /**
+       * The sending plugin's name, which the receiver reads as its
+       * `session.receive` origin's `plugin` and shows beside the sender.
+       */
+      name: string;
+  };
+
+  /**
+   * What a `session.send` hook returns and `next(e)` and `$.session.send`
+   * resolve to: whether the message was delivered, and why not when not.
+   *
+   * Delivered means queued at the recipient (an agent's inbox, another
+   * session's socket, the server for a remote session), never read: the
+   * receiver's turn is its own, and it may hold the message for its person.
+   *
+   * @example
+   * const { isDelivered, reason } = await $.session.send({ to, text })
+   */
+  export type SessionSendResult = {
+      /**
+       * True: the message reached its recipient's queue or inbox.
+       */
+      isDelivered: true;
+      reason?: undefined;
+  } | {
+      /**
+       * False: nothing was delivered. A hook answering this without `next`
+       * refuses the send, and the model reads `reason` as the tool's result.
+       */
+      isDelivered: false;
+      /**
+       * Why not, as the SendMessage tool words it: nobody by that name,
+       * several by it, the recipient gone or refusing, or a hook's refusal.
+       *
+       * @example
+       * on('session.send', { to: 'prod' }, () => NOT_FROM_HERE)
+       */
+      reason: string;
+  };
+
+  type SessionStartHookInput = BaseHookInput & {
+      hook_event_name: 'SessionStart';
+      source: 'startup' | 'resume' | 'clear' | 'compact' | 'fork';
+      agent_type?: string;
+      model?: string;
+      model: {
+          /**
+           * Runs one text completion through the session's own API client and
+           * resolves a result: the reply's text and cost, or why there is no text.
+           *
+           * No tools, no history, no system prompt beyond the CLI's identity block
+           * and `request.system`; ModelCompleteRequest says the rest. Only a request
+           * the engine refuses to send (a blocked model, a bad cap) rejects.
+           *
+           * @param request the model (an alias such as `haiku`, or a full id
+           *                resolved like `--model`), prompt, cap, effort, time limit
+           * @param options `signal`: the plugin's own AbortSignal; aborting it
+           *   cuts the call while it runs, which then resolves `aborted`
+           * @returns the reply (`isAnswered`, `text`, `usage`), else the `reason`:
+           *          `api-error` with `status` and `error`, `empty-reply`, `aborted`
+           * @example
+           * const r = await $.model.complete({ model: "haiku", prompt, effort })
+           * @example
+           * // one handler starts it, a later one cancels it while it runs
+           * let stop = new AbortController()
+           * const start = async () => {
+           *   stop = new AbortController()
+           *   const r = await $.model.complete(ask, { signal: stop.signal })
+           *   if (!r.isAnswered && r.reason === "aborted") $.ui.log("cancelled")
+           * }
+           * const cancel = () => stop.abort()
+           */
+          complete: (request: ModelCompleteRequest, options?: ModelCompleteOptions) => Promise<ModelCompleteResult>;
+          /**
+           * Runs one tool-less completion over the session's OWN transcript as the
+           * main thread last sent it, so the API serves that prefix from its cache.
+           *
+           * The main thread's last request again (its model, system prompt, tools,
+           * messages) with `prompt` after it: every tool denied, its own tail never
+           * cached, the prefix billed afresh once the entry lapsed or after `/model`.
+           *
+           * @param request the one user message the fork answers
+           * @returns always a result, never null: the reply (`isAnswered`, `text`,
+           *          `usage`), or why there is no text (`reason`: `nothing-to-fork`
+           *          before the first response and after `/clear`, `api-error` with
+           *          its HTTP `status` and `error` kind, `empty-reply`, or `aborted`
+           *          when the turn whose hook forked was interrupted)
+           * @example
+           * const reply = await $.model.fork({ prompt: "One line to learn?" })
+           * $.ui.log(reply.isAnswered ? reply.text : `no reply: ${reply.reason}`)
+           */
+          fork: (request: ModelForkRequest) => Promise<ModelForkResult>;
+          /**
+           * Picks one of `labels` for `text` with one completion over
+           * `$.model.complete` and a fixed classifier prompt.
+           *
+           * `text` is data; the model answers with a label alone. It resolves
+           * `undefined` when the answer named none of `labels`. A failed request,
+           * an abort or a reply with no text rejects, naming the cause.
+           *
+           * @param text what to classify
+           * @param labels the labels to choose from (2 or more)
+           * @param options `model`: an alias or id; default the engine's small
+           *   fast model
+           * @returns the label the model named, or undefined when it named none;
+           *          rejects when the request fails or the reply has no text
+           * @example
+           * const kind = await $.model.classify(e.text, ["bug", "feature"])
+           * if (kind === undefined) return next(e)
+           */
+          classify: (text: string, labels: readonly string[], options?: ClassifyOptions) => Promise<string | undefined>;
+      };
+      /**
+       * Sound: clip playback and platform speech.
+       */
+      audio: {
+          /**

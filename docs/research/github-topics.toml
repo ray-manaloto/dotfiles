@@ -1,0 +1,214 @@
+# GitHub topic registry for research sweeps (Ray, 2026-10-04: "add github topics
+# to the /research-sweep skill so we can also find and track examples from github
+# topics ... as we find examples, track what topics a repo has applied and add
+# that to our list").
+#
+# [[topic]]   one row per topic we track; `seed` = given by Ray, `discovered` =
+#             found on example repos (snowball). `total` = repo count measured
+#             by `gh api -X GET search/repositories -f q=topic:<name>` on `measured`.
+# [[example]] repos we cite as examples, with the topics THEY applied — the
+#             snowball input: a topic seen on >= 2 relevant examples is promoted.
+# Control arm for every total: a fresh nonexistent topic -> total_count 0
+# (measured 2026-10-04). Raw sweep: docs/research/kb/raw/coord-router/gh-topics-sweep.jsonl.
+# Saved-search reruns cannot watch repositories yet (kinds: code/issues/
+# discussions/releases) — see the coord-router report's repositories-kind spec.
+schema = "github-topics/v0"
+
+[[topic]]
+name = "claude-code-mods"
+origin = "seed"
+found_on = "Ray 2026-10-04"
+total = 58
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-code-mods"
+
+[[topic]]
+name = "claude-code-plugin"
+origin = "seed"
+found_on = "Ray 2026-10-04"
+total = 8175
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-code-plugin"
+
+[[topic]]
+name = "claude-code-plugins"
+origin = "seed"
+found_on = "Ray 2026-10-04"
+total = 639
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-code-plugins"
+
+[[topic]]
+name = "claude-mods"
+origin = "seed"
+found_on = "Ray 2026-10-04"
+total = 45
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-mods"
+
+[[topic]]
+name = "function-hooks"
+origin = "seed"
+found_on = "Ray 2026-10-04"
+total = 51
+measured = "2026-10-04"
+url = "https://github.com/topics/function-hooks"
+
+[[topic]]
+name = "claude-code-mod"
+origin = "discovered"
+found_on = "co-occurring topic on seed repos, 110 of 457 repos"
+total = 139
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-code-mod"
+
+[[topic]]
+name = "claude-mod"
+origin = "discovered"
+found_on = "co-occurring topic on seed repos, 15 of 457 repos"
+total = 15
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-mod"
+
+[[topic]]
+name = "claude-code-hooks"
+origin = "discovered"
+found_on = "co-occurring topic on seed repos, 102 of 457 repos"
+total = 544
+measured = "2026-10-04"
+url = "https://github.com/topics/claude-code-hooks"
+
+# Candidate topics (co-occurrence >= 10 among the swept repos), not yet promoted:
+#   claude-code: 398
+#   developer-tools: 139
+#   claude: 135
+#   anthropic: 107
+#   ai-agents: 103
+#   mcp: 60
+#   codex: 48
+#   claude-skills: 44
+#   terminal: 41
+#   agent-skills: 40
+#   llm: 39
+#   typescript: 38
+#   claude-code-skills: 38
+#   hooks: 36
+#   cli: 35
+#   claude-code-marketplace: 32
+#   ai-coding: 28
+#   agentic-coding: 25
+#   productivity: 23
+#   cursor: 23
+#   claude-ai: 22
+#   claude-plugin: 21
+#   ai-tools: 19
+#   tui: 19
+#   multi-agent: 19
+#   python: 19
+#   mcp-server: 19
+#   prompt-caching: 18
+#   coding-agents: 18
+#   plugin-marketplace: 18
+#   claude-code-skill: 18
+#   ai: 18
+#   opencode: 18
+#   statusline: 17
+#   pixel-art: 17
+#   subagents: 17
+#   prompt-engineering: 17
+#   skills: 17
+#   claude-code-plugins-marketplace: 16
+#   macos: 16
+#   claude-code-subagents: 15
+#   agentic-ai: 15
+#   code-review: 14
+#   codex-plugin: 14
+#   agents: 13
+#   awesome-list: 12
+#   context-engineering: 12
+#   anthropic-claude: 11
+#   model-context-protocol: 11
+#   automation: 11
+#   claude-code-commands: 11
+#   nodejs: 11
+#   context-window: 10
+#   agent-orchestration: 10
+#   vibe-coding: 10
+#   guardrails: 10
+#   codex-cli: 10
+
+[[example]]
+repo = "kbrdn1/claude-crosstalk"
+why = "session.receive (peer, peer-send-message) + tool.call SendMessage capture; hooks/register.ts:376 — receive-side prior art for coord-router"
+topics = ["claude-code", "claude-code-plugin", "claude-mods", "function-hooks", "multi-agent"]
+stars = 0
+pushed = "2026-09-19T02:09:45Z"
+description = "A Claude Mod to read and join the conversations between your Claude Code sessions (/crosstalk)"
+
+[[example]]
+repo = "tsurutanmen/session-bridge"
+why = "talk to sessions from other sessions/programs — cross-session transport prior art"
+topics = ["claude", "claude-code", "claude-code-mod", "claude-code-plugin", "multi-agent", "voice-assistant", "windows"]
+stars = 0
+pushed = "2026-10-04T07:53:02Z"
+description = "Talk to your Claude Code sessions from other sessions, your voice, or any local program. Meetings between two sessions, and a talk button."
+
+[[example]]
+repo = "bennewton999/claude-code-mods"
+why = "fleet board for many concurrent sessions"
+topics = ["ai-tools", "claude-code", "claude-code-mods", "claude-code-plugins", "developer-tools"]
+stars = 0
+pushed = "2026-10-05T00:33:32Z"
+description = "Five Claude Code mods for running many sessions at once: fleet board, PR-to-production tracker, rule tripwires, side-effects ledger, context gauge"
+
+[[example]]
+repo = "RedesignedRobot/cdx"
+why = "function-hooks plugin running codex/antigravity as detached execution lanes"
+topics = ["agent-orchestration", "ai-agents", "anthropic", "bun", "claude", "claude-code", "claude-code-plugin", "cli", "codex", "developer-tools", "function-hooks", "gemini", "google-antigravity", "llm", "multi-agent", "openai", "openai-codex", "plugin", "typescript"]
+stars = 0
+pushed = "2026-10-02T17:53:26Z"
+description = "Native Claude Code plugin (function hooks) that runs OpenAI Codex and Google Antigravity as detached execution lanes: 21 in-session tools, live wake-ups, adversarial reviews, full audit trail, zero de"
+
+[[example]]
+repo = "NovusEdge/a2a-mod"
+why = "A2A hand-off to non-Claude workers from a mod"
+topics = ["a2a", "agent2agent", "ai-agents", "claude-code", "claude-code-mod", "claude-code-plugin", "interoperability", "multi-agent"]
+stars = 1
+pushed = "2026-10-04T14:07:10Z"
+description = "A2A protocol client for Claude Code: Claude hands tasks to non-Claude worker agents over Agent2Agent and picks up their results."
+
+[[example]]
+repo = "tsurutanmen/session-dash"
+why = "pane of every open session + background work"
+topics = ["claude", "claude-code", "claude-code-mod", "claude-code-plugin", "statusline", "usage-limits"]
+stars = 0
+pushed = "2026-10-04T07:43:03Z"
+description = "Claude Code mod: usage limits above the prompt, background work and every open session in a pane"
+
+[[example]]
+repo = "scasella/claude-flightdeck"
+why = "live agent dashboard mod (context, cost, advisor timeline)"
+topics = ["agent-observability", "agent-visualization", "anthropic", "claude", "claude-code", "claude-code-mod", "claude-code-mods", "claude-code-plugin", "claude-mods", "coding-agents", "context-window", "cost-tracking", "developer-tools", "function-hooks", "llm-observability", "multi-agent", "observability", "subagents", "tui", "typescript"]
+stars = 6
+pushed = "2026-10-02T21:36:52Z"
+description = "A Claude Code mod that puts a live agent dashboard in your terminal: context and cost, advisor timeline, every permission check, subagent cards and swimlanes."
+
+[[example]]
+repo = "OneWave-AI/claude-code-mods"
+why = "ten mods incl. tool-call guards — pattern catalogue"
+topics = ["anthropic", "claude", "claude-code", "claude-code-mods", "claude-code-plugins"]
+stars = 2
+pushed = "2026-10-03T08:35:11Z"
+description = "Ten open-source mods for Claude Code: live panes, bands, status lines and tool-call guards. Burn meter, launch codes, session wrapped, boss fight, code pet and more."
+
+[[example]]
+repo = "ray-amjad/awesome-claude-code-function-hooks"
+why = "curated function-hooks list"
+topics = ["anthropic", "claude-code", "claude-code-hooks", "claude-code-plugin", "function-hooks", "redaction", "secret-scanning"]
+stars = 3
+pushed = "2026-09-10T15:01:57Z"
+description = "Claude Code function hooks worth installing. First up: secret-redactor, which keeps secrets, emails and IPs out of the session transcript."
+
+[[catalog]]
+repo = "shuizhengqi1/cc-mod-hub"
+why = "a checked hub of community Claude Code mods (377 at PR #53, 2026-10-04)"
