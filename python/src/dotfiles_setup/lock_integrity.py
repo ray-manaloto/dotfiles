@@ -39,6 +39,8 @@ Three consequences shape this module:
 
 Adding a tool, removing a tool, and bumping a version all pass. Dropping a
 platform from a tool that stayed, or losing a conda platform family, fails.
+Absolute checks also reject asset entries without platforms and platform tables
+with neither URL nor checksum, even without a committed baseline.
 """
 
 from __future__ import annotations
@@ -144,6 +146,35 @@ def platformless_asset_entries(lock_text: str) -> list[str]:
     return empty
 
 
+def stub_platform_entries(lock_text: str) -> list[str]:
+    """Asset-backend platform tables with neither `url` nor `checksum`."""
+    try:
+        data = tomllib.loads(lock_text)
+    except tomllib.TOMLDecodeError as exc:
+        return [f"could not parse lockfile TOML: {exc}"]
+    findings: list[str] = []
+    for name, entries in data.get("tools", {}).items():
+        for entry in entries:
+            backend = entry.get("backend", "")
+            if backend.split(":", 1)[0] not in ASSET_BACKENDS:
+                continue
+            for key, table in entry.items():
+                if (
+                    key.startswith("platforms.")
+                    and isinstance(table, dict)
+                    and "url" not in table
+                    and "checksum" not in table
+                ):
+                    platform = key.removeprefix("platforms.")
+                    findings.append(
+                        f"tool {name}@{entry.get('version', '')} ({backend}): "
+                        f"platform {platform} has no url/checksum — host mise "
+                        "fills it on every install (jdx/mise#13857, #1673); "
+                        're-lock scoped: mise run lock -- "<config key>"'
+                    )
+    return findings
+
+
 def _os_family(platform: str) -> str:
     """The OS half of a mise platform name (``linux-x64-musl`` -> ``linux``)."""
     return platform.split("-", 1)[0]
@@ -232,6 +263,10 @@ def check_lockfiles(
         findings.extend(
             f"{rel_path}: {finding}"
             for finding in platformless_asset_entries(path.read_text())
+        )
+        findings.extend(
+            f"{rel_path}: {finding}"
+            for finding in stub_platform_entries(path.read_text())
         )
         committed = committed_text(repo_root, rel_path)
         if committed is None:
