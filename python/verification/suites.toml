@@ -1450,7 +1450,7 @@ per_path_lines = { "hk.pkl" = [
     'def test_wiring_contract_rejects_missing_or_commented_lines(',
     'assert line_baseline["status"] == "passed", line_baseline',
     'assert line_mutation["status"] == "failed", line_mutation',
-    'def test_wiring_contract_rejects_missing_paths(',
+    'def test_wiring_contract_rejects_missing_paths(tmp_path: Path, relative: str) -> None:',
     'assert path_baseline["status"] == "passed", path_baseline',
     'assert path_mutation["status"] == "failed", path_mutation',
 ] }

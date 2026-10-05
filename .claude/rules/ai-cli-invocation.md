@@ -68,7 +68,8 @@ contract.
 Invoke agy by its NATIVE path, `"$HOME/.local/bin/agy"` (Ray, 2026-10-01: native installer only,
 self-updating via `agy update` (codex: `codex update`, claude: `claude update`); every mise name for it
 is in `disable_tools`). A leftover mise copy can sit AHEAD of it on PATH, so never rely on bare `agy`
-or `mise exec -- agy`.
+or `mise exec -- agy`. ⚠️ `agy --print --output-format …` exits 2, a stdin-only
+prompt is rejected, and `--print -` silently takes `-` as the prompt.
 
 `which -a agy` shows which copy PATH order selects on this machine; keep the
 explicit form regardless. For raw Gemini, `gemini "prompt"` remains

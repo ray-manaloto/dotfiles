@@ -80,7 +80,8 @@ hangs every **uncached** Doppler read, on every shell prompt.
    echo ABSENT`. **Now machine-enforced** — `hook_guard`'s
    `secret_value_substitution` denies any `echo`/`printf`/`print` of a
    credential-named variable (broader than just `:-`/`:=`, `\$\{?` optional) —
-   still allows `${(P)k}` indirect expansion; this rule carries every other shape.
+   does NOT catch `${(P)k}` indirect expansion (one printed four live
+   credentials, 2026-08-02); this rule carries every other shape.
 
    ⚠️ **There is no blast-radius cap.** Every credential is printable by any
    probe, wrapped or not; `DOPPLER_TOKEN` is itself in the sanctioned shell
