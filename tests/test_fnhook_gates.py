@@ -157,6 +157,24 @@ def test_plugin_elsewhere_under_tests_is_discovered(tmp_path: Path) -> None:
     assert fnhook_gates.discover_plugin_dirs(tmp_path) == [plugin_dir]
 
 
+def test_a_plugin_mirrored_into_the_verbatim_tree_is_not_discovered(
+    tmp_path: Path,
+) -> None:
+    """A third-party plugin mirrored verbatim under VERBATIM_ROOT is not ours.
+
+    Reproduces the 2026-10-05 ship failure: the codex-takeover research mirrored
+    an upstream function-hook plugin into `docs/research/kb/raw/`, and the
+    typecheck failed this repo's gate on that plugin's code. Both arms run: the
+    mirrored plugin is excluded, and a sibling plugin under `docs/` is still found.
+    """
+    ours = tmp_path / "docs" / "plugins" / "ours"
+    _write_plugin_markers(ours)
+    theirs = tmp_path / fnhook_gates.VERBATIM_ROOT / "slug" / "links" / "upstream"
+    _write_plugin_markers(theirs)
+
+    assert fnhook_gates.discover_plugin_dirs(tmp_path) == [ours]
+
+
 def test_validate_plugin_issues_the_strict_command() -> None:
     """The validator runs off PATH, on the plugin dir, with warnings as errors."""
     calls: list[tuple[list[str], Path]] = []

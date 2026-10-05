@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 FIXTURE_ROOT = "tests/fixtures/fnhook"
+# Verbatim third-party source mirrors (`agent-report-persistence.md`: raw sources
+# are kept byte-for-byte). A plugin mirrored there is someone else's code, the
+# same reason a nested checkout is skipped below.
+VERBATIM_ROOT = "docs/research/kb/raw"
 
 _TYPE_FILENAMES = ("claude-code.d.ts", "claude-code-mcp.d.ts")
 
@@ -234,6 +238,7 @@ def discover_plugin_dirs(
     rule states the actual invariant: this gate governs THIS repo's modules.
     """
     fixture_root = (repo_root / FIXTURE_ROOT).resolve()
+    verbatim_root = (repo_root / VERBATIM_ROOT).resolve()
     root = repo_root.resolve()
     discovered: list[Path] = []
     for plugin_manifest in repo_root.rglob(".claude-plugin/plugin.json"):
@@ -242,6 +247,8 @@ def discover_plugin_dirs(
             continue
         resolved = plugin_dir.resolve()
         if not include_fixtures and resolved.is_relative_to(fixture_root):
+            continue
+        if resolved.is_relative_to(verbatim_root):
             continue
         if _is_in_nested_checkout(resolved, root):
             continue

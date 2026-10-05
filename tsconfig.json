@@ -13,5 +13,5 @@
     "jsxFragmentFactory": "Fragment"
   },
   "include": [".claude/types", "**/hooks/**/*.ts"],
-  "exclude": ["tests/fixtures/fnhook"]
+  "exclude": ["tests/fixtures/fnhook", "docs/research/kb/raw"]
 }
