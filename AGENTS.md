@@ -40,18 +40,7 @@ The devloop is `mise run up` → work inside the container → `mise run down`
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `mise.toml` + `.config/mise/conf.d/shared.toml` | Host tool versions + tasks; the tools shared with the image (hk, pkl, linters, python, uv, chezmoi, bun) live in the exact-pinned shared fragment both host and image merge (#160 T5) |
-| `mise.lock` | Locked tool versions for reproducible installs |
-| `mise.local.toml` | Gitignored per-clone overrides (e.g., `BASE_IMAGE`). See `mise.local.toml.example` |
-| `hk.pkl` | Project git hook config; imports `hk-common.pkl`; enforces `no_lint_skip`, `require_pipefail`, `bash_logic_budget`, `claude_md_import_stub`, `claude_agents_md_pairs` |
-| `hk-common.pkl` | Shared step definitions (hygiene, safety, security, typos) reused by `hk.pkl` and `hk-image.pkl` |
-| `hk-image.pkl` | Image-only hook config for devcontainer validation |
-| `docker-bake.hcl` | BuildKit bake config (`dev`, `dev-load` build targets + `base`/`p2996-cache` CI stages); `IMAGE_REF` consolidates registry+image |
-| `renovate.json` · `currency.toml` · `rule-sync.toml` | Declarative sets: Renovate deps; deep-tracked tools (`mise run tool-currency`); the cross-repo shared set (`mise run rule-sync`, #354) |
-| `AGENTS.md` | Agent-agnostic project instructions (this file) |
-| `CLAUDE.md` | Thin `@AGENTS.md` import stub for Claude Code |
+See `docs/agents/codex-policy-index.md` for the key-file reference and policy map.
 
 ## Subdirectories
 
@@ -97,6 +86,12 @@ locally before pushing Dockerfile changes.
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
 
 ## Agent Instructions
+
+**Codex bootstrap:** Before work, READ `docs/agents/codex-policy-index.md`, then
+READ its ordered eager policies and every scoped policy matching intended edits.
+Open required targets explicitly; links alone do not load them.
+
+**Always ready:** Claude and Codex update `docs/handoffs/codex-takeover-START-HERE.md` and lane cards at every milestone; follow [Handover](docs/agents/session-orchestration.md#handover-both-directions) in both directions.
 
 ### Policies (read before working)
 

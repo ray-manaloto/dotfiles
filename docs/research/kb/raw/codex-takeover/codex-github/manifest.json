@@ -1,0 +1,188 @@
+{
+  "generated_at": "2026-10-05T12:13:13.932362+00:00",
+  "out_dir": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github",
+  "policy_version": null,
+  "query": "AGENTS.md",
+  "repo": "openai/codex",
+  "request_id": null,
+  "sources": [
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 1.231721332995221,
+      "items": [
+        {
+          "date": "2026-09-05T18:47:09Z",
+          "snippet": "### What version of the Codex App are you using (From \u201cAbout Codex\u201d dialog)?\n\ncodex-cli 0.153.4\n\n### What subscription do you have?\n\nPro\n\n### What platform is your computer?\n\nDarwin 25.6.0 arm64 arm\n\n### What issue are you seeing?\n\ncodex ignored instructions at the end of my AGENTS.md. So I asked\n\n```\nwhat's the last sentences of your agents instruction?\n```\n\nthen it says\n\n```\nThe instructions end with the incomplete fragment: (if y\n```\n\nthere is actually 4,321 more bytes after it. Codex only go",
+          "title": "long AGENTS.md truncated",
+          "url": "https://github.com/openai/codex/issues/43075"
+        },
+        {
+          "date": "2026-08-09T14:46:45Z",
+          "snippet": "## Summary\n\n`/status` keeps reporting `Agents.md: <none>` for the rest of a session after `/init` creates an `AGENTS.md`, on any platform.\n\n## Reproduction\n\n1. Start a session in a directory with no `AGENTS.md`.\n2. Run `/init` and let it write `AGENTS.md`.\n3. Run `/status`.\n\nExpected: the new file is discovered. Actual: `Agents.md: <none>`, and it stays that way until a new session is started.\n\nReported downstream with a full `codex doctor --json` on 0.146.0 (DioNanos/codex-termux#14) and still ",
+          "title": "/status keeps showing Agents.md: <none> after /init creates AGENTS.md",
+          "url": "https://github.com/openai/codex/issues/37704"
+        },
+        {
+          "date": "2026-09-07T00:09:30Z",
+          "snippet": "## Request\n\nAdd a user-configurable policy for automatically reloading `AGENTS.md` instructions, with an explicit **freeze** option. This is a token-efficiency and session-consistency preference, useful even when the entire conversation fits comfortably within the context window.\n\nRelated bug: #43295 tracks automatic instruction reload overflowing the context window and locking a previously usable session. **That failure needs to be handled independently of this feature request.** This enhanceme",
+          "title": "Allow configurable AGENTS.md reload policies, including freeze",
+          "url": "https://github.com/openai/codex/issues/43309"
+        },
+        {
+          "date": "2026-09-09T16:14:23Z",
+          "snippet": "### What version of Codex CLI is running?\n\n0.153.4\n\n### What subscription do you have?\n\nEnterprise\n\n### Which model were you using?\n\ngpt-6-astra\n\n### What platform is your computer?\n\nLinux 7.1.8+deb13-amd64 x86_64 unknown\n\n### What terminal emulator and version are you using (if applicable)?\n\nkonsole 25.04.2, screen\n\n### Codex doctor report\n\n```json\n{\n  \"schemaVersion\": 1,\n  \"generatedAt\": \"1788970166s since unix epoch\",\n  \"overallStatus\": \"ok\",\n  \"codexVersion\": \"0.153.4\",\n  \"checks\": {\n    \"ap",
+          "title": "codex scanned unsafe / untrusted paths to find AGENTS.md",
+          "url": "https://github.com/openai/codex/issues/44191"
+        },
+        {
+          "date": "2026-08-30T17:08:49Z",
+          "snippet": "### What version of the Codex App are you using (From \u201cAbout Codex\u201d dialog)?\n\nVersion 26.825.51511\n\n### What subscription do you have?\n\n200 Pro\n\n### What platform is your computer?\n\nMicrosoft Windows NT 10.0.26200.0 x64\n\n### What issue are you seeing?\n\nAll my agents have been failing the past few days because they are not able to hold onto their governance and rules and behaviors derived from their agents.md chains. One of them even said they reconstructed their rules from our in chat recent mes",
+          "title": "Codex no longer understanding respecting Agents.md chains",
+          "url": "https://github.com/openai/codex/issues/41704"
+        },
+        {
+          "date": "2026-09-13T02:55:00Z",
+          "snippet": "### What version of Codex CLI is running?\n\ncodex-cli 0.154.0\n\n### What subscription do you have?\n\nBusiness, 2-seat\n\n### Which model were you using?\n\ngpt-5.6-luna high fast \n\n### What platform is your computer?\n\nLinux 6.8.0-138-generic x86_64 x86_64\n\n### What terminal emulator and version are you using (if applicable)?\n\nterminator 2.1.3\n\n### Codex doctor report\n\n```json\n{\n  \"schemaVersion\": 1,\n  \"generatedAt\": \"1789266819s since unix epoch\",\n  \"overallStatus\": \"warning\",\n  \"codexVersion\": \"0.154.",
+          "title": "Model ignoring self diagnosis for improving AGENTS.md behaviour updates",
+          "url": "https://github.com/openai/codex/issues/45156"
+        },
+        {
+          "date": "2026-09-03T19:30:15Z",
+          "snippet": "### What variant of Codex are you using?\n\ncli\n\n### What feature would you like to see?\n\n## Problem\n\nCodex currently builds an instruction chain by loading global guidance from `$CODEX_HOME/AGENTS.override.md` or `$CODEX_HOME/AGENTS.md`, followed by applicable project-level `AGENTS.md` files.\n\nThere is no supported configuration option that lets a selected profile choose a different global instruction file or disable global instructions.\n\nI regularly use Codex in two different situations:\n\n- In m",
+          "title": "Allow profiles to override the global AGENTS.md path",
+          "url": "https://github.com/openai/codex/issues/42601"
+        },
+        {
+          "date": "2026-09-17T10:36:57Z",
+          "snippet": "### What variant of Codex are you using?\n\nCodex desktop app on macOS. This is a feature proposal for the shared context/compaction machinery, also relevant to CLI sessions.\n\n### What feature would you like to see?\n\nPersist the original text of loaded `AGENTS.md` instructions as session-owned snapshots, and restore the applicable snapshots verbatim **exactly once at each compaction boundary**.\n\nThe goal is to keep repository instructions stable across long sessions without relying on the model's ",
+          "title": "Persist AGENTS.md snapshots and restore them verbatim once per compaction",
+          "url": "https://github.com/openai/codex/issues/46186"
+        },
+        {
+          "date": "2026-02-18T10:26:35Z",
+          "snippet": "## Tracker summary\n\nCodex should make nested AGENTS.md behavior easier to understand and debug, especially when deeper files are expected to override shallower repo-level guidance.\n\n## Customer signal\n\n* Customer: Wix\n* Submitted by: Andrew Ginns\n* Source: #codex-feedback, 2026-05-05 05:15 PDT\n\n## Evidence\n\nWix reported issues with nested AGENTS.md behavior and referenced GitHub issue openai/codex#12115. The source question asks whether deeper AGENTS.md files should override shallower ones and w",
+          "title": "Dynamically loading nested AGENTS.md",
+          "url": "https://github.com/openai/codex/issues/12115"
+        },
+        {
+          "date": "2026-09-09T15:06:44Z",
+          "snippet": "### What version of the Codex App are you using (From \u201cAbout Codex\u201d dialog)?\n\n26.901.51231 (8109)\n\n### What subscription do you have?\n\nChatGPT Pro\n\n### What platform is your computer?\n\nDarwin 25.5.0 arm64 arm\n\n### What issue are you seeing?\n\nFeedback ID: 01a08672-ef8c-79d2-9d3b-ef9856cdec6e\n\nThe agent does not reliably follow explicit instructions provided in AGENTS.md. It invents its own workflow, makes unsupported assumptions, and performs actions that were neither requested nor documented.\n\nT",
+          "title": "Agent ignores AGENTS.md and invents an unsafe production workflow",
+          "url": "https://github.com/openai/codex/issues/44171"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github/github-issues.raw",
+      "raw_sha256": "69ecc14a63259e16f75082cede8b47bc1970b81b14ebf909a60da103c5962526",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-issues",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 1.3806921250070445,
+      "items": [
+        {
+          "date": "2026-10-03T01:52:31Z",
+          "snippet": "I just noticed that the Codex repository no longer contains AGENTS.md or the Codex self repo-specific skills, removed somewhere around 30th September. An optimistic\u2014perhaps utopian\u2014interpretation is that this signals a broader reassessment of how much explicit scaffolding coding agents need as models evolve. But the Astra traces I\u2019ve seen in Langfuse still suggest a greedy approach to solving tasks: pursuing the next immediate step rather than reconsidering the overall approach. I still don\u2019t se",
+          "title": "AGENTS.md and project skills removed from codex source code",
+          "url": "https://github.com/openai/codex/discussions/50487"
+        },
+        {
+          "date": "2026-09-25T08:09:02Z",
+          "snippet": "Product: Codex desktop app for Windows\nProject setup: Local Codex project with Google Drive connected through the available app/connector\nI\u2019m working on a team project where Google Drive is the source of truth. We intentionally use an empty local project folder only as a placeholder. Project instructions prohibit reading from or writing to that local folder.\nWe need each new chat in the same Codex project to:\n\nRead the current AGENTS.md from Google Drive automatically, without requiring someone ",
+          "title": "Feature request: persistent Google Drive instructions and file creation in Codex for Windows",
+          "url": "https://github.com/openai/codex/discussions/48032"
+        },
+        {
+          "date": "2026-09-20T19:27:08Z",
+          "snippet": "I\u2019ve open-sourced Agent Lint, a linter for configuration used by Codex and other coding agents:\nhttps://github.com/zhupanov/agent-lint\nIt validates things including:\n.codex/ and .codex-plugin/\nAGENTS.md\n.agents/skills/\nMCP configuration\nClaude Code configuration\nCursor configuration\nThe project currently has ~300 lint rules, with a documented rule registry.\nIt supports configurable rule severity and suppression, running selected rules with --only, GitHub Actions integration, and prebuilt binarie",
+          "title": "Agent Lint: open-source linter for Codex, AGENTS.md, MCP, Claude Code, and Cursor config",
+          "url": "https://github.com/openai/codex/discussions/46874"
+        },
+        {
+          "date": "2026-09-24T03:02:50Z",
+          "snippet": "I build ghfs. It keeps a repository's GitHub issues on disk as Markdown files, mounted read-only at .ghfs/ in the repo, so a coding agent reads an issue with cat instead of calling GitHub in the middle of a task. Disclosure up front: it is a paid product and it is not open source. The free tier covers one repository; unlimited repositories are $5/month or $48/year.\nThe Codex-specific part is the sandbox. Codex CLI's default workspace-write sandbox runs with network access off, so gh issue view 4",
+          "title": "ghfs: GitHub issues as read-only local files, readable from inside Codex's sandbox",
+          "url": "https://github.com/openai/codex/discussions/47730"
+        },
+        {
+          "date": "2026-08-30T08:45:01Z",
+          "snippet": "The problem\nMy AGENTS.md and CLAUDE.md files kept growing, but I had no safe way to tell which instructions were still useful and which were stale, duplicated, or too broad.\nSo I built Skill Sunset, a local, read-only audit for agent instruction files. The important constraint is: TEST is not RETIRE. A suspicious rule is not removed just because a heuristic dislikes it.\nnpx skill-sunset@latest audit --codex --open\nIt scans AGENTS.md, CLAUDE.md, and generic SKILL.md files, then produces an eviden",
+          "title": "Skill Sunset: a local, read-only audit for stale AGENTS.md rules",
+          "url": "https://github.com/openai/codex/discussions/41635"
+        },
+        {
+          "date": "2026-09-21T20:41:41Z",
+          "snippet": "Instructions files are advice. The agent reads them, agrees, and then writes the thing you told it not to \u2014 a hardcoded connection string, a duplicate route handler, await on a synchronous call.\nSarge makes the rules enforceable instead of advisory. Every file the agent writes gets judged against a rule book in the repo \u2014 by a local model, not a regex \u2014 and the run refuses while a rule is broken. The agent gets the failure back and fixes it. Break the same rule twice and a tutor writes the corre",
+          "title": "Sarge: a rule check that refuses the run, instead of another line in the instructions file",
+          "url": "https://github.com/openai/codex/discussions/47107"
+        },
+        {
+          "date": "2026-10-01T13:37:50Z",
+          "snippet": "I run a few projects with Codex and Claude Code, and the part that wore me out was not the coding. It was being the operator: opening terminals, making worktrees, checking which agent was stuck, reading their pull requests, answering the same permission prompts. So I built the operations layer and open-sourced it.\nAgent 007 (https://github.com/bill10/agent-007) is a small web app, one command (npx @bill10/agent-007), that:\n\nstarts Codex (or Claude Code, or any CLI agent) in web terminals, each i",
+          "title": "Agent 007: a job board and a manager agent for Codex (and Claude Code) workers, in your browser",
+          "url": "https://github.com/openai/codex/discussions/49981"
+        },
+        {
+          "date": "2026-06-12T03:58:18Z",
+          "snippet": "I built a lightweight Codex plugin experiment around repository-local guidance maps:\nhttps://github.com/Heyu2002/Code-Project-Guidance-Map\nThe plugin generates and refreshes a compact AGENTS.md action map for a codebase. It focuses on information that future Codex sessions often need before editing:\n\nmodule ownership\ntask routing\ndependency boundaries\nproject-specific editing rules\nkey entry points for each module\n\nThe goal is not to create broad project documentation or replace reading source c",
+          "title": "Experiment: a Codex plugin for reusable project guidance maps in AGENTS.md",
+          "url": "https://github.com/openai/codex/discussions/27754"
+        },
+        {
+          "date": "2026-09-21T16:01:44Z",
+          "snippet": "Codex users need a reliable way to determine what instructions reached the agent, what capabilities are available, and what work was actually performed. These should be standard product safeguards rather than depend on custom prompts.\nRequested improvements\n\n\nInstruction-loading report\nShow applicable instruction files, their precedence, and whether each was fully loaded, overridden, skipped, or truncated. Display the effective instruction budget and warn explicitly when guidance is omitted. The",
+          "title": "Make instruction loading, available capabilities, and execution evidence visible and auditable",
+          "url": "https://github.com/openai/codex/discussions/47058"
+        },
+        {
+          "date": "2026-10-01T18:16:31Z",
+          "snippet": "I'm developing MAIOS Project Kernel, an open-source semantic operating kernel for AI agents. It keeps sources, intent, competences and consequences connected so the agent can maintain orientation as its work changes: understand what the situation calls for, form useful capacities and let what happens change how it continues.\nA competence carries domain knowledge, reasons, sources and ways of working. A piece of work can produce both a result and a reusable ability. The Kernel returns that learni",
+          "title": "MAIOS Project Kernel: maintaining orientation as an AI agent learns and changes",
+          "url": "https://github.com/openai/codex/discussions/50062"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github/github-discussions.raw",
+      "raw_sha256": "e25831e8f6666caf320554bdfffb010e6f5bcd20aa1725f1bd54b8a754e54578",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-discussions",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 9.793825707980432,
+      "items": [
+        {
+          "date": "2026-09-25T02:31:06Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "rust-v0.157.0",
+          "url": "https://github.com/openai/codex/releases/tag/rust-v0.157.0"
+        },
+        {
+          "date": "2026-09-22T19:51:01Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "rust-v0.156.0",
+          "url": "https://github.com/openai/codex/releases/tag/rust-v0.156.0"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github/github-releases.raw",
+      "raw_sha256": "8134a163f03b721d5909ceac1613a1860bc0b7d9fcbeda1837b8efb7044315a4",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-releases",
+      "status": "ok"
+    }
+  ],
+  "strict_five": false
+}

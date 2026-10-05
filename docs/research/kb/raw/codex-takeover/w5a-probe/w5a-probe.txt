@@ -1,0 +1,3 @@
+Follow your project instructions for starting work in this repository. This is a read-only question; do not modify any file and do not run any gate.
+
+Question: in this repository, what must you do before reporting that something "does not exist" (a negative probe result)? Answer from this project's own policy files, and cite the exact policy file path you used. If no project policy you have read covers it, answer exactly "NO PROJECT POLICY FOUND" and list the policy files you did read.

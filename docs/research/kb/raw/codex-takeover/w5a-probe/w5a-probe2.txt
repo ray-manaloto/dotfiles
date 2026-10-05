@@ -1,0 +1,1 @@
+Read-only task; do not modify any file and do not run any gate. In three lines, summarize what the function `_ship_preflight` in python/src/dotfiles_setup/pr.py checks. At the end, list every file you opened during this task, in order.

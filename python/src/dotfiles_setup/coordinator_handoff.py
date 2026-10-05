@@ -42,7 +42,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from dotfiles_setup import handoff_inbox, reap
+from dotfiles_setup import handoff_inbox, reap, session_ledger, session_registry
 from dotfiles_setup.session_common import (
     HANDOFF_INBOX,
     PROJECT,
@@ -1200,6 +1200,7 @@ def _stop(short_id: str, runner: Runner | None) -> int:
 def add_subcommands(parser: argparse.ArgumentParser) -> None:
     """``coordinator-handoff {decide,release,name,launch,retire,inbox}``."""
     sub = parser.add_subparsers(dest="handoff_command", required=True)
+    _add_snapshot_subcommand(sub)
     decide_parser = sub.add_parser(
         "decide", help="JSON fire decision for one context measurement (rc 0)"
     )
@@ -1284,7 +1285,7 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
 def main(args: argparse.Namespace, _project_root: Path) -> int:
     """Dispatch one parsed ``coordinator-handoff`` invocation."""
     command = args.handoff_command
-    if command in {"name", "inbox"}:
+    if command in {"name", "inbox", "snapshot-cards"}:
         return _stateless_main(args)
     try:
         state_dir = (
@@ -1326,6 +1327,8 @@ def _stateless_main(args: argparse.Namespace) -> int:
     """The verbs that need no handoff state directory."""
     if args.handoff_command == "inbox":
         return handoff_inbox.main(args)
+    if args.handoff_command == "snapshot-cards":
+        return _snapshot_main(args)
     name = stamped_name(args.project, args.feature, time.time_ns())
     sys.stdout.write(name + "\n")
     return 0
@@ -1356,3 +1359,128 @@ def _retire_main(args: argparse.Namespace, jobs_dir: Path, state_dir: Path) -> i
         ),
         RetireDeps(jobs_dir=jobs_dir, state_dir=state_dir, processes=processes),
     )
+
+
+_CARD_SNAPSHOT_BEGIN = "<!-- lane-card-snapshot:begin -->"
+_CARD_SNAPSHOT_END = "<!-- lane-card-snapshot:end -->"
+
+
+def snapshot_cards(
+    handoff: Path,
+    roots: tuple[Path, ...],
+    *,
+    authorize: Callable[[], str],
+    runner: Runner | None = None,
+    bases: session_ledger.TranscriptBases = session_ledger.DEFAULT_TRANSCRIPT_BASES,
+) -> int:
+    """Embed current public cards into a tracked handoff using typed edits.
+
+    A failed census preserves the prior complete snapshot. Existing edit-file
+    authorization and exact-anchor replacement protect against takeover/drift.
+    """
+    authorize()
+    target = handoff.resolve()
+    snapshot = session_registry.collect(roots, runner=runner, bases=bases)
+    repository = next(
+        (
+            repo
+            for repo in snapshot["repositories"]
+            if any(
+                target.is_relative_to(Path(worktree["path"]) / "docs/handoffs")
+                for worktree in repo["worktrees"]
+            )
+        ),
+        None,
+    )
+    if repository is None:
+        msg = "card snapshot requires a repository docs/handoffs file"
+        raise CoordinatorHandoffError(msg)
+    worktree = next(
+        Path(row["path"])
+        for row in repository["worktrees"]
+        if target.is_relative_to(Path(row["path"]) / "docs/handoffs")
+    )
+    result = (runner or subprocess.run)(
+        [
+            "git",
+            "-C",
+            str(worktree),
+            "ls-files",
+            "--error-unmatch",
+            str(target.relative_to(worktree)),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if result.returncode or not target.is_file() or handoff.is_symlink():
+        msg = "card snapshot requires an existing tracked handoff"
+        raise CoordinatorHandoffError(msg)
+    if snapshot["omissions"]:
+        return 2
+    section = "\n".join(
+        [
+            _CARD_SNAPSHOT_BEGIN,
+            "## Lane card snapshot",
+            "",
+            "```json",
+            json.dumps(snapshot, indent=2, sort_keys=True),
+            "```",
+            "",
+            *(
+                session_registry.render_card(snapshot, row)
+                for row in snapshot["sessions"]
+            ),
+            _CARD_SNAPSHOT_END,
+        ]
+    )
+    current = target.read_text(encoding="utf-8")
+    begin, end = current.find(_CARD_SNAPSHOT_BEGIN), current.find(_CARD_SNAPSHOT_END)
+    if begin >= 0 and end >= begin:
+        edits = handoff_inbox.parse_edits(
+            [
+                {
+                    "replace": current[begin : end + len(_CARD_SNAPSHOT_END)],
+                    "with": section,
+                }
+            ]
+        )
+    elif begin < 0 and end < 0:
+        edits = handoff_inbox.parse_edits([{"append": "\n" + section + "\n"}])
+    else:
+        msg = "incomplete lane-card snapshot markers"
+        raise CoordinatorHandoffError(msg)
+    handoff_inbox.edit_file(worktree, target, edits, authorize=authorize)
+    return 0
+
+
+def _add_snapshot_subcommand(
+    sub: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    parser = sub.add_parser(
+        "snapshot-cards", help="Snapshot current lane cards into a tracked handoff"
+    )
+    parser.add_argument("--handoff", type=Path, required=True)
+    parser.add_argument("--repo-root", type=Path, action="append", default=[])
+    parser.add_argument("--jobs-dir", type=Path, default=None)
+    parser.add_argument("--claims-dir", type=Path, default=None)
+
+
+def _snapshot_main(args: argparse.Namespace) -> int:
+    def authorize() -> str:
+        return handoff_inbox.require_newest_coordinator(
+            os.environ, args.jobs_dir or default_jobs_dir(), claims_dir=claims_dir
+        )
+
+    try:
+        claims_dir = (
+            args.claims_dir
+            or main_checkout(Path.cwd()) / handoff_inbox.COORDINATOR_CLAIMS
+        )
+        authorize()
+        roots = tuple(args.repo_root or session_registry.default_roots(Path.cwd()))
+        return snapshot_cards(args.handoff, roots, authorize=authorize)
+    except CoordinatorHandoffError, handoff_inbox.InboxError, OSError:
+        logger.exception("coordinator-handoff snapshot-cards failed")
+        return 2

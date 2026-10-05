@@ -1916,3 +1916,219 @@ def test_t5_launch_state_refusals_are_distinct_from_census(
     assert ("state-locked" if failure == "lock" else "state-unreadable") in caplog.text
     assert "census-unavailable" not in caplog.text
     assert runner.calls == []
+
+
+def test_card_snapshot_public_handoff_replacement_and_census_failure(
+    checkouts: tuple[Path, Path], tmp_path: Path
+) -> None:
+    main, lane = checkouts
+    _git(
+        "remote", "add", "origin", "git@github.com:ray-manaloto/dotfiles.git", cwd=main
+    )
+    target = lane / "docs/handoffs/session.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Tracked handoff\n\nKeep this ruling.\n")
+    _git("add", "docs/handoffs/session.md", cwd=lane)
+    rows: list[dict[str, object]] = [
+        {
+            "cwd": str(lane),
+            "id": "snapshot",
+            "sessionId": "snapshot-session",
+            "name": "dotfiles-snapshot.coordinator",
+            "kind": "background",
+            "startedAt": "2026-10-05T12:00:00Z",
+            "state": "blocked",
+        }
+    ]
+    calls: list[list[str]] = []
+    control = {"rc": 0}
+
+    def runner(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        if argv[0] == "claude":
+            return subprocess.CompletedProcess(
+                argv, control["rc"], json.dumps(rows), "inventory failure"
+            )
+        return subprocess.run(argv, capture_output=True, text=True, check=False)
+
+    codex_base = tmp_path / "empty-codex"
+    codex_base.mkdir()
+    bases = ch.session_ledger.TranscriptBases(
+        codex=codex_base, claude=tmp_path / "empty-claude"
+    )
+    assert (
+        ch.snapshot_cards(
+            target, (main,), authorize=lambda: COORDINATOR, runner=runner, bases=bases
+        )
+        == 0
+    )
+    first = target.read_text()
+    assert "Keep this ruling." in first
+    assert "snapshot-session" in first
+    assert str(main) in first
+    assert str(lane) in first
+    assert "State: blocked (blocked); liveness: unknown" in first
+    assert first.count("<!-- lane-card-snapshot:begin -->") == 1
+    rows[0]["state"] = "working"
+    assert (
+        ch.snapshot_cards(
+            target, (main,), authorize=lambda: COORDINATOR, runner=runner, bases=bases
+        )
+        == 0
+    )
+    replaced = target.read_text()
+    assert replaced.count("<!-- lane-card-snapshot:begin -->") == 1
+    assert "State: working (working)" in replaced
+    assert "State: blocked (blocked)" not in replaced
+    control["rc"] = 1
+    assert (
+        ch.snapshot_cards(
+            target, (main,), authorize=lambda: COORDINATOR, runner=runner, bases=bases
+        )
+        == 2
+    )
+    assert target.read_text() == replaced
+    assert all(
+        argv[1:] == ["agents", "--json", "--all"]
+        for argv in calls
+        if argv[0] == "claude"
+    )
+
+
+def test_card_snapshot_refuses_untracked_handoff_and_writer(
+    checkouts: tuple[Path, Path], tmp_path: Path
+) -> None:
+    main, lane = checkouts
+    _git(
+        "remote", "add", "origin", "git@github.com:ray-manaloto/dotfiles.git", cwd=main
+    )
+    target = lane / "docs/handoffs/session.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Handoff\n")
+
+    def runner(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if argv[0] == "claude":
+            return subprocess.CompletedProcess(argv, 0, "[]", "")
+        return subprocess.run(argv, capture_output=True, text=True, check=False)
+
+    codex_base = tmp_path / "empty-codex"
+    codex_base.mkdir()
+    bases = ch.session_ledger.TranscriptBases(
+        codex=codex_base, claude=tmp_path / "empty-claude"
+    )
+    with pytest.raises(ch.CoordinatorHandoffError, match="tracked handoff"):
+        ch.snapshot_cards(
+            target, (main,), authorize=lambda: COORDINATOR, runner=runner, bases=bases
+        )
+    _git("add", "docs/handoffs/session.md", cwd=lane)
+
+    def denied() -> str:
+        msg = "superseded writer"
+        raise ch.handoff_inbox.InboxError(msg)
+
+    with pytest.raises(ch.handoff_inbox.InboxError, match="superseded writer"):
+        ch.snapshot_cards(target, (main,), authorize=denied, runner=runner, bases=bases)
+    assert target.read_text() == "# Handoff\n"
+    outside = tmp_path / "outside.md"
+    outside.write_text("preserved")
+    with pytest.raises(ch.CoordinatorHandoffError, match="docs/handoffs"):
+        ch.snapshot_cards(
+            outside, (main,), authorize=lambda: COORDINATOR, runner=runner, bases=bases
+        )
+    assert outside.read_text() == "preserved"
+    args = setup_parser().parse_args(
+        [
+            "coordinator-handoff",
+            "snapshot-cards",
+            "--handoff",
+            str(target),
+            "--repo-root",
+            str(main),
+        ]
+    )
+    assert args.handoff_command == "snapshot-cards"
+
+
+@pytest.mark.parametrize("explicit_claims", [True, False])
+def test_snapshot_cards_public_cli_uses_isolated_codex_claim_and_handback(
+    checkouts: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    explicit_claims: bool,
+) -> None:
+    main, lane = checkouts
+    _git(
+        "remote", "add", "origin", "git@github.com:ray-manaloto/dotfiles.git", cwd=main
+    )
+    monkeypatch.chdir(lane)
+    target = lane / "docs/handoffs/session.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Preserve this handoff\n")
+    _git("add", "docs/handoffs/session.md", cwd=lane)
+    jobs = tmp_path / "isolated-jobs"
+    claims = (
+        tmp_path / "claims"
+        if explicit_claims
+        else main / ch.handoff_inbox.COORDINATOR_CLAIMS
+    )
+    caller = "snapshot-codex-native-id"
+    monkeypatch.delenv(ch.handoff_inbox.SESSION_ENV, raising=False)
+    monkeypatch.setenv(ch.handoff_inbox.CODEX_ENV, caller)
+    codex_config = tmp_path / "codex-config"
+    (codex_config / "sessions").mkdir(parents=True)
+    monkeypatch.setenv("CODEX_HOME", str(codex_config))
+    claude_config = tmp_path / "claude-config"
+    (claude_config / "projects").mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_config))
+    # Substitute only the native harness inventory process; Git and state IO are real.
+    native_run = subprocess.run
+
+    def inventory_boundary(
+        argv: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if argv[0] == "claude":
+            return subprocess.CompletedProcess(argv, 0, "[]", "")
+        return native_run(argv, capture_output=True, text=True, check=False, timeout=30)
+
+    monkeypatch.setattr(subprocess, "run", inventory_boundary)
+    ch.handoff_inbox.coordinator_claim(
+        {ch.handoff_inbox.CODEX_ENV: caller},
+        jobs,
+        claims_dir=claims,
+        takeover=("dotfiles-snapshot-codex.coordinator", "none"),
+        now=lambda: datetime(2026, 10, 5, 17, tzinfo=UTC),
+    )
+    flags = ["--claims-dir", str(claims)] if explicit_claims else []
+    args = setup_parser().parse_args(
+        [
+            "coordinator-handoff",
+            "snapshot-cards",
+            "--handoff",
+            str(target),
+            "--repo-root",
+            str(main),
+            "--jobs-dir",
+            str(jobs),
+            *flags,
+        ]
+    )
+    assert ch.main(args, lane) == 0
+    before = target.read_bytes()
+    assert b"<!-- lane-card-snapshot:begin -->" in before
+    assert b"Preserve this handoff" in before
+    successor = "claude-snapshot-successor"
+    job = jobs / successor[:8] / "state.json"
+    job.parent.mkdir(parents=True)
+    job.write_text(
+        json.dumps(
+            {
+                "sessionId": successor,
+                "name": "dotfiles-snapshot-handback.coordinator",
+                "createdAt": "2099-01-01T00:00:00Z",
+                "state": "done",
+            }
+        )
+    )
+    assert ch.main(args, lane) == 2
+    assert target.read_bytes() == before

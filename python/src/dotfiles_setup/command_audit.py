@@ -65,19 +65,24 @@ transcripts to read.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from dotfiles_setup import hook_guard, host_lock
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
+
+    from dotfiles_setup.session_ledger import TranscriptBases
+
 
 # Most-recent sessions to scan by default (mirrors fewer-permission-prompts' cap).
 DEFAULT_SESSION_LIMIT = 50
@@ -798,6 +803,7 @@ def command_audit_main(
     *,
     limit: int = DEFAULT_SESSION_LIMIT,
     output: Path | None = None,
+    **digest_options: object,
 ) -> int:
     """Scan this project's recent transcripts; report to stdout or ``output``.
 
@@ -808,6 +814,10 @@ def command_audit_main(
     branch deliberately leaves any existing report untouched rather than
     clobbering it with a notice.
     """
+    if digest_options.get("digest") or digest_options.get("since") is not None:
+        return command_digest_main(
+            project_root, limit=limit, output=output, options=digest_options
+        )
     try:
         with host_lock.held(
             host_lock.COMMAND_AUDIT, f"command-audit ({project_root})", wait_s=0
@@ -843,3 +853,148 @@ def _command_audit(project_root: Path, *, limit: int, output: Path | None) -> in
         f"{result.counts.get('blocked', 0)} guard-denied)\n"
     )
     return 0
+
+
+def command_digest_main(
+    project_root: Path,
+    *,
+    limit: int = DEFAULT_SESSION_LIMIT,
+    output: Path | None = None,
+    review: bool = False,
+    options: dict[str, object] | None = None,
+) -> int:
+    """Publish fresh, argument-free command evidence and its sibling JSON.
+
+    The legacy host lock can skip a scan with rc 0. This explicit digest path
+    instead always resolves fingerprinted facts and writes this run's receipt.
+    Concurrent publishers of the same destination are unsupported.
+    """
+    options = options or {}
+    session_ledger = importlib.import_module("dotfiles_setup.session_ledger")
+
+    try:
+        projection = session_ledger.command_projection(
+            cast("Iterable[Path]", options.get("repo_roots") or (project_root,)),
+            since=cast(
+                "str", options.get("since") or session_ledger.DEFAULT_COMMAND_SINCE
+            ),
+            providers=cast(
+                "Iterable[str]", options.get("providers", ("claude", "codex"))
+            ),
+            session_limit=limit,
+            bases=cast(
+                "TranscriptBases",
+                options.get("bases") or session_ledger.DEFAULT_TRANSCRIPT_BASES,
+            ),
+        )
+    except OSError, ValueError, subprocess.SubprocessError:
+        sys.stderr.write(
+            "command digest: invalid selection or source inventory unavailable\n"
+        )
+        return 2
+    commands = projection["commands"]
+    candidates: dict[str, dict[str, Any]] = {}
+    if isinstance(commands, list):
+        for event in commands:
+            shape = event["command_shape"]
+            if not shape or event["execution_status"] != "executed":
+                continue
+            candidate = candidates.setdefault(
+                shape,
+                {
+                    "command_shape": shape,
+                    "uses": 0,
+                    "session_ids": set(),
+                    "signal": classify(
+                        BashCommand(shape, "", event["timestamp"], executed=True)
+                    ),
+                    "rationale": (
+                        "Executed approved shape; review repeated manual work "
+                        "for a canonical task."
+                    ),
+                },
+            )
+            candidate["uses"] += 1
+            candidate["session_ids"].add(event["session_id"])
+    rows = [
+        {key: value for key, value in candidate.items() if key != "session_ids"}
+        | {"sessions": len(candidate["session_ids"])}
+        for candidate in candidates.values()
+    ]
+    rows.sort(
+        key=lambda row: (
+            (row["sessions"], row["uses"]) if review else (row["uses"], row["sessions"])
+        ),
+        reverse=True,
+    )
+    projection["candidates"] = rows
+    destination = output or Path(".agent/session-review/codex-takeover-digest.md")
+    text = render_command_digest(projection)
+    written = write_report(text, project_root, destination)
+    written.with_suffix(".json").write_text(
+        json.dumps(projection, indent=2, sort_keys=True) + "\n"
+    )
+    sys.stdout.write(
+        f"command digest: {projection['coverage']}; "
+        f"{projection['selected_sources']} selected source(s); artifacts written\n"
+    )
+    return 0 if projection["coverage"] == "complete" else 2
+
+
+def render_command_digest(projection: dict[str, Any]) -> str:
+    """Render only the shared allowlisted projection, never transcript text."""
+    lines = [
+        "# Codex takeover command digest",
+        "",
+        f"Coverage: {projection['coverage']}. Since (UTC): {projection['since']}.",
+        f"Collected at: {projection['collected_at']}.",
+        (
+            f"Sources: {projection['selected_sources']} selected / "
+            f"{projection['discovered_sources']} discovered; "
+            f"{projection['excluded_sources']} excluded by limit."
+        ),
+        "",
+        "| provider | attempted | executed | refused |",
+        "|---|---:|---:|---:|",
+    ]
+    for provider, counts in projection["counts"].items():
+        lines.append(
+            f"| {provider} | {counts['attempted']} | "
+            f"{counts['executed']} | {counts['refused']} |"
+        )
+    lines += [
+        "",
+        "| shape | sessions | uses | signal | rationale |",
+        "|---|---:|---:|---|---|",
+    ]
+    for candidate in projection["candidates"]:
+        lines.append(
+            f"| {candidate['command_shape']} | {candidate['sessions']} | "
+            f"{candidate['uses']} | {candidate['signal']} | {candidate['rationale']} |"
+        )
+    lines += [
+        "",
+        "## Local evidence references",
+        "",
+        (
+            "| provider | source sha256 | call line | "
+            "record sha256 | status | result line |"
+        ),
+        "|---|---|---:|---|---|---:|",
+    ]
+    for event in projection["commands"]:
+        result = event["result_ref"]
+        lines.append(
+            f"| {event['provider']} | {event['source_id']} | "
+            f"{event['event_ref']['line']} | {event['event_ref']['record_sha256']} | "
+            f"{event['execution_status']} | {result['line'] if result else '-'} |"
+        )
+    lines += [
+        "",
+        (
+            f"Omissions: {len(projection['omissions'])}. "
+            "See sibling JSON for safe omission reasons."
+        ),
+        "",
+    ]
+    return "\n".join(lines)

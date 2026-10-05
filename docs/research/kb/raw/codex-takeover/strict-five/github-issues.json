@@ -1,0 +1,21 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 0.6231618750025518,
+  "items": [
+    {
+      "date": "2025-08-21T07:22:15Z",
+      "snippet": "Codex, Amp, Cursor, and others are starting to standardize around AGENTS.md (https://agents.md/) \u2014 a unified Markdown file that coding agents can use to understand a codebase.\n\nBy contrast, CLAUDE.md feels too specific to Claude Code. It doesn\u2019t work as well when collaborating with other developers who aren\u2019t using Claude Code.\n",
+      "title": "Feature Request: Support AGENTS.md.",
+      "url": "https://github.com/anthropics/claude-code/issues/6235"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-issues.raw",
+  "raw_sha256": "78eeb8bb0257b804e992c847be98ec299570a627ce2879e476c8ba5cf712c574",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "github-issues",
+  "status": "ok"
+}

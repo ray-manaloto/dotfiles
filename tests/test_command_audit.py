@@ -12,17 +12,22 @@ concurrency.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import uuid
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
 from dotfiles_setup import command_audit as ca
+
+if TYPE_CHECKING:
+    from dotfiles_setup.session_ledger import TranscriptBases
 
 # --------------------------------------------------------- discovery / encoding
 
@@ -705,3 +710,71 @@ def test_main_counts_sessions_not_transcript_files(
     report = capsys.readouterr().out
     assert "Scanned **1** recent session(s)" in report
     assert "`git commit`" in report  # the subagent's command was actually scanned
+
+
+def test_public_audit_digest_is_fresh_dual_provider_and_secret_safe(
+    tmp_path: Path,
+    digest_fixture: tuple[tuple[Path, Path], TranscriptBases, str],
+) -> None:
+    roots, bases, secret = digest_fixture
+    output = roots[0] / "digest.md"
+    output.write_text("stale-generation")
+    assert (
+        ca.command_audit_main(
+            roots[0], digest=True, repo_roots=roots, bases=bases, output=output
+        )
+        == 0
+    )
+    for artifact_text in (output.read_text(), output.with_suffix(".json").read_text()):
+        assert secret not in artifact_text
+        assert str(tmp_path) not in artifact_text
+        assert "https://" not in artifact_text
+    receipt = json.loads(output.with_suffix(".json").read_text())
+    absent = hashlib.sha256(
+        ("git rebase --onto " + uuid.uuid4().hex).encode()
+    ).hexdigest()
+    assert absent not in {event["command_sha256"] for event in receipt["commands"]}
+    assert receipt["counts"] == {
+        "claude": {"attempted": 5, "executed": 4, "refused": 1},
+        "codex": {"attempted": 5, "executed": 4, "refused": 1},
+    }
+    assert receipt["selected_sources"] == 8
+    assert {row["command_shape"] for row in receipt["candidates"]} == {
+        "git gc",
+        "git commit",
+    }
+    assert "stale-generation" not in output.read_text()
+    assert "| claude | 5 | 4 | 1 |" in output.read_text()
+    assert "| codex | 5 | 4 | 1 |" in output.read_text()
+    for text in (output.read_text(), output.with_suffix(".json").read_text()):
+        assert secret not in text
+        assert str(tmp_path) not in text
+        assert "https://" not in text
+        assert "git fetch" not in text
+        assert "git push" not in text
+        assert "git rebase" not in text
+
+
+def test_public_audit_digest_partial_window_and_default_artifacts(
+    digest_fixture: tuple[tuple[Path, Path], TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    assert ca.command_audit_main(roots[0], digest=True, bases=bases, limit=1) == 2
+    output = roots[0] / ".agent/session-review/codex-takeover-digest.md"
+    receipt = json.loads(output.with_suffix(".json").read_text())
+    assert receipt["coverage"] == "partial"
+    assert receipt["excluded_sources"] > 0
+    assert receipt["since"] == "2026-10-02T05:00:00+00:00"
+    assert receipt["collected_at"]
+
+
+def test_public_audit_digest_invalid_selection_never_publishes(
+    digest_fixture: tuple[tuple[Path, Path], TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    output = roots[0] / "bad.md"
+    assert (
+        ca.command_audit_main(roots[0], since="invalid", bases=bases, output=output)
+        == 2
+    )
+    assert not output.exists()

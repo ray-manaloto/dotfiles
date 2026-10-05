@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -1507,3 +1508,67 @@ def test_unknown_path_attachment_makes_public_review_exit_one(
 
     assert rc == 1
     assert "future_shape_zzq" in output.read_text()
+
+
+def test_public_review_digest_ranks_safe_dual_provider_commands(
+    tmp_path: Path,
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, secret = digest_fixture
+    output = roots[0] / "review-digest.md"
+    assert (
+        session_review.session_review_main(
+            roots[0], digest=True, repo_roots=roots, bases=bases, output=output
+        )
+        == 0
+    )
+    for artifact_text in (output.read_text(), output.with_suffix(".json").read_text()):
+        assert secret not in artifact_text
+        assert str(tmp_path) not in artifact_text
+        assert "https://" not in artifact_text
+    receipt = json.loads(output.with_suffix(".json").read_text())
+    absent = hashlib.sha256(
+        ("git rebase --onto " + uuid.uuid4().hex).encode()
+    ).hexdigest()
+    assert absent not in {event["command_sha256"] for event in receipt["commands"]}
+    assert receipt["counts"]["codex"]["executed"] == 4
+    assert receipt["counts"]["claude"]["executed"] == 4
+    candidate = receipt["candidates"][0]
+    assert candidate["command_shape"] == "git gc"
+    assert candidate["uses"] == 6
+    assert candidate["sessions"] == 6
+    assert candidate["signal"] == "one_off"
+    assert candidate["rationale"]
+    for text in (output.read_text(), output.with_suffix(".json").read_text()):
+        assert secret not in text
+        assert str(tmp_path) not in text
+        assert "https://" not in text
+        assert "git fetch" not in text
+        assert "git push" not in text
+        assert "git rebase" not in text
+    assert "| claude | 5 | 4 | 1 |" in output.read_text()
+    assert "| codex | 5 | 4 | 1 |" in output.read_text()
+
+
+def test_public_review_digest_date_selection_and_partial_limit(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    output = roots[0] / "review-digest.md"
+    assert (
+        session_review.session_review_main(
+            roots[0], digest=True, bases=bases, output=output, sessions=1
+        )
+        == 2
+    )
+    assert json.loads(output.with_suffix(".json").read_text())["coverage"] == "partial"
+    assert (
+        session_review.session_review_main(
+            roots[0], since="2026-10-03T00:00:00Z", bases=bases, output=output
+        )
+        == 0
+    )
+    receipt = json.loads(output.with_suffix(".json").read_text())
+    assert receipt["commands"] == []
+    assert receipt["candidates"] == []
+    assert receipt["selected_sources"] == 0

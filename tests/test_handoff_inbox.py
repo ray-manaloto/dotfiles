@@ -8,12 +8,14 @@ checkout from a lane is the whole point of the task (Ray ruling b).
 
 from __future__ import annotations
 
+import fcntl
 import io
 import json
 import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,16 @@ OLDER = "dotfiles-20261003T140808.926861000-05.coordinator"
 NEWEST_ID = "aaaaaaaa-1111-2222-3333-444444444444"
 OLDER_ID = "bbbbbbbb-1111-2222-3333-444444444444"
 LANE_ID = "cccccccc-1111-2222-3333-444444444444"
+CODEX_ID = "dddddddd-1111-2222-3333-444444444444"
+CODEX_NAME = "dotfiles-20261005T120000.codex.coordinator"
+CLAIM_AT = datetime(2026, 10, 5, 17, 0, 0, 123456, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def isolated_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Native Codex/Claude identities must never leak into isolated test callers."""
+    monkeypatch.delenv(handoff_inbox.CODEX_ENV, raising=False)
+    monkeypatch.delenv(handoff_inbox.SESSION_ENV, raising=False)
 
 
 def _git(*args: str) -> None:
@@ -380,3 +392,504 @@ def test_lock_and_backup_names_do_not_collide_and_backups_are_pruned(
     backups = list((main_repo / handoff_inbox.BACKUP_SUBDIR).iterdir())
     assert len(backups) == handoff_inbox.BACKUPS_KEPT
     assert all(not b.name.startswith("task_plan.md.") for b in backups)
+
+
+# ------------------------------------------------------ provider-qualified CAS
+
+
+def _claim(jobs: Path, claims: Path, *, name: str = CODEX_NAME) -> Path:
+    return handoff_inbox.coordinator_claim(
+        {handoff_inbox.CODEX_ENV: CODEX_ID},
+        jobs,
+        claims_dir=claims,
+        takeover=(name, NEWEST),
+        now=lambda: CLAIM_AT,
+    )
+
+
+def test_codex_takeover_and_claude_handback_use_native_identity(
+    jobs_dir: Path, tmp_path: Path
+) -> None:
+    claims = tmp_path / "claims"
+    caller = {handoff_inbox.CODEX_ENV: CODEX_ID}
+    claude = {handoff_inbox.SESSION_ENV: NEWEST_ID}
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+    _claim(jobs_dir, claims)
+    assert (
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+        == CODEX_NAME
+    )
+    with pytest.raises(handoff_inbox.InboxError, match="provider=codex"):
+        handoff_inbox.require_newest_coordinator(claude, jobs_dir, claims_dir=claims)
+    # Omitting the optional store retains the old isolated Claude-only contract.
+    assert handoff_inbox.require_newest_coordinator(claude, jobs_dir) == NEWEST
+    successor = "eeeeeeee-1111-2222-3333-444444444444"
+    successor_name = "dotfiles-new-claude.coordinator"
+    _job(jobs_dir, successor, successor_name, "2026-10-05T17:00:01Z", state="done")
+    with pytest.raises(handoff_inbox.InboxError, match="provider=claude"):
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: successor}, jobs_dir, claims_dir=claims
+        )
+        == successor_name
+    )
+    with pytest.raises(handoff_inbox.InboxError, match="supersedes"):
+        _claim(jobs_dir, claims)
+    handoff_inbox.coordinator_release(caller, claims_dir=claims)
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+
+
+def test_release_only_retires_own_claim_and_retired_names_are_reserved(
+    jobs_dir: Path, tmp_path: Path
+) -> None:
+    claims = tmp_path / "claims"
+    path = _claim(jobs_dir, claims)
+    before = path.read_bytes()
+    stranger = {handoff_inbox.CODEX_ENV: "ffffffff-1111-2222-3333-444444444444"}
+    with pytest.raises(handoff_inbox.InboxError, match="no coordinator claim"):
+        handoff_inbox.coordinator_release(stranger, claims_dir=claims)
+    assert path.read_bytes() == before
+    handoff_inbox.coordinator_release(
+        {handoff_inbox.CODEX_ENV: CODEX_ID}, claims_dir=claims
+    )
+    assert json.loads(path.read_text())["claims"][CODEX_ID]["retired"] is True
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: NEWEST_ID}, jobs_dir, claims_dir=claims
+        )
+        == NEWEST
+    )
+    with pytest.raises(handoff_inbox.InboxError, match="already used"):
+        handoff_inbox.coordinator_claim(
+            stranger,
+            jobs_dir,
+            claims_dir=claims,
+            takeover=(CODEX_NAME, NEWEST),
+            now=lambda: CLAIM_AT,
+        )
+    # The same owner may deliberately reclaim; it cannot transfer the reserved name.
+    _claim(jobs_dir, claims)
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: CODEX_ID}, jobs_dir, claims_dir=claims
+        )
+        == CODEX_NAME
+    )
+
+
+@pytest.mark.parametrize(
+    ("env", "name", "supersedes"),
+    [
+        ({}, CODEX_NAME, NEWEST),
+        ({handoff_inbox.CODEX_ENV: ""}, CODEX_NAME, NEWEST),
+        (
+            {handoff_inbox.CODEX_ENV: CODEX_ID, handoff_inbox.SESSION_ENV: NEWEST_ID},
+            CODEX_NAME,
+            NEWEST,
+        ),
+        (
+            {handoff_inbox.CODEX_ENV: CODEX_ID, handoff_inbox.SESSION_ENV: ""},
+            CODEX_NAME,
+            NEWEST,
+        ),
+        ({handoff_inbox.CODEX_ENV: CODEX_ID}, "dotfiles-lane", NEWEST),
+        ({handoff_inbox.CODEX_ENV: CODEX_ID}, CODEX_NAME, "none"),
+        ({handoff_inbox.CODEX_ENV: CODEX_ID}, NEWEST, NEWEST),
+    ],
+)
+def test_claim_refusals_leave_store_untouched(
+    jobs_dir: Path, tmp_path: Path, env: dict[str, str], name: str, supersedes: str
+) -> None:
+    claims = tmp_path / "claims"
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        handoff_inbox.coordinator_claim(
+            env,
+            jobs_dir,
+            claims_dir=claims,
+            takeover=(name, supersedes),
+            now=lambda: CLAIM_AT,
+        )
+    assert not (claims / handoff_inbox.CLAIMS_FILE).exists()
+    _claim(jobs_dir, claims)
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: CODEX_ID}, jobs_dir, claims_dir=claims
+        )
+        == CODEX_NAME
+    )
+
+
+@pytest.mark.parametrize(
+    "clock", [CLAIM_AT.replace(tzinfo=None), datetime(2026, 10, 1, tzinfo=UTC)]
+)
+def test_naive_or_rollback_clock_is_refused_and_precise_aware_clock_passes(
+    jobs_dir: Path, tmp_path: Path, clock: datetime
+) -> None:
+    claims = tmp_path / "claims"
+    with pytest.raises(handoff_inbox.InboxError, match="clock"):
+        handoff_inbox.coordinator_claim(
+            {handoff_inbox.CODEX_ENV: CODEX_ID},
+            jobs_dir,
+            claims_dir=claims,
+            takeover=(CODEX_NAME, NEWEST),
+            now=lambda: clock,
+        )
+    assert not (claims / handoff_inbox.CLAIMS_FILE).exists()
+    path = _claim(jobs_dir, claims)
+    assert (
+        json.loads(path.read_text())["claims"][CODEX_ID]["createdAt"]
+        == "2026-10-05T17:00:00.123456+00:00"
+    )
+
+
+@pytest.mark.parametrize(
+    "corrupt",
+    [
+        "{",
+        "[]",
+        '{"unsupported-store": {}}',
+        '{"claims": []}',
+        '{"claims": {"owner": {}}}',
+        '{"claims":{"owner":{"provider":"codex","threadId":"owner","name":"dotfiles-x.coordinator","createdAt":"2026-10-05T17:00:00"}}}',
+    ],
+)
+def test_corrupt_claims_fail_closed_for_claim_release_and_authorization(
+    jobs_dir: Path, tmp_path: Path, corrupt: str
+) -> None:
+    claims = tmp_path / "claims"
+    claims.mkdir()
+    path = claims / handoff_inbox.CLAIMS_FILE
+    path.write_text(corrupt)
+    caller = {handoff_inbox.CODEX_ENV: CODEX_ID}
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        _claim(jobs_dir, claims)
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        handoff_inbox.coordinator_release(caller, claims_dir=claims)
+    with pytest.raises(handoff_inbox.InboxError, match="refused"):
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+    assert path.read_text() == corrupt
+    # Repair is explicit fixture setup, never a silent implementation reset.
+    path.unlink()
+    _claim(jobs_dir, claims)
+    assert (
+        handoff_inbox.require_newest_coordinator(caller, jobs_dir, claims_dir=claims)
+        == CODEX_NAME
+    )
+
+
+def test_empty_coordinator_store_requires_none_sentinel(tmp_path: Path) -> None:
+    jobs, claims = tmp_path / "jobs", tmp_path / "claims"
+    env = {handoff_inbox.CODEX_ENV: CODEX_ID}
+    with pytest.raises(handoff_inbox.InboxError, match="supersedes"):
+        handoff_inbox.coordinator_claim(
+            env,
+            jobs,
+            claims_dir=claims,
+            takeover=(CODEX_NAME, NEWEST),
+            now=lambda: CLAIM_AT,
+        )
+    handoff_inbox.coordinator_claim(
+        env,
+        jobs,
+        claims_dir=claims,
+        takeover=(CODEX_NAME, "none"),
+        now=lambda: CLAIM_AT,
+    )
+    assert (
+        handoff_inbox.require_newest_coordinator(env, jobs, claims_dir=claims)
+        == CODEX_NAME
+    )
+
+
+def test_equal_timestamps_choose_provider_then_full_id(
+    jobs_dir: Path, tmp_path: Path
+) -> None:
+    claims = tmp_path / "claims"
+    path = _claim(jobs_dir, claims)
+    # A real tied Claude record loses to provider='codex', regardless of its name.
+    _job(
+        jobs_dir,
+        "zzzzzzzz-1111-2222-3333-444444444444",
+        "dotfiles-tied.coordinator",
+        CLAIM_AT.isoformat(),
+    )
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: CODEX_ID}, jobs_dir, claims_dir=claims
+        )
+        == CODEX_NAME
+    )
+    with pytest.raises(handoff_inbox.InboxError, match="not the newest"):
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: "zzzzzzzz-1111-2222-3333-444444444444"},
+            jobs_dir,
+            claims_dir=claims,
+        )
+    store = json.loads(path.read_text())
+    later_id = "ffffffff-1111-2222-3333-444444444444"
+    store["claims"][later_id] = dict(
+        store["claims"][CODEX_ID],
+        threadId=later_id,
+        name="dotfiles-tied-codex.coordinator",
+    )
+    path.write_text(json.dumps(store))
+    with pytest.raises(handoff_inbox.InboxError, match="not the newest"):
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: CODEX_ID}, jobs_dir, claims_dir=claims
+        )
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: later_id}, jobs_dir, claims_dir=claims
+        )
+        == "dotfiles-tied-codex.coordinator"
+    )
+
+
+def test_equal_claude_timestamps_require_full_record_identity(tmp_path: Path) -> None:
+    jobs = tmp_path / "jobs"
+    _job(jobs, NEWEST_ID, NEWEST, CLAIM_AT.isoformat())
+    _job(jobs, OLDER_ID, OLDER, CLAIM_AT.isoformat())
+    with pytest.raises(handoff_inbox.InboxError, match="not the newest"):
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: NEWEST_ID}, jobs
+        )
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.SESSION_ENV: OLDER_ID}, jobs
+        )
+        == OLDER
+    )
+
+
+def test_ambiguous_provider_is_refused_after_a_valid_claim(
+    jobs_dir: Path, tmp_path: Path
+) -> None:
+    claims = tmp_path / "claims"
+    _claim(jobs_dir, claims)
+    with pytest.raises(handoff_inbox.InboxError, match="ambiguous provider"):
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: CODEX_ID, handoff_inbox.SESSION_ENV: NEWEST_ID},
+            jobs_dir,
+            claims_dir=claims,
+        )
+
+
+def test_two_cas_claims_waiting_on_the_same_lock_have_one_winner(
+    jobs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    claims = tmp_path / "claims"
+    path = claims / handoff_inbox.CLAIMS_FILE
+    attempted = [threading.Event(), threading.Event()]
+    original_flock = fcntl.flock
+
+    def observed_flock(fd: int, operation: int) -> None:
+        if operation & fcntl.LOCK_EX:
+            for index in range(2):
+                if threading.current_thread().name == f"cas-{index}":
+                    attempted[index].set()
+        original_flock(fd, operation)
+
+    results: list[str] = []
+    start = threading.Barrier(3)
+
+    def claim(index: int) -> None:
+        start.wait(timeout=5)
+        try:
+            handoff_inbox.coordinator_claim(
+                {handoff_inbox.CODEX_ENV: f"cas-owner-{index}"},
+                jobs_dir,
+                claims_dir=claims,
+                takeover=(f"dotfiles-cas-{index}.coordinator", NEWEST),
+                now=lambda: CLAIM_AT,
+            )
+            results.append(f"won-{index}")
+        except handoff_inbox.InboxError:
+            results.append(f"refused-{index}")
+
+    monkeypatch.setattr(fcntl, "flock", observed_flock)
+    with state_lock(path):
+        threads = [
+            threading.Thread(target=claim, args=(index,), name=f"cas-{index}")
+            for index in range(2)
+        ]
+        for worker in threads:
+            worker.start()
+        start.wait(timeout=5)
+        assert all(event.wait(timeout=5) for event in attempted)
+    for worker in threads:
+        worker.join(timeout=15)
+        assert not worker.is_alive()
+    assert len([result for result in results if result.startswith("won-")]) == 1
+    assert len([result for result in results if result.startswith("refused-")]) == 1
+    winner = next(result[-1] for result in results if result.startswith("won-"))
+    assert (
+        handoff_inbox.require_newest_coordinator(
+            {handoff_inbox.CODEX_ENV: f"cas-owner-{winner}"},
+            jobs_dir,
+            claims_dir=claims,
+        )
+        == f"dotfiles-cas-{winner}.coordinator"
+    )
+
+
+def test_codex_cli_claim_all_writes_and_release_use_explicit_stores(
+    repos: tuple[Path, Path],
+    jobs_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_repo, lane = repos
+    claims = tmp_path / "claims"
+    monkeypatch.setenv(handoff_inbox.CODEX_ENV, CODEX_ID)
+    flags = ["--jobs-dir", str(jobs_dir), "--claims-dir", str(claims)]
+    assert (
+        _run(
+            ["coordinator-claim", "--name", CODEX_NAME, "--supersedes", "none", *flags]
+        )
+        == 2
+    )
+    assert (
+        _run(
+            ["coordinator-claim", "--name", CODEX_NAME, "--supersedes", NEWEST, *flags]
+        )
+        == 0
+    )
+    plan, edits = _plan(main_repo, tmp_path)
+    assert _run(["plan-apply", "--edits", str(edits), *flags]) == 0
+    assert "row A: DONE" in plan.read_text()
+    assert _run(["append", "--lane", "brief", "--message", "line 7: STALE"]) == 0
+    edits.write_text(json.dumps([{"replace": "line 7: STALE", "with": "line 7: OK"}]))
+    assert _run(["inbox-edit", "--lane", "brief", "--edits", str(edits), *flags]) == 0
+    assert (
+        "line 7: OK"
+        in (main_repo / handoff_inbox.HANDOFF_INBOX / "brief.md").read_text()
+    )
+    assert _run(["queue-append", "--message", "accepted slot", *flags]) == 0
+    queue = main_repo / handoff_inbox.SHIP_QUEUE
+    before = queue.read_bytes()
+    assert _run(["coordinator-release", *flags]) == 0
+    assert _run(["queue-append", "--message", "released slot", *flags]) == 2
+    assert queue.read_bytes() == before
+    assert not (main_repo / handoff_inbox.COORDINATOR_CLAIMS).exists()
+    assert not (lane / ".agent").exists()
+
+
+def test_codex_writer_superseded_after_input_check_is_refused_under_target_lock(
+    repos: tuple[Path, Path],
+    jobs_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_repo, _lane = repos
+    claims = tmp_path / "claims"
+    _claim(jobs_dir, claims)
+    monkeypatch.setenv(handoff_inbox.CODEX_ENV, CODEX_ID)
+    reading = threading.Event()
+    proceed = threading.Event()
+
+    class Body(io.StringIO):
+        def read(self, size: int | None = -1, /) -> str:
+            reading.set()
+            assert proceed.wait(timeout=5)
+            return super().read(size)
+
+    monkeypatch.setattr(sys, "stdin", Body("should never land"))
+    queue = main_repo / handoff_inbox.SHIP_QUEUE
+    results: list[int] = []
+    with state_lock(handoff_inbox.lock_path(main_repo, queue)):
+        worker = threading.Thread(
+            target=lambda: results.append(
+                _run(
+                    [
+                        "queue-append",
+                        "--jobs-dir",
+                        str(jobs_dir),
+                        "--claims-dir",
+                        str(claims),
+                    ]
+                )
+            )
+        )
+        worker.start()
+        assert reading.wait(timeout=5)
+        _job(
+            jobs_dir,
+            "ffffffff-1111-2222-3333-444444444444",
+            "dotfiles-handback.coordinator",
+            "2099-01-01T00:00:00Z",
+        )
+        proceed.set()
+    worker.join(timeout=15)
+    assert not worker.is_alive()
+    assert results == [2]
+    assert not queue.exists()
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"name": CODEX_NAME, "sessionId": NEWEST_ID, "createdAt": "bad-clock"},
+        {
+            "name": CODEX_NAME,
+            "sessionId": NEWEST_ID,
+            "createdAt": "2026-10-05T12:00:00",
+        },
+        {"name": CODEX_NAME, "createdAt": "2026-10-05T12:00:00Z"},
+    ],
+)
+def test_unrankable_claude_job_still_reserves_its_name(
+    tmp_path: Path, record: dict[str, str]
+) -> None:
+    jobs, claims = tmp_path / "jobs", tmp_path / "claims"
+    path = jobs / NEWEST_ID[:8] / "state.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(record))
+    caller = {handoff_inbox.CODEX_ENV: CODEX_ID}
+    with pytest.raises(handoff_inbox.InboxError, match="already used"):
+        handoff_inbox.coordinator_claim(
+            caller,
+            jobs,
+            claims_dir=claims,
+            takeover=(CODEX_NAME, "none"),
+            now=lambda: CLAIM_AT,
+        )
+    assert not (claims / handoff_inbox.CLAIMS_FILE).exists()
+    handoff_inbox.coordinator_claim(
+        caller,
+        jobs,
+        claims_dir=claims,
+        takeover=("dotfiles-distinct.coordinator", "none"),
+        now=lambda: CLAIM_AT,
+    )
+    assert (
+        handoff_inbox.require_newest_coordinator(caller, jobs, claims_dir=claims)
+        == "dotfiles-distinct.coordinator"
+    )
+
+
+def test_codex_cli_default_claim_store_lands_in_main_checkout(
+    repos: tuple[Path, Path], jobs_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_repo, lane = repos
+    monkeypatch.setenv(handoff_inbox.CODEX_ENV, CODEX_ID)
+    flags = ["--jobs-dir", str(jobs_dir)]
+    assert _run(["queue-append", "--message", "unclaimed", *flags]) == 2
+    assert (
+        _run(
+            ["coordinator-claim", "--name", CODEX_NAME, "--supersedes", NEWEST, *flags]
+        )
+        == 0
+    )
+    assert (
+        main_repo / handoff_inbox.COORDINATOR_CLAIMS / handoff_inbox.CLAIMS_FILE
+    ).is_file()
+    assert _run(["queue-append", "--message", "default store accepted", *flags]) == 0
+    queue = main_repo / handoff_inbox.SHIP_QUEUE
+    before = queue.read_bytes()
+    assert _run(["coordinator-release", *flags]) == 0
+    assert _run(["queue-append", "--message", "retired", *flags]) == 2
+    assert queue.read_bytes() == before
+    assert not (lane / ".agent").exists()

@@ -1,0 +1,15 @@
+[
+  {
+    "arm": "generated",
+    "command": "fnox exec -- mise run research-saved-search -- status /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/saved-searches/codex-takeover-2026-10-05.toml",
+    "rc": 0,
+    "stdout": "| file | watches | baseline | snapshot | age days | state |\n|---|---|---|---|---|---|\n| /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/saved-searches/codex-takeover-2026-10-05.toml | 13 | 2026-10-05T12:13:13.932362+00:00 | never | 0.00 | fresh |\n",
+    "stderr": "[research-saved-search] $ uv run --project python python -m dotfiles_setup.saved_searches status /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/saved-searches/codex-takeover-2026-10-05.toml\n"
+  },
+  {
+    "arm": "invalid-schema-fail-control",
+    "rc": 2,
+    "stdout": "| file | watches | baseline | snapshot | age days | state |\n|---|---|---|---|---|---|\n",
+    "stderr": "[research-saved-search] $ uv run --project python python -m dotfiles_setup.saved_searches status /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/config/saved-search-control-29e8gwxw/invalid.toml\n/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/config/saved-search-control-29e8gwxw/invalid.toml: id invalid-control: invalid Invalid enum value 'not-a-watch-kind' - at `$.kind`\n[research-saved-search] ERROR task failed\n"
+  }
+]

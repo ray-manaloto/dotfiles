@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-10-05T12:16:38.638486+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/links/codex-config-reference-probe.json",
+  "probe_out": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/links/codex-config-reference-probe.json",
+  "probes": [
+    {
+      "bytes": 188288,
+      "code": "",
+      "detail": {
+        "primary_reason": "Error: Insufficient credits to perform this request. For more credits, you can upgrade your plan at https://firecrawl.dev/pricing or try changing the request limit to a lower value.",
+        "reason": ""
+      },
+      "http_status": 0,
+      "kind": "mirror",
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/links/codex-config-reference-fallback.md",
+      "provisional": true,
+      "rc": 0,
+      "route": "webclaw",
+      "url": "https://learn.chatgpt.com/docs/config-file/config-reference"
+    }
+  ]
+}

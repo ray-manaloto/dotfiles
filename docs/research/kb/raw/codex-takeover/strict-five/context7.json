@@ -1,0 +1,45 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 4.84161750000203,
+  "items": [
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md\n\nThe release note announcing AGENTS.md support: 'in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead'. This is the user's exact CHANGELOG entry query.\n\n```markdown\n- Added AGENTS.md support: in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead; change it under \"Project instructions\" in `/config` (not yet on Bedrock, Vertex or Foundry)\n```\n\n--------------------------------",
+      "title": "CHANGELOG entry for AGENTS.md support",
+      "url": "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/names/claude-names.ts\n\nDefines the three filenames that the engine's ancestor walk looks for in every directory above the working directory. This is the core discovery mechanism for project-level instruction files.\n\n```typescript\nexport const CLAUDE_NAMES = [\n  'CLAUDE.md',\n  '.claude/CLAUDE.md',\n  'CLAUDE.local.md',\n] as const\n```\n\n--------------------------------",
+      "title": "CLAUDE.md discovery: filenames searched during directory walk",
+      "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/names/claude-names.ts"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/frames/outside-claude-dirs.ts\n\nIn claude-md-or-agents-md mode, only AGENTS.md files in directories that have no CLAUDE.md of their own are included \u2014 the native fallback without merging or importing.\n\n```typescript\nexport function outsideClaudeDirs(\n  agents: readonly FsAncestor[],\n  claude: readonly FsAncestor[],\n): readonly FsAncestor[] {\n  const taken = new Set(claude.map(file => file.dir))\n  return agents.filter",
+      "title": "Fallback filter: AGENTS.md only outside directories with CLAUDE.md",
+      "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/frames/outside-claude-dirs.ts"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/command-development/references/plugin-features-reference.md\n\nClaude Code discovers commands placed in the commands/ directory at plugin load time without requiring manual registration.\n\n```text\nplugin-name/\n\u251c\u2500\u2500 commands/              # Auto-discovered commands\n\u2502   \u251c\u2500\u2500 foo.md            # /foo (plugin:plugin-name)\n\u2502   \u2514\u2500\u2500 bar.md            # /bar (plugin:plugin-name)\n\u2514\u2500\u2500 plugin.json           # Plugin manifest\n`",
+      "title": "Structure auto-discovered plugin command directory",
+      "url": "https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/command-development/references/plugin-features-reference.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/README.md\n\n`AGENTS.md` read the way Claude Code reads `CLAUDE.md`, as a plugin, under\none option, `instructionFiles`:\n\n- `claude-md`: only `CLAUDE.md` is loaded, by the engine, as today. The plugin\n  adds nothing.\n- `claude-md-or-agents-md` (the default): a project with no instruction files\n  of its own gets its `AGENTS.md` files instead, loaded exactly where and how\n  `CLAUDE.md` would be. \"Of its own\" is read off what t",
+      "title": "agents-md",
+      "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/README.md"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/context7.raw",
+  "raw_sha256": "8a6574545b7f0239a24cdcacbb53f268c04ee04ad0f5d0d780b90e3d71b56181",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "context7",
+  "status": "ok"
+}

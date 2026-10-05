@@ -15,11 +15,19 @@ silently re-enable the credit-spending `codex_exec` tests the day someone
 adds a marker and forgets. This cannot drift.
 """
 
+import json
 import os
+import subprocess
+import sys
+import uuid
 from pathlib import Path
 
 import pytest
 import yaml
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
+
+from dotfiles_setup import session_ledger
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -161,3 +169,222 @@ def lock_refresh_commands() -> str:
     ).read_text()
     steps = yaml.safe_load(action)["runs"]["steps"]
     return "\n".join(step.get("run", "") for step in steps)
+
+
+@pytest.fixture
+def digest_fixture(
+    tmp_path: Path,
+) -> tuple[tuple[Path, Path], session_ledger.TranscriptBases, str]:
+    """Native-shaped roots in isolated repositories, worktrees and provider stores."""
+    secret = "planted-credential-" + uuid.uuid4().hex
+    roots = (tmp_path / "dotfiles", tmp_path / "knowledge-base")
+    unrelated = tmp_path / "unrelated"
+    git_env = {
+        **os.environ,
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null",
+    }
+    for root in (*roots, unrelated):
+        root.mkdir()
+        subprocess.run(
+            ["git", "-c", "init.defaultBranch=main", "init", str(root)],
+            check=True,
+            capture_output=True,
+            env=git_env,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "fixture",
+            ],
+            check=True,
+            capture_output=True,
+            env=git_env,
+        )
+    worktree = tmp_path / "dotfiles-worktree"
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(roots[0]),
+            "-c",
+            "core.hooksPath=/dev/null",
+            "worktree",
+            "add",
+            "-b",
+            "fixture-lane",
+            str(worktree),
+        ],
+        check=True,
+        capture_output=True,
+        env=git_env,
+    )
+    codex_base = tmp_path / "codex"
+    claude_base = tmp_path / "claude"
+    bases = session_ledger.TranscriptBases(codex=codex_base, claude=claude_base)
+    codex_base.mkdir()
+    claude_base.mkdir()
+    after = "2026-10-02T06:00:00Z"
+    before = "2026-10-02T04:59:59Z"
+
+    def write(
+        provider: str,
+        cwd: Path,
+        name: str,
+        entries: list[tuple[str, str, str]],
+        *,
+        parent: str = "",
+    ) -> None:
+        records = []
+        if provider == "codex":
+            records.append(
+                {
+                    "type": "session_meta",
+                    "payload": {
+                        "id": name,
+                        "cwd": str(cwd),
+                        "cli_version": "0.160.0",
+                        "parent_thread_id": parent,
+                    },
+                }
+            )
+            path = codex_base / (name + ".jsonl")
+        else:
+            project = claude_base / session_ledger.command_audit.encode_cwd(cwd)
+            path = project / (
+                "claude-root/subagents/" + name + ".jsonl"
+                if parent
+                else name + ".jsonl"
+            )
+        for number, (command, timestamp, outcome) in enumerate(entries):
+            call_id = name + str(number)
+            if provider == "codex":
+                records.append(
+                    {
+                        "timestamp": timestamp,
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "name": "functions.exec_command",
+                            "call_id": call_id,
+                            "arguments": json.dumps(
+                                {"cmd": command, "nested": {"token": secret}}
+                            ),
+                        },
+                    }
+                )
+                result = (
+                    "approval policy is Never; reject command — you cannot ask "
+                    "for escalated permissions if the approval policy is Never"
+                    if outcome == "refused"
+                    else json.dumps(
+                        {"wall_time_seconds": 0.1, "exit_code": 0, "output": secret}
+                    )
+                )
+                records.append(
+                    {
+                        "timestamp": timestamp,
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": result,
+                        },
+                    }
+                )
+            else:
+                records.append(
+                    {
+                        "type": "assistant",
+                        "sessionId": name,
+                        "cwd": str(cwd),
+                        "timestamp": timestamp,
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": call_id,
+                                    "name": "Bash",
+                                    "input": {
+                                        "command": command,
+                                        "nested": {"token": secret},
+                                    },
+                                }
+                            ]
+                        },
+                    }
+                )
+                records.append(
+                    {
+                        "type": "user",
+                        "sessionId": name,
+                        "timestamp": timestamp,
+                        "toolUseResult": "Permission to use Bash denied"
+                        if outcome == "refused"
+                        else {"stdout": secret},
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": call_id,
+                                    "is_error": outcome == "refused",
+                                    "content": secret,
+                                }
+                            ]
+                        },
+                    }
+                )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in records))
+
+    hit = (
+        "git gc --prune="
+        + secret
+        + " https://user:"
+        + secret
+        + "@example.invalid/?token="
+        + secret
+    )
+    for provider in ("claude", "codex"):
+        write(
+            provider,
+            roots[0],
+            provider + "-root",
+            [
+                (hit, after, "executed"),
+                (hit, after, "refused"),
+                ("git fetch", before, "executed"),
+            ],
+        )
+        write(provider, roots[1], provider + "-kb", [(hit, after, "executed")])
+        write(
+            provider,
+            roots[0],
+            provider + "-child",
+            [(hit, after, "executed")],
+            parent=provider + "-root",
+        )
+        write(
+            provider,
+            worktree,
+            provider + "-worktree",
+            [("git commit -m " + secret, after, "executed")],
+        )
+        write(
+            provider,
+            unrelated,
+            provider + "-unrelated",
+            [("git push", after, "executed")],
+        )
+    return roots, bases, secret

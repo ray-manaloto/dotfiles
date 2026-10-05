@@ -1740,6 +1740,11 @@ description = "Coordinator auto-handoff: decide | release | name | launch the su
 # the old coordinator owns a live heavy run or in-flight harness tasks.
 run = 'uv run --project python dotfiles-setup coordinator-handoff'
 
+[tasks.lane-cards]
+description = "Inspect session lane cards, write card snapshots, or preview issue intentions"
+# Thin caller; python/src/dotfiles_setup/session_registry.py. Read-only unless --write.
+run = 'uv run --project python dotfiles-setup lane-cards'
+
 [tasks.handoff-inbox]
 description = "Sanctioned main-checkout writes from any worktree: inbox append|list|read; newest-coordinator plan-apply|queue-append|inbox-edit"
 # Thin caller; python/src/dotfiles_setup/handoff_inbox.py. The route lanes and

@@ -1,0 +1,92 @@
+{
+  "attempts": [
+    {
+      "http_status": null,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.primary.raw",
+      "raw_sha256": "bee9d1fdf4fff96b77675942c3440d59f0a7bd6bbdc0fdea55415d389db15799",
+      "reason": "Error: Request failed with status code 402",
+      "route": "firecrawl-search",
+      "status": "skipped"
+    },
+    {
+      "http_status": 200,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.serper.raw",
+      "raw_sha256": "cf44ed00db28bc67a61cbca527125e52d8e8efd0e8c2f1709066bb5f04da8c40",
+      "reason": null,
+      "route": "serper",
+      "status": "ok"
+    }
+  ],
+  "control": null,
+  "elapsed_s": 3.785245249979198,
+  "items": [
+    {
+      "date": null,
+      "snippet": "Codex builds an instruction chain when it starts (once per run; in the TUI this usually means once per launched session). Discovery follows this precedence ...",
+      "title": "Custom instructions with AGENTS.md",
+      "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+    },
+    {
+      "date": null,
+      "snippet": "AGENTS.md is a simple, open format for guiding coding agents, used by over 60k open-source projects. Think of it as a README for agents.",
+      "title": "AGENTS.md",
+      "url": "https://agents.md/"
+    },
+    {
+      "date": "Jun 3, 2026",
+      "snippet": "Claude Code reads CLAUDE.md, Codex reads AGENTS.md, and neither falls back to the other. CLAUDE.md is the equivalent file Claude Code has ...",
+      "title": "AGENTS.md vs CLAUDE.md: Does Claude Code or Codex ...",
+      "url": "https://agyn.io/blog/claude-md-agents-md-compatibility"
+    },
+    {
+      "date": "Sep 22, 2026",
+      "snippet": "Claude Code natively reads AGENTS.md , the open, cross-tool standard for AI coding agent instructions. By default it's a fallback, not a merge:",
+      "title": "Claude Code now supports AGENTS.md Natively",
+      "url": "https://dev.to/valyuai/claude-code-now-supports-agentsmd-natively-heres-how-it-actually-works-5nl"
+    },
+    {
+      "date": "1 year ago",
+      "snippet": "Working with Claude Code, you setup a user level memory in ~/.Claude/CLAUDE.md so that your instructions are shared with all your Claude Code ...",
+      "title": "AGENTS.md CODEX.md INSTRUCTIONS.md CLAUDE.md",
+      "url": "https://www.reddit.com/r/OpenAI/comments/1n8r8tp/agentsmd_codexmd_instructionsmd_claudemd/"
+    },
+    {
+      "date": null,
+      "snippet": "Claude Code is a command line tool for agentic coding. You can give Codex extra instructions and guidance using AGENTS.md files.",
+      "title": "Some notes on AI Agent Rule / Instruction / Context files / etc",
+      "url": "https://gist.github.com/0xdevalias/f40bc5a6f84c4c5ad862e314894b2fa6"
+    },
+    {
+      "date": null,
+      "snippet": "\u201cagents md\u201d and \u201cclaude md\u201d are a set of instructions that Codex and Claude Claude Code use every time they start. Codex uses an \u201cagents md\u201d ...",
+      "title": "Codex and Claude Code are AI agents and need to be ...",
+      "url": "https://www.threads.com/@mushtaqbilalphd/post/DXT_5Y1mqtA/codex-and-claude-code-are-ai-agents-and-need-to-be-installed-on-your-computer"
+    },
+    {
+      "date": "May 25, 2026",
+      "snippet": "For Claude Code, create a CLAUDE.md that imports @AGENTS.md , or symlink CLAUDE.md to AGENTS.md if you do not need Claude-specific additions.",
+      "title": "AGENTS.md Guide: Setup, Examples & Best Practices",
+      "url": "https://kingy.ai/news/the-definitive-guide-to-agents-md-what-it-is-how-to-use-it-and-why-it-matters/"
+    },
+    {
+      "date": "1 year ago",
+      "snippet": "In this Codex tutorial series, you'll learn how to use the Codex Cloud platform to spin up remote tasks, the Codex CLI to work locally on ...",
+      "title": "OpenAI Codex Tutorial #6 - Using the AGENTS.md file",
+      "url": "https://www.youtube.com/watch?v=NlNuoH5PPl4"
+    },
+    {
+      "date": "Sep 21, 2026",
+      "snippet": "Claude Code 2.1.277 now falls back to AGENTS.md when no CLAUDE.md exists. How it works and the gaps DevOps teams should check.",
+      "title": "Claude Code Adds AGENTS.md Fallback, Cutting ...",
+      "url": "https://devops.com/claude-code-adds-agents-md-fallback-cutting-instruction-file-sprawl/"
+    }
+  ],
+  "provisional": true,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.raw",
+  "raw_sha256": "cf44ed00db28bc67a61cbca527125e52d8e8efd0e8c2f1709066bb5f04da8c40",
+  "reason": null,
+  "route": "serper",
+  "skip_reason": null,
+  "source": "firecrawl-search",
+  "status": "ok"
+}

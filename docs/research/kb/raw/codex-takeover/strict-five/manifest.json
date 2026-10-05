@@ -1,0 +1,428 @@
+{
+  "generated_at": "2026-10-05T12:28:21.684602+00:00",
+  "out_dir": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2",
+  "policy_version": "strict-five-v2",
+  "query": "AGENTS.md instructionFiles Claude Code Codex discovery",
+  "repo": "anthropics/claude-code",
+  "request_id": "01a10bf3-3b78-7e32-9de1-c11098181af2",
+  "sources": [
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 0.6231618750025518,
+      "items": [
+        {
+          "date": "2025-08-21T07:22:15Z",
+          "snippet": "Codex, Amp, Cursor, and others are starting to standardize around AGENTS.md (https://agents.md/) \u2014 a unified Markdown file that coding agents can use to understand a codebase.\n\nBy contrast, CLAUDE.md feels too specific to Claude Code. It doesn\u2019t work as well when collaborating with other developers who aren\u2019t using Claude Code.\n",
+          "title": "Feature Request: Support AGENTS.md.",
+          "url": "https://github.com/anthropics/claude-code/issues/6235"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-issues.raw",
+      "raw_sha256": "78eeb8bb0257b804e992c847be98ec299570a627ce2879e476c8ba5cf712c574",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-issues",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": {
+        "count": 0,
+        "query": "claude-code"
+      },
+      "elapsed_s": 1.2437359169707634,
+      "items": [],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-discussions.raw",
+      "raw_sha256": "e56779ec134a9f8d1d081cbb18e643fab4abb2dbcbc9b45057d681aa549f358e",
+      "reason": "canary returned 0 items",
+      "route": null,
+      "skip_reason": null,
+      "source": "github-discussions",
+      "status": "empty_unverified"
+    },
+    {
+      "attempts": [],
+      "control": {
+        "count": 1,
+        "query": "anthropics/claude-code"
+      },
+      "elapsed_s": 1.8609117090236396,
+      "items": [],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-releases.raw",
+      "raw_sha256": "a71f888749938322d5233119fd03d63f6b42ec4bcf758026ccf24ade543d21c8",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-releases",
+      "status": "empty_verified"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 5.210399583040271,
+      "items": [
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Custom instructions with AGENTS.md \u2013 Codex | OpenAI Developers",
+          "url": "https://developers.openai.com/codex/guides/agents-md"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Agents-MD Mod | anthropics/claude-code | DeepWiki",
+          "url": "https://deepwiki.com/anthropics/claude-code/4.4-agents-md-mod"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "codex-rs/core/src/agents_md.rs at main \u00b7 openai/codex",
+          "url": "https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "agents-md, a mod for Claude Code | Claude Code Mods",
+          "url": "https://claudecodemods.com/extensions/agents-md/"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "docs/agent-instruction-discovery.md",
+          "url": "https://github.com/mokronos/instructmd/blob/main/docs/agent-instruction-discovery.md"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Custom instructions with AGENTS.md",
+          "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "skills/agentic-readiness/references/instruction-files.md",
+          "url": "https://github.com/codealive-ai/ai-driven-development/blob/main/skills/agentic-readiness/references/instruction-files.md"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "codex-rs/core/src/agents_md.rs at ac4332c05b11e00ae775a24cb762edc05c5b5932 \u00b7 openai/codex",
+          "url": "https://github.com/openai/codex/blob/ac4332c05b11e00ae775a24cb762edc05c5b5932/codex-rs/core/src/agents_md.rs"
+        },
+        {
+          "date": "2026-09-26T00:00:00.000Z",
+          "snippet": "",
+          "title": "Claude Code Now Reads AGENTS.md: The Four instructionFiles Modes and a CLAUDE.local.md Priority Trap  | Claude Me",
+          "url": "https://claude-me.com/en/practice/claude-code-agents-md-fallback-instructionfiles-modes/"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "Claude Code Reads AGENTS.md Now: Setup, the Four Loading Modes, and How to Share One File with Codex, OpenCode, and Cursor \u2013 Kanaries",
+          "url": "https://docs.kanaries.net/topics/AICoding/claude-code-agents-md"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/exa.raw",
+      "raw_sha256": "b59604c5a1460e1120d4d481a1f1c5469cd9193cb9438ba27ebcd4d817ee52c1",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "exa",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 4.84161750000203,
+      "items": [
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md\n\nThe release note announcing AGENTS.md support: 'in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead'. This is the user's exact CHANGELOG entry query.\n\n```markdown\n- Added AGENTS.md support: in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead; change it under \"Project instructions\" in `/config` (not yet on Bedrock, Vertex or Foundry)\n```\n\n--------------------------------",
+          "title": "CHANGELOG entry for AGENTS.md support",
+          "url": "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/names/claude-names.ts\n\nDefines the three filenames that the engine's ancestor walk looks for in every directory above the working directory. This is the core discovery mechanism for project-level instruction files.\n\n```typescript\nexport const CLAUDE_NAMES = [\n  'CLAUDE.md',\n  '.claude/CLAUDE.md',\n  'CLAUDE.local.md',\n] as const\n```\n\n--------------------------------",
+          "title": "CLAUDE.md discovery: filenames searched during directory walk",
+          "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/names/claude-names.ts"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/frames/outside-claude-dirs.ts\n\nIn claude-md-or-agents-md mode, only AGENTS.md files in directories that have no CLAUDE.md of their own are included \u2014 the native fallback without merging or importing.\n\n```typescript\nexport function outsideClaudeDirs(\n  agents: readonly FsAncestor[],\n  claude: readonly FsAncestor[],\n): readonly FsAncestor[] {\n  const taken = new Set(claude.map(file => file.dir))\n  return agents.filter",
+          "title": "Fallback filter: AGENTS.md only outside directories with CLAUDE.md",
+          "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/frames/outside-claude-dirs.ts"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/command-development/references/plugin-features-reference.md\n\nClaude Code discovers commands placed in the commands/ directory at plugin load time without requiring manual registration.\n\n```text\nplugin-name/\n\u251c\u2500\u2500 commands/              # Auto-discovered commands\n\u2502   \u251c\u2500\u2500 foo.md            # /foo (plugin:plugin-name)\n\u2502   \u2514\u2500\u2500 bar.md            # /bar (plugin:plugin-name)\n\u2514\u2500\u2500 plugin.json           # Plugin manifest\n`",
+          "title": "Structure auto-discovered plugin command directory",
+          "url": "https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/command-development/references/plugin-features-reference.md"
+        },
+        {
+          "date": null,
+          "snippet": "Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/README.md\n\n`AGENTS.md` read the way Claude Code reads `CLAUDE.md`, as a plugin, under\none option, `instructionFiles`:\n\n- `claude-md`: only `CLAUDE.md` is loaded, by the engine, as today. The plugin\n  adds nothing.\n- `claude-md-or-agents-md` (the default): a project with no instruction files\n  of its own gets its `AGENTS.md` files instead, loaded exactly where and how\n  `CLAUDE.md` would be. \"Of its own\" is read off what t",
+          "title": "agents-md",
+          "url": "https://github.com/anthropics/claude-code/blob/main/mods/agents-md/README.md"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/context7.raw",
+      "raw_sha256": "8a6574545b7f0239a24cdcacbb53f268c04ee04ad0f5d0d780b90e3d71b56181",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "context7",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 0.978549583000131,
+      "items": [
+        {
+          "date": null,
+          "snippet": "The mod reads `AGENTS.md` the way the engine reads `CLAUDE.md`, under one option, `instructionFiles` (`claude-md`, `claude-md-or-agents-md` the default, `claude-md-and-agents-md`, `managed-only`; a value under the earlier `projectInstructions` key is still honoured), on `prompt.context`'s instruction files, `tool.call` on `Read`, `agent.spawn` and `$.fs.ancestors`.\n\n`\n          Keep AGENTS.md as the only agent instruction files\n`\u2026\n\n`\n          Keep AGENTS.md as the only agent instruction files\n`",
+          "title": "Adds the source of the `agents-md` mod under `mods/agents-md`, in the same layout as `sec-default`, `diff` and `telemetr",
+          "url": "https://github.com/anthropics/claude-code/issues/95409"
+        },
+        {
+          "date": null,
+          "snippet": "# Agent discovery: initial scan silently skips some project .claude/agents/\\*.md; the same files' names absent all session while a newly created agent hot-loads fine\\#88488\n\nNew issue\n\nNew issue\n\n## Description\n\nborisbat\n\n**Summary**: On session start, the agent registry loaded 5 of the 7 project agent definitions in `.claude/agents/` \u2014 two tracked, structurally ordinary files (`tdd-auditor.md`, `review-md-auditor.md`) were silently absent from the available-agents list. A brand-new agent file W",
+          "title": "Agent discovery: initial scan silently skips some project .claude/agents/*.md; the same files' names absent all session while a newly created agent hot-loads fine#88488",
+          "url": "https://github.com/anthropics/claude-code/issues/88488"
+        },
+        {
+          "date": null,
+          "snippet": "# [Feature Request] Move agentic instructions from CLAUDE.md to vendor-agnostic AGENTS.md#84830\n## Description\nAgentic instructions belong in AGENTS.md and not in a vendor specific CLAUDE.md file.\n\n### bcherny commented yesterdayon Aug 16, 2026\nClaude Code reads `CLAUDE.md`, so create a one-line `CLAUDE.md` containing:\n\n\ud83e\udd16 Generated with Claude Code",
+          "title": "[Feature Request] Move agentic instructions from CLAUDE.md to vendor-agnostic AGENTS.md#84830",
+          "url": "https://github.com/anthropics/claude-code/issues/84830"
+        },
+        {
+          "date": null,
+          "snippet": "# [FEATURE] Proposal: Support a Shared `.agents/` Directory and Manifest-Based Discovery#80801\n## Description\n### Problem Statement\n\n## Proposal 1: Support a Shared `.agents/` Directory\n\n## Project Documentation\n\n## Why This Matters\nPrompts have no native discovery dir in Claude Code, so those get injected as `additionalContext` at session start instead.",
+          "title": "[FEATURE] Proposal: Support a Shared `.agents/` Directory and Manifest-Based Discovery#80801",
+          "url": "https://github.com/anthropics/claude-code/issues/80801"
+        },
+        {
+          "date": null,
+          "snippet": "# Feature Request: native AGENTS.md support (duplicate of \\#6235, filed deliberately)\\#78977\n\n## Description\n\nmikkihugo\n\n## Summary\n\nClaude Code still does not natively read `AGENTS.md`. This is a deliberate duplicate \u2014 please close it against #6235 and the rest of the pile. The point of filing it is the pile.\n\n## Prior art (all still open)\n\n| Issue | Opened | \ud83d\udc4d | Comments |\n| --- | --- | --- | --- |\n| #6235 Feature Request: Support AGENTS.md. | 2025-08-21 | **4407** | 341 |\n| #31005 Support for",
+          "title": "Feature Request: native AGENTS.md support (duplicate of #6235, filed deliberately)#78977",
+          "url": "https://github.com/anthropics/claude-code/issues/78977"
+        },
+        {
+          "date": null,
+          "snippet": "# Register Claude Code sessions with VS Code's native Sessions pane (history/discovery only \u2014 distinct from \\#72198)\\#90068\n\n## Description\n\ndpanigo\n\n### Preflight Checklist\n\nThis is a single feature request (not multiple features)\n\n### Problem Statement\n\nVS Code has a built-in \"Sessions\" pane in the sidebar that lists agent session history across providers (separate from the Chat/Agents view discussed in #72198). Copilot and Codex both register with this pane, so their session history shows up ",
+          "title": "Register Claude Code sessions with VS Code's native Sessions pane (history/discovery only \u2014 distinct from #72198)#90068",
+          "url": "https://github.com/anthropics/claude-code/issues/90068"
+        },
+        {
+          "date": null,
+          "snippet": "# [Bug] Agent tool registry fails to discover subset of valid .claude/agents/*.md files#82361\n## Description\n\ud83e\udd16 Generated with Claude Code",
+          "title": "[Bug] Agent tool registry fails to discover subset of valid .claude/agents/*.md files#82361",
+          "url": "https://github.com/anthropics/claude-code/issues/82361"
+        },
+        {
+          "date": null,
+          "snippet": "# T3 Code: skills not loading when using OpenCode provider models#84855\n## Root Cause\n- `.claude-plugin/` \u2014 Claude Code\n\n## Proposed Solution\n- Claude models \u2192 `.claude-plugin/`\n- Codex models \u2192 `.codex-plugin/`",
+          "title": "T3 Code: skills not loading when using OpenCode provider models#84855",
+          "url": "https://github.com/anthropics/claude-code/issues/84855"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "[FEATURE] - Configurable Discovery Paths for Skills, Workflows, and Agents#77766",
+          "url": "https://github.com/anthropics/claude-code/issues/77766"
+        },
+        {
+          "date": null,
+          "snippet": "",
+          "title": "[Bug] Agent discovery inconsistently loads user and project agents#10311",
+          "url": "https://github.com/anthropics/claude-code/issues/10311"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-developer.raw",
+      "raw_sha256": "e073717883f4b0a210727ef1b916087159ba8b13dc24ff1c16d6b8de24ba1db1",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "firecrawl-developer",
+      "status": "ok"
+    },
+    {
+      "attempts": [
+        {
+          "http_status": null,
+          "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.primary.raw",
+          "raw_sha256": "bee9d1fdf4fff96b77675942c3440d59f0a7bd6bbdc0fdea55415d389db15799",
+          "reason": "Error: Request failed with status code 402",
+          "route": "firecrawl-search",
+          "status": "skipped"
+        },
+        {
+          "http_status": 200,
+          "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.serper.raw",
+          "raw_sha256": "cf44ed00db28bc67a61cbca527125e52d8e8efd0e8c2f1709066bb5f04da8c40",
+          "reason": null,
+          "route": "serper",
+          "status": "ok"
+        }
+      ],
+      "control": null,
+      "elapsed_s": 3.785245249979198,
+      "items": [
+        {
+          "date": null,
+          "snippet": "Codex builds an instruction chain when it starts (once per run; in the TUI this usually means once per launched session). Discovery follows this precedence ...",
+          "title": "Custom instructions with AGENTS.md",
+          "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md"
+        },
+        {
+          "date": null,
+          "snippet": "AGENTS.md is a simple, open format for guiding coding agents, used by over 60k open-source projects. Think of it as a README for agents.",
+          "title": "AGENTS.md",
+          "url": "https://agents.md/"
+        },
+        {
+          "date": "Jun 3, 2026",
+          "snippet": "Claude Code reads CLAUDE.md, Codex reads AGENTS.md, and neither falls back to the other. CLAUDE.md is the equivalent file Claude Code has ...",
+          "title": "AGENTS.md vs CLAUDE.md: Does Claude Code or Codex ...",
+          "url": "https://agyn.io/blog/claude-md-agents-md-compatibility"
+        },
+        {
+          "date": "Sep 22, 2026",
+          "snippet": "Claude Code natively reads AGENTS.md , the open, cross-tool standard for AI coding agent instructions. By default it's a fallback, not a merge:",
+          "title": "Claude Code now supports AGENTS.md Natively",
+          "url": "https://dev.to/valyuai/claude-code-now-supports-agentsmd-natively-heres-how-it-actually-works-5nl"
+        },
+        {
+          "date": "1 year ago",
+          "snippet": "Working with Claude Code, you setup a user level memory in ~/.Claude/CLAUDE.md so that your instructions are shared with all your Claude Code ...",
+          "title": "AGENTS.md CODEX.md INSTRUCTIONS.md CLAUDE.md",
+          "url": "https://www.reddit.com/r/OpenAI/comments/1n8r8tp/agentsmd_codexmd_instructionsmd_claudemd/"
+        },
+        {
+          "date": null,
+          "snippet": "Claude Code is a command line tool for agentic coding. You can give Codex extra instructions and guidance using AGENTS.md files.",
+          "title": "Some notes on AI Agent Rule / Instruction / Context files / etc",
+          "url": "https://gist.github.com/0xdevalias/f40bc5a6f84c4c5ad862e314894b2fa6"
+        },
+        {
+          "date": null,
+          "snippet": "\u201cagents md\u201d and \u201cclaude md\u201d are a set of instructions that Codex and Claude Claude Code use every time they start. Codex uses an \u201cagents md\u201d ...",
+          "title": "Codex and Claude Code are AI agents and need to be ...",
+          "url": "https://www.threads.com/@mushtaqbilalphd/post/DXT_5Y1mqtA/codex-and-claude-code-are-ai-agents-and-need-to-be-installed-on-your-computer"
+        },
+        {
+          "date": "May 25, 2026",
+          "snippet": "For Claude Code, create a CLAUDE.md that imports @AGENTS.md , or symlink CLAUDE.md to AGENTS.md if you do not need Claude-specific additions.",
+          "title": "AGENTS.md Guide: Setup, Examples & Best Practices",
+          "url": "https://kingy.ai/news/the-definitive-guide-to-agents-md-what-it-is-how-to-use-it-and-why-it-matters/"
+        },
+        {
+          "date": "1 year ago",
+          "snippet": "In this Codex tutorial series, you'll learn how to use the Codex Cloud platform to spin up remote tasks, the Codex CLI to work locally on ...",
+          "title": "OpenAI Codex Tutorial #6 - Using the AGENTS.md file",
+          "url": "https://www.youtube.com/watch?v=NlNuoH5PPl4"
+        },
+        {
+          "date": "Sep 21, 2026",
+          "snippet": "Claude Code 2.1.277 now falls back to AGENTS.md when no CLAUDE.md exists. How it works and the gaps DevOps teams should check.",
+          "title": "Claude Code Adds AGENTS.md Fallback, Cutting ...",
+          "url": "https://devops.com/claude-code-adds-agents-md-fallback-cutting-instruction-file-sprawl/"
+        }
+      ],
+      "provisional": true,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-search.raw",
+      "raw_sha256": "cf44ed00db28bc67a61cbca527125e52d8e8efd0e8c2f1709066bb5f04da8c40",
+      "reason": null,
+      "route": "serper",
+      "skip_reason": null,
+      "source": "firecrawl-search",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 72.01457316701999,
+      "items": [
+        {
+          "date": "2026-09-28",
+          "snippet": "Does Your Agent Actually Read AGENTS.md? Does your agent load the instructions you put in AGENTS.md? In First Principles 03, we test it with one small fact: my favorite animal is a cheetah. We start with an empty practice file, add the fact, compare an existing session with a fresh one, then remove it and ask again. Along the way: what belongs in a project instruction file, how AGENTS.md and CLAUDE.md are discovered, and why instructions guide behavior without guaranteeing it. Try the playground",
+          "title": "Does Your Agent Actually Read AGENTS.md?",
+          "url": "https://www.youtube.com/watch?v=7ZSkdWA9U-o"
+        },
+        {
+          "date": "2026-09-23",
+          "snippet": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+          "title": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+          "url": "https://blog.szypowi.cz/p/claude-code-reads-agents.md-only-when-telemetry-is-on/"
+        },
+        {
+          "date": "2026-09-29",
+          "snippet": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69\n\n\u7b2c 2 \u90e8\u5206 \u00b7 Agent \u5185\u6838\n\n# Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\n\n\u6280\u80fd\u4ece\u54ea\u4e9b\u6839\u76ee\u5f55\u88ab\u626b\u63cf\u51fa\u6765\u3001\u6e05\u5355\u600e\u6837\u5728\u9884\u7b97\u5185\u6324\u8fdb\u4e0a\u4e0b\u6587\u3001\u663e\u5f0f\u63d0\u53ca\u5982\u4f55\u89e3\u6790\u6210\u8981\u6ce8\u5165\u7684 SKILL.md\uff0c\u4ee5\u53ca\u201c\u81ea\u52a8\u9009\u7528\u201d\u5728 v0.158.0 \u5176\u5b9e\u4ecd\u7531\u6a21\u578b\u81ea\u5df1\u51b3\u5b9a\u2014\u2014\u4ee3\u7801\u91cc\u7684\u68c0\u7d22\u5f0f\u9009\u62e9\u5668\u53ea\u5728\u5f71\u5b50\u6a21\u5f0f\u4e0b\u8dd1\u5b9e\u9a8c\u6307\u6807\u3002\n\n\u4f5c\u8005 David\u00b7\u66f4\u65b0\u4e8e 2026-09-29\u00b7\u7b2c 36 \u7bc7\uff08\u5171 57 \u7bc7\uff09\u6536\u85cf\u5206\u4eab\n\n## Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n\u6280\u80fd\uff08skill\uff09\u662f\u4e00\u4e2a\u5e26 `SKILL.md` \u7684\u76ee\u5f55\u3002Codex \u7528\u6e10\u8fdb\u5f0f\u52a0\u8f7d\uff1a\u4e0a\u4e0b\u6587\u91cc\u5e73\u65f6\u53ea\u653e\u6bcf\u4e2a\u6280\u80fd\u7684\u540d\u5b57\u3001\u63cf\u8ff0\u548c\u4f4d\u7f6e\uff0c\u771f\u8981\u7528\u67d0\u4e2a\u6280\u80fd\u65f6\u624d\u8bfb\u5b83\u7684\u5168\u6587\u3002\u8fd9\u4e00\u7bc7\u6cbf\u7740\u201c\u53d1\u73b0 \u2192 \u6e05\u5355 \u2192 \u9009\u62e9 \u2192 \u6ce8\u5165\u201d\u8d70\u4e00\u904d\u3002\n\n## \u600e\u4e48\u7528\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n`SKILL.md` \u4ee5 YAML frontmatter \u5f00\u5934\uff0c\u5199 `name`\u3001`description`\uff0c\u53ef\u9009 `metadata.short-description`\uff1b\u540c\u76ee\u5f55\u53ef\u653e `agents/openai.yaml`\uff0c\u58f0\u660e\u754c\u9762\u4fe1",
+          "title": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69",
+          "url": "https://daiw.org/manual/codex-source/skills"
+        },
+        {
+          "date": "2026-09-18",
+          "snippet": "Claude Code now reads AGENTS.md if there is no Claude.md",
+          "title": "Claude Code now reads AGENTS.md if there is no Claude.md",
+          "url": "https://code.claude.com/docs/en/changelog"
+        },
+        {
+          "date": "2026-09-27",
+          "snippet": "The model has no way of knowing which option is best suited to the task. As it stands, you've essentially created a monkey randomly pressing buttons. It does, and it chooses them pretty accurately. Identifying grunt work vs requiring creativity and depth. Give it a try before throwing out random accusations. Doesn't switching models during a session consume more tokens because it breaks the prompt-caching continuity and forces the system to resend the entire conversation history?",
+          "title": "Amazing Agents.md instruction for best usage efficiency",
+          "url": "https://www.reddit.com/r/codex/comments/1wrok1q/amazing_agentsmd_instruction_for_best_usage/"
+        },
+        {
+          "date": "2026-09-18",
+          "snippet": "Anthropic finally adds AGENTS.md support to Claude Code",
+          "title": "Anthropic finally adds AGENTS.md support to Claude Code",
+          "url": "https://twitter.com/trq212/status/2101009392611278961"
+        },
+        {
+          "date": "2026-09-19",
+          "snippet": "Claude Code is getting native AGENTS.md support",
+          "title": "Claude Code Supports AGENTS.md",
+          "url": "https://github.com/anthropics/claude-code/tree/main/mods/agents-md"
+        },
+        {
+          "date": "2026-09-26",
+          "snippet": "This sub is trash. Unsubscribing. cool story bro. say hi to Mike. thanks for the disclosure. These guys don\u2019t know what they are doing, it\u2019s a science experiment that\u2019s already been done. They just don\u2019t know it.",
+          "title": "My friend gave Claude Code and Codex agents a way to talk to each other. Once this went over a hundred agents they reinvented bureaucracy.",
+          "url": "https://www.reddit.com/r/AI_Agents/comments/1wqij2i/my_friend_gave_claude_code_and_codex_agents_a_way/"
+        },
+        {
+          "date": "2026-09-20",
+          "snippet": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+          "title": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+          "url": "https://asyncdot.com/blog/chief-of-staff-pattern-orchestrating-claude-code-sessions/"
+        },
+        {
+          "date": "2026-09-18",
+          "snippet": "I actually think this is a huge QOL improvement. Especially because so many people are using both Claude Code and Codex, they need to stop fighting that. Creating a walled garden and not making things Still needs to read skills from .agents/skills so I can stop symlinking it. see @AGENTS.md every CLAUDE.md in my repos",
+          "title": "AGENTS.md now supported in Claude Code",
+          "url": "https://www.reddit.com/r/ClaudeCode/comments/1wk2q8v/agentsmd_now_supported_in_claude_code/"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/last30days.raw",
+      "raw_sha256": "59b2139dc2b29af4c9fcf7f0ad8d1dfa0a2403b739eb0a31a0aa3c3bc1f9f373",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "last30days",
+      "status": "ok"
+    }
+  ],
+  "strict_five": true
+}

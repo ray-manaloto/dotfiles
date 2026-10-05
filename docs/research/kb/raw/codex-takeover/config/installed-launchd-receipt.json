@@ -1,0 +1,30 @@
+[
+  {
+    "path": "/Users/rmanaloto/Library/LaunchAgents/dev.mise.dotfiles-dag-project.plist",
+    "Label": "dev.mise.dotfiles-dag-project",
+    "ProgramArguments": [
+      "/Users/rmanaloto/.local/bin/mise",
+      "run",
+      "dag-project",
+      "--",
+      "--write"
+    ],
+    "WorkingDirectory": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "StartInterval": 300,
+    "StandardOutPath": "/Users/rmanaloto/Library/Logs/dotfiles-dag-project.log",
+    "StandardErrorPath": "/Users/rmanaloto/Library/Logs/dotfiles-dag-project.err.log"
+  },
+  {
+    "path": "/Users/rmanaloto/Library/LaunchAgents/dev.mise.dotfiles-dag-tick.plist",
+    "Label": "dev.mise.dotfiles-dag-tick",
+    "ProgramArguments": [
+      "/Users/rmanaloto/.local/bin/mise",
+      "run",
+      "dag-tick"
+    ],
+    "WorkingDirectory": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "StartInterval": 60,
+    "StandardOutPath": "/Users/rmanaloto/Library/Logs/dotfiles-dag-tick.log",
+    "StandardErrorPath": "/Users/rmanaloto/Library/Logs/dotfiles-dag-tick.err.log"
+  }
+]

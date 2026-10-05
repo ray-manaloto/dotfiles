@@ -1,0 +1,43 @@
+[
+  {
+    "skill": "coordinator-handoff",
+    "sha256": {
+      ".claude/skills": "2a5f1a9622e6a065c02c9c10deb6790a77f3bbbf9b213ec863f422d5f79c0bc7",
+      ".agents/skills": "9f462f19881cd5b86edd9c594f1928ede22445f8ad3b6a8017fbb2251e49d8be"
+    },
+    "claude_agents_equal": false
+  },
+  {
+    "skill": "codex-sdlc-team",
+    "sha256": {
+      ".claude/skills": "a3c492b48384cb08f2f21f080f51aac69b85293b4df64672cd93f923f52a5d26",
+      ".agents/skills": "0996bf121ed854804057989460836f379be219cc4edcb6aee4d105296ae7bd42"
+    },
+    "claude_agents_equal": false
+  },
+  {
+    "skill": "graphify",
+    "sha256": {
+      ".claude/skills": "d2a94a8b49c04822ed0c924e8a7c3e61fac3caa59e36a91fd028348d4addd41b",
+      ".agents/skills": "ac3e475e30acc57d336d0ecf2a7c27f845ff32f7410a1aa573706f63e3666957",
+      ".codex/skills": "086299243bbca0aec77a08222fbecdffe4bedb06c4bb63745915c6e796295113"
+    },
+    "claude_agents_equal": false
+  },
+  {
+    "skill": "session-start",
+    "sha256": {
+      ".claude/skills": "2b1315c230ba459593a92616aece54079ccb9b466bd5df7ee8ce2db62dc126ef",
+      ".agents/skills": "819259ea965bc74c6fb4ea80e29852ec9601d350d4eb9de68c12919957368840"
+    },
+    "claude_agents_equal": false
+  },
+  {
+    "skill": "pr-workflow",
+    "sha256": {
+      ".claude/skills": "036ce3cf9778a3c0c5daf7e041e5952c76703591a78e86c16e17724c798e744d",
+      ".agents/skills": "8ab42ed2fd7557d38af295cb8f96f1d8a5dc9e0307d2667d25de8bd152a818dd"
+    },
+    "claude_agents_equal": false
+  }
+]

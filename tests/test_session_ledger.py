@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import codec, session_ledger
-from dotfiles_setup.session_store import RunReceipt
+from dotfiles_setup.session_store import RunReceipt, SessionStore
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -3121,3 +3121,267 @@ def test_primary_reason_uses_selection_enum_not_omission_wording() -> None:
         "selection certification is explicit_session_id_unresolved"
         in session_ledger.render_coverage(unresolved).splitlines()[0]
     )
+
+
+def test_command_projection_dual_provider_since_execution_and_repository_control(
+    tmp_path: Path,
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, secret = digest_fixture
+    projection = session_ledger.command_projection(roots, bases=bases)
+    assert projection["since"] == "2026-10-02T05:00:00+00:00"
+    assert projection["coverage"] == "complete"
+    assert projection["counts"] == {
+        "claude": {"attempted": 5, "executed": 4, "refused": 1},
+        "codex": {"attempted": 5, "executed": 4, "refused": 1},
+    }
+    assert {event["command_shape"] for event in projection["commands"]} == {
+        "git gc",
+        "git commit",
+    }
+    assert projection["selected_sources"] == 8
+    assert projection["selected_sessions"] == 6
+    text = json.dumps(projection)
+    assert secret not in text
+    assert str(tmp_path) not in text
+    assert "https://" not in text
+    assert all(
+        event["result_ref"]["line"] > event["event_ref"]["line"]
+        for event in projection["commands"]
+    )
+
+
+def test_command_projection_selection_limits_and_cache_reapply_policy(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    first = session_ledger.command_projection(
+        roots, bases=bases, providers=("codex",), session_limit=1
+    )
+    assert first["coverage"] == "partial"
+    assert first["selected_sessions"] == 1
+    assert first["excluded_sources"] > 0
+    assert any(
+        omission["reason"] == "session limit truncated date window"
+        for omission in first["omissions"]
+    )
+    assert {event["provider"] for event in first["commands"]} == {"codex"}
+    second = session_ledger.command_projection(
+        roots, bases=bases, since="2026-10-03T00:00:00Z"
+    )
+    assert second["commands"] == []
+    assert second["selected_sources"] == 0
+
+
+def test_command_projection_opaque_unknown_and_timestamp_omissions(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, secret = digest_fixture
+    assert bases.codex is not None
+    path = bases.codex / "codex-kb.jsonl"
+    rows = [
+        {
+            "type": "response_item",
+            "timestamp": "2026-10-03T00:00:00Z",
+            "payload": {
+                "type": "function_call",
+                "name": "functions.exec",
+                "call_id": "wrapper",
+                "arguments": 'await tools.exec_command({cmd: "git rebase"}) ' + secret,
+            },
+        },
+        {
+            "type": "response_item",
+            "timestamp": "invalid",
+            "payload": {
+                "type": "function_call",
+                "name": "exec_command",
+                "call_id": "missing-date",
+                "arguments": json.dumps({"cmd": "git rebase"}),
+            },
+        },
+        {
+            "type": "response_item",
+            "timestamp": "2026-10-03T00:00:00Z",
+            "payload": {
+                "type": "function_call",
+                "name": "exec_command",
+                "call_id": "unpaired",
+                "arguments": json.dumps({"cmd": "git rebase"}),
+            },
+        },
+        {
+            "type": "response_item",
+            "timestamp": "2026-10-03T00:00:00Z",
+            "payload": {
+                "type": "function_call_output",
+                "call_id": "other-call",
+                "output": {"wall_time_seconds": 0.1, "exit_code": 0, "output": secret},
+            },
+        },
+    ]
+    with path.open("a") as handle:
+        handle.write("".join(json.dumps(row) + "\n" for row in rows))
+        handle.write("{malformed\n")
+    projection = session_ledger.command_projection(roots, bases=bases)
+    assert projection["coverage"] == "partial"
+    rebases = [
+        event
+        for event in projection["commands"]
+        if event["command_shape"] == "git rebase"
+    ]
+    assert len(rebases) == 1
+    assert rebases[0]["execution_status"] == "unknown"
+    assert rebases[0]["result_ref"] is None
+    reasons = {omission["reason"] for omission in projection["omissions"]}
+    assert {
+        "opaque wrapper command",
+        "missing or invalid command timestamp",
+        "unverified or ambiguous execution result",
+        "native parser omission",
+    } <= reasons
+    assert secret not in json.dumps(projection)
+
+
+@pytest.mark.parametrize("since", ["2026-10-02", "invalid"])
+def test_command_cutoff_rejects_ambiguous_dates(since: str) -> None:
+    with pytest.raises(ValueError, match=r"timezone|Invalid isoformat"):
+        session_ledger.command_cutoff(since)
+
+
+def test_command_projection_rebuilds_pre_projection_facts_for_unchanged_source(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    assert bases.codex is not None
+    session_ledger.command_projection(roots, bases=bases)
+    source = bases.codex / "codex-root.jsonl"
+    root = roots[0] / ".agent/state/session-review/command-projection"
+    parser = hashlib.sha256(Path(session_ledger.__file__).read_bytes()).hexdigest()
+    current = SessionStore(
+        root,
+        parser_fingerprint=parser,
+        policy_fingerprint="command-projection-allowlist-v1",
+    )
+    stored = current.resolve(
+        "codex", source, cold_parser=lambda _: b"", append_parser=lambda prior, _: prior
+    )
+    assert stored.facts
+    prior = json.loads(stored.facts)
+    for event in prior["acc"]["events"]:
+        event["metadata"] = [
+            pair
+            for pair in event["metadata"]
+            if not pair[0].startswith("command_") and pair[0] != "execution_status"
+        ]
+    legacy = SessionStore(
+        root, parser_fingerprint=parser, policy_fingerprint="pre-command-projection-v0"
+    )
+    legacy.resolve(
+        "codex",
+        source,
+        cold_parser=lambda _: json.dumps(prior).encode(),
+        append_parser=lambda prior, _: prior,
+    )
+    projected = session_ledger.command_projection(roots, bases=bases)
+    assert projected["counts"]["codex"] == {"attempted": 5, "executed": 4, "refused": 1}
+    assert projected["selected_sources"] == 8
+
+
+@pytest.mark.parametrize(
+    ("output", "extra", "status"),
+    [
+        (
+            {"wall_time_seconds": 0.1, "exit_code": 1, "output": "failure"},
+            {},
+            "executed",
+        ),
+        (
+            {"wall_time_seconds": 0.1, "session_id": 12, "output": "running"},
+            {},
+            "executed",
+        ),
+        (
+            (
+                "Chunk ID: abc\nWall time: 0.1 seconds\n"
+                "Process exited with code 1\nOutput:\nfailure"
+            ),
+            {},
+            "executed",
+        ),
+        (
+            (
+                "Wall time: 0.1 seconds\n"
+                "Process running with session ID 12\nOutput:\nrunning"
+            ),
+            {},
+            "executed",
+        ),
+        ("output mentions Process exited with code 0", {}, "unknown"),
+        ("arbitrary failure", {"is_error": True}, "unknown"),
+        (
+            {"wall_time_seconds": 0.1, "exit_code": True, "output": "invalid"},
+            {},
+            "unknown",
+        ),
+    ],
+)
+def test_command_projection_requires_verified_native_result_semantics(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+    output: object,
+    extra: dict[str, object],
+    status: str,
+) -> None:
+    roots, bases, _ = digest_fixture
+    assert bases.codex is not None
+    path = bases.codex / "codex-kb.jsonl"
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    records[-1]["payload"]["output"] = output
+    records[-1]["payload"].update(extra)
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    projection = session_ledger.command_projection(
+        roots, bases=bases, providers=("codex",)
+    )
+    hits = [
+        event
+        for event in projection["commands"]
+        if event["event_ref"]["line"] == 2 and event["command_shape"] == "git gc"
+    ]
+    assert sum(event["execution_status"] == status for event in hits) >= 1
+    assert projection["counts"]["codex"]["executed"] == (
+        4 if status == "executed" else 3
+    )
+
+
+def test_command_projection_duplicate_call_result_is_never_credited(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    assert bases.codex is not None
+    path = bases.codex / "codex-kb.jsonl"
+    records = path.read_text().splitlines()
+    path.write_text("\n".join([*records, records[-1]]) + "\n")
+    projection = session_ledger.command_projection(
+        roots, bases=bases, providers=("codex",)
+    )
+    assert projection["counts"]["codex"]["executed"] == 3
+    assert projection["coverage"] == "partial"
+    assert any(
+        event["execution_status"] == "unknown" for event in projection["commands"]
+    )
+
+
+def test_command_projection_metadata_drift_is_an_explicit_discovery_omission(
+    digest_fixture: tuple[tuple[Path, Path], session_ledger.TranscriptBases, str],
+) -> None:
+    roots, bases, _ = digest_fixture
+    assert bases.codex is not None
+    (bases.codex / "unknown-native-shape.jsonl").write_text(
+        '{"type":"future_meta","payload":{}}\n'
+    )
+    projection = session_ledger.command_projection(roots, bases=bases)
+    assert projection["coverage"] == "partial"
+    assert any(
+        omission.get("malformed_sources") == 1 for omission in projection["omissions"]
+    )
+    assert projection["counts"]["codex"]["executed"] == 4

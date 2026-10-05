@@ -1,0 +1,75 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 2.3000867500086315,
+  "items": [
+    {
+      "date": null,
+      "snippet": "The mod reads `AGENTS.md` the way the engine reads `CLAUDE.md`, under one option, `instructionFiles` (`claude-md`, `claude-md-or-agents-md` the default, `claude-md-and-agents-md`, `managed-only`; a value under the earlier `projectInstructions` key is still honoured), on `prompt.context`'s instruction files, `tool.call` on `Read`, `agent.spawn` and `$.fs.ancestors`.\n\n`\n          Keep AGENTS.md as the only agent instruction files\n`\u2026\n\n`\n          Keep AGENTS.md as the only agent instruction files\n`",
+      "title": "Adds the source of the `agents-md` mod under `mods/agents-md`, in the same layout as `sec-default`, `diff` and `telemetr",
+      "url": "https://github.com/anthropics/claude-code/issues/95409"
+    },
+    {
+      "date": null,
+      "snippet": "# Agent discovery: initial scan silently skips some project .claude/agents/\\*.md; the same files' names absent all session while a newly created agent hot-loads fine\\#88488\n\nNew issue\n\nNew issue\n\n## Description\n\nborisbat\n\n**Summary**: On session start, the agent registry loaded 5 of the 7 project agent definitions in `.claude/agents/` \u2014 two tracked, structurally ordinary files (`tdd-auditor.md`, `review-md-auditor.md`) were silently absent from the available-agents list. A brand-new agent file W",
+      "title": "Agent discovery: initial scan silently skips some project .claude/agents/*.md; the same files' names absent all session while a newly created agent hot-loads fine#88488",
+      "url": "https://github.com/anthropics/claude-code/issues/88488"
+    },
+    {
+      "date": null,
+      "snippet": "# [Feature Request] Move agentic instructions from CLAUDE.md to vendor-agnostic AGENTS.md#84830\n## Description\nAgentic instructions belong in AGENTS.md and not in a vendor specific CLAUDE.md file.\n\n### bcherny commented yesterdayon Aug 16, 2026\nClaude Code reads `CLAUDE.md`, so create a one-line `CLAUDE.md` containing:\n\n\ud83e\udd16 Generated with Claude Code",
+      "title": "[Feature Request] Move agentic instructions from CLAUDE.md to vendor-agnostic AGENTS.md#84830",
+      "url": "https://github.com/anthropics/claude-code/issues/84830"
+    },
+    {
+      "date": null,
+      "snippet": "# [FEATURE] Proposal: Support a Shared `.agents/` Directory and Manifest-Based Discovery#80801\n## Description\n### Problem Statement\n\n## Proposal 1: Support a Shared `.agents/` Directory\n\n## Project Documentation\n\n## Why This Matters\nPrompts have no native discovery dir in Claude Code, so those get injected as `additionalContext` at session start instead.",
+      "title": "[FEATURE] Proposal: Support a Shared `.agents/` Directory and Manifest-Based Discovery#80801",
+      "url": "https://github.com/anthropics/claude-code/issues/80801"
+    },
+    {
+      "date": null,
+      "snippet": "# Feature Request: native AGENTS.md support (duplicate of \\#6235, filed deliberately)\\#78977\n\n## Description\n\nmikkihugo\n\n## Summary\n\nClaude Code still does not natively read `AGENTS.md`. This is a deliberate duplicate \u2014 please close it against #6235 and the rest of the pile. The point of filing it is the pile.\n\n## Prior art (all still open)\n\n| Issue | Opened | \ud83d\udc4d | Comments |\n| --- | --- | --- | --- |\n| #6235 Feature Request: Support AGENTS.md. | 2025-08-21 | **4407** | 341 |\n| #31005 Support for",
+      "title": "Feature Request: native AGENTS.md support (duplicate of #6235, filed deliberately)#78977",
+      "url": "https://github.com/anthropics/claude-code/issues/78977"
+    },
+    {
+      "date": null,
+      "snippet": "# Register Claude Code sessions with VS Code's native Sessions pane (history/discovery only \u2014 distinct from \\#72198)\\#90068\n\n## Description\n\ndpanigo\n\n### Preflight Checklist\n\nThis is a single feature request (not multiple features)\n\n### Problem Statement\n\nVS Code has a built-in \"Sessions\" pane in the sidebar that lists agent session history across providers (separate from the Chat/Agents view discussed in #72198). Copilot and Codex both register with this pane, so their session history shows up ",
+      "title": "Register Claude Code sessions with VS Code's native Sessions pane (history/discovery only \u2014 distinct from #72198)#90068",
+      "url": "https://github.com/anthropics/claude-code/issues/90068"
+    },
+    {
+      "date": null,
+      "snippet": "# [Bug] Agent tool registry fails to discover subset of valid .claude/agents/*.md files#82361\n## Description\n\ud83e\udd16 Generated with Claude Code",
+      "title": "[Bug] Agent tool registry fails to discover subset of valid .claude/agents/*.md files#82361",
+      "url": "https://github.com/anthropics/claude-code/issues/82361"
+    },
+    {
+      "date": null,
+      "snippet": "# T3 Code: skills not loading when using OpenCode provider models#84855\n## Root Cause\n- `.claude-plugin/` \u2014 Claude Code\n\n## Proposed Solution\n- Claude models \u2192 `.claude-plugin/`\n- Codex models \u2192 `.codex-plugin/`",
+      "title": "T3 Code: skills not loading when using OpenCode provider models#84855",
+      "url": "https://github.com/anthropics/claude-code/issues/84855"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "[FEATURE] - Configurable Discovery Paths for Skills, Workflows, and Agents#77766",
+      "url": "https://github.com/anthropics/claude-code/issues/77766"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "[Bug] Agent discovery inconsistently loads user and project agents#10311",
+      "url": "https://github.com/anthropics/claude-code/issues/10311"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/firecrawl-developer.raw",
+  "raw_sha256": "e073717883f4b0a210727ef1b916087159ba8b13dc24ff1c16d6b8de24ba1db1",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "firecrawl-developer",
+  "status": "ok"
+}

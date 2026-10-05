@@ -734,17 +734,34 @@ def session_review_main(
     sessions: int = command_audit.DEFAULT_SESSION_LIMIT,
     output: Path | None = None,
     narrative: NarrativeScope = DEFAULT_NARRATIVE_SCOPE,
+    **digest_options: object,
 ) -> int:
-    """Run the requested lanes and write (or print) the report.
+    """Route explicit safe command digests while preserving the legacy lanes."""
+    if digest_options.get("digest") or digest_options.get("since") is not None:
+        if lanes.requirements_only or lanes.narrative_only:
+            logger.error("command digest cannot select requirements or narrative only")
+            return 2
+        return command_audit.command_digest_main(
+            repo_root,
+            limit=sessions,
+            output=output,
+            review=True,
+            options=digest_options,
+        )
+    return _session_review_main(
+        repo_root, lanes=lanes, sessions=sessions, output=output, narrative=narrative
+    )
 
-    Two concurrent runs targeting the same report path are unsupported because
-    segment pruning is scoped by report name.
 
-    Asking for both ``--transcript-only`` and ``--narrative-only`` is refused
-    rather than silently resolved: the two flags mean opposite things, so any
-    interpretation would be a guess about intent, and the lanes are disjoint
-    enough that guessing wrong loses the finding.
-    """
+def _session_review_main(
+    repo_root: Path,
+    *,
+    lanes: LaneChoice = BOTH_LANES,
+    sessions: int = command_audit.DEFAULT_SESSION_LIMIT,
+    output: Path | None = None,
+    narrative: NarrativeScope = DEFAULT_NARRATIVE_SCOPE,
+) -> int:
+    """Run legacy automation/requirements lanes under their original preflight."""
     transcript_only, narrative_only = lanes.transcript_only, lanes.narrative_only
     if (
         lanes.source_repo_root is not None

@@ -59,6 +59,25 @@ Run `.agents/skills/session-handoff/SKILL.md` in full, under its
   ship holds the host slot, do NOT push: `ship` holds the slot across gates
   AND push (`pr.py` ship path). Put this ship at the head of the queue; the
   overlap available is remote CI of the previous PR with this ship's gates.
+- Before shipping the tracked handoff, snapshot the fresh registry and live cards:
+
+  ```bash
+  mise run coordinator-handoff -- snapshot-cards --handoff <absolute-tracked-handoff>
+  ```
+
+  Use repeated `--repo-root <absolute-root>` for explicit managed roots. This
+  read-only census embeds registry JSON and rendered cards in one replaceable
+  tracked section; a partial/unknown inventory or refused writer is a blocker,
+  not permission to erase prior evidence. Re-read the snapshot and preserve its
+  omissions. Run the snapshot before the handoff commit/ship, never after launch
+  as an inferred side effect. B2a permits these writes for an explicitly claimed
+  Codex coordinator only while its provider-qualified identity is newest; never
+  export `CLAUDE_CODE_SESSION_ID` to bypass authorization. A newer coordinator
+  with provider `claude` automatically takes authority back; the outgoing Codex owner runs
+  `mise run handoff-inbox -- coordinator-release` to retire its own claim.
+  See `docs/agents/session-orchestration.md` for the required claim
+  `--name`/`--supersedes` expectation, isolated-store flags and both-direction
+  recovery/hand-back. All W4 takeover-check, launcher and self-heal work is deferred.
 - Bring `.agent/plans/main-checkout-ship-queue.md` up to date.
 - Skip §6's resume line: there is no `/clear`.
 
