@@ -41,12 +41,26 @@ def _isolated_sync_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
 
     Probe-observed 2026-07-07: before the write_sync_record isolation fix,
     a host pytest run wrote a FIXTURE digest into the user's real
-    ~/.local/state/dotfiles record. Redirecting _state_file makes that
-    class of pollution impossible for every current and future test here.
+    ~/.local/state/dotfiles record. A temporary HOME makes that class of
+    pollution impossible for every current and future test here. It isolates
+    at the environment boundary, so the real state-path resolver runs
+    (tests/AGENTS.md "Mocking": never patch our own internals).
     """
-    monkeypatch.setattr(
-        sync, "_state_file", lambda ref: tmp_path / f"sync-{hash(ref)}.json"
-    )
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+
+#: Where sync keeps _REF's record under the temporary HOME. Written out
+#: literally, not derived the way the code derives it, so a change to the
+#: path formula is caught here rather than mirrored.
+_STATE_REL = (
+    ".local/state/dotfiles/sync-ghcr.io_ray-manaloto_dotfiles-devcontainer_dev.json"
+)
+
+
+def _state_path(tmp_path: Path) -> Path:
+    path = tmp_path / "home" / _STATE_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 _REPO = "ghcr.io/ray-manaloto/dotfiles-devcontainer"
@@ -541,50 +555,134 @@ def test_sync_refuses_to_converge_when_docker_is_down(
     assert sync.sync_main(_WORKSPACE, sync.SyncOptions(check_only=True)) == 2
 
 
-def test_container_image_id_falls_back_to_a_stopped_container(
+def _docker_ps_and_inspect(states: tuple[str, ...], *, inspect_rc: int = 0) -> str:
+    """A fake ``docker`` body: ``ps`` prints rows, ``inspect <id>`` prints an image."""
+    return (
+        'case "$1" in\n'
+        f"  ps) {_rows(*states)}; exit 0 ;;\n"
+        f'  inspect) [ {inspect_rc} -eq 0 ] || {{ echo "No such object: $2" >&2;'
+        f' exit {inspect_rc}; }}; echo "sha256:img-$2"; exit 0 ;;\n'
+        "esac\nexit 99"
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        # #800 F1: a stopped container's overlay must remain observable.
+        (("exited",), "sha256:img-id0"),
+        # `docker ps -a` lists newest first: a newer EXITED leftover (id0)
+        # must not shadow the genuinely running container (id1).
+        (("exited", "running"), "sha256:img-id1"),
+        (("running",), "sha256:img-id0"),
+        # Plain `docker ps` (the pre-#1554 first pass) lists paused containers
+        # too: an older PAUSED one still beats a newer exited leftover.
+        (("exited", "paused"), "sha256:img-id1"),
+        # Restarting is listed by plain `docker ps` too.
+        (("exited", "restarting"), "sha256:img-id1"),
+        ((), None),
+    ],
+    ids=[
+        "stopped-only",
+        "newer-exited-then-running",
+        "running",
+        "newer-exited-then-paused",
+        "newer-exited-then-restarting",
+        "none",
+    ],
+)
+def test_container_image_id_prefers_running_else_newest(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    case: tuple[tuple[str, ...], str | None],
 ) -> None:
-    """#800 F1: a stopped container's overlay must remain observable."""
-    calls: list[list[str]] = []
-
-    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        if cmd[:3] == ["docker", "ps", "-q"]:
-            return _cp("")
-        if cmd[:3] == ["docker", "ps", "-aq"]:
-            return _cp("stopped-container\n")
-        if cmd[:2] == ["docker", "inspect"]:
-            return _cp("sha256:stopped-overlay\n")
-        raise AssertionError(cmd)
-
-    monkeypatch.setattr(sync, "_run", fake_run)
-
-    assert sync.container_image_id(_NAMES) == "sha256:stopped-overlay"
-    assert [cmd[:3] for cmd in calls[:2]] == [
-        ["docker", "ps", "-q"],
-        ["docker", "ps", "-aq"],
-    ]
-    assert calls[2][:3] == ["docker", "inspect", "stopped-container"]
+    """Healthy-daemon control arm for the #1554 refusals below."""
+    states, expected = case
+    _fake_docker(monkeypatch, tmp_path, _docker_ps_and_inspect(states))
+    assert sync.container_image_id(_NAMES) == expected
 
 
-def test_container_image_id_prefers_running_without_stopped_fallback(
-    monkeypatch: pytest.MonkeyPatch,
+def test_container_image_id_refuses_a_down_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A running match wins without consulting the stopped-container list."""
-    calls: list[list[str]] = []
+    """#1554: an unanswered ``docker ps`` is UNKNOWN, never "no container"."""
+    _fake_docker(
+        monkeypatch, tmp_path, 'echo "Cannot connect to the Docker daemon" >&2; exit 1'
+    )
+    with pytest.raises(DockerUnavailableError, match="Cannot connect"):
+        sync.container_image_id(_NAMES)
 
-    def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        if cmd[:3] == ["docker", "ps", "-q"]:
-            return _cp("running-container\n")
-        if cmd[:2] == ["docker", "inspect"]:
-            return _cp("sha256:running-overlay\n")
-        raise AssertionError(cmd)
 
-    monkeypatch.setattr(sync, "_run", fake_run)
+def test_sync_exits_unknown_when_docker_fails_after_the_lifecycle_succeeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1554 review: write_sync_record reads the overlay id AFTER `mise run up`.
 
-    assert sync.container_image_id(_NAMES) == "sha256:running-overlay"
-    assert not any(cmd[:3] == ["docker", "ps", "-aq"] for cmd in calls)
+    That read is outside observe(), so a docker that stops answering there
+    escaped sync_main as a traceback (through `land` too). It must be the same
+    rc=2 UNKNOWN as an observe-time failure, and verification must not run.
+
+    Faked only at the system boundary (tests/AGENTS.md "Mocking"): real
+    `docker`, `mise` and `gh` executables first on PATH, identity from env.
+    `docker` serves a current, stopped world until `mise run up` drops a
+    marker; after that its CONTAINER queries (`ps`) fail while image queries
+    still answer — the shape that reaches container_image_id inside
+    write_sync_record. (A daemon that is fully down fails local_image_id first,
+    the record is skipped, and verification fails with rc=1 — no traceback.)
+    """
+    assert sync.SyncOptions().image_ref == _REF
+    gone = tmp_path / "daemon-gone"
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    mise_log = tmp_path / "mise-argv.log"
+    fakes = {
+        "docker": (
+            f'[ "$1" = ps ] && [ -e "{gone}" ] && '
+            '{ echo "daemon went away" >&2; exit 1; }\n'
+            'case "$1 $2" in\n'
+            f"  'buildx imagetools') echo '\"{_DIGEST_NEW}\"' ;;\n"
+            "  'image inspect') case \"$*\" in\n"
+            f"    *RepoDigests*) echo '[\"{_REPO}@{_DIGEST_NEW}\"]' ;;\n"
+            "    *) echo img-1 ;; esac ;;\n"
+            f"  'ps -a') {_rows('exited')} ;;\n"
+            "  inspect\\ *) echo sha256:overlay-1 ;;\n"
+            "  *) exit 98 ;;\n"
+            "esac\nexit 0"
+        ),
+        "mise": f'printf "%s\\n" "$@" >> "{mise_log}"\ntouch "{gone}"\nexit 0',
+        "gh": "echo '[]'; exit 0",
+    }
+    for name, body in fakes.items():
+        script = bindir / name
+        script.write_text(f"#!/bin/sh\n{body}\n")
+        script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    monkeypatch.setenv("USER", "u")
+    monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
+    monkeypatch.delenv("DEVCONTAINER_SSH_PORT", raising=False)
+
+    workspace = tmp_path / "dotfiles"  # `up` runs with the workspace as cwd
+    workspace.mkdir()
+
+    assert sync.sync_main(workspace) == 2
+    # `up` really ran (the lifecycle succeeded) before the late docker failure;
+    # rc 2 rather than 1 shows verification never ran either.
+    assert mise_log.read_text().splitlines() == ["run", "up"]
+
+
+def test_container_image_id_refuses_a_failed_inspect(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#1554: ``docker inspect`` rc!=0 raises instead of returning ``None``.
+
+    ``None`` means "nothing to compare" to the currency check, so swallowing
+    the failure would read an unknown overlay as current.
+    """
+    _fake_docker(
+        monkeypatch, tmp_path, _docker_ps_and_inspect(("running",), inspect_rc=1)
+    )
+    with pytest.raises(DockerUnavailableError, match="docker inspect id0 failed"):
+        sync.container_image_id(_NAMES)
 
 
 def test_container_state_filters_on_both_id_labels_not_local_folder(
@@ -598,19 +696,16 @@ def test_container_state_filters_on_both_id_labels_not_local_folder(
     reverting the filter to the old bare-folder label fails this assertion.
     """
     captured: list[list[str]] = []
-
-    def _record(cmd: list[str], **_k: object) -> subprocess.CompletedProcess[str]:
-        captured.append(cmd)
-        return _cp("")
-
-    monkeypatch.setattr(sync, "_run", _record)
-    sync.container_image_id(_NAMES)
-    log = _fake_docker(monkeypatch, tmp_path, "exit 0")
-    sync.container_state(_NAMES)
-    # The fake logs one argv word per line ("$@"), so boundaries survive.
-    captured.append(log.read_text().splitlines())
-    assert len(captured) == 3
+    # The fake logs one argv word per line ("$@"), so boundaries survive. With
+    # no rows, each function makes exactly one `docker ps` call.
+    for probe in (sync.container_state, sync.container_image_id):
+        log = _fake_docker(monkeypatch, tmp_path, "exit 0")
+        log.unlink(missing_ok=True)
+        probe(_NAMES)
+        captured.append(log.read_text().splitlines())
+    assert len(captured) == 2
     for cmd in captured:
+        assert cmd[0] == "ps"
         assert f"label={_NAMES.workspace_label}" in cmd
         assert f"label={_NAMES.arch_label}" in cmd
         assert not any("devcontainer.local_folder" in arg for arg in cmd)
@@ -727,9 +822,8 @@ def test_write_sync_record_warns_when_container_probe_returns_none(
 
 def test_read_sync_record_non_dict_payload_reads_as_none(tmp_path: Path) -> None:
     """#800 F8: a state file holding a bare JSON list must not raise."""
-    # Same path formula as the `_isolated_sync_state` autouse fixture above —
-    # `tmp_path` is the identical cached fixture instance for this test node.
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(json.dumps([]))
+    # `tmp_path` is the same cached fixture instance the autouse HOME uses.
+    _state_path(tmp_path).write_text(json.dumps([]))
     assert sync.read_sync_record(_REF) is None
 
 
@@ -739,7 +833,7 @@ def test_read_sync_record_parses_legacy_flat_key(tmp_path: Path) -> None:
     Flat ``container_image_id`` key, no ``containers`` — the value lands in
     ``legacy_container_image_id``.
     """
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+    _state_path(tmp_path).write_text(
         json.dumps(
             {
                 "registry_digest": _DIGEST_NEW,
@@ -762,7 +856,7 @@ def test_read_sync_record_non_string_legacy_field_degrades_to_none(
     It degrades to ``None`` like the ``containers`` guard, rather than
     comparing unequal against a real container id.
     """
-    (tmp_path / f"sync-{hash(_REF)}.json").write_text(
+    _state_path(tmp_path).write_text(
         json.dumps(
             {
                 "registry_digest": _DIGEST_NEW,
