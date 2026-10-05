@@ -18,9 +18,8 @@ from dotfiles_setup.codec import encode
 if TYPE_CHECKING:
     from pathlib import Path
 
-HARNESS_LIMIT = 150_000
-SAFETY_MARGIN_PERCENT = 93
-# Approximately 93% of the harness ceiling, rounded to the specified limit.
+# Claude Code 2.1.289 warns above 150,000 chars of eager instructions; the
+# gate fails at 140,000 (~93%) to keep headroom for a legitimate rule edit.
 DEFAULT_LIMIT = 140_000
 TOP_FILE_COUNT = 5
 ENTRY_PATHS = ("CLAUDE.md", ".claude/CLAUDE.md")

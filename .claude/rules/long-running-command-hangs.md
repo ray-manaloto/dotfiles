@@ -31,8 +31,9 @@ Case history: `docs/rules-evidence/long-running-command-hangs.md`.
    when the completion notice arrives — the command keeps running after the
    turn ends. A foreground subagent's background commands stop at its final
    response, so a subagent keeps its turn engaged with a bounded poll:
+   `deadline=$((SECONDS+540)); while [ $SECONDS -lt $deadline ]; do grep -qs RC "$LOG" && break; sleep 15; done`
 
-   Preserve that `deadline` (worked example: `docs/rules-evidence/long-running-command-hangs.md`). The wait-loop guard accepts a bound only when the
+   Preserve that `deadline`. The wait-loop guard accepts a bound only when the
    loop condition compares `SECONDS`, `deadline`/`DEADLINE`/`end`, or
    `date +%s`, or when command position wraps the loop with `timeout <n>` or
    `mise run bounded-wait`. ⚠️ On this Mac host `timeout` is an unversioned mise

@@ -24,7 +24,9 @@ worked.
     FIRST.** `~/dev/github/ray-manaloto/knowledge-base/sources/` holds the
     offline source corpus, including
     `agent-harness-docs/docs/{claude-code,codex,cursor,opencode,pi}` — the
-    **vendor's own docs**, on disk, greppable, zero round-trips.
+    **vendor's own docs**, on disk, greppable, zero round-trips. `$CC` in every
+    rule is `$KB/agent-harness-docs/docs/claude-code` (KB = that `sources/`).
+    Any "does Claude Code do X" question is a step-00 question.
 
     ⚠️ **An unanswered question whose answer is already on this disk is pure
     loss** — a session once shipped a PreToolUse gate reporting two harness
