@@ -730,6 +730,15 @@ def test_preflight_ignores_mentions_of_smoke_script(
 def test_early_timeout_like_exit_reports_rc_and_still_reaps(
     smoke_system: Path, monkeypatch: pytest.MonkeyPatch, mode: str
 ) -> None:
+    """An early inner rc is classified by the injected clock, never wall time.
+
+    Under host load the real fixture round-trip can exceed 0.9 * T, which
+    would flip this into the timeout branch (seen at load ~230 under Rosetta).
+    """
+    readings = iter((0.0, 0.0))
+    monkeypatch.setattr(
+        container, "time", SimpleNamespace(monotonic=lambda: next(readings))
+    )
     monkeypatch.setenv("SMOKE_MODE", mode)
     monkeypatch.setenv("SMOKE_INNER_DELAY", "0")
     monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", "3")
