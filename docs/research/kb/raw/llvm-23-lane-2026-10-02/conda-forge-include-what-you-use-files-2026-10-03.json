@@ -1,0 +1,1911 @@
+[
+  {
+    "description": null,
+    "dependencies": {
+      "depends": [
+        {
+          "name": "libclang-cpp13",
+          "specs": [
+            [
+              ">=",
+              "13.0.1,<13.1.0a0"
+            ]
+          ]
+        },
+        {
+          "name": "libgcc-ng",
+          "specs": [
+            [
+              ">=",
+              "10.3.0"
+            ]
+          ]
+        },
+        {
+          "name": "libllvm13",
+          "specs": [
+            [
+              ">=",
+              "13.0.1,<13.1.0a0"
+            ]
+          ]
+        },
+        {
+          "name": "libstdcxx-ng",
+          "specs": [
+            [
+              ">=",
+              "10.3.0"
+            ]
+          ]
+        }
+      ]
+    },
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.17-h27087fc_0.tar.bz2",
+    "attrs": {
+      "build_number": 0,
+      "license": "NCSA",
+      "has_prefix": false,
+      "license_family": "OTHER",
+      "machine": "x86_64",
+      "platform": "linux",
+      "depends": [
+        "libclang-cpp13 >=13.0.1,<13.1.0a0",
+        "libgcc-ng >=10.3.0",
+        "libllvm13 >=13.0.1,<13.1.0a0",
+        "libstdcxx-ng >=10.3.0"
+      ],
+      "build": "h27087fc_0",
+      "timestamp": 1651587064198,
+      "arch": "x86_64",
+      "operatingsystem": "linux",
+      "target-triplet": "x86_64-any-linux",
+      "subdir": "linux-64"
+    },
+    "upload_time": "2022-05-03 14:11:31.597000+00:00",
+    "md5": "fa237d7106dc41df73b96222bef862d5",
+    "sha256": "",
+    "size": 859779,
+    "full_name": "conda-forge/include-what-you-use/0.17/linux-64/include-what-you-use-0.17-h27087fc_0.tar.bz2",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.17/linux-64/include-what-you-use-0.17-h27087fc_0.tar.bz2",
+    "type": "conda",
+    "version": "0.17",
+    "ndownloads": 3491,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": {
+      "depends": [
+        {
+          "name": "libclang-cpp14",
+          "specs": [
+            [
+              ">=",
+              "14.0.0,<14.1.0a0"
+            ]
+          ]
+        },
+        {
+          "name": "libgcc-ng",
+          "specs": [
+            [
+              ">=",
+              "10.3.0"
+            ]
+          ]
+        },
+        {
+          "name": "libllvm14",
+          "specs": [
+            [
+              ">=",
+              "14.0.0,<14.1.0a0"
+            ]
+          ]
+        },
+        {
+          "name": "libstdcxx-ng",
+          "specs": [
+            [
+              ">=",
+              "10.3.0"
+            ]
+          ]
+        }
+      ]
+    },
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.18-h27087fc_0.tar.bz2",
+    "attrs": {
+      "build_number": 0,
+      "license": "NCSA",
+      "has_prefix": false,
+      "license_family": "OTHER",
+      "machine": "x86_64",
+      "platform": "linux",
+      "depends": [
+        "libclang-cpp14 >=14.0.0,<14.1.0a0",
+        "libgcc-ng >=10.3.0",
+        "libllvm14 >=14.0.0,<14.1.0a0",
+        "libstdcxx-ng >=10.3.0"
+      ],
+      "build": "h27087fc_0",
+      "timestamp": 1651758395508,
+      "arch": "x86_64",
+      "operatingsystem": "linux",
+      "target-triplet": "x86_64-any-linux",
+      "subdir": "linux-64"
+    },
+    "upload_time": "2022-05-05 13:47:00.252000+00:00",
+    "md5": "4a57902d67f7669842660836e7316601",
+    "sha256": "",
+    "size": 858768,
+    "full_name": "conda-forge/include-what-you-use/0.18/linux-64/include-what-you-use-0.18-h27087fc_0.tar.bz2",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.18/linux-64/include-what-you-use-0.18-h27087fc_0.tar.bz2",
+    "type": "conda",
+    "version": "0.18",
+    "ndownloads": 10078,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.19-h27087fc_0.conda",
+    "attrs": {
+      "build_number": 0,
+      "license": "NCSA",
+      "has_prefix": false,
+      "license_family": "OTHER",
+      "machine": "x86_64",
+      "platform": "linux",
+      "depends": [
+        "libclang-cpp15 >=15.0.5,<15.1.0a0",
+        "libgcc-ng >=12",
+        "libllvm15 >=15.0.5,<15.1.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "build": "h27087fc_0",
+      "timestamp": 1669221869934,
+      "arch": "x86_64",
+      "operatingsystem": "linux",
+      "target-triplet": "x86_64-any-linux",
+      "subdir": "linux-64"
+    },
+    "upload_time": "2022-11-23 16:44:56.273000+00:00",
+    "md5": "72977cb19d30dd4d326c3619cc82d367",
+    "sha256": "fdd52bdccd4e6de092e98db07cf7e20ebe70e7ec65981a68a85e237babfabcd6",
+    "size": 714273,
+    "full_name": "conda-forge/include-what-you-use/0.19/linux-64/include-what-you-use-0.19-h27087fc_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.19/linux-64/include-what-you-use-0.19-h27087fc_0.conda",
+    "type": "conda",
+    "version": "0.19",
+    "ndownloads": 5045,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.20-h59595ed_0.conda",
+    "attrs": {
+      "build_number": 0,
+      "license": "NCSA",
+      "has_prefix": false,
+      "license_family": "OTHER",
+      "machine": "x86_64",
+      "platform": "linux",
+      "depends": [
+        "libclang-cpp16 >=16.0.6,<16.1.0a0",
+        "libgcc-ng >=12",
+        "libllvm16 >=16.0.6,<16.1.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "subdir": "linux-64",
+      "timestamp": 1693400909167,
+      "arch": "x86_64",
+      "operatingsystem": "linux",
+      "target-triplet": "x86_64-any-linux",
+      "build": "h59595ed_0"
+    },
+    "upload_time": "2023-08-30 13:09:01.484000+00:00",
+    "md5": "0e6726aec6929c45eb2ce0196308ddc5",
+    "sha256": "3bf75c01af2d873fd148c99d805f061edea4ce24aa0142d89740034d44bc526a",
+    "size": 739307,
+    "full_name": "conda-forge/include-what-you-use/0.20/linux-64/include-what-you-use-0.20-h59595ed_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.20/linux-64/include-what-you-use-0.20-h59595ed_0.conda",
+    "type": "conda",
+    "version": "0.20",
+    "ndownloads": 6032,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.20-he965462_0.conda",
+    "attrs": {
+      "build_number": 0,
+      "license": "NCSA",
+      "has_prefix": false,
+      "license_family": "OTHER",
+      "machine": "x86_64",
+      "platform": "osx",
+      "depends": [
+        "libclang-cpp16 >=16.0.6,<16.1.0a0",
+        "libcxx >=15.0.7",
+        "libllvm16 >=16.0.6,<16.1.0a0"
+      ],
+      "subdir": "osx-64",
+      "timestamp": 1693401807602,
+      "arch": "x86_64",
+      "operatingsystem": "darwin",
+      "target-triplet": "x86_64-any-darwin",
+      "build": "he965462_0"
+    },
+    "upload_time": "2023-08-30 13:24:19.955000+00:00",
+    "md5": "7e5cf8218a498e75e78c8fd507d66f7d",
+    "sha256": "1d4a93c201dd165e1a43168b2108f2dcb3d2886bcd7ea8413bfcc49f2ce5f406",
+    "size": 596292,
+    "full_name": "conda-forge/include-what-you-use/0.20/osx-64/include-what-you-use-0.20-he965462_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.20/osx-64/include-what-you-use-0.20-he965462_0.conda",
+    "type": "conda",
+    "version": "0.20",
+    "ndownloads": 172,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.21-h59595ed_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h59595ed_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp17 >=17.0.5,<17.1.0a0",
+        "libgcc-ng >=12",
+        "libllvm17 >=17.0.5,<17.1.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1700443537277
+    },
+    "upload_time": "2023-11-20 01:26:36.129000+00:00",
+    "md5": "1a5cb751eb4796a88b3b5292408ef6f3",
+    "sha256": "f5191d0709946e80691da51deae290cad64c49e744464085663550aa29e6389d",
+    "size": 770332,
+    "full_name": "conda-forge/include-what-you-use/0.21/linux-64/include-what-you-use-0.21-h59595ed_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/linux-64/include-what-you-use-0.21-h59595ed_0.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 2642,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.21-h93d8f39_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h93d8f39_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=10.9",
+        "libclang-cpp17 >=17.0.5,<17.1.0a0",
+        "libcxx >=16.0.6",
+        "libllvm17 >=17.0.5,<17.1.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1700443711362
+    },
+    "upload_time": "2023-11-20 01:29:58.954000+00:00",
+    "md5": "2cce1932c4914bc5c1697fbaf9378474",
+    "sha256": "0ce22eaccf50450df44278a1d1d8e10f7646140b4f24f21475de5bca76d2df09",
+    "size": 605037,
+    "full_name": "conda-forge/include-what-you-use/0.21/osx-64/include-what-you-use-0.21-h93d8f39_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/osx-64/include-what-you-use-0.21-h93d8f39_0.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 147,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.21-h59595ed_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h59595ed_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp17 >=17.0.6,<17.1.0a0",
+        "libgcc-ng >=12",
+        "libllvm17 >=17.0.6,<17.1.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1708032619921
+    },
+    "upload_time": "2024-02-15 21:30:53.317000+00:00",
+    "md5": "8ffc4dbff0703de5444121ca63d9494f",
+    "sha256": "e3e23b6476a134092270bf7e574f4c9faf96facd511b2da7b1c6a7ee6b098321",
+    "size": 769229,
+    "full_name": "conda-forge/include-what-you-use/0.21/linux-64/include-what-you-use-0.21-h59595ed_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/linux-64/include-what-you-use-0.21-h59595ed_1.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 4663,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.21-h2f0025b_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "h2f0025b_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp17 >=17.0.6,<17.1.0a0",
+        "libgcc-ng >=12",
+        "libllvm17 >=17.0.6,<17.1.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1708032636215
+    },
+    "upload_time": "2024-02-15 21:31:06.199000+00:00",
+    "md5": "cf61238cbef4e3bb48564121cc8bdc08",
+    "sha256": "530d1e11227d38bd316639f2278079855e97a61aaa0cd03bd11b228c3d36a087",
+    "size": 759314,
+    "full_name": "conda-forge/include-what-you-use/0.21/linux-aarch64/include-what-you-use-0.21-h2f0025b_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/linux-aarch64/include-what-you-use-0.21-h2f0025b_1.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 1560,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.21-h73e2aa4_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h73e2aa4_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp17 >=17.0.6,<17.1.0a0",
+        "libcxx >=16",
+        "libllvm17 >=17.0.6,<17.1.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1708033164553
+    },
+    "upload_time": "2024-02-15 21:40:33.961000+00:00",
+    "md5": "6f6c2dccdb931b3f6944e179d5fa231c",
+    "sha256": "22227f1ec2ff0b42ce47d09a13eedd460366ca9fc09842f904544de642344eb3",
+    "size": 605756,
+    "full_name": "conda-forge/include-what-you-use/0.21/osx-64/include-what-you-use-0.21-h73e2aa4_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/osx-64/include-what-you-use-0.21-h73e2aa4_1.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 138,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.21-hebf3989_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "hebf3989_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp17 >=17.0.6,<17.1.0a0",
+        "libcxx >=16",
+        "libllvm17 >=17.0.6,<17.1.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1708033194439
+    },
+    "upload_time": "2024-02-15 21:40:36.962000+00:00",
+    "md5": "3220a349dd44aa594da43ab08efe6ab9",
+    "sha256": "6db6d9a4b0ccc38a3813df4da5761877fadcba0ec1787948d150bea310f55eaa",
+    "size": 591932,
+    "full_name": "conda-forge/include-what-you-use/0.21/osx-arm64/include-what-you-use-0.21-hebf3989_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.21/osx-arm64/include-what-you-use-0.21-hebf3989_1.conda",
+    "type": "conda",
+    "version": "0.21",
+    "ndownloads": 207,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.22-h2f0025b_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "h2f0025b_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libgcc-ng >=12",
+        "libllvm18 >=18.1.1,<18.2.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1710611569911
+    },
+    "upload_time": "2024-03-16 17:53:20.401000+00:00",
+    "md5": "5f9a4d9c893ba3c3f0d8d9beb176dc70",
+    "sha256": "9e989df7b0a966f48979de2b5192267bb2b6fe3c43186ee58f0e297867812a73",
+    "size": 772902,
+    "full_name": "conda-forge/include-what-you-use/0.22/linux-aarch64/include-what-you-use-0.22-h2f0025b_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/linux-aarch64/include-what-you-use-0.22-h2f0025b_0.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 138,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.22-h59595ed_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h59595ed_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libgcc-ng >=12",
+        "libllvm18 >=18.1.1,<18.2.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1710611579884
+    },
+    "upload_time": "2024-03-16 17:53:42.556000+00:00",
+    "md5": "4daa3e982592b60ccd03e4f49d876fba",
+    "sha256": "2377c9bc0094b10e54d5bb4b16a943b2aa61fe36c82e203f61bd5468ec805be6",
+    "size": 781111,
+    "full_name": "conda-forge/include-what-you-use/0.22/linux-64/include-what-you-use-0.22-h59595ed_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/linux-64/include-what-you-use-0.22-h59595ed_0.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 2429,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.22-h73e2aa4_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h73e2aa4_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libcxx >=16",
+        "libllvm18 >=18.1.1,<18.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1710611814704
+    },
+    "upload_time": "2024-03-16 17:58:14.675000+00:00",
+    "md5": "0185932a040ef7372aeaf79917fed1f0",
+    "sha256": "5427660602fb7b72ac543553c69ee16b19a7c5485686b070ba7c75ef66c34692",
+    "size": 623194,
+    "full_name": "conda-forge/include-what-you-use/0.22/osx-64/include-what-you-use-0.22-h73e2aa4_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/osx-64/include-what-you-use-0.22-h73e2aa4_0.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 143,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.22-hebf3989_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "hebf3989_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libcxx >=16",
+        "libllvm18 >=18.1.1,<18.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1710611969218
+    },
+    "upload_time": "2024-03-16 18:00:16.314000+00:00",
+    "md5": "cc5c4038f3d6ebe9d1be025061ec5f3f",
+    "sha256": "926d60a2a2c38f8e864acbf1040958f707e9d2da156be8ba542eadc16b813b60",
+    "size": 609511,
+    "full_name": "conda-forge/include-what-you-use/0.22/osx-arm64/include-what-you-use-0.22-hebf3989_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/osx-arm64/include-what-you-use-0.22-hebf3989_0.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 179,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.22-h2f0025b_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "h2f0025b_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libgcc-ng >=12",
+        "libllvm18 >=18.1.1,<18.2.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1710612398390
+    },
+    "upload_time": "2024-03-16 18:07:08.808000+00:00",
+    "md5": "5f5b34ebd2a1e2258491dd1ac05ff8a3",
+    "sha256": "18ec4db717cc4094ac8d59c099068def872e02ff1c5f1279ba833ff1117c52cc",
+    "size": 771367,
+    "full_name": "conda-forge/include-what-you-use/0.22/linux-aarch64/include-what-you-use-0.22-h2f0025b_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/linux-aarch64/include-what-you-use-0.22-h2f0025b_1.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 170,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.22-h59595ed_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": false,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h59595ed_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libgcc-ng >=12",
+        "libllvm18 >=18.1.1,<18.2.0a0",
+        "libstdcxx-ng >=12"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1710612532136
+    },
+    "upload_time": "2024-03-16 18:09:43.791000+00:00",
+    "md5": "d861a75a4d610c4c2cb5fc42f5070df8",
+    "sha256": "78ba473227c606991508374f463c0fa430d1b7929f9a6cb3ca916c362b932fe7",
+    "size": 782335,
+    "full_name": "conda-forge/include-what-you-use/0.22/linux-64/include-what-you-use-0.22-h59595ed_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/linux-64/include-what-you-use-0.22-h59595ed_1.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 2827,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.22-hebf3989_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "hebf3989_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libcxx >=16",
+        "libllvm18 >=18.1.1,<18.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1710612675289
+    },
+    "upload_time": "2024-03-16 18:11:44.554000+00:00",
+    "md5": "08d23b5bdc6d6c391bc8b66edf21a06d",
+    "sha256": "afa30fdf7de6fab7952faf954fdb8e1d0b1c84e8267dc6eeb146c87033f3e9b1",
+    "size": 611741,
+    "full_name": "conda-forge/include-what-you-use/0.22/osx-arm64/include-what-you-use-0.22-hebf3989_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/osx-arm64/include-what-you-use-0.22-hebf3989_1.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 241,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.22-h73e2aa4_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": false,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h73e2aa4_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp18.1 >=18.1.1,<18.2.0a0",
+        "libcxx >=16",
+        "libllvm18 >=18.1.1,<18.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1710612689934
+    },
+    "upload_time": "2024-03-16 18:12:55.979000+00:00",
+    "md5": "add6c39fe4f81afea79ec2e956f05157",
+    "sha256": "aa0914cfe7e689d759c3ddc553f2bb6b5d56363fc229518434b40667841d955d",
+    "size": 624739,
+    "full_name": "conda-forge/include-what-you-use/0.22/osx-64/include-what-you-use-0.22-h73e2aa4_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/osx-64/include-what-you-use-0.22-h73e2aa4_1.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 166,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.22-h63175ca_1.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "h63175ca_1",
+      "build_number": 1,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.2,<15",
+        "vc14_runtime >=14.29.30139"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1710686235331
+    },
+    "upload_time": "2024-03-17 14:39:27.497000+00:00",
+    "md5": "4c5a1719897e05d6c76ba24af937bcd4",
+    "sha256": "0f2755f9263d1691de6e16a99d48bf84ee487f0d8928d63fc9fb05e73c7dd3de",
+    "size": 22678225,
+    "full_name": "conda-forge/include-what-you-use/0.22/win-64/include-what-you-use-0.22-h63175ca_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.22/win-64/include-what-you-use-0.22-h63175ca_1.conda",
+    "type": "conda",
+    "version": "0.22",
+    "ndownloads": 266,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.23-h5888daf_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h5888daf_0",
+      "build_number": 0,
+      "depends": [
+        "__glibc >=2.17,<3.0.a0",
+        "libclang-cpp19.1 >=19.1.3,<19.2.0a0",
+        "libgcc >=13",
+        "libllvm19 >=19.1.3,<19.2.0a0",
+        "libstdcxx >=13"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1731276255975
+    },
+    "upload_time": "2024-11-10 22:04:49.458000+00:00",
+    "md5": "a9ae9bf0495a03e6a36352028fb1aa99",
+    "sha256": "e25a046a0ce74fb19e9d8cfba10ca6e67973ebb33c1fca12aa0dcfe3d70759a6",
+    "size": 829284,
+    "full_name": "conda-forge/include-what-you-use/0.23/linux-64/include-what-you-use-0.23-h5888daf_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.23/linux-64/include-what-you-use-0.23-h5888daf_0.conda",
+    "type": "conda",
+    "version": "0.23",
+    "ndownloads": 51129,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.23-h5ad3122_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "h5ad3122_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp19.1 >=19.1.3,<19.2.0a0",
+        "libgcc >=13",
+        "libllvm19 >=19.1.3,<19.2.0a0",
+        "libstdcxx >=13"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1731276352575
+    },
+    "upload_time": "2024-11-10 22:06:32.684000+00:00",
+    "md5": "643ecb4a4a67fc503cc1cea1a8635984",
+    "sha256": "641420fb9b796e6ee6e409de79e84ca0b04b5309662104b00df8f72c2e22e5e8",
+    "size": 810098,
+    "full_name": "conda-forge/include-what-you-use/0.23/linux-aarch64/include-what-you-use-0.23-h5ad3122_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.23/linux-aarch64/include-what-you-use-0.23-h5ad3122_0.conda",
+    "type": "conda",
+    "version": "0.23",
+    "ndownloads": 155,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.23-hbb528cf_0.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "hbb528cf_0",
+      "build_number": 0,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.2,<15",
+        "vc14_runtime >=14.29.30139"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1731276529282
+    },
+    "upload_time": "2024-11-10 22:10:32.871000+00:00",
+    "md5": "9a95c21fb74bc866313ec8120da40ebb",
+    "sha256": "09214dab2916b680925fd916df0fd8997cb749130141f262e48af3292afbbe20",
+    "size": 23886112,
+    "full_name": "conda-forge/include-what-you-use/0.23/win-64/include-what-you-use-0.23-hbb528cf_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.23/win-64/include-what-you-use-0.23-hbb528cf_0.conda",
+    "type": "conda",
+    "version": "0.23",
+    "ndownloads": 507,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.23-h286801f_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "h286801f_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp19.1 >=19.1.3,<19.2.0a0",
+        "libcxx >=18",
+        "libllvm19 >=19.1.3,<19.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1731276824968
+    },
+    "upload_time": "2024-11-10 22:14:06.286000+00:00",
+    "md5": "a926c7bc4d198f131d68b924cd9d843d",
+    "sha256": "2d8d93a311816877e3d5467ea7ce62bbf5762ceaea3768ecb84632da0fb4923a",
+    "size": 638362,
+    "full_name": "conda-forge/include-what-you-use/0.23/osx-arm64/include-what-you-use-0.23-h286801f_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.23/osx-arm64/include-what-you-use-0.23-h286801f_0.conda",
+    "type": "conda",
+    "version": "0.23",
+    "ndownloads": 227,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.23-h240833e_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h240833e_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=10.13",
+        "libclang-cpp19.1 >=19.1.3,<19.2.0a0",
+        "libcxx >=18",
+        "libllvm19 >=19.1.3,<19.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1731276867180
+    },
+    "upload_time": "2024-11-10 22:14:59.422000+00:00",
+    "md5": "fe9d4deee664404260e2c6824c75c389",
+    "sha256": "6988fa76ec4fd206b63c2dcf74a70f08fb8cfc07d79faa161c78914a8af59820",
+    "size": 654764,
+    "full_name": "conda-forge/include-what-you-use/0.23/osx-64/include-what-you-use-0.23-h240833e_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.23/osx-64/include-what-you-use-0.23-h240833e_0.conda",
+    "type": "conda",
+    "version": "0.23",
+    "ndownloads": 168,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.24-h5888daf_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "h5888daf_0",
+      "build_number": 0,
+      "depends": [
+        "__glibc >=2.17,<3.0.a0",
+        "libclang-cpp20.1 >=20.1.2,<20.2.0a0",
+        "libgcc >=13",
+        "libllvm20 >=20.1.2,<20.2.0a0",
+        "libstdcxx >=13"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1743870372809
+    },
+    "upload_time": "2025-04-05 16:26:57.938000+00:00",
+    "md5": "0234ecf42b64d547e9e3f2b771ba67ce",
+    "sha256": "44bb9906b8608a47f0f0c2e67b517d3626c2c37a28aec3de04ad7fdfc35dc468",
+    "size": 835929,
+    "full_name": "conda-forge/include-what-you-use/0.24/linux-64/include-what-you-use-0.24-h5888daf_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.24/linux-64/include-what-you-use-0.24-h5888daf_0.conda",
+    "type": "conda",
+    "version": "0.24",
+    "ndownloads": 35261,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.24-h5ad3122_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "h5ad3122_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp20.1 >=20.1.2,<20.2.0a0",
+        "libgcc >=13",
+        "libllvm20 >=20.1.2,<20.2.0a0",
+        "libstdcxx >=13"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1743870447039
+    },
+    "upload_time": "2025-04-05 16:28:07.562000+00:00",
+    "md5": "84d952dc758165a86265c084e66935e5",
+    "sha256": "f7740ea810967711323cf9ffd24efdf54628cadaa3980095c4a625427be3d243",
+    "size": 831746,
+    "full_name": "conda-forge/include-what-you-use/0.24/linux-aarch64/include-what-you-use-0.24-h5ad3122_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.24/linux-aarch64/include-what-you-use-0.24-h5ad3122_0.conda",
+    "type": "conda",
+    "version": "0.24",
+    "ndownloads": 12653,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.24-h240833e_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "h240833e_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=10.13",
+        "libclang-cpp20.1 >=20.1.2,<20.2.0a0",
+        "libcxx >=18",
+        "libllvm20 >=20.1.2,<20.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1743870554165
+    },
+    "upload_time": "2025-04-05 16:30:14.145000+00:00",
+    "md5": "1c405b12e42a99da5578e05ee3ceea9c",
+    "sha256": "2fae4bab5ad5dc72b8cb66ed81afdd06d984d7eb3dcd144629d3b878681400f1",
+    "size": 647444,
+    "full_name": "conda-forge/include-what-you-use/0.24/osx-64/include-what-you-use-0.24-h240833e_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.24/osx-64/include-what-you-use-0.24-h240833e_0.conda",
+    "type": "conda",
+    "version": "0.24",
+    "ndownloads": 93,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.24-h286801f_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "h286801f_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp20.1 >=20.1.2,<20.2.0a0",
+        "libcxx >=18",
+        "libllvm20 >=20.1.2,<20.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1743870640145
+    },
+    "upload_time": "2025-04-05 16:31:17.737000+00:00",
+    "md5": "4154aa07269b44e343be094d3da42004",
+    "sha256": "3abac508cec0f0dfd27f3ffc1e5619e31ccc7745fb82503b8d83ce76ba8beb7a",
+    "size": 630193,
+    "full_name": "conda-forge/include-what-you-use/0.24/osx-arm64/include-what-you-use-0.24-h286801f_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.24/osx-arm64/include-what-you-use-0.24-h286801f_0.conda",
+    "type": "conda",
+    "version": "0.24",
+    "ndownloads": 102,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.24-hbb528cf_0.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "hbb528cf_0",
+      "build_number": 0,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.2,<15",
+        "vc14_runtime >=14.29.30139"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1743870918057
+    },
+    "upload_time": "2025-04-05 16:37:22.556000+00:00",
+    "md5": "0bd9c111c0d80039b40bb0f32f87fb8c",
+    "sha256": "aba862fef69d494498ad47be35394af426529ae71fe7238b02bf84d76926e265",
+    "size": 25319099,
+    "full_name": "conda-forge/include-what-you-use/0.24/win-64/include-what-you-use-0.24-hbb528cf_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.24/win-64/include-what-you-use-0.24-hbb528cf_0.conda",
+    "type": "conda",
+    "version": "0.24",
+    "ndownloads": 157,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.25-hecca717_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "hecca717_0",
+      "build_number": 0,
+      "depends": [
+        "__glibc >=2.17,<3.0.a0",
+        "libclang-cpp21.1 >=21.1.1,<21.2.0a0",
+        "libgcc >=14",
+        "libllvm21 >=21.1.1,<21.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1758357034392
+    },
+    "upload_time": "2025-09-20 08:31:19.107000+00:00",
+    "md5": "2ddc4e02822e85bff76abec5378fbfee",
+    "sha256": "9a84f3068a7f7e7d69878713146eb6486a77929279600f49f428447c9ed0c577",
+    "size": 849200,
+    "full_name": "conda-forge/include-what-you-use/0.25/linux-64/include-what-you-use-0.25-hecca717_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.25/linux-64/include-what-you-use-0.25-hecca717_0.conda",
+    "type": "conda",
+    "version": "0.25",
+    "ndownloads": 3596,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.25-hfae3067_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "hfae3067_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp21.1 >=21.1.1,<21.2.0a0",
+        "libgcc >=14",
+        "libllvm21 >=21.1.1,<21.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1758357084485
+    },
+    "upload_time": "2025-09-20 08:31:58.347000+00:00",
+    "md5": "9237ba9026f342afd0e1acfb55f9d8ef",
+    "sha256": "6c76e180335ffe0b39435f4f24d784a7a77e21268efe8ce24071efe819bf948d",
+    "size": 838167,
+    "full_name": "conda-forge/include-what-you-use/0.25/linux-aarch64/include-what-you-use-0.25-hfae3067_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.25/linux-aarch64/include-what-you-use-0.25-hfae3067_0.conda",
+    "type": "conda",
+    "version": "0.25",
+    "ndownloads": 234,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.25-haf25636_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "haf25636_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp21.1 >=21.1.1,<21.2.0a0",
+        "libcxx >=19",
+        "libllvm21 >=21.1.1,<21.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1758357307946
+    },
+    "upload_time": "2025-09-20 08:35:40.847000+00:00",
+    "md5": "fbd86ced5177d1944bb4f951f8f022d6",
+    "sha256": "d05df3d594eab1251971b9330a3779078e447e8227ebc284bf4e50da508cb50a",
+    "size": 630484,
+    "full_name": "conda-forge/include-what-you-use/0.25/osx-arm64/include-what-you-use-0.25-haf25636_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.25/osx-arm64/include-what-you-use-0.25-haf25636_0.conda",
+    "type": "conda",
+    "version": "0.25",
+    "ndownloads": 125,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.25-heffb93a_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "heffb93a_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=10.13",
+        "libclang-cpp21.1 >=21.1.1,<21.2.0a0",
+        "libcxx >=19",
+        "libllvm21 >=21.1.1,<21.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1758357346475
+    },
+    "upload_time": "2025-09-20 08:36:41.686000+00:00",
+    "md5": "0509ca14c51d03f932f4e6a6256b7323",
+    "sha256": "981361be49f19a5ba461e13702515d9b26cdd55e8fa25dea379b48c19728a4d2",
+    "size": 647886,
+    "full_name": "conda-forge/include-what-you-use/0.25/osx-64/include-what-you-use-0.25-heffb93a_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.25/osx-64/include-what-you-use-0.25-heffb93a_0.conda",
+    "type": "conda",
+    "version": "0.25",
+    "ndownloads": 86,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.25-h1608b31_0.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "h1608b31_0",
+      "build_number": 0,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.3,<15",
+        "vc14_runtime >=14.44.35208"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1758357435274
+    },
+    "upload_time": "2025-09-20 08:39:22.044000+00:00",
+    "md5": "b808e3f6ec2a96965546352339a8f55d",
+    "sha256": "31814c1598af0efe76d4e65a75f6b4a0bb5bfc4f1283cad41a890c257920139b",
+    "size": 25832730,
+    "full_name": "conda-forge/include-what-you-use/0.25/win-64/include-what-you-use-0.25-h1608b31_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.25/win-64/include-what-you-use-0.25-h1608b31_0.conda",
+    "type": "conda",
+    "version": "0.25",
+    "ndownloads": 180,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.26-hf6b4638_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "hf6b4638_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libcxx >=19",
+        "libllvm22 >=22.1.0,<22.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1774206284561
+    },
+    "upload_time": "2026-03-22 19:05:25.276000+00:00",
+    "md5": "95a7c218f871d68a5e8c7c9992c83b70",
+    "sha256": "02b0b3f3c58853986840877f7f6f71f5f2b36c94b00d779cd38eb68e3e6363be",
+    "size": 668218,
+    "full_name": "conda-forge/include-what-you-use/0.26/osx-arm64/include-what-you-use-0.26-hf6b4638_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/osx-arm64/include-what-you-use-0.26-hf6b4638_0.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 50,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.26-hecca717_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "hecca717_0",
+      "build_number": 0,
+      "depends": [
+        "__glibc >=2.17,<3.0.a0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libgcc >=14",
+        "libllvm22 >=22.1.0,<22.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1774206306418
+    },
+    "upload_time": "2026-03-22 19:05:41.568000+00:00",
+    "md5": "1939f1f90052339b286080119f539415",
+    "sha256": "6dd8a119827d207d7926ed595794e80a8fea0b7d9081a2631c9e73b2fe38fec0",
+    "size": 907869,
+    "full_name": "conda-forge/include-what-you-use/0.26/linux-64/include-what-you-use-0.26-hecca717_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/linux-64/include-what-you-use-0.26-hecca717_0.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 686,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.26-hfae3067_0.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "hfae3067_0",
+      "build_number": 0,
+      "depends": [
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libgcc >=14",
+        "libllvm22 >=22.1.0,<22.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1774206329885
+    },
+    "upload_time": "2026-03-22 19:06:08.911000+00:00",
+    "md5": "eddb59c690224a896e9509466c72452b",
+    "sha256": "118fb76bd6a3f5315ca7dcfc6719df291a48f08833a2fdef81a4ae3a945424ac",
+    "size": 895806,
+    "full_name": "conda-forge/include-what-you-use/0.26/linux-aarch64/include-what-you-use-0.26-hfae3067_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/linux-aarch64/include-what-you-use-0.26-hfae3067_0.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 47,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.26-hcc62823_0.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "hcc62823_0",
+      "build_number": 0,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libcxx >=19",
+        "libllvm22 >=22.1.0,<22.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1774206603686
+    },
+    "upload_time": "2026-03-22 19:11:35.204000+00:00",
+    "md5": "92e7f4b143154b3137a772946f302908",
+    "sha256": "526b6373cdaa39b75d1125ad39cac96926834e1791e553745625b45cd704cb83",
+    "size": 679421,
+    "full_name": "conda-forge/include-what-you-use/0.26/osx-64/include-what-you-use-0.26-hcc62823_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/osx-64/include-what-you-use-0.26-hcc62823_0.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 52,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.26-h1608b31_0.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "h1608b31_0",
+      "build_number": 0,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.3,<15",
+        "vc14_runtime >=14.44.35208"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1774206638974
+    },
+    "upload_time": "2026-03-22 19:12:24.195000+00:00",
+    "md5": "3cb6126f28671b51e343e92e3219b7a2",
+    "sha256": "cac8d647a5e96fbc5cb0621b11e1cffddcfd84a723899dca93fd4fb2e3e964e2",
+    "size": 26579346,
+    "full_name": "conda-forge/include-what-you-use/0.26/win-64/include-what-you-use-0.26-h1608b31_0.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/win-64/include-what-you-use-0.26-h1608b31_0.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 71,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-64/include-what-you-use-0.26-hecca717_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-64",
+      "arch": "x86_64",
+      "build": "hecca717_1",
+      "build_number": 1,
+      "depends": [
+        "__glibc >=2.17,<3.0.a0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libgcc >=14",
+        "libllvm22 >=22.1.0,<22.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1774688676774
+    },
+    "upload_time": "2026-03-28 09:09:48.744000+00:00",
+    "md5": "5f032bf6f2373d5bd0b8bbb49f6a42fc",
+    "sha256": "d377fee4ba38e014417a49855fa8fbaab1c58c990fe59bd03d370e18c2d23999",
+    "size": 907836,
+    "full_name": "conda-forge/include-what-you-use/0.26/linux-64/include-what-you-use-0.26-hecca717_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/linux-64/include-what-you-use-0.26-hecca717_1.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 10226,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-arm64/include-what-you-use-0.26-hf6b4638_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "arm64",
+      "target-triplet": "arm64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-arm64",
+      "arch": "arm64",
+      "build": "hf6b4638_1",
+      "build_number": 1,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libcxx >=19",
+        "libllvm22 >=22.1.0,<22.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1774688687459
+    },
+    "upload_time": "2026-03-28 09:09:59.022000+00:00",
+    "md5": "4bc5ee7f16fe1c335fea5bcfe575d15b",
+    "sha256": "6fedd82e76c08efd2fe1327c18b05175979f21a5ca2ca52c27a3e59d4ab709d8",
+    "size": 669142,
+    "full_name": "conda-forge/include-what-you-use/0.26/osx-arm64/include-what-you-use-0.26-hf6b4638_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/osx-arm64/include-what-you-use-0.26-hf6b4638_1.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 105,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "linux-aarch64/include-what-you-use-0.26-hfae3067_1.conda",
+    "attrs": {
+      "operatingsystem": "linux",
+      "machine": "aarch64",
+      "target-triplet": "aarch64-any-linux",
+      "has_prefix": true,
+      "subdir": "linux-aarch64",
+      "arch": "aarch64",
+      "build": "hfae3067_1",
+      "build_number": 1,
+      "depends": [
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libgcc >=14",
+        "libllvm22 >=22.1.0,<22.2.0a0",
+        "libstdcxx >=14"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "linux",
+      "timestamp": 1774688699227
+    },
+    "upload_time": "2026-03-28 09:10:14.811000+00:00",
+    "md5": "a46ad46b0684e46a5e4e2205482d6228",
+    "sha256": "5908b2c83b335e169288f13aabbfcb2b00db11742a289747c20745fcf6b73383",
+    "size": 892352,
+    "full_name": "conda-forge/include-what-you-use/0.26/linux-aarch64/include-what-you-use-0.26-hfae3067_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/linux-aarch64/include-what-you-use-0.26-hfae3067_1.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 139,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "win-64/include-what-you-use-0.26-h1608b31_1.conda",
+    "attrs": {
+      "operatingsystem": "win32",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-win32",
+      "has_prefix": false,
+      "subdir": "win-64",
+      "arch": "x86_64",
+      "build": "h1608b31_1",
+      "build_number": 1,
+      "depends": [
+        "ucrt >=10.0.20348.0",
+        "vc >=14.3,<15",
+        "vc14_runtime >=14.44.35208"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "win",
+      "timestamp": 1774689010062
+    },
+    "upload_time": "2026-03-28 09:11:54.995000+00:00",
+    "md5": "67789b82ae7cfa36c76a79e3ffa9f9f5",
+    "sha256": "27ea34c011dd664346b4ac1841c3de242fb8516df8c85b79c7f96a752353e71c",
+    "size": 26582865,
+    "full_name": "conda-forge/include-what-you-use/0.26/win-64/include-what-you-use-0.26-h1608b31_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/win-64/include-what-you-use-0.26-h1608b31_1.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 228,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  },
+  {
+    "description": null,
+    "dependencies": [
+      "depends"
+    ],
+    "distribution_type": "conda",
+    "basename": "osx-64/include-what-you-use-0.26-hcc62823_1.conda",
+    "attrs": {
+      "operatingsystem": "darwin",
+      "machine": "x86_64",
+      "target-triplet": "x86_64-any-darwin",
+      "has_prefix": true,
+      "subdir": "osx-64",
+      "arch": "x86_64",
+      "build": "hcc62823_1",
+      "build_number": 1,
+      "depends": [
+        "__osx >=11.0",
+        "libclang-cpp22.1 >=22.1.0,<22.2.0a0",
+        "libcxx >=19",
+        "libllvm22 >=22.1.0,<22.2.0a0"
+      ],
+      "license": "NCSA",
+      "license_family": "OTHER",
+      "platform": "osx",
+      "timestamp": 1774689175726
+    },
+    "upload_time": "2026-03-28 09:14:11.748000+00:00",
+    "md5": "3bb533107e9e288bd1154be2742351e1",
+    "sha256": "c6fc266fb91e8df4da396627d8cd9bd9a77da20a4f054e40ef6d8988268b6581",
+    "size": 680466,
+    "full_name": "conda-forge/include-what-you-use/0.26/osx-64/include-what-you-use-0.26-hcc62823_1.conda",
+    "download_url": "//api.anaconda.org/download/conda-forge/include-what-you-use/0.26/osx-64/include-what-you-use-0.26-hcc62823_1.conda",
+    "type": "conda",
+    "version": "0.26",
+    "ndownloads": 59,
+    "owner": "conda-forge",
+    "labels": [
+      "main"
+    ]
+  }
+]

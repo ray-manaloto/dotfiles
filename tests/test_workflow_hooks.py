@@ -72,6 +72,8 @@ REAL_CASES: tuple[tuple[str, str, bool], ...] = (
     (".github/workflows/refresh.yml", "lock-refresh", True),
     (".github/workflows/refresh.yml", "image-lock-pr", True),
     (".github/workflows/refresh.yml", "tool-currency", False),
+    (".github/workflows/refresh.yml", "llvm-currency", False),
+    (".github/workflows/refresh.yml", "apt-pin-liveness", False),
     (".github/workflows/autofix.yml", "autofix", False),
 )
 
@@ -106,6 +108,8 @@ EXPECTED_JOBS: frozenset[tuple[str, str]] = frozenset(
         (".github/workflows/probe-aslr-tsan.yml", "probe-aslr-tsan"),
         (".github/workflows/refresh.yml", "image-lock-pr"),
         (".github/workflows/refresh.yml", "lock-refresh"),
+        (".github/workflows/refresh.yml", "llvm-currency"),
+        (".github/workflows/refresh.yml", "apt-pin-liveness"),
         (".github/workflows/refresh.yml", "schema-refresh"),
         (".github/workflows/refresh.yml", "tool-currency"),
     }

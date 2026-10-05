@@ -127,6 +127,11 @@ def probe_script(pins: dict[str, str], fingerprint: str) -> str:
     in ONE transaction — which is how `mise bootstrap packages apply` installs
     them, and the only way a cross-package conflict shows up.
     """
+    anchors = [name for name in pins if re.fullmatch(r"clang-\d+", name)]
+    if len(anchors) != 1:
+        msg = "pins must contain exactly one clang-<N> key"
+        raise ValueError(msg)
+    major = anchors[0].rsplit("-", maxsplit=1)[1]
     specs = " ".join(f"{name}={version}" for name, version in sorted(pins.items()))
     return f"""set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -142,7 +147,8 @@ if [ "$actual" != "{fingerprint}" ]; then
   exit 1
 fi
 codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
-printf 'Types: deb\\nURIs: https://apt.llvm.org/%s/\\nSuites: llvm-toolchain-%s-22\\n\
+printf 'Types: deb\\nURIs: https://apt.llvm.org/%s/\\n\
+Suites: llvm-toolchain-%s-{major}\\n\
 Components: main\\nSigned-By: /etc/apt/keyrings/apt-llvm-org.asc\\n' \
   "$codename" "$codename" > /etc/apt/sources.list.d/apt-llvm-org.sources
 apt-get update -qq

@@ -71,12 +71,12 @@
       "groupName": null
     },
     {
-      "description": "#288 `apt-ubuntu-pockets`: give every [bootstrap.packages] deb dep ALL FOUR upstreams and let the deb datasource's registryStrategy='merge' (lib/modules/datasource/deb/index.ts) route each by where it is found. This is why no hand-rolled discriminator is needed: probed 2026-07-16, the 58 apt.llvm.org names and Ubuntu's 9308 main-component names across the 3 pockets overlap in EXACTLY 0 packages, so a merge can never cross upstreams, and a 15th Ubuntu package needs no routing config. Ubuntu MUST list all three pockets: the LTS release pocket is frozen at release day, so `suite=resolute` alone pins pre-security-patch versions that DO NOT INSTALL - `curl=8.18.0-1ubuntu2` fails because it hard-depends on its co-versioned `libcurl4t64` and apt will not drag that below its candidate (clean-room probe; see the [bootstrap.packages] header). components=main only: all 66 packages live in main, and adding `universe` would download a 19.6MB / 66741-package index per run for zero extra coverage (that index is what blew #251's 2-minute timeout, and it is why this was wrongly scoped as expensive). The datasource hardcodes Packages.gz, caches per component per run, and sends If-Modified-Since, so 66 deps cost one conditional GET per component on a warm run.",
+      "description": "#288 apt-ubuntu-pockets: Ubuntu bootstrap deb pins keep all three main-component pockets. The deb datasource's registryStrategy=merge combines their versions. Exclude the apt.llvm.org snapshot signature so this override cannot replace the regex manager's major-following URL. LLVM snapshots use the captured version major; Ubuntu release-only lookup misses updates/security. Native routing: https://docs.renovatebot.com/configuration-options/#custommanagersregistryurltemplate and #packagerulesmatchcurrentvalue.",
       "matchDatasources": [
         "deb"
       ],
+      "matchCurrentValue": "!/^\\d+:\\d+(?:\\.\\d+)*~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
       "registryUrls": [
-        "https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-22&components=main&binaryArch=amd64",
         "https://archive.ubuntu.com/ubuntu?suite=resolute&components=main&binaryArch=amd64",
         "https://archive.ubuntu.com/ubuntu?suite=resolute-updates&components=main&binaryArch=amd64",
         "https://security.ubuntu.com/ubuntu?suite=resolute-security&components=main&binaryArch=amd64"
@@ -111,6 +111,20 @@
         "python"
       ],
       "groupName": "image python"
+    },
+    {
+      "description": "LLVM exact snapshots get their own green automerging PR: docs/research/kb/reports/agents/llvm-apt-pin-churn-research-2026-10-03.md Q2 found grouped apt repairs blocked by unrelated reds. Precedent: the formerly packageRules[9] clang-p2996 rule, which stays last. minimumReleaseAge provides no soak: the deb datasource emits no releaseTimestamp and timestamp-optional proceeds when it is missing; no update-type restriction.",
+      "matchDatasources": [
+        "deb"
+      ],
+      "matchFileNames": [
+        ".devcontainer/mise-system.toml"
+      ],
+      "matchCurrentValue": "/^\\d+:\\d+(?:\\.\\d+)*~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~/",
+      "groupName": "apt.llvm.org LLVM debs",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
     },
     {
       "description": "clang-p2996 (#1434/#1435, S28b-1): its OWN daily PR, pulled OUT of `image-build inputs` (packageRules[0] matches docker-bake.hcl by file name, which is what put the compiler into #1063). Each bump is a cold p2996 compile, so a once-a-day window bounds cost. minimumReleaseAge is INERT here: the git-refs datasource emits no releaseTimestamp, and this repo's timestamp-optional behaviour then proceeds immediately, so `schedule` is the only soak lever, and `updateNotScheduled: false` keeps an OPEN clang PR from being re-pushed outside that window (each push cancels an in-flight multi-hour compile). Auto-merge is GitHub-native and waits on the required `ci-gate`, which needs build-publish; docker-bake.hcl is in ci.yml's build path filter, so build-publish cannot skip for this PR.",
@@ -223,13 +237,14 @@
     },
     {
       "customType": "regex",
-      "description": "#251/#288: EVERY pinned apt package in mise-system.toml [bootstrap.packages] - the 52 LLVM entries from apt.llvm.org and the 14 Ubuntu-archive entries. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end (2026-07-15 LLVM, 2026-07-16 Ubuntu): extract yields depName/currentValue/replaceString, lookup resolves with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. The value regex anchors on a LEADING DIGIT, which matches every deb version (incl. the `1:` epoch forms `1:22.1.8~++...` and `1:1.3.dfsg+really1.3.1-1ubuntu3`) while never matching \"latest\" - a negative lookahead is NOT an option here, because Renovate compiles regexes with RE2, which has no lookaround. Routing to the right upstream is NOT done here: the `apt-ubuntu-pockets` packageRules entry below hands every deb dep all four registryUrls and lets registryStrategy='merge' resolve each by where it is found.",
+      "description": "#251/#288: EVERY pinned apt package in mise-system.toml [bootstrap.packages] - the 58 LLVM entries (52 active + 6 commented) from apt.llvm.org and the 14 Ubuntu entries. Renovate's NATIVE mise manager cannot do this - its schema parses only `tools`/`tasks` and z.object silently strips [bootstrap.packages] - so this regex + the `deb` datasource is the only route. Proven end-to-end (2026-07-15 LLVM, 2026-07-16 Ubuntu): extract yields depName/currentValue/replaceString, lookup resolves with no warnings. #236 does NOT apply: bootstrap packages are not in mise.lock and a regex manager has no lockfile to regenerate. The value regex anchors on a LEADING DIGIT, which matches every deb version (incl. the `1:` epoch forms `1:22.1.8~++...` and `1:1.3.dfsg+really1.3.1-1ubuntu3`) while never matching \"latest\" - a negative lookahead is NOT an option here, because Renovate compiles regexes with RE2, which has no lookaround. Capture llvmMajor from snapshot currentValue, including the four major-less names, and render the LLVM suite natively with registryUrlTemplate. Ubuntu values use the release URL fallback and the scoped apt-ubuntu-pockets rule overrides it with all three pocket URLs; registryStrategy='merge' is unchanged.",
       "managerFilePatterns": [
         "/^\\.devcontainer/mise-system\\.toml$/"
       ],
       "matchStrings": [
-        "\"apt:(?<depName>[a-z0-9.+-]+)\"\\s*=\\s*\"(?<currentValue>[0-9][^\"]*)\""
+        "\"apt:(?<depName>[a-z0-9.+-]+)\"\\s*=\\s*\"(?<currentValue>(?:\\d+:(?<llvmMajor>\\d+)(?:\\.\\d+)*~\\+\\+\\d{14}\\+[0-9a-f]+-1~exp1~[^\"]*|[0-9][^\"]*))\""
       ],
+      "registryUrlTemplate": "{{#if llvmMajor}}https://apt.llvm.org/resolute?suite=llvm-toolchain-resolute-{{{llvmMajor}}}&components=main&binaryArch=amd64{{else}}https://archive.ubuntu.com/ubuntu?suite=resolute&components=main&binaryArch=amd64{{/if}}",
       "datasourceTemplate": "deb",
       "versioningTemplate": "deb"
     }

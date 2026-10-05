@@ -1,0 +1,142 @@
+# Saved searches: include-what-you-use (IWYU) built or pinned against a specific LLVM/Clang major.
+# Hand-curated by lane llvm23 (2026-10-03), from research sweep wf_0f6000c0-dc0
+# (docs/research/kb/reports/agents/iwyu-prebuilt-llvm23-sweep-2026-10-03.md). Format: lane 1502
+# (docs/specs/research-saved-searches-1502.md). Rerun: mise run research-saved-search -- rerun <this file>.
+schema_version = 1
+question = "Prebuilt or source-built IWYU matching the newest LLVM major (23+), and IWYU against clang forks (p2996)"
+
+# --- code search ---------------------------------------------------------------------------
+
+[[watch]]
+id = "iwyu-dockerfile-musthit"
+kind = "code"
+origin = "topic:iwyu-llvm"
+cadence = "weekly"
+limit = 10
+queries = ['include-what-you-use filename:Dockerfile']
+role = "must-hit"
+
+[[watch]]
+id = "iwyu-dockerfile-cmake-prefix"
+kind = "code"
+origin = "topic:iwyu-llvm"
+question = "Dockerfiles that build IWYU from source against an installed LLVM"
+cadence = "weekly"
+limit = 20
+queries = ['include-what-you-use CMAKE_PREFIX_PATH filename:Dockerfile']
+role = "query"
+grep = 'include-what-you-use'
+
+[[watch]]
+id = "iwyu-yml-cmake-prefix"
+kind = "code"
+origin = "topic:iwyu-llvm"
+question = "CI workflows/actions that build IWYU from source against an installed LLVM"
+cadence = "weekly"
+limit = 20
+queries = ['include-what-you-use CMAKE_PREFIX_PATH extension:yml']
+role = "query"
+control_hit = 'include-what-you-use extension:yml'
+grep = 'include-what-you-use'
+
+[[watch]]
+id = "iwyu-clang-23-branch"
+kind = "code"
+origin = "topic:iwyu-llvm"
+question = "Repos checking out IWYU's clang_23 branch (first LLVM-23 adopters)"
+cadence = "weekly"
+limit = 20
+queries = ['include-what-you-use clang_23']
+role = "query"
+control_hit = 'include-what-you-use clang_22'
+grep = 'clang_23'
+
+[[watch]]
+id = "iwyu-clang-p2996"
+kind = "code"
+origin = "topic:iwyu-llvm"
+question = "IWYU used alongside or built against the clang-p2996 reflection fork"
+cadence = "weekly"
+limit = 20
+queries = ['include-what-you-use clang-p2996']
+role = "query"
+control_hit = 'include-what-you-use clang_22'
+grep = 'p2996'
+
+# --- issues / PRs ---------------------------------------------------------------------------
+
+[[watch]]
+id = "iwyu-upstream-clang-23-issues"
+kind = "issues"
+origin = "topic:iwyu-llvm"
+question = "Upstream IWYU work on Clang 23 / the 0.27 release"
+repo = "include-what-you-use/include-what-you-use"
+cadence = "weekly"
+limit = 20
+queries = ['clang_23', '0.27']
+
+[[watch]]
+id = "iwyu-feedstock-issues"
+kind = "issues"
+origin = "topic:iwyu-llvm"
+question = "conda-forge feedstock PRs/issues for an IWYU build on libllvm23 (0.27)"
+repo = "conda-forge/include-what-you-use-feedstock"
+cadence = "daily"
+limit = 20
+queries = ['0.27', 'llvm_version']
+
+[[watch]]
+id = "iwyu-p2996-issues"
+kind = "issues"
+origin = "topic:iwyu-llvm"
+question = "clang-p2996 fork issues mentioning IWYU or its base Clang major"
+repo = "bloomberg/clang-p2996"
+cadence = "weekly"
+limit = 20
+queries = ['include-what-you-use', 'IWYU']
+
+# --- releases -------------------------------------------------------------------------------
+
+[[watch]]
+id = "iwyu-upstream-releases"
+kind = "releases"
+origin = "topic:iwyu-llvm"
+question = "A new IWYU release (each note says 'Compatible with Clang N'); the rerun's NEW/GONE diff surfaces it"
+repo = "include-what-you-use/include-what-you-use"
+cadence = "daily"
+limit = 10
+# The fanout release filter is case-insensitive and drops terms under 3 chars (research_fanout.py:664-668),
+# so a major number cannot be filtered on; match every release note and rely on the diff (lane 1502, 2026-10-03).
+queries = ['Compatible']
+
+# --- baseline (code-search total_count from the sweep, 2026-10-03) ---------------------------
+
+[[result]]
+watch_id = "iwyu-dockerfile-musthit"
+date_run = "2026-10-03T00:00:00Z"
+count = 221
+urls = []
+
+[[result]]
+watch_id = "iwyu-dockerfile-cmake-prefix"
+date_run = "2026-10-03T00:00:00Z"
+count = 125
+urls = ["https://github.com/magma/magma/blob/HEAD/.devcontainer/Dockerfile", "https://github.com/cpp-best-practices/cmake_template/blob/HEAD/.devcontainer/Dockerfile", "https://github.com/ogdf/ogdf/blob/HEAD/util/docker/clang/Dockerfile"]
+
+[[result]]
+watch_id = "iwyu-yml-cmake-prefix"
+date_run = "2026-10-03T00:00:00Z"
+count = 81
+urls = ["https://github.com/ssrobins/install-include-what-you-use/blob/HEAD/action.yml"]
+
+[[result]]
+watch_id = "iwyu-clang-23-branch"
+date_run = "2026-10-03T00:00:00Z"
+count = 3
+urls = ["https://github.com/bansan85/ntfs-browser/blob/HEAD/.github/workflows/iwyu.yml"]
+
+[[result]]
+watch_id = "iwyu-clang-p2996"
+date_run = "2026-10-03T00:00:00Z"
+count = 12
+urls = ["https://github.com/starsurgeon/cpp_reflection_blog/blob/HEAD/.devcontainer/Dockerfile", "https://github.com/rmanaloto-tastytrade/cpp-devcontainers/blob/HEAD/.devcontainer/Dockerfile"]

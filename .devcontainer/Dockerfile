@@ -149,16 +149,17 @@ COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
 # (build-time self-check rule). Accepted trade-off: the config COPY above
 # busts this layer on any mise-system.toml edit — mitigated by the cache
 # mounts keeping .deb downloads and lists warm.
-# apt.llvm.org — the LLVM 22 source (#251). Ubuntu resolute/universe froze at
+# apt.llvm.org — the numbered LLVM source (#251). Probed 2026-07-15:
+# Ubuntu resolute/universe froze at
 # 22.1.2; this suite carries 22.1.8. Despite the site self-describing as
 # "nightly", the NUMBERED suites build RELEASED TAGS: probed 2026-07-15,
 # `llvmorg-22.1.8` points at commit ca7933e47d3a and the pinned versions in
 # mise-system.toml embed exactly that commit. "Nightly" names the packaging
 # cadence, not the source tree.
 #
-# Only `-22` is enabled. The UNNUMBERED suite (`llvm-toolchain-<codename>`) is
-# LLVM 23 trunk and sorts HIGHER, so enabling it would silently win every
-# unversioned package; `-23` does not exist (404).
+# Only the pinned numbered suite is enabled. The UNNUMBERED suite
+# (`llvm-toolchain-<codename>`) carries trunk and sorts HIGHER, so enabling it
+# would silently win every unversioned package.
 #
 # MUST run BEFORE the bootstrap apply below — mise resolves `[bootstrap.packages]`
 # against the image's apt sources, so the repo has to exist first.
@@ -181,6 +182,7 @@ COPY .config/mise/conf.d/shared.toml /usr/local/share/mise/conf.d/shared.toml
 # exactly how this build broke on its first CI run (#289); probed with control
 # arms: early match -> 141, pipefail off -> 0, match at end-of-stream -> 0.
 ARG LLVM_APT_SIGNING_FINGERPRINT=6084F3CF814B57C1CF12EFD515CF4D18AF4F7421
+ARG LLVM_MAJOR=22
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     export DEBIAN_FRONTEND=noninteractive && \
@@ -195,13 +197,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       exit 1; \
     fi && \
     codename="$(. /etc/os-release && echo "$VERSION_CODENAME")" && \
-    printf 'Types: deb\nURIs: https://apt.llvm.org/%s/\nSuites: llvm-toolchain-%s-22\nComponents: main\nSigned-By: /etc/apt/keyrings/apt-llvm-org.asc\n' \
-      "$codename" "$codename" > /etc/apt/sources.list.d/apt-llvm-org.sources && \
+    printf 'Types: deb\nURIs: https://apt.llvm.org/%s/\nSuites: llvm-toolchain-%s-%s\nComponents: main\nSigned-By: /etc/apt/keyrings/apt-llvm-org.asc\n' \
+      "$codename" "$codename" "${LLVM_MAJOR}" > /etc/apt/sources.list.d/apt-llvm-org.sources && \
     apt-get update && \
-    clang_policy="$(apt-cache policy clang-22)" && \
+    clang_policy="$(apt-cache policy clang-${LLVM_MAJOR})" && \
     case "$clang_policy" in \
       *apt.llvm.org*) ;; \
-      *) echo "FAIL: apt.llvm.org is not a candidate source for clang-22" >&2; \
+      *) echo "FAIL: apt.llvm.org is not a candidate source for clang-${LLVM_MAJOR}" >&2; \
          echo "$clang_policy" >&2; exit 1 ;; \
     esac
 
@@ -289,32 +291,33 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     dot_version="$(dot -V 2>&1)" && \
     case "$dot_version" in *"version ${expected_major}."*) ;; *) echo "ERROR: dot reports '$dot_version', expected major ${expected_major}" >&2; exit 1;; esac
 
-# LLVM-22 C++ toolchain build-time smoke (#222 PR-C).
+# LLVM C++ toolchain build-time smoke (#222 PR-C).
 # The apt llvm/clang/lld/lldb/clang-tools packages (declared in mise-system.toml
 # [bootstrap.packages], installed by `mise bootstrap packages apply` above) put
-# their UNVERSIONED binaries under /usr/lib/llvm-22/bin (clang, clang++, clangd,
+# their UNVERSIONED binaries under the versioned LLVM bin directory (clang,
+# clang++, clangd,
 # clang-tidy, clang-format, lld, ld.lld, lldb, llvm-*) — /usr/bin holds only the
-# `-22`-suffixed names. That dir is put on PATH via mise's `_.path` in
+# major-suffixed names. That dir is put on PATH via mise's `_.path` in
 # mise-system.toml [env] (NOT /etc/profile.d: the chezmoi ~/.profile runs `mise
 # activate`, which resets PATH and would drop a profile.d addition). This RUN is
 # purely the loud build-time self-check (full paths, no PATH dependency): it proves
-# clang++ is really v22, that the asan+ubsan sanitizer runtimes (libclang-rt-22-dev)
+# clang++ matches LLVM_MAJOR, that the asan+ubsan sanitizer runtimes
 # link AND the binary runs, and that clangd/clang-tidy/lld/lldb/llvm-config are
 # present (capability parity with the removed conda tools). TSan is not RUN here
 # (build-as-root ASLR layout; the tier-3 smoke covers it on real amd64).
-RUN clangxx_version="$(/usr/lib/llvm-22/bin/clang++ --version)" && \
-    case "$clangxx_version" in *"version 22"*) ;; *) echo "ERROR: unexpected clang++ version: $clangxx_version" >&2; exit 1;; esac && \
+RUN clangxx_version="$(/usr/lib/llvm-${LLVM_MAJOR}/bin/clang++ --version)" && \
+    case "$clangxx_version" in *"version ${LLVM_MAJOR}"*) ;; *) echo "ERROR: unexpected clang++ version: $clangxx_version" >&2; exit 1;; esac && \
     printf '#include <cstdio>\nint main(){printf("ok\\n");return 0;}\n' > /tmp/llvmcheck.cpp && \
-    /usr/lib/llvm-22/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
+    /usr/lib/llvm-${LLVM_MAJOR}/bin/clang++ -fsanitize=address,undefined /tmp/llvmcheck.cpp -o /tmp/llvmcheck && \
     llvmcheck_out="$(/tmp/llvmcheck)" && \
     [ "$llvmcheck_out" = "ok" ] && \
-    test -x /usr/lib/llvm-22/bin/clangd && \
-    test -x /usr/lib/llvm-22/bin/clang-tidy && \
-    test -x /usr/lib/llvm-22/bin/clang-format && \
-    test -x /usr/lib/llvm-22/bin/lld && \
-    test -x /usr/lib/llvm-22/bin/lldb && \
-    llvm_config_version="$(/usr/lib/llvm-22/bin/llvm-config --version)" && \
-    grep -q '^22' <<<"$llvm_config_version" && \
+    test -x /usr/lib/llvm-${LLVM_MAJOR}/bin/clangd && \
+    test -x /usr/lib/llvm-${LLVM_MAJOR}/bin/clang-tidy && \
+    test -x /usr/lib/llvm-${LLVM_MAJOR}/bin/clang-format && \
+    test -x /usr/lib/llvm-${LLVM_MAJOR}/bin/lld && \
+    test -x /usr/lib/llvm-${LLVM_MAJOR}/bin/lldb && \
+    llvm_config_version="$(/usr/lib/llvm-${LLVM_MAJOR}/bin/llvm-config --version)" && \
+    grep -q "^${LLVM_MAJOR}" <<<"$llvm_config_version" && \
     rm -f /tmp/llvmcheck.cpp /tmp/llvmcheck
 
 # Pre-install tools globally via mise

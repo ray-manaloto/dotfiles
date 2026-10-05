@@ -779,17 +779,37 @@ description = "List the packages an apt repository publishes (defaults to apt.ll
 # (`mise bootstrap packages` has no search; `import`/dpkg-query only ever see
 # INSTALLED packages), and apt-cache would require adding the repo first.
 #
-#   mise run apt-repo                                  # llvm 22 (qualification)
-#   mise run apt-repo -- --llvm-version 21             # stable
-#   mise run apt-repo -- --llvm-version dev            # development (clang 23)
+#   mise run apt-repo                                  # pinned LLVM major
+#   mise run apt-repo -- --llvm-version <major>         # numbered suite
+#   mise run apt-repo -- --llvm-version dev             # unnumbered trunk
 #   mise run apt-repo -- --llvm-version dev --toml --exclude-runtime
 #   mise run apt-repo -- --repo <url> --suite <suite>  # any apt repo
 #
 # --llvm-version takes a VERSION, not a channel label: apt.llvm.org's
 # stable/qualification/development roles shift every release cycle
-# (2026-07-15: 21/22/23), so a label pinned today silently becomes a
+# so a label pinned today silently becomes a
 # different major later.
 run = 'uv run --project python dotfiles-setup apt-repo'
+
+[tasks.llvm-detect]
+description = "Detect the newest GA LLVM major served for the base and ready in IWYU"
+run = 'uv run --project python dotfiles-setup llvm-detect'
+
+[tasks.apt-liveness]
+description = "Check exact apt pin publication on both architectures without docker"
+run = 'uv run --project python dotfiles-setup apt-liveness'
+
+[tasks.llvm-parity]
+description = "Check LLVM consumers offline against the bootstrap clang pin"
+run = 'uv run --project python dotfiles-setup llvm-parity'
+
+[tasks.standing-issue]
+description = "Upsert or close an exact-title standing GitHub issue"
+run = 'uv run --project python dotfiles-setup standing-issue'
+
+[tasks.llvm-bump]
+description = "Plan or write an LLVM major bump gated on dual-arch IWYU readiness"
+run = 'uv run --project python dotfiles-setup llvm-bump'
 
 [tasks.command-audit]
 description = "Scan recent Claude Code transcripts for one-off Bash culprits to package as mise tasks"

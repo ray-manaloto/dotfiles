@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import renovate_validate
+from dotfiles_setup import llvm_major, renovate_validate
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -208,6 +208,91 @@ def test_cli_wires_end_to_end() -> None:
 def test_canary_config_is_serialisable() -> None:
     """The canary is written as JSON; a non-serialisable value would crash."""
     json.dumps(renovate_validate.RE2_CANARY_CONFIG)
+
+
+def test_llvm_group_is_snapshot_only_and_keeps_clang_last() -> None:
+    """Keep Ubuntu epochs in the image group and LLVM snapshots together."""
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    rules = config["packageRules"]
+    group = rules[-2]
+    assert group["groupName"] == "apt.llvm.org LLVM debs"
+    assert rules[-1]["matchDepNames"] == ["bloomberg/clang-p2996"]
+    assert group["matchDatasources"] == ["deb"]
+    assert group["matchFileNames"] == [".devcontainer/mise-system.toml"]
+    assert group["automerge"] is True
+    assert group["automergeType"] == "pr"
+    assert group["platformAutomerge"] is True
+    assert "matchUpdateTypes" not in group
+    assert "registryUrls" not in group
+    expression = re.compile(group["matchCurrentValue"][1:-1])
+    text = (REPO_ROOT / ".devcontainer/mise-system.toml").read_text()
+    pins = llvm_major.bootstrap_pins(text)
+    matched = {
+        name for name, (version, _) in pins.items() if expression.search(version)
+    }
+    assert len(matched) == 58
+    assert len(set(pins) - matched) == 14
+    assert {"libc++1", "libc++abi1", "libomp5", "llvm-libunwind1"} <= matched
+    assert "zlib1g-dev" not in matched
+    assert matched == set(llvm_major.llvm_pins(text))
+
+
+def test_llvm_description_states_release_age_provides_no_soak() -> None:
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    description = config["packageRules"][-2]["description"]
+    assert "no soak" in description
+    assert "no releaseTimestamp" in description
+    assert "timestamp-optional" in description
+
+
+def test_release_age_config_values_only() -> None:
+    """These config values do not establish a soak for timestamp-less debs."""
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    assert config["minimumReleaseAge"] == "1 hour"
+    assert config["minimumReleaseAgeBehaviour"] == "timestamp-optional"
+
+
+def test_apt_manager_description_counts_active_and_commented_entries() -> None:
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    manager = next(
+        item
+        for item in config["customManagers"]
+        if item.get("datasourceTemplate") == "deb"
+    )
+    assert "58 LLVM entries (52 active + 6 commented)" in manager["description"]
+    assert "14 Ubuntu entries" in manager["description"]
+
+
+@pytest.mark.parametrize("epoch", ["1:", ""])
+def test_snapshot_signature_encodings_agree_on_epoch_requirement(epoch: str) -> None:
+    config = json.loads((REPO_ROOT / "renovate.json").read_text())
+    value = f"{epoch}22.1.8~++20260714015917+ca7933e47d3a-1~exp1~20260714135927.17"
+    text = (REPO_ROOT / ".devcontainer/mise-system.toml").read_text()
+    # Append inside bootstrap.packages, before the next table, for the inventory arm.
+    text = text.replace(
+        "[bootstrap.packages]\n",
+        f'[bootstrap.packages]\n# "apt:signature-control" = "{value}"\n',
+        1,
+    )
+    expected = bool(epoch)
+    assert ("signature-control" in llvm_major.llvm_pins(text)) is expected
+    group = config["packageRules"][-2]["matchCurrentValue"]
+    ubuntu = next(
+        rule
+        for rule in config["packageRules"]
+        if "apt-ubuntu-pockets" in rule.get("description", "")
+    )["matchCurrentValue"]
+    assert bool(re.search(group[1:-1], value)) is expected
+    assert bool(re.search(ubuntu[2:-1], value)) is expected
+    manager = next(
+        item
+        for item in config["customManagers"]
+        if item.get("datasourceTemplate") == "deb"
+    )
+    pattern = re.sub(r"\(\?<([A-Za-z]+)>", r"(?P<\1>", manager["matchStrings"][0])
+    match = re.search(pattern, f'"apt:signature-control" = "{value}"')
+    assert match is not None
+    assert bool(match["llvmMajor"]) is expected
 
 
 def test_validator_routes_through_the_repo_pinned_renovate(
