@@ -107,3 +107,55 @@ must print rc=1 with three zizmor musl findings, and `git status --short mise.lo
 | 10 | E | finding strings go to `logger.error` via `main`; contain tool/version/platform only, no secrets | `lock_integrity.py:256-257` |
 | 11 | A | jdx/mise#13857 (merged 2026-09-30, in 2026.10.0) is why host mise fills musl stubs with gnu assets | `gh pr view 13857 -R jdx/mise` |
 | 12 | L | committed lockfiles at 8a873b21: 763 platform blocks, 0 stubs | tomllib scan this session |
+
+---
+
+# Revision 2 — cold-review fixes (review: docs/research/kb/reports/agents/cold-review-1673.md, base fb99d4af)
+
+Allowlist and §4 constraints unchanged (same two files; COMMIT: caller; targeted §5 commands only).
+
+## R2-1 (F1, MEDIUM): repair command per lockfile path
+The finding text currently hard-codes `mise run lock -- "<config key>"` for all four lockfiles. Make the
+repair depend on the lockfile path, chosen in `check_lockfiles` (which knows `rel_path`), not inside
+`stub_platform_entries` (keep its signature; it may return findings WITHOUT the repair clause, and the
+call site appends it). Mapping — a module-level dict next to `LOCKFILES`:
+- `mise.lock` -> `mise run lock -- "<config key>"`
+- `.config/mise/mise.lock` -> `mise run lock-shared -- "<name>"` (#790; `.claude/skills/lock-shared/SKILL.md:3`)
+- `.devcontainer/mise-system.lock`, `.devcontainer/mise-runtime.lock` -> `mise run lock-image` (never from macOS; `lock_integrity.py:63-64`)
+- any other path (tests' `x.lock`) -> fall back to the root `mise run lock -- "<config key>"` form.
+Narrow the cause clause: say "host mise >= 2026.10.0 fills it on install (jdx/mise#13857 for aqua gnu-only tools, #1673)" — do not claim #13857 for every backend.
+
+## R2-2 (F2, LOW): `main()` summary
+The trailing summary only describes coverage LOSS. Keep that paragraph for loss, but make it accurate
+when stub findings are present: either emit a second, stub-specific summary ("A lockfile carries an
+incomplete platform entry; do NOT `git checkout` — re-lock it with the command in the finding") when any
+finding is a stub, or reword the single summary to cover both. Must not tell the user to `git checkout`
+as the repair for a stub. Add one test asserting the stub path's summary contains no `git checkout`
+(use `caplog`), with a control that a pure loss finding still gets the checkout advice.
+
+## R2-3 (F4, LOW): tests
+(a) add a fixture with ONE tool locked at TWO versions where only the SECOND version's platform is a
+stub -> exactly one finding naming the second version.
+(b) parametrize the every-asset-backend test from `sorted(lock_integrity.ASSET_BACKENDS)`, not a copied list.
+
+## R2-4 (F5, LOW): drop the assertion on tomllib's own wording
+(`"Invalid initial character for a key part"`); keep the `could not parse lockfile TOML:` prefix assertion.
+
+## R2-5 (F6, LOW): unexpected shapes
+Valid TOML whose `tools` is not a table, or whose tool value is a single table instead of an array, or an
+array element that is not a table, must produce a finding ("unexpected lockfile shape ...") instead of
+raising `AttributeError`/`TypeError`. Test each shape.
+
+## R2 verification
+Same §5 bundle, plus the FAIL arm on real bytes, plus: on the pre-fix bytes the three findings must carry
+`mise run lock -- ` (root lock), and a test must show `.config/mise/mise.lock` gets `lock-shared` and an
+image lock gets `lock-image`.
+
+## R2 PREMISES (re-read this session)
+| # | Kind | Claim | Source |
+|---|---|---|---|
+| R1 | L | stub findings are extended at the call site with `f"{rel_path}: {finding}"` | `lock_integrity.py:267-270` @ fb99d4af |
+| R2 | L | `main()` summary text hard-codes "lost platform coverage" + `git checkout -- <lockfile>` | `lock_integrity.py:285-301` @ fb99d4af |
+| R3 | L | `[tasks.lock-shared]` exists, run = `dotfiles-setup lock-shared` | `mise.toml:1482-1499` |
+| R4 | L | every-asset-backend test hard-codes the backend list | `tests/test_lock_integrity.py:369-371` @ fb99d4af |
+| R5 | L | parse-error test asserts tomllib wording | `tests/test_lock_integrity.py:402` @ fb99d4af |

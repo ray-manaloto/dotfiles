@@ -69,6 +69,14 @@ LOCKFILES: tuple[str, ...] = (
     ".devcontainer/mise-runtime.lock",
 )
 
+# Repairs must use the task that owns each lockfile's asset resolution.
+LOCKFILE_REPAIR_COMMANDS: dict[str, str] = {
+    "mise.lock": 'mise run lock -- "<config key>"',
+    ".config/mise/mise.lock": 'mise run lock-shared -- "<name>"',
+    ".devcontainer/mise-system.lock": "mise run lock-image",
+    ".devcontainer/mise-runtime.lock": "mise run lock-image",
+}
+
 #: The subset of :data:`LOCKFILES` that belongs to the IMAGE, which is
 #: linux-only by `.devcontainer/mise-system.toml`'s `lockfile_platforms`.
 #: Only these are compared within the declared OS families — the host pair
@@ -152,9 +160,23 @@ def stub_platform_entries(lock_text: str) -> list[str]:
         data = tomllib.loads(lock_text)
     except tomllib.TOMLDecodeError as exc:
         return [f"could not parse lockfile TOML: {exc}"]
+    tools = data.get("tools", {})
+    if not isinstance(tools, dict):
+        return ["unexpected lockfile shape: tools must be a table"]
     findings: list[str] = []
-    for name, entries in data.get("tools", {}).items():
+    for name, entries in tools.items():
+        if not isinstance(entries, list):
+            findings.append(
+                f"unexpected lockfile shape: tools.{name} must be an array of tables"
+            )
+            continue
         for entry in entries:
+            if not isinstance(entry, dict):
+                findings.append(
+                    f"unexpected lockfile shape: tools.{name} "
+                    "array entry must be a table"
+                )
+                continue
             backend = entry.get("backend", "")
             if backend.split(":", 1)[0] not in ASSET_BACKENDS:
                 continue
@@ -169,8 +191,8 @@ def stub_platform_entries(lock_text: str) -> list[str]:
                     findings.append(
                         f"tool {name}@{entry.get('version', '')} ({backend}): "
                         f"platform {platform} has no url/checksum — host mise "
-                        "fills it on every install (jdx/mise#13857, #1673); "
-                        're-lock scoped: mise run lock -- "<config key>"'
+                        ">= 2026.10.0 fills it on install "
+                        "(jdx/mise#13857 for aqua gnu-only tools, #1673)"
                     )
     return findings
 
@@ -242,7 +264,7 @@ def committed_text(repo_root: Path, rel_path: str) -> str | None:
 def check_lockfiles(
     repo_root: Path, lockfiles: tuple[str, ...] = LOCKFILES
 ) -> list[str]:
-    """Findings across every lockfile — empty means no coverage was lost.
+    """Findings across every lockfile — empty means coverage and entries are intact.
 
     The two IMAGE lockfiles are compared only within the OS families
     ``.devcontainer/mise-system.toml`` declares. They are linux-only by that
@@ -264,8 +286,11 @@ def check_lockfiles(
             f"{rel_path}: {finding}"
             for finding in platformless_asset_entries(path.read_text())
         )
+        repair = LOCKFILE_REPAIR_COMMANDS.get(
+            rel_path, LOCKFILE_REPAIR_COMMANDS["mise.lock"]
+        )
         findings.extend(
-            f"{rel_path}: {finding}"
+            f"{rel_path}: {finding}; re-lock: {repair}"
             for finding in stub_platform_entries(path.read_text())
         )
         committed = committed_text(repo_root, rel_path)
@@ -283,22 +308,30 @@ def check_lockfiles(
 
 
 def main(repo_root: Path, lockfiles: tuple[str, ...] = LOCKFILES) -> int:
-    """Exit 1 when any lockfile lost platform coverage relative to HEAD."""
+    """Exit 1 for incomplete entries or platform coverage lost relative to HEAD."""
     findings = check_lockfiles(repo_root, lockfiles)
     if not findings:
         logger.info("lock-integrity OK: every lockfile kept its platform coverage")
         return 0
     for finding in findings:
         logger.error("lock-integrity: %s", finding)
-    logger.error(
-        "A lockfile lost platform coverage. Both a bare `mise lock` and any "
-        "`mise install` do this on macOS (#370): they re-lock the whole file "
-        "for THIS platform and drop the linux conda entries the amd64 "
-        "devcontainer needs. Repair: `git checkout -- <lockfile>` to restore "
-        "the committed bytes, then re-lock only what changed with "
-        '`mise run lock -- "<backend/name>"` per tool — scoped locking is '
-        "measured safe. Verify with this command."
-    )
+    stubs = [finding for finding in findings if "has no url/checksum" in finding]
+    if stubs:
+        logger.error(
+            "A lockfile carries an incomplete platform entry. Re-lock it with "
+            "the command in the finding; restoring the committed bytes does "
+            "not repair a committed stub. Verify with this command."
+        )
+    if len(stubs) < len(findings):
+        logger.error(
+            "A lockfile lost platform coverage. Both a bare `mise lock` and any "
+            "`mise install` do this on macOS (#370): they re-lock the whole file "
+            "for THIS platform and drop the linux conda entries the amd64 "
+            "devcontainer needs. Repair: `git checkout -- <lockfile>` to restore "
+            "the committed bytes, then re-lock only what changed with "
+            '`mise run lock -- "<backend/name>"` per tool — scoped locking is '
+            "measured safe. Verify with this command."
+        )
     return 1
 
 
