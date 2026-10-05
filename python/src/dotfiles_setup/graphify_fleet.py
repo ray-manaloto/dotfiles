@@ -82,6 +82,10 @@ _SEVERITY = {
     LegState.behind: 2,
     LegState.unverifiable: 3,
 }
+# Host first: graphify-upgrade's closing offline check requires the PATH
+# binary to equal the new lock, so a stale host pin fails the dotfiles step
+# after it has already moved the lock (codex lens F1).
+_PLAN_ORDER = (LegName.host, LegName.dotfiles, LegName.kb)
 _EXIT = {
     LegState.current: DriftVerdict.IN_SYNC,
     LegState.drift: DriftVerdict.DRIFT,
@@ -169,10 +173,14 @@ class _LegBuilder:
         elif upstream is None:
             self.findings.append("UNVERIFIABLE: upstream latest unknown")
             state = LegState.unverifiable
+        elif self.drift:
+            # Drift outranks behind: a version move built on sites that
+            # disagree would carry the disagreement forward (codex lens F2).
+            if _older(self.version, upstream):
+                self.findings.append(f"also behind upstream {upstream}")
+            state = LegState.drift
         elif _older(self.version, upstream):
             state = LegState.behind
-        elif self.drift:
-            state = LegState.drift
         return Leg(
             name=self.name,
             state=state,
@@ -292,7 +300,8 @@ def _kb_leg(run: Run, roots: FleetRoots) -> tuple[_LegBuilder, str | None, str |
     leg.findings.append(f"read from {roots.kb}@{roots.kb_ref} (no fetch)")
     try:
         pyproject = _git_show(run, roots, "pyproject.toml")
-        lock = _git_show(run, roots, "uv.lock")
+        sources = tomllib.loads(pyproject).get("tool", {}).get("uv", {})
+        lock_version, lock_rev = _lock_entry(_git_show(run, roots, "uv.lock"))
         manifest = _manifest_fields(_git_show(run, roots, "sources/graphify.manifest"))
         currency = tomllib.loads(_git_show(run, roots, "currency.toml"))
     except (_ProbeError, tomllib.TOMLDecodeError) as exc:
@@ -300,9 +309,7 @@ def _kb_leg(run: Run, roots: FleetRoots) -> tuple[_LegBuilder, str | None, str |
         return leg, None, None
 
     pin = _PYPROJECT_PIN_RE.search(pyproject)
-    sources = tomllib.loads(pyproject).get("tool", {}).get("uv", {}).get("sources", {})
-    source_rev = sources.get("graphifyy", {}).get("rev")
-    lock_version, lock_rev = _lock_entry(lock)
+    source_rev = sources.get("sources", {}).get("graphifyy", {}).get("rev")
     fork = currency.get("tool", {}).get("graphify", {}).get("fork", {})
     base_ref = fork.get("base_ref")
 
@@ -474,6 +481,19 @@ def _kb_steps(
             )
         ]
     probe = status.fork_probe
+    if probe.error is not None:
+        # An unanswered probe cannot establish that the fork is still needed,
+        # so no replay or pin command is printed (codex lens F3).
+        return [
+            PlanStep(
+                leg=leg.name,
+                summary=f"fork-feature probe UNVERIFIABLE ({probe.error}): resolve it "
+                "before choosing between a fork replay and retiring the fork",
+                commands=[],
+                human_gate=True,
+                runnable=False,
+            )
+        ]
     if probe.native:
         fork_step = PlanStep(
             leg=leg.name,
@@ -498,7 +518,11 @@ def _kb_steps(
             commands=[
                 (
                     "mise -C <fork-maintenance checkout> run fork-maintenance -- "
-                    f"preview --candidate {commit}"
+                    f"preview --source-repo {roots.fork} --candidate {commit} "
+                    f"--upstream-repository {UPSTREAM_REPO} "
+                    f"--upstream-url https://github.com/{UPSTREAM_REPO}.git "
+                    f"--output-plan {roots.fork.parent}/graphify.evidence/"
+                    f"{latest}/plan.json"
                 ),
                 f"git -C {roots.fork} switch -c {branch} {commit}",
                 (
@@ -536,7 +560,8 @@ def _host_commands(leg: Leg, latest: str | None, ctx: _Context) -> list[str]:
 def plan(status: FleetPlan, ctx: _Context, roots: FleetRoots) -> FleetPlan:
     """Return ``status`` with ordered steps for every leg that is not current."""
     steps: list[PlanStep] = []
-    for leg in status.legs:
+    by_name = {leg.name: leg for leg in status.legs}
+    for leg in (by_name[name] for name in _PLAN_ORDER):
         if leg.state is LegState.current:
             continue
         if leg.state is LegState.unverifiable:

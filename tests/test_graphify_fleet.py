@@ -318,7 +318,7 @@ def test_fork_probe_missing_tag_never_fetches(roots: Roots, currency: Currency) 
     assert not any("fetch" in argv for argv in run.calls)
 
 
-def test_plan_orders_dotfiles_then_human_fork_rebase(
+def test_plan_orders_host_then_dotfiles_then_human_fork_rebase(
     roots: Roots, currency: Currency, capsys: Capsys
 ) -> None:
     run = FakeRun()
@@ -327,16 +327,70 @@ def test_plan_orders_dotfiles_then_human_fork_rebase(
     document = codec.decode(capsys.readouterr().out.encode(), FleetPlan)
     assert rc == 1
     legs = [step.leg for step in document.steps]
-    assert legs == [LegName.dotfiles, LegName.kb, LegName.kb, LegName.host]
-    dotfiles, rebase, pin, host = document.steps
+    # Host first: graphify-upgrade's closing check needs the new PATH binary.
+    assert legs == [LegName.host, LegName.dotfiles, LegName.kb, LegName.kb]
+    host, dotfiles, rebase, pin = document.steps
     assert dotfiles.runnable
     assert not dotfiles.human_gate
     assert rebase.human_gate
     assert not rebase.runnable
-    assert any(f"preview --candidate {FORK_SHA}" in cmd for cmd in rebase.commands)
+    preview = rebase.commands[0]
+    for required in (
+        f"--source-repo {roots.fork}",
+        f"--candidate {FORK_SHA}",
+        "--upstream-repository Graphify-Labs/graphify",
+        "--upstream-url https://github.com/Graphify-Labs/graphify.git",
+        "--output-plan ",
+    ):
+        assert required in preview
     assert any("rebase --onto v0.9.76 v0.9.57" in cmd for cmd in rebase.commands)
     assert "T8" in pin.summary
     assert "mise use -g pipx:graphifyy@0.9.76" in host.commands
+
+
+def test_kb_drift_outranks_behind_and_blocks_the_version_move(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"
+    run.kb_files["sources/graphify.manifest"] = _MANIFEST.replace(FORK_SHA, OTHER_SHA)
+    status, ctx = graphify_fleet.gather(run, roots, currency.probes)
+    kb = status.legs[1]
+    assert kb.state is LegState.drift
+    assert "also behind upstream 0.9.76" in kb.findings
+    kb_steps = [
+        s for s in graphify_fleet.plan(status, ctx, roots).steps if s.leg is LegName.kb
+    ]
+    assert len(kb_steps) == 1
+    assert kb_steps[0].commands == []
+    assert "reconcile" in kb_steps[0].summary
+
+
+def test_unanswered_fork_probe_prints_no_kb_commands(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"
+    run.tag_present = False
+    status, ctx = graphify_fleet.gather(run, roots, currency.probes)
+    kb_steps = [
+        s for s in graphify_fleet.plan(status, ctx, roots).steps if s.leg is LegName.kb
+    ]
+    assert len(kb_steps) == 1
+    assert kb_steps[0].commands == []
+    assert "UNVERIFIABLE" in kb_steps[0].summary
+
+
+@pytest.mark.parametrize("path", ["pyproject.toml", "uv.lock", "currency.toml"])
+def test_malformed_kb_toml_marks_leg_unverifiable_not_crash(
+    roots: Roots, currency: Currency, path: str
+) -> None:
+    run = FakeRun()
+    run.kb_files[path] = "[[unterminated"
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    kb = status.legs[1]
+    assert kb.state is LegState.unverifiable
+    assert status.legs[0].state is LegState.current
 
 
 def test_plan_native_upstream_proposes_retirement(
