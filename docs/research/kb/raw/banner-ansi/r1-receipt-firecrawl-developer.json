@@ -1,0 +1,71 @@
+{
+  "control": null,
+  "elapsed_s": 0.40715916600311175,
+  "items": [
+    {
+      "date": null,
+      "snippet": "# Use dash-separated header session-id instead of session\\_id\\#11732\n\nNew issue\n\nNew issue\n\n## Description\n\nwengyao04\n\nLast edited by wengyao04\n\n## What version of Codex is running?\n\nopenai/codex current main in v0.101.0.\n\n## What issue are you seeing?\n\nThe Codex client sends requests to our internal Envoy-based model gateway. Our gateway rejects HTTP headers that contain underscores (\\_) `session_id`.\n\nThis behavior is intentional on our side and aligns with common HTTP best practices. Undersco",
+      "title": "Use dash-separated header session-id instead of session_id#11732",
+      "url": "https://github.com/openai/codex/issues/11732"
+    },
+    {
+      "date": null,
+      "snippet": "# False-positive content blocks interrupt benign C repository review and its reporting flow#36102\n## Description\n### Additional information\nSession ID: 019fb199-8243-7ba3-b1f7-b9932cac4972",
+      "title": "False-positive content blocks interrupt benign C repository review and its reporting flow#36102",
+      "url": "https://github.com/openai/codex/issues/36102"
+    },
+    {
+      "date": null,
+      "snippet": "# codex exec on Windows: every invocation emits `failed to record rollout items: thread <uuid> not found` for the just-created session\\#19475\n\n#19630\n\n#19630\n\n## Description\n\nCitizen3rased\n\n## Summary\n\nOn Windows, every `codex exec` invocation emits an `ERROR` line on stderr **after** the answer has already streamed successfully:\n\n```\nERROR codex_core::session: failed to record rollout items: thread <uuid> not found\n```\n\nThe `<uuid>` is the same session id printed in the Codex banner at the top ",
+      "title": "codex exec on Windows: every invocation emits `failed to record rollout items: thread <uuid> not found` for the just-created session#19475",
+      "url": "https://github.com/openai/codex/issues/19475"
+    },
+    {
+      "date": null,
+      "snippet": "# Usage panel shows \"1% left\" while backend-api/codex/usage reports 81% used (19% left); requests still succeed#37455\n## Description\n### What steps can reproduce the bug?\n- **Session id:**`019fdcad-bc06-7db3-b278-979cd1e94dc3`",
+      "title": "Usage panel shows \"1% left\" while backend-api/codex/usage reports 81% used (19% left); requests still succeed#37455",
+      "url": "https://github.com/openai/codex/issues/37455"
+    },
+    {
+      "date": null,
+      "snippet": "# `ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices\\#12890\n\n#13016\n\n#13016\n\n## Description\n\ntummetott\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPro\n\n### Which model were you using?\n\ngpt-5.3-codex\n\n### What platform is your computer?\n\nDarwin 24.6.0 arm64 arm\n\n### What terminal emulator and version are you using (if applicable)?\n\nWezterm\n\n### What issue are you seeing?\n\nContinuation of #1618\n\nWhen `tui.",
+      "title": "`ansi` theme is rendered as explicit RGB colors instead of terminal ANSI palette indices#12890",
+      "url": "https://github.com/openai/codex/issues/12890"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Windows: TUI control sequences (ESC[?2026) leak into composer on Codex CLI 0.145.0#35395\\",
+      "url": "https://github.com/openai/codex/issues/35395"
+    },
+    {
+      "date": null,
+      "snippet": "## Problem\n\nThe `ansi`, `base16`, and `base16-256` syntax themes are designed to emit ANSI palette colors so that highlighted code respects the user's terminal color scheme. Syntect encodes this intent in the alpha channel of its `Color` struct \u2014 a convention shared with `bat` \u2014 but `convert_style` was ignoring it entirely, treating every foreground color as raw RGB. This caused ANSI-family themes to produce hard-coded RGB values (e.g. `Rgb(0x02, 0, 0)` instead of `Green`), defeating their purpo",
+      "title": "openai/codex#13382",
+      "url": "https://github.com/openai/codex/issues/13382"
+    },
+    {
+      "date": null,
+      "snippet": "# \\[macOS 26.908.40834\\] New sessions fail to initialize unified-computer-use due to stale CUA plugin cache\\#45047\n\n## Description\n\nshixu-data-analysis\n\n### What version of the Codex App are you using (From \u201cAbout Codex\u201d dialog)?\n\n26.908.40834 (bundle build 8881)\n\n### What subscription do you have?\n\nChatGPT Pro\n\n### What platform is your computer?\n\nDarwin 25.5.0 arm64 arm\n\n### What issue are you seeing?\n\nNew Codex Desktop sessions expose the bundled `unified-computer-use` / `cua_repl` tool, but ",
+      "title": "[macOS 26.908.40834] New sessions fail to initialize unified-computer-use due to stale CUA plugin cache#45047",
+      "url": "https://github.com/openai/codex/issues/45047"
+    },
+    {
+      "date": null,
+      "snippet": "# \\[Windows 26.901.6511.0\\] Repeated renderer crashes and UI recovery while the main process stays alive\\#43557\n\nNew issue\n\nNew issue\n\n## Description\n\ngazezovfm-bit\n\n### What version of the Codex App are you using (From \u201cAbout Codex\u201d dialog)?\n\n26.901.6511.0 (installed Windows package: OpenAI.Codex; executable: ChatGPT.exe)\n\n### What subscription do you have?\n\nChatGPT Pro\n\n### What platform is your computer?\n\nWindows 11 Pro for Workstations, build 26200, x64\n\n### What issue are you seeing?\n\nThe d",
+      "title": "[Windows 26.901.6511.0] Repeated renderer crashes and UI recovery while the main process stays alive#43557",
+      "url": "https://github.com/openai/codex/issues/43557"
+    },
+    {
+      "date": null,
+      "snippet": "# Color diff in Warp terminal is unreadable in the new version (Windows)\\#12904\n\n#13016\n\n#13016\n\n## Description\n\ntomasmarekk\n\n### What version of Codex CLI is running?\n\ncodex-cli 0.105.0\n\n### What subscription do you have?\n\nPRO\n\n### Which model were you using?\n\ngpt-5.3-codex-xhigh\n\n### What platform is your computer?\n\nMicrosoft Windows NT 10.0.26200.0 x64\n\n### What terminal emulator and version are you using (if applicable)?\n\nWarp\n\n### What issue are you seeing?\n\nAfter installing the new version",
+      "title": "Color diff in Warp terminal is unreadable in the new version (Windows)#12904",
+      "url": "https://github.com/openai/codex/issues/12904"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/firecrawl-developer.raw",
+  "raw_sha256": "a366708732d1e7797cec649e10a60833376cef5af3e88fffa3e1277347cc3f67",
+  "reason": null,
+  "source": "firecrawl-developer",
+  "status": "ok"
+}

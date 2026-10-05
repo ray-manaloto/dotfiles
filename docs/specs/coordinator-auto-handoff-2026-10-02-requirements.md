@@ -13,7 +13,7 @@ Sources: outgoing coordinator transcript 98eb9783 (/handoff instruction + answer
 ## Old coordinator
 7. Run `/session-handoff` fully unattended; ambiguities/review findings become OWED/OPEN items in the handoff instead of asking. "Make sure all issues are fixed and applied and not lost."
 8. Commit handoff to tracked `docs/handoffs/session-….md` on a docs branch; push with ssh keepalive; keep `.agent/plans/main-checkout-ship-queue.md` current; ship that docs branch as a PR early.
-9. Launch successor: `claude --bg -n <name> --settings '{"crossSessionInbound":"accept"}'` from the dotfiles MAIN checkout (first `git worktree list` entry), never a worktree.
+9. Launch successor: `claude --bg -n <name> --settings '{"crossSessionInbound":"accept","worktree":{"bgIsolation":"none"}}'` from the dotfiles MAIN checkout (first `git worktree list` entry), never a worktree.
 10. Successor name: `dotfiles-<yyyyMMdd'T'HHmmss.SSSSSSSSSX>.coordinator`, America/Chicago, 9-digit ns, e.g. `dotfiles-20261002T163103.123456789-05.coordinator`.
 11. At successor launch, census every heavy run it owns (ship/land/sync/verify-local/bounded-wait/kb-ship/kb-land: pid, argv, log) into the brief.
 12. Brief carries old name, old session id, old transcript path, handoff path, ship-queue path. Old coordinator then idles, starts nothing new.

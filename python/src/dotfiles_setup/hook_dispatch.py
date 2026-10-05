@@ -52,7 +52,12 @@ def dispatch(project_root: Path, raw: str) -> str:
     tool_name, tool_input, payload = hook_guard.parse_payload(raw)
     # An absent tool_name is the legacy Bash shape (hook_guard.decide_payload).
     if not tool_name or tool_name in GUARDED_TOOLS:
-        reason = hook_guard.decide_payload(tool_name, tool_input)
+        session_id = payload.get("session_id")
+        reason = hook_guard.decide_payload(
+            tool_name,
+            tool_input,
+            session_id=session_id if isinstance(session_id, str) else None,
+        )
         if reason is not None:
             return hook_guard.deny_output(reason)
     if worktree_guard.handles(tool_name):

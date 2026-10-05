@@ -427,6 +427,39 @@ def test_a_stale_version_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any("2.1.271 is published" in f for f in result.findings)
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        # Running 2.1.270 (the stub's doctor). Older oracle = AHEAD: not stale.
+        ("2.1.269", Verdict.OK),
+        # String order would call 2.1.99 NEWER than 2.1.270; numerically older.
+        ("2.1.99", Verdict.OK),
+        # Behind numerically while "2.1.1000" < "2.1.270" as strings.
+        ("2.1.1000", Verdict.INVALID),
+        ("2.2.0", Verdict.INVALID),
+    ],
+    ids=["ahead", "ahead-string-trap", "behind-string-trap", "behind-minor"],
+)
+def test_only_an_older_install_is_stale(
+    monkeypatch: pytest.MonkeyPatch, case: tuple[str, Verdict]
+) -> None:
+    """#1631: a NEWER install (oracle lag) is current, never 'run install latest'.
+
+    Before the fix `running != latest` made 2.1.289-vs-2.1.288 INVALID with a
+    downgrade instruction, and INVALID is what the PreToolUse half denies on.
+    """
+    oracle, expected = case
+    monkeypatch.setattr(install_doctor, "_run", _fake_run(oracle=(0, f"{oracle}\n")))
+    result = install_doctor.evaluate(check_pin=False)
+    assert result.verdict is expected
+    stale = [f for f in result.findings if "is published" in f]
+    if expected is Verdict.OK:
+        assert stale == []
+    else:
+        assert stale
+        assert "mise latest" in stale[0]
+
+
 def test_a_shadowed_install_is_invalid_and_names_the_shadowing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1069,6 +1102,20 @@ def test_a_current_pin_reports_nothing(tmp_path: Path) -> None:
     root = _sources_with("2.1.273", tmp_path)
 
     assert install_doctor.pin_currency_findings("2.1.273", root) == []
+
+
+@pytest.mark.parametrize(
+    "case",
+    [("2.1.289", "2.1.288", 0), ("2.1.270", "2.1.99", 0), ("2.1.99", "2.1.270", 1)],
+    ids=["pin-ahead-of-lagging-oracle", "ahead-string-trap", "behind-string-trap"],
+)
+def test_pin_currency_is_numeric_and_ahead_is_current(
+    tmp_path: Path, case: tuple[str, str, int]
+) -> None:
+    """#1631, same class: a pin AHEAD of the oracle must not say 'bump' downward."""
+    pinned, latest, n_findings = case
+    root = _sources_with(pinned, tmp_path)
+    assert len(install_doctor.pin_currency_findings(latest, root)) == n_findings
 
 
 def test_a_pin_behind_upstream_is_reported(tmp_path: Path) -> None:

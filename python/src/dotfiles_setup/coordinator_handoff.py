@@ -106,7 +106,10 @@ type DecisionReason = Literal[
 ]
 
 STATE_SUBDIR = Path(".agent") / "state" / "coordinator-handoff"
-CROSS_SESSION_SETTINGS = '{"crossSessionInbound":"accept"}'
+CROSS_SESSION_SETTINGS = json.dumps(
+    {"crossSessionInbound": "accept", "worktree": {"bgIsolation": "none"}},
+    separators=(",", ":"),
+)
 
 #: Long operations a coordinator may own when it hands off. The tasks first,
 #: then their python entrypoints (`mise.toml` `run =` lines, and the
@@ -724,7 +727,7 @@ Never treat rc 3 as a reason to wait for heavy work.
 
 
 def launch_argv(name: str, brief: str) -> list[str]:
-    """``claude --bg -n NAME`` with cross-session inbound accepted; no ``-p``."""
+    """Coordinator argv: accept cross-session inbound and edit the working copy."""
     return ["claude", "--bg", "-n", name, "--settings", CROSS_SESSION_SETTINGS, brief]
 
 

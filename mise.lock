@@ -360,9 +360,9 @@ checksum = "sha256:bbce8ba03cfe43b5281586b10c65879cf9b7a6741563dd3778637334c6b9e
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openh264-2.6.0-h71d5e59_2.conda"
 checksum = "sha256:36bb8c4b5533e73782c047f6f1d1bd6239e2613b6451fc6c3d7d7b9ddc27959b"
 
-[conda-packages.linux-arm64."openssl-3.6.4-he6ad1d5_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.4-he6ad1d5_0.conda"
-checksum = "sha256:a70c05a9baba9b1ce17c7e8b9479029372069b3bf402dbf200bc03696c531bed"
+[conda-packages.linux-arm64."openssl-3.6.5-he6ad1d5_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.5-he6ad1d5_0.conda"
+checksum = "sha256:238136f1df197ecd89bafd728a34d0642176f3170423d13d8276746d675a9485"
 
 [conda-packages.linux-arm64."pango-1.58.2-h03cb6a0_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/pango-1.58.2-h03cb6a0_1.conda"
@@ -848,9 +848,9 @@ checksum = "sha256:bbce8ba03cfe43b5281586b10c65879cf9b7a6741563dd3778637334c6b9e
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openh264-2.6.0-h71d5e59_2.conda"
 checksum = "sha256:36bb8c4b5533e73782c047f6f1d1bd6239e2613b6451fc6c3d7d7b9ddc27959b"
 
-[conda-packages.linux-arm64-musl."openssl-3.6.4-he6ad1d5_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.4-he6ad1d5_0.conda"
-checksum = "sha256:a70c05a9baba9b1ce17c7e8b9479029372069b3bf402dbf200bc03696c531bed"
+[conda-packages.linux-arm64-musl."openssl-3.6.5-he6ad1d5_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.5-he6ad1d5_0.conda"
+checksum = "sha256:238136f1df197ecd89bafd728a34d0642176f3170423d13d8276746d675a9485"
 
 [conda-packages.linux-arm64-musl."pango-1.58.2-h03cb6a0_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/pango-1.58.2-h03cb6a0_1.conda"
@@ -1372,9 +1372,9 @@ checksum = "sha256:8de2f0cd8a659b01abf86e7fbb8cea4f28ada62fd288429a2bbc040db1b98
 url = "https://conda.anaconda.org/conda-forge/linux-64/openh264-2.6.0-h8c49934_2.conda"
 checksum = "sha256:6d54eeb307488f725a8f14af955467249735fa69ffd822763e53784aff05b8a3"
 
-[conda-packages.linux-x64."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64."pango-1.58.2-h7bb47b9_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pango-1.58.2-h7bb47b9_1.conda"
@@ -1900,9 +1900,9 @@ checksum = "sha256:8de2f0cd8a659b01abf86e7fbb8cea4f28ada62fd288429a2bbc040db1b98
 url = "https://conda.anaconda.org/conda-forge/linux-64/openh264-2.6.0-h8c49934_2.conda"
 checksum = "sha256:6d54eeb307488f725a8f14af955467249735fa69ffd822763e53784aff05b8a3"
 
-[conda-packages.linux-x64-baseline."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-baseline."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-baseline."pango-1.58.2-h7bb47b9_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pango-1.58.2-h7bb47b9_1.conda"
@@ -2428,9 +2428,9 @@ checksum = "sha256:8de2f0cd8a659b01abf86e7fbb8cea4f28ada62fd288429a2bbc040db1b98
 url = "https://conda.anaconda.org/conda-forge/linux-64/openh264-2.6.0-h8c49934_2.conda"
 checksum = "sha256:6d54eeb307488f725a8f14af955467249735fa69ffd822763e53784aff05b8a3"
 
-[conda-packages.linux-x64-musl."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-musl."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-musl."pango-1.58.2-h7bb47b9_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pango-1.58.2-h7bb47b9_1.conda"
@@ -2956,9 +2956,9 @@ checksum = "sha256:8de2f0cd8a659b01abf86e7fbb8cea4f28ada62fd288429a2bbc040db1b98
 url = "https://conda.anaconda.org/conda-forge/linux-64/openh264-2.6.0-h8c49934_2.conda"
 checksum = "sha256:6d54eeb307488f725a8f14af955467249735fa69ffd822763e53784aff05b8a3"
 
-[conda-packages.linux-x64-musl-baseline."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-musl-baseline."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-musl-baseline."pango-1.58.2-h7bb47b9_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/pango-1.58.2-h7bb47b9_1.conda"
@@ -3372,9 +3372,9 @@ checksum = "sha256:36cdae1076fc8d92b030af4e8d02e32629aaa31dbe32233040a04d495815b
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/openh264-2.6.0-hf8510ef_2.conda"
 checksum = "sha256:abbf05ef3f338eb70623400c6ecf3318fe3a71fbf56b1099d7b3fddd13a0a0aa"
 
-[conda-packages.macos-arm64."openssl-3.6.4-h55eecbc_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.4-h55eecbc_0.conda"
-checksum = "sha256:f23239eacd75c4c50705e68fae1aa3292da473e6a3a4abe2330f1e6afa680704"
+[conda-packages.macos-arm64."openssl-3.6.5-h55eecbc_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.6.5-h55eecbc_0.conda"
+checksum = "sha256:44fbc526456571a9fb8fa18157f6f269d4d4bd40eef20183a93b9c9296f94497"
 
 [conda-packages.macos-arm64."pango-1.58.2-hf9b25ef_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/pango-1.58.2-hf9b25ef_1.conda"
@@ -3660,9 +3660,9 @@ checksum = "sha256:92c404daa40f1cf3576febbb7a50064af6b2d012cfd33b9061029bdee7f0b
 url = "https://conda.anaconda.org/conda-forge/osx-64/openh264-2.6.0-h29fea0d_2.conda"
 checksum = "sha256:0cf5ff9a035978ac0a3ef775a7e7c0f22eb288de83b9549ef9dfba3ab3978c6b"
 
-[conda-packages.macos-x64."openssl-3.6.4-h332eb6d_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.6.4-h332eb6d_0.conda"
-checksum = "sha256:73d648d24f0994fd8641972848d74bd57b8d80888a64600643e3fe88a1b50545"
+[conda-packages.macos-x64."openssl-3.6.5-h332eb6d_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.6.5-h332eb6d_0.conda"
+checksum = "sha256:d992d27aec2f1beac81f792c85b449546c030f06937b5b3ea7cf58431861dde4"
 
 [conda-packages.macos-x64."pango-1.58.2-hc5a6962_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/pango-1.58.2-hc5a6962_1.conda"
@@ -3936,9 +3936,9 @@ checksum = "sha256:92c404daa40f1cf3576febbb7a50064af6b2d012cfd33b9061029bdee7f0b
 url = "https://conda.anaconda.org/conda-forge/osx-64/openh264-2.6.0-h29fea0d_2.conda"
 checksum = "sha256:0cf5ff9a035978ac0a3ef775a7e7c0f22eb288de83b9549ef9dfba3ab3978c6b"
 
-[conda-packages.macos-x64-baseline."openssl-3.6.4-h332eb6d_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.6.4-h332eb6d_0.conda"
-checksum = "sha256:73d648d24f0994fd8641972848d74bd57b8d80888a64600643e3fe88a1b50545"
+[conda-packages.macos-x64-baseline."openssl-3.6.5-h332eb6d_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.6.5-h332eb6d_0.conda"
+checksum = "sha256:d992d27aec2f1beac81f792c85b449546c030f06937b5b3ea7cf58431861dde4"
 
 [conda-packages.macos-x64-baseline."pango-1.58.2-hc5a6962_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/pango-1.58.2-hc5a6962_1.conda"
@@ -4180,9 +4180,9 @@ checksum = "sha256:c8a4c4580179383855c826b57720ecd10b4f526f19a7da63645cef5076906
 url = "https://conda.anaconda.org/conda-forge/win-64/openh264-2.6.0-h1eab103_2.conda"
 checksum = "sha256:4393c06ab364a873b03b1f090d9392dadeee9fce636194c04507b2a7626698ba"
 
-[conda-packages.windows-x64."openssl-3.6.4-hf411b9b_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.4-hf411b9b_0.conda"
-checksum = "sha256:9dddb559ba49744d5d94092d8d13cb0567f5c3b3f439f3acf28433d1f4256acc"
+[conda-packages.windows-x64."openssl-3.6.5-hf411b9b_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.5-hf411b9b_0.conda"
+checksum = "sha256:bc44625e0c6d83f3e02b5f6adc01e0e3ca7001d3d94e24959591a57f5a011b9a"
 
 [conda-packages.windows-x64."pango-1.58.2-h13911b6_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/pango-1.58.2-h13911b6_1.conda"
@@ -4432,9 +4432,9 @@ checksum = "sha256:c8a4c4580179383855c826b57720ecd10b4f526f19a7da63645cef5076906
 url = "https://conda.anaconda.org/conda-forge/win-64/openh264-2.6.0-h1eab103_2.conda"
 checksum = "sha256:4393c06ab364a873b03b1f090d9392dadeee9fce636194c04507b2a7626698ba"
 
-[conda-packages.windows-x64-baseline."openssl-3.6.4-hf411b9b_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.4-hf411b9b_0.conda"
-checksum = "sha256:9dddb559ba49744d5d94092d8d13cb0567f5c3b3f439f3acf28433d1f4256acc"
+[conda-packages.windows-x64-baseline."openssl-3.6.5-hf411b9b_0"]
+url = "https://conda.anaconda.org/conda-forge/win-64/openssl-3.6.5-hf411b9b_0.conda"
+checksum = "sha256:bc44625e0c6d83f3e02b5f6adc01e0e3ca7001d3d94e24959591a57f5a011b9a"
 
 [conda-packages.windows-x64-baseline."pango-1.58.2-h13911b6_1"]
 url = "https://conda.anaconda.org/conda-forge/win-64/pango-1.58.2-h13911b6_1.conda"
@@ -4886,7 +4886,7 @@ conda_deps = [
     "librsvg-2.62.4-ha90e91f_0",
     "libxml2-2.15.4-h92b9305_0",
     "libxml2-16-2.15.4-h2e5089f_0",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "pulseaudio-client-17.0-hcdf0bd4_4",
     "libsndfile-1.2.2-h7354dbf_3",
     "x264-1!164.3095-h5bc82ec_3",
@@ -5014,7 +5014,7 @@ conda_deps = [
     "librsvg-2.62.4-ha90e91f_0",
     "libxml2-2.15.4-h92b9305_0",
     "libxml2-16-2.15.4-h2e5089f_0",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "pulseaudio-client-17.0-hcdf0bd4_4",
     "libsndfile-1.2.2-h7354dbf_3",
     "x264-1!164.3095-h5bc82ec_3",
@@ -5146,7 +5146,7 @@ conda_deps = [
     "librsvg-2.62.4-ha427ee3_0",
     "libxml2-16-2.15.4-hf3af7cc_0",
     "libxml2-2.15.4-h7df9aa5_0",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "pulseaudio-client-17.0-hb10c1b2_4",
     "libsndfile-1.2.2-hbc6d301_3",
     "x264-1!164.3095-h7cc23a3_3",
@@ -5284,7 +5284,7 @@ conda_deps = [
     "librsvg-2.62.4-ha427ee3_0",
     "libxml2-16-2.15.4-hf3af7cc_0",
     "libxml2-2.15.4-h7df9aa5_0",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "pulseaudio-client-17.0-hb10c1b2_4",
     "libsndfile-1.2.2-hbc6d301_3",
     "x264-1!164.3095-h7cc23a3_3",
@@ -5422,7 +5422,7 @@ conda_deps = [
     "librsvg-2.62.4-ha427ee3_0",
     "libxml2-16-2.15.4-hf3af7cc_0",
     "libxml2-2.15.4-h7df9aa5_0",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "pulseaudio-client-17.0-hb10c1b2_4",
     "libsndfile-1.2.2-hbc6d301_3",
     "x264-1!164.3095-h7cc23a3_3",
@@ -5560,7 +5560,7 @@ conda_deps = [
     "librsvg-2.62.4-ha427ee3_0",
     "libxml2-16-2.15.4-hf3af7cc_0",
     "libxml2-2.15.4-h7df9aa5_0",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "pulseaudio-client-17.0-hb10c1b2_4",
     "libsndfile-1.2.2-hbc6d301_3",
     "x264-1!164.3095-h7cc23a3_3",
@@ -5689,7 +5689,7 @@ conda_deps = [
     "librsvg-2.62.4-hc8ac265_0",
     "libxml2-2.15.4-h550178d_0",
     "libxml2-16-2.15.4-heb56d2d_0",
-    "openssl-3.6.4-h55eecbc_0",
+    "openssl-3.6.5-h55eecbc_0",
     "x264-1!164.3095-hb001647_3",
     "x265-3.5-h55d2f36_4",
     "libintl-0.25.1-hae62183_2",
@@ -5769,7 +5769,7 @@ conda_deps = [
     "librsvg-2.62.4-h43ae438_0",
     "libxml2-16-2.15.4-h8376fb4_0",
     "libxml2-2.15.4-hb56241c_0",
-    "openssl-3.6.4-h332eb6d_0",
+    "openssl-3.6.5-h332eb6d_0",
     "x264-1!164.3095-hd115831_3",
     "x265-3.5-h78a8136_4",
     "libintl-0.25.1-h98e67c8_2",
@@ -5844,7 +5844,7 @@ conda_deps = [
     "librsvg-2.62.4-h43ae438_0",
     "libxml2-16-2.15.4-h8376fb4_0",
     "libxml2-2.15.4-hb56241c_0",
-    "openssl-3.6.4-h332eb6d_0",
+    "openssl-3.6.5-h332eb6d_0",
     "x264-1!164.3095-hd115831_3",
     "x265-3.5-h78a8136_4",
     "libintl-0.25.1-h98e67c8_2",
@@ -5916,7 +5916,7 @@ conda_deps = [
     "librsvg-2.62.4-h5506a08_0",
     "libxml2-2.15.4-he095d88_0",
     "libxml2-16-2.15.4-h3cfd58e_0",
-    "openssl-3.6.4-hf411b9b_0",
+    "openssl-3.6.5-hf411b9b_0",
     "ucrt-10.0.26100.0-h57928b3_0",
     "vc-14.5-ha367084_41",
     "vc14_runtime-14.51.36247-habf1de7_41",
@@ -5985,7 +5985,7 @@ conda_deps = [
     "librsvg-2.62.4-h5506a08_0",
     "libxml2-2.15.4-he095d88_0",
     "libxml2-16-2.15.4-h3cfd58e_0",
-    "openssl-3.6.4-hf411b9b_0",
+    "openssl-3.6.5-hf411b9b_0",
     "ucrt-10.0.26100.0-h57928b3_0",
     "vc-14.5-ha367084_41",
     "vc14_runtime-14.51.36247-habf1de7_41",
@@ -6258,61 +6258,61 @@ url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6
 url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279452"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.56.2"
+version = "0.56.4"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
+checksum = "sha256:f0b460e2c0df13dc2f95815bd449892d69215ced709c0153c95c342246191970"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088750"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:c54e2e246b68fefecf49e9284e75d5e449aed5f7d6dd0415feeca23ed2f48c9b"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715224"
+checksum = "sha256:f0b460e2c0df13dc2f95815bd449892d69215ced709c0153c95c342246191970"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088750"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
+checksum = "sha256:c4ddf687b064639804f5b669c7372d48e6720cf397f320761b6d6ec315e72a96"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088725"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:620f3ba17c9a8fa2de26d1cc817b33a56719e7564c10195bdbed20398720463a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715193"
+checksum = "sha256:c4ddf687b064639804f5b669c7372d48e6720cf397f320761b6d6ec315e72a96"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088725"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
+checksum = "sha256:9f520b1ae417cb8c08cb52b7d7185f0939735ce03836aa240ecce09f788f65af"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088724"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7906d8ef652c2e996dcb1708674734e4dee49e978cfef93771c87ffd45664662"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715194"
+checksum = "sha256:9f520b1ae417cb8c08cb52b7d7185f0939735ce03836aa240ecce09f788f65af"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088724"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:782c00d5f76a58d803c336a618db04f2542f94f399078b4872acb95b186e71c5"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715218"
+checksum = "sha256:8f7043eadc6c162cf733fff2aaa1514619f38dcb541f39a2a42428d95ccdf6a6"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088756"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
+checksum = "sha256:ae2b9c74e1e82558c0becc119f68b7103376b4891dffa558df1e68f73cff8629"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088718"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:a6a6168feb2a63cad6cbebd49c4fb66d964f43a88e64750bfda9e3b5bdad9fae"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.2/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/608715209"
+checksum = "sha256:ae2b9c74e1e82558c0becc119f68b7103376b4891dffa558df1e68f73cff8629"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.4/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/609088718"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
@@ -6531,7 +6531,7 @@ version = "0.7.0"
 backend = "npm:agents-lint"
 
 [[tools."npm:claude-code-lint"]]
-version = "0.9.0"
+version = "0.10.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
@@ -6555,7 +6555,7 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.132.5"
+version = "44.133.0"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]

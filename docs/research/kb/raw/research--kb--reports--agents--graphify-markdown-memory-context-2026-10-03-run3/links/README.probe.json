@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-10-04T02:08:32.102414+00:00",
+  "kind": "probe",
+  "manifest": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03o/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03-run3/links/README.probe.json",
+  "probe_out": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03o/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03-run3/links/README.probe.json",
+  "probes": [
+    {
+      "kind": "mirror-index",
+      "missing": 0,
+      "path": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-2026-10-03o/docs/research/kb/raw/research--kb--reports--agents--graphify-markdown-memory-context-2026-10-03-run3/links/README.md",
+      "rows": 3,
+      "written": true
+    }
+  ]
+}

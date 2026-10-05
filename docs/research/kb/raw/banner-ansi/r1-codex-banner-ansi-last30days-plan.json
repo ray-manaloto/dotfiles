@@ -1,0 +1,15 @@
+{
+  "intent": "factual",
+  "freshness_mode": "recent",
+  "cluster_mode": "none",
+  "source_weights": {"github": 1.0, "grounding": 1.0},
+  "subqueries": [
+    {
+      "id": "codex-banner-ansi",
+      "search_query": "Codex ANSI session id banner",
+      "ranking_query": "OpenAI Codex 0.160.0 exec banner ANSI coloured session id parsing",
+      "sources": ["github", "grounding"],
+      "weight": 1.0
+    }
+  ]
+}

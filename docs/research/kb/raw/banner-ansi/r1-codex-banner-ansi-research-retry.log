@@ -1,0 +1,13 @@
+[research-fanout] $ uv run --project python python -m dotfiles_setup.research_fanout 'Codex ANSI session id banner' --repo openai/codex --strict-five --request-id 01a106ce-58a9-7df1-9011-9e876121cf27 --last30days-plan /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-banner-ansi/.agent/state/codex-banner-ansi-last30days-plan.json --out /Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27
+/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/manifest.json
+github-issues  ok  3 items  0.747s
+github-discussions  empty_verified  0 items  1.650s
+github-releases  empty_verified  0 items  9.019s
+exa  ok  10 items  0.342s
+context7  ok  5 items  4.925s
+firecrawl-developer  ok  10 items  0.407s
+firecrawl-search  error  0 items  0.457s  [exited 1: Error: Request failed with status code 402 |]
+last30days  ok  5 items  3.809s
+strict-five  fail  [firecrawl-search did not complete]
+[research-fanout] ERROR task failed
+EXIT=1

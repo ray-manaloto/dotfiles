@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SavedSearchFile",
+  "description": "Tracked searches and their recorded baselines.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "watch"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "question": {"type": "string"},
+    "origin": {"type": "string"},
+    "watch": {"type": "array", "items": {"$ref": "#/$defs/Watch"}},
+    "result": {"type": "array", "items": {"$ref": "#/$defs/Result"}, "default": []}
+  },
+  "$defs": {
+    "WatchKind": {"description": "GitHub search endpoint family.", "type": "string", "enum": ["code", "issues", "discussions", "releases"]},
+    "CodeRole": {"description": "Evidence or positive-control role of a code search.", "type": "string", "enum": ["query", "must-hit", "health", "readme"]},
+    "Cadence": {"description": "Expected refresh interval for a saved search.", "type": "string", "enum": ["daily", "weekly"]},
+    "Collect": {"description": "Top limit hits, or every hit up to the 1000 cap (default for code queries).", "type": "string", "enum": ["top", "all"]},
+    "Watch": {
+      "description": "One reproducible search with optional draft controls.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "queries"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,79}$"},
+        "kind": {"$ref": "#/$defs/WatchKind"},
+        "origin": {"type": "string"},
+        "question": {"type": "string"},
+        "cadence": {"$ref": "#/$defs/Cadence"},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+        "repo": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "queries": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "role": {"$ref": "#/$defs/CodeRole"},
+        "collect": {"$ref": "#/$defs/Collect"},
+        "grep": {"type": "string"},
+        "path_grep": {"type": "string"},
+        "control_hit": {"type": "string"},
+        "control_hit_grep": {"type": "string"},
+        "control_hit_path_grep": {"type": "string"},
+        "control_absent": {"type": "string"}
+      }
+    },
+    "Result": {
+      "description": "Baseline observation for one watch.",
+      "type": "object",
+      "required": ["watch_id", "date_run"],
+      "properties": {
+        "watch_id": {"type": "string"},
+        "date_run": {"type": "string"},
+        "status": {"type": "string"},
+        "count": {"type": "integer", "minimum": -1},
+        "total_count": {"type": "integer", "minimum": -1},
+        "urls": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

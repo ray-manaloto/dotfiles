@@ -1,0 +1,29 @@
+{
+  "control": null,
+  "elapsed_s": 0.7472184579819441,
+  "items": [
+    {
+      "date": "2026-04-14T19:24:04Z",
+      "snippet": "## Feature Request\n\n### Problem\n\nClaude Code has a built-in customizable status line feature that allows users to display useful real-time information at the bottom of the terminal UI \u2014 token usage, model name, rate limits, context window, git branch, etc.\n\nThis is configured via a simple shell script hook in settings:\n\n```json\n{\n  \"statusLine\": {\n    \"type\": \"command\",\n    \"command\": \"/bin/bash ~/.claude/statusline.sh\",\n    \"padding\": 0\n  }\n}\n```\n\nThe script receives JSON context on stdin and r",
+      "title": "Customizable status line",
+      "url": "https://github.com/openai/codex/issues/17827"
+    },
+    {
+      "date": "2026-04-29T18:34:11Z",
+      "snippet": "### What variant of Codex are you using?\n\nCLI / TUI mode\n\n### What feature would you like to see?\n\nPlease add a supported way to show custom text, colors, and conditional status information in the Codex TUI status area.\n\nToday, `[tui].status_line` supports a fixed list of built-in item IDs such as `model-with-reasoning`, `current-dir`, `git-branch`, and context usage. That is useful, but it does not support arbitrary static text, command-backed output, conditional formatting, ANSI colors, or an ",
+      "title": "Custom command-backed TUI status line or colored status banner",
+      "url": "https://github.com/openai/codex/issues/20244"
+    },
+    {
+      "date": "2026-05-10T17:58:48Z",
+      "snippet": "## Summary\n\n`codex exec` unconditionally writes a multi-line configuration banner to stderr before any model output:\n\n```\nOpenAI Codex v0.129.0\n--------\nworkdir: /\u2026\nmodel: gpt-5.2-codex\nprovider: openai\napproval: \u2026\nsandbox: workspace-write\nreasoning effort: \u2026\nreasoning summaries: \u2026\nsession id: 019dc5cf-\u2026\n--------\nuser\n<echoed prompt>\n```\n\nWhen `codex exec` is being driven by a parent harness that renders its own status (e.g. an Ink/Ratatui front-end, a CI summary panel, or anything that wraps th",
+      "title": "Add `codex exec --quiet` to suppress the config summary banner for parent harnesses",
+      "url": "https://github.com/openai/codex/issues/22047"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/github-issues.raw",
+  "raw_sha256": "58ba7211dc2db940427df268b59526b6ebe283e6e0cdd7edb6a460e0c9c8afb0",
+  "reason": null,
+  "source": "github-issues",
+  "status": "ok"
+}

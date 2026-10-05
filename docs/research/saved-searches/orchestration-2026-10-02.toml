@@ -59,7 +59,9 @@ question = "How do real repos use Claude Code / Herdr parallel-orchestration fea
 cadence  = "weekly"
 tags     = ["orchestration", "claude-code"]
 limit    = 10
-queries  = ['"subagent_type" "fork"']
+# Narrowed 2026-10-03 (Ray, #1502 1000-cap ruling): '"subagent_type" "fork"' had 41664 hits, far past the
+# 1000-result cap; path:.claude/agents measured 104 (known-absent control 0).
+queries  = ['"subagent_type" "fork" path:.claude/agents']
 grep      = "subagent_type[\"\\']?\\s*[:=]\\s*[\"\\']fork"
 path_grep = ''
 control_hit           = '"[tools]" filename:mise.toml'
@@ -203,7 +205,26 @@ question = "How do real repos use Claude Code / Herdr parallel-orchestration fea
 cadence  = "weekly"
 tags     = ["orchestration", "claude-code"]
 limit    = 10
-queries  = ['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS']
+# Narrowed 2026-10-03 (Ray, #1502 1000-cap ruling): the bare token had 23616 hits. It is split into a
+# devcontainer watch (66 hits) and a settings.local.json watch (211 hits, the next watch); the
+# known-absent control returned 0.
+queries  = ['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS path:.devcontainer']
+grep      = 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'
+path_grep = ''
+control_hit           = '"[tools]" filename:mise.toml'
+control_hit_grep      = '^\[tools\]'
+control_hit_path_grep = ''
+control_absent        = '"{nonce}" filename:mise.toml'
+
+[[watch]]
+id       = "orch-code-claude-code-experimental-agent-teams-settings-local"
+kind     = "code"
+origin   = "topic:parallel-orchestration"
+question = "How do real repos use Claude Code / Herdr parallel-orchestration features?"
+cadence  = "weekly"
+tags     = ["orchestration", "claude-code"]
+limit    = 10
+queries  = ['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS filename:settings.local.json']
 grep      = 'CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'
 path_grep = ''
 control_hit           = '"[tools]" filename:mise.toml'
@@ -235,7 +256,9 @@ question = "How do real repos use Claude Code / Herdr parallel-orchestration fea
 cadence  = "weekly"
 tags     = ["orchestration", "claude-code"]
 limit    = 10
-queries  = ['"subagent_type" "fork" language:Markdown']
+# Narrowed 2026-10-03 (Ray, #1502 1000-cap ruling): language:Markdown had 23264 hits. Skills are where fork
+# dispatch is written in Markdown, and path:.claude/skills measured 752 (the known-absent control returned 0).
+queries  = ['"subagent_type" "fork" path:.claude/skills']
 grep      = "subagent_type[\"\\']?\\s*[:=]\\s*[\"\\']fork"
 path_grep = ''
 control_hit           = '"[tools]" filename:mise.toml'
@@ -406,11 +429,11 @@ examples    = ["Snailclimb/JavaGuide/docs/ai-coding/practices/claudecode-agentvi
 
 [[result]]
 watch_id    = "orch-code-subagent-type-fork"
-date_run    = "2026-10-02T04:14:33Z"
+date_run    = "2026-10-03T22:10:37Z"
 endpoint    = "GET search/code"
 repo_filter = ""
-total_count = 41664
-verified    = "0/5 top hits re-fetched and matched grep"
+total_count = 104
+verified    = "re-recorded after narrowing (research-fanout probe); hits not re-fetched"
 examples    = []
 
 [[result]]
@@ -487,12 +510,21 @@ examples    = ["zebbern/claude-code-guide/README.md", "Chachamaru127/claude-code
 
 [[result]]
 watch_id    = "orch-code-claude-code-experimental-agent-teams"
-date_run    = "2026-10-02T04:14:33Z"
+date_run    = "2026-10-03T22:11:17Z"
 endpoint    = "GET search/code"
 repo_filter = ""
-total_count = 23616
-verified    = "10/10 top hits re-fetched and matched grep"
-examples    = ["zebbern/claude-code-guide/README.md", "trailofbits/claude-code-config/README.md", "Cranot/claude-code-guide/README.md", "kousen/claude-code-training/glossary.md"]
+total_count = 66
+verified    = "re-recorded after narrowing (research-fanout probe); hits not re-fetched"
+examples    = []
+
+[[result]]
+watch_id    = "orch-code-claude-code-experimental-agent-teams-settings-local"
+date_run    = "2026-10-03T22:11:17Z"
+endpoint    = "GET search/code"
+repo_filter = ""
+total_count = 211
+verified    = "re-recorded after narrowing (research-fanout probe); hits not re-fetched"
+examples    = []
 
 [[result]]
 watch_id    = "orch-code-subagent-type-fork-path-claude"
@@ -505,11 +537,11 @@ examples    = ["edobry/minsky/.claude/hooks/block-nested-fork-dispatch.ts", "oxs
 
 [[result]]
 watch_id    = "orch-code-subagent-type-fork-language-markdown"
-date_run    = "2026-10-02T04:14:33Z"
+date_run    = "2026-10-03T22:10:37Z"
 endpoint    = "GET search/code"
 repo_filter = ""
-total_count = 23264
-verified    = "0/10 top hits re-fetched and matched grep"
+total_count = 752
+verified    = "re-recorded after narrowing (research-fanout probe); hits not re-fetched"
 examples    = []
 
 [[result]]

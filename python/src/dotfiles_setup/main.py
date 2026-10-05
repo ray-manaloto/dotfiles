@@ -1904,8 +1904,8 @@ def _add_dag_tick_subcommand(subparsers: _SubParsers) -> None:
     dag_tick_parser = subparsers.add_parser(
         "dag-tick",
         help="launchd watchdog tick: census this repo's background agents, "
-        "classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD nodes and stop "
-        "lingering DONE ones. WEDGED is classify-and-log only in this "
+        "classify ALIVE/DEAD/WEDGED/DONE and respawn DEAD nodes; it never "
+        "stops a node. WEDGED is classify-and-log only in this "
         "slice — automated stall recovery is #590",
     )
     dag_tick_parser.add_argument(
@@ -2023,7 +2023,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
     shared `kb-setup currency daily` engine.)
 
     ⚠️ **Two members do NOT fit that shape, and the name under-describes them.**
-    `dag-tick` (#578) can respawn and stop processes; `codex-lane` (#613) is the
+    `dag-tick` (#578) can respawn processes; `codex-lane` (#613) is the
     most side-effecting command in this file — it mkdirs, unlinks four
     artifacts, writes two and spawns a **paid** subprocess. Both live here for
     one reason only: the statement budget. Each has its own registration

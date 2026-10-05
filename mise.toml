@@ -43,16 +43,16 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 doppler = "3.76.6"
 colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.1"
-"github:agent-sh/agnix" = "0.56.2"
+"github:agent-sh/agnix" = "0.56.4"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.132.5"
+"npm:renovate" = "44.133.0"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
 # follow-up). md_size_budget (below in hk.pkl) provides the immediate,
 # class-aware enforcement — see .claude/rules/md-size-budgets.md.
-"npm:claude-code-lint" = "0.9.0"
+"npm:claude-code-lint" = "0.10.0"
 "npm:@contextlint/cli" = "1.1.1"
 "npm:markdownlint-cli2" = "0.23.3"
 "aqua:jackchuka/mdschema" = "0.15.4"
@@ -713,7 +713,7 @@ description = "Project doctor: does the declared setup (doctor.toml) match reali
 run = 'uv run --project python dotfiles-setup doctor'
 
 [tasks.dag-tick]
-description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD and stop lingering DONE. WEDGED is log-only in this slice (#590)"
+description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD; never stops a node (a DONE session may be an idle coordinator waiting for messages, 2026-10-03). WEDGED is log-only in this slice (#590)"
 # Thin caller (zero-bash-logic); logic in
 # python/src/dotfiles_setup/dag_tick.py. Fired every 60s by the
 # dev.mise.dotfiles-dag-tick LaunchAgent declared below
@@ -891,6 +891,11 @@ run = 'uv run --project python dotfiles-setup graphify prs'
 description = "Fetch raw research evidence concurrently from configured sources"
 # Thin caller; python/src/dotfiles_setup/research_fanout.py.
 run = 'uv run --project python python -m dotfiles_setup.research_fanout'
+
+[tasks.research-saved-search]
+description = "Record, rerun and report freshness of saved GitHub searches"
+# Thin caller; python/src/dotfiles_setup/saved_searches.py (#1502).
+run = 'uv run --project python python -m dotfiles_setup.saved_searches'
 
 [tasks.bakeoff]
 description = "Run the graphify extraction bake-off (writes OUTSIDE the repo)"

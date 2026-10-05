@@ -76,9 +76,9 @@ checksum = "sha256:e8392843a18954fef038f2721fde65c4dbe7693fcd07677e5e74fca85b1a6
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/ncurses-6.6-h2b6f883_1.conda"
 checksum = "sha256:d69a04914139627f0a6bfd19412d6c7f1e37edc896af84a6011e07e8bc1e69fa"
 
-[conda-packages.linux-arm64."openssl-3.6.4-he6ad1d5_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.4-he6ad1d5_0.conda"
-checksum = "sha256:a70c05a9baba9b1ce17c7e8b9479029372069b3bf402dbf200bc03696c531bed"
+[conda-packages.linux-arm64."openssl-3.6.5-he6ad1d5_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.5-he6ad1d5_0.conda"
+checksum = "sha256:238136f1df197ecd89bafd728a34d0642176f3170423d13d8276746d675a9485"
 
 [conda-packages.linux-arm64."popt-1.19-hd6fdeab_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/popt-1.19-hd6fdeab_2.conda"
@@ -168,9 +168,9 @@ checksum = "sha256:e8392843a18954fef038f2721fde65c4dbe7693fcd07677e5e74fca85b1a6
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/ncurses-6.6-h2b6f883_1.conda"
 checksum = "sha256:d69a04914139627f0a6bfd19412d6c7f1e37edc896af84a6011e07e8bc1e69fa"
 
-[conda-packages.linux-arm64-musl."openssl-3.6.4-he6ad1d5_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.4-he6ad1d5_0.conda"
-checksum = "sha256:a70c05a9baba9b1ce17c7e8b9479029372069b3bf402dbf200bc03696c531bed"
+[conda-packages.linux-arm64-musl."openssl-3.6.5-he6ad1d5_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.6.5-he6ad1d5_0.conda"
+checksum = "sha256:238136f1df197ecd89bafd728a34d0642176f3170423d13d8276746d675a9485"
 
 [conda-packages.linux-arm64-musl."popt-1.19-hd6fdeab_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/popt-1.19-hd6fdeab_2.conda"
@@ -260,9 +260,9 @@ checksum = "sha256:b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc5
 url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda"
 checksum = "sha256:5d46557214ed184381dafe835b7c94a474a1c3b307a08a250b1ea4779b44ffb3"
 
-[conda-packages.linux-x64."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64."popt-1.19-hcfc3c73_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/popt-1.19-hcfc3c73_2.conda"
@@ -352,9 +352,9 @@ checksum = "sha256:b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc5
 url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda"
 checksum = "sha256:5d46557214ed184381dafe835b7c94a474a1c3b307a08a250b1ea4779b44ffb3"
 
-[conda-packages.linux-x64-baseline."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-baseline."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-baseline."popt-1.19-hcfc3c73_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/popt-1.19-hcfc3c73_2.conda"
@@ -444,9 +444,9 @@ checksum = "sha256:b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc5
 url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda"
 checksum = "sha256:5d46557214ed184381dafe835b7c94a474a1c3b307a08a250b1ea4779b44ffb3"
 
-[conda-packages.linux-x64-musl."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-musl."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-musl."popt-1.19-hcfc3c73_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/popt-1.19-hcfc3c73_2.conda"
@@ -536,9 +536,9 @@ checksum = "sha256:b8c0e930183e6b7f83cd35ace102f2b8c2f0faae41dc05255dc72f247dfc5
 url = "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.6-hdb14827_1.conda"
 checksum = "sha256:5d46557214ed184381dafe835b7c94a474a1c3b307a08a250b1ea4779b44ffb3"
 
-[conda-packages.linux-x64-musl-baseline."openssl-3.6.4-h781a0a9_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.4-h781a0a9_0.conda"
-checksum = "sha256:4747b2d6a8336f52343bceb8a1ebf41a9e6e665b9d2e3f989972de53a310599e"
+[conda-packages.linux-x64-musl-baseline."openssl-3.6.5-h781a0a9_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.5-h781a0a9_0.conda"
+checksum = "sha256:9c1533f1cf784f0e250919c0c9762d0b0e6bc727a79290ffb7cea1ceca1d038c"
 
 [conda-packages.linux-x64-musl-baseline."popt-1.19-hcfc3c73_2"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/popt-1.19-hcfc3c73_2.conda"
@@ -598,7 +598,7 @@ conda_deps = [
     "libzlib-1.3.2-hdc9db2a_3",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "zstd-1.5.7-h9d15635_7",
     "keyutils-1.6.3-h5bc82ec_1",
     "libedit-3.1.20250104-pl5321hc48eb74_1",
@@ -623,7 +623,7 @@ conda_deps = [
     "libzlib-1.3.2-hdc9db2a_3",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "zstd-1.5.7-h9d15635_7",
     "keyutils-1.6.3-h5bc82ec_1",
     "libedit-3.1.20250104-pl5321hc48eb74_1",
@@ -648,7 +648,7 @@ conda_deps = [
     "libzlib-1.3.2-h25fd6f3_3",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "zstd-1.5.7-hb78ec9c_7",
     "keyutils-1.6.3-h7cc23a3_1",
     "libedit-3.1.20250104-pl5321h373387f_1",
@@ -673,7 +673,7 @@ conda_deps = [
     "libzlib-1.3.2-h25fd6f3_3",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "zstd-1.5.7-hb78ec9c_7",
     "keyutils-1.6.3-h7cc23a3_1",
     "libedit-3.1.20250104-pl5321h373387f_1",
@@ -698,7 +698,7 @@ conda_deps = [
     "libzlib-1.3.2-h25fd6f3_3",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "zstd-1.5.7-hb78ec9c_7",
     "keyutils-1.6.3-h7cc23a3_1",
     "libedit-3.1.20250104-pl5321h373387f_1",
@@ -723,7 +723,7 @@ conda_deps = [
     "libzlib-1.3.2-h25fd6f3_3",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "zstd-1.5.7-hb78ec9c_7",
     "keyutils-1.6.3-h7cc23a3_1",
     "libedit-3.1.20250104-pl5321h373387f_1",
@@ -756,7 +756,7 @@ conda_deps = [
     "libiconv-1.18-h1ea5142_3",
     "popt-1.19-hd6fdeab_2",
     "zstd-1.5.7-h9d15635_7",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_7",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
@@ -774,7 +774,7 @@ conda_deps = [
     "libiconv-1.18-h1ea5142_3",
     "popt-1.19-hd6fdeab_2",
     "zstd-1.5.7-h9d15635_7",
-    "openssl-3.6.4-he6ad1d5_0",
+    "openssl-3.6.5-he6ad1d5_0",
     "_openmp_mutex-4.5-20_gnu",
     "libgomp-16.2.0-h8acb6b2_7",
     "ca-certificates-2026.7.22-hbd8a1cb_0",
@@ -789,7 +789,7 @@ conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
@@ -807,7 +807,7 @@ conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
@@ -825,7 +825,7 @@ conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",
@@ -843,7 +843,7 @@ conda_deps = [
     "libstdcxx-16.2.0-h934c35e_7",
     "xxhash-0.8.3-hec8ed23_1",
     "libzlib-1.3.2-h25fd6f3_3",
-    "openssl-3.6.4-h781a0a9_0",
+    "openssl-3.6.5-h781a0a9_0",
     "libiconv-1.18-h0cb94f2_3",
     "zstd-1.5.7-hb78ec9c_7",
     "popt-1.19-hcfc3c73_2",

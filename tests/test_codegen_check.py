@@ -19,6 +19,7 @@ from dotfiles_setup.codegen_check import (
     job_outputs,
     stale_files,
 )
+from dotfiles_setup.codegen_imports import CodeFormatter
 from dotfiles_setup.generated.drift_verdict import DriftVerdict
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -241,10 +242,17 @@ def real_generator() -> Path:
 
 
 def _copy_codegen_inputs(dest: Path) -> Path:
-    """The schemas (+ templates), the pyproject and the generated package."""
-    for relative in ("schemas/drift-verdict.schema.json", "python/pyproject.toml"):
+    """Every job's schema (+ templates), the pyproject and the generated package.
+
+    All `*.schema.json` files, not just the pilot's: the pyproject names every job,
+    so a copy missing one job's input makes `--all-jobs --check` an ERROR (2)
+    rather than a verdict (#1502 added two jobs and broke a pilot-only copy).
+    """
+    schemas = sorted((_REPO / "schemas").glob("*.schema.json"))
+    for source in [*schemas, _REPO / "python/pyproject.toml"]:
+        relative = source.relative_to(_REPO)
         (dest / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(_REPO / relative, dest / relative)
+        shutil.copy2(source, dest / relative)
     shutil.copytree(_REPO / "schemas/templates", dest / "schemas/templates")
     shutil.copytree(
         _REPO / _GENERATED,
@@ -407,3 +415,38 @@ def test_the_vendored_agent_skill_is_upstream_verbatim(tmp_path: Path) -> None:
         }
 
     assert files(fresh) == files(vendored)
+
+
+def test_codegen_imports_points_generated_models_at_the_codec() -> None:
+    """Generated `from msgspec import` lines are rewritten to the codec (#1502).
+
+    Only `dotfiles_setup.codec` may import msgspec. The in-container ship caught
+    two generated modules crossing that boundary. FAIL arm: drop the
+    `custom-formatters` line from python/pyproject.toml and regenerate. The
+    generated modules then import msgspec, and the test_codec sweep fails.
+    """
+    formatter = CodeFormatter(formatter_kwargs={})
+    generated = (
+        "from enum import StrEnum\n\n"
+        "from msgspec import UNSET, Meta, UnsetType, field\n"
+        "from msgspec import Struct as _Struct\n"
+    )
+    rewritten = formatter.apply(generated)
+    assert "msgspec" not in rewritten
+    assert (
+        "from dotfiles_setup.codec import UNSET, Meta, UnsetType, field\n" in rewritten
+    )
+    # every name the rewrite points at must really be exported by the codec
+    for name in ("UNSET", "Meta", "UnsetType", "field", "Struct"):
+        assert name in codec.__all__
+    # a shape it cannot map fails loudly instead of slipping past the boundary
+    with pytest.raises(ValueError, match="cannot"):
+        formatter.apply("import msgspec\n")
+
+
+def test_generated_models_import_no_msgspec() -> None:
+    """The committed generated modules carry the rewrite (no direct msgspec import)."""
+    for path in sorted((_REPO / _GENERATED).glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        assert "from msgspec" not in text, path.name
+        assert "import msgspec" not in text, path.name

@@ -1,0 +1,41 @@
+{
+  "control": null,
+  "elapsed_s": 4.925069999997504,
+  "items": [
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md\n\nResumes an existing Codex thread session by its thread ID. Supports optionally including turn history in the server response.\n\n```APIDOC",
+      "title": "Codex.thread_resume(thread_id, *, approval_mode, base_instructions, config, cwd, developer_instructions, include_turns, model, model_provider, personality, sandbox, service_tier)",
+      "url": "https://github.com/openai/codex/blob/main/sdk/python/docs/api-reference.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/exec-server/README.md\n\nSend an `initialize` request with client configuration to start a session. Receive session parameters and environment information before acknowledging with the `initialized` notification.\n\n```json\n{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientName\":\"example-client\"}}\n{\"id\":1,\"result\":{\"sessionId\":\"00000000-0000-4000-8000-000000000001\",\"environmentInfo\":{\"shell\":{\"name\":\"bash\",\"path\":\"/bin/bash\"},\"cwd\":\"file:///tmp",
+      "title": "Initialize execution server session",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/exec-server/README.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/sdk/python/README.md\n\nReuses existing Codex authentication to start a thread and execute a turn. Returns a TurnResult containing the final response, collected items, and token usage.\n\n```python\nfrom openai_codex import Codex\n\nwith Codex() as codex:\n    thread = codex.thread_start()\n    result = thread.run(\"Explain this repository in three bullets.\")\n    print(result.final_response)\n```\n\n--------------------------------",
+      "title": "Start a thread and run a turn with Codex",
+      "url": "https://github.com/openai/codex/blob/main/sdk/python/README.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/sdk/python/docs/getting-started.md\n\nResumes and continues an existing thread session using its thread ID.\n\n```python\nwith Codex() as codex:\n    thread = codex.thread_resume(\"thr_123\")\n    print(thread.run(\"Continue where we left off.\").final_response)\n```\n\n--------------------------------",
+      "title": "Resume an existing thread by ID",
+      "url": "https://github.com/openai/codex/blob/main/sdk/python/docs/getting-started.md"
+    },
+    {
+      "date": null,
+      "snippet": "Source: https://github.com/openai/codex/blob/main/codex-rs/cli/src/main.rs\n\nDefines the `codex resume` subcommand. The `session_id` field accepts an optional UUID or session name as a positional argument. The `config_overrides: SessionTuiCli` flatten brings in all shared TUI flags including `-C`/`--cd`.\n\n```rust\n#[derive(Debug, Parser)]\nstruct ResumeCommand {\n    /// Session id (UUID) or session name. UUIDs take precedence if it parses.\n    /// If omitted, use --last to pick the most recent reco",
+      "title": "ResumeCommand struct \u2014 positional SESSION_ID arg",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/cli/src/main.rs"
+    }
+  ],
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a106ce-52b7-7380-93fb-73d759ac27f3/01a106ce-58a9-7df1-9011-9e876121cf27/context7.raw",
+  "raw_sha256": "1ad0fe6d592c9442867d26d6f3aa0d96700398e5ea9121675d40de7d6b9a1c0a",
+  "reason": null,
+  "source": "context7",
+  "status": "ok"
+}
