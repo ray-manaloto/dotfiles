@@ -335,12 +335,18 @@ The split was agreed with the process-hardening lane on 2026-10-04:
 | coord-router (this spec) | transport and custody of the GO and the ACK only. Both travel as PR2 durable events, routed by ROLE and never by a stale session name. The router validates nothing about authority. |
 | R-a3 PR2 + relay-rule / #1692 | the real authority resolver: `role resolve coordinator` returns role, name, session_id and epoch |
 
-Proposed alignment (it is not a router-owned type):
-1. command id = the PR2 ingress/event ID, so transport dedup and 04's
-   seen-set key on one value. If 04 ships before PR2, 04 mints the id and PR2
-   adopts it.
-2. `CoordinatorIdentity` = PR2's coordinator role binding. "Coordinator
-   authority" means the epoch. `Unknown` means HOLD, never accept.
+Alignment (not a router-owned type; Ray rulings via process-hardening, 2026-10-04):
+1. **`command_id` = PR2's `event_id`** — the opaque id PR2 assigns when it
+   appends the durable event. It is the ONE identifier: this spec's "ingress
+   ID" and the `message_id` field in `coord-router route` input are names for
+   that same `event_id` (:62, :68, :124-128, :184), and both the router's dedup
+   and 04's seen-set key on it. **No minting** (Ray): 04 stage 2 ships code
+   now, and live grants start only when PR2 lands and supplies `event_id`.
+2. `CoordinatorIdentity` = PR2's coordinator role binding; "coordinator
+   authority" is its epoch. **Unknown authority → refuse** (Ray). Clearing a
+   HOLD requires `hold_id` AND the current coordinator (Ray). Read-only checks
+   run before the id is consumed, so a GO held in the #1692 window can be
+   retried with the same `event_id` (Ray, "check before claiming").
 3. An enqueued or delivered GO is not an ACK. Only 04's `AckRecord` closes a
    grant, and the router carries that record back to the granting role.
 
