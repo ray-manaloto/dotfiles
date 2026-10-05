@@ -90,3 +90,11 @@ PYTHON_COLORS=1 → 35 ESC lines on `--help`, NO_COLOR=1 alone → 0); F4 explic
 docstring line + evidence pointer. Mutation drop-PYTHON_COLORS → 3 FAIL (rc=1), restored. 4-file targeted pytest 212 passed rc=0.
 Deferred (sibling ticket proposal, same class, parse/output side): F2 parse ctx7 via `--json`; F3 strip ANSI from child
 stderr in `_subprocess_error` (last30days emits ANSI on stderr despite NO_COLOR).
+
+## Codex review lens (gpt-6-astra, xhigh, read-only) on c4ee7886
+Verdict (verbatim): "No actionable regressions were found. The change neutralizes color forcing at the shared subprocess boundary while preserving unrelated environment values. Targeted tests could not run because the read-only sandbox blocked uv cache access." rc=0. (Tests were run by the architect instead: 212 passed.)
+Sibling ticket filed: #1700.
+
+## sdlc-team review (run c7baa7c5, mode review) of the fold-in delta 470efafd..c4ee7886
+SHIP, 0 LOW+ findings; specialists claimed=observed=[python, documentation]. Verbatim: `sdlc-review-1699-foldins.md`.
+Lane side effect: a gh probe created an untracked `.local/state/gh/device-id` (36 B) in the worktree; architect removed it unread. Coverage now: Opus cold review → 470efafd (codex code); codex lens + sdlc-team review → c4ee7886 (incl. Claude fold-ins).
