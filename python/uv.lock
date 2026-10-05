@@ -720,7 +720,7 @@ wheels = [
 
 [[package]]
 name = "graphifyy"
-version = "0.9.73"
+version = "0.9.76"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "networkx" },
@@ -753,9 +753,9 @@ dependencies = [
     { name = "tree-sitter-verilog" },
     { name = "tree-sitter-zig" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/0c/c9e22e950235d8db4a8c1a6c5a364051099b17aef4a3cb1bfdf990bc8879/graphifyy-0.9.73.tar.gz", hash = "sha256:0f976b424e7af942a9ee4c80711b67a1a4f47ef7c85e29d79293f4479476be31", size = 2402619, upload-time = "2026-09-30T19:54:12.816Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/62/9255f27efda2596c7af0d2ba078626c2888c02fd858e2e0c8d2754968134/graphifyy-0.9.76.tar.gz", hash = "sha256:64ec394cae65b9af5c37aa5b139fa954422183808ffc71ff49bfc17ae7406c32", size = 2485956, upload-time = "2026-10-04T20:03:44.814Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/96/053837d48d89dadbe275414fc9e850a0b0e85c77cc11f0bf16af069dd95d/graphifyy-0.9.73-py3-none-any.whl", hash = "sha256:ebf525ce442176710a5f9137a2b5d17244916bfbdf7150b90f446851ecd227be", size = 1517374, upload-time = "2026-09-30T19:54:10.062Z" },
+    { url = "https://files.pythonhosted.org/packages/62/8f/090c259a3244a00d4a51796e4037c3284a2241fe474254aaa99b7367ebb0/graphifyy-0.9.76-py3-none-any.whl", hash = "sha256:68e09bc159628c4cc0d62ce76786993037266b74f3dbce3a40f498ed7cd9f129", size = 1547929, upload-time = "2026-10-04T20:03:42.695Z" },
 ]
 
 [package.optional-dependencies]
