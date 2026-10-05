@@ -57,7 +57,7 @@
       }
     },
     "ForkProbe": {
-      "description": "Whether upstream now ships the fork's features natively.",
+      "description": "Whether upstream's latest tag contains every probed fork term.",
       "type": "object",
       "required": ["tag", "feature_hits", "control_hits", "native", "error"],
       "properties": {

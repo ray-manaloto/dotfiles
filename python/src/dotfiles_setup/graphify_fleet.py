@@ -510,9 +510,10 @@ def _kb_steps(
             leg=leg.name,
             summary=(
                 f"upstream {probe.tag} contains all {len(probe.feature_hits)} probed "
-                "fork terms: retiring the fork is a human decision (manifest "
-                "`clears_when`); confirm against the fork commit list "
-                f"(`git log {ctx.fork_base_ref or '<old base tag>'}.."
+                "fork terms: retiring the fork is a human decision (KB "
+                "`currency.toml` [tool.graphify.fork] `clears_when`); confirm "
+                f"against the fork commit list (`git -C {roots.fork} log "
+                f"{ctx.fork_base_ref or '<old base tag>'}.."
                 f"{ctx.fork_commit or '<KB fork commit>'}`)"
             ),
             commands=[],

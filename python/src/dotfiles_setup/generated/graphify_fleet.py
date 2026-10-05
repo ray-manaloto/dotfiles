@@ -58,7 +58,7 @@ type FeatureHitsAdditionalProperty = Annotated[int, Meta(ge=0)]
 
 
 class ForkProbe(Struct):
-    """Whether upstream now ships the fork's features natively."""
+    """Whether upstream's latest tag contains every probed fork term."""
 
     tag: str | None
     feature_hits: dict[str, FeatureHitsAdditionalProperty]

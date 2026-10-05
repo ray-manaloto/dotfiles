@@ -508,7 +508,8 @@ def test_plan_native_upstream_proposes_retirement(
     assert "every fork feature" not in kb_first.summary
     assert "all 5 probed fork terms" in kb_first.summary
     assert "human decision" in kb_first.summary
-    assert f"git log v0.9.57..{FORK_SHA}" in kb_first.summary
+    assert f"git -C {roots.fork} log v0.9.57..{FORK_SHA}" in kb_first.summary
+    assert "currency.toml" in kb_first.summary
     assert kb_first.commands == []
     assert kb_first.human_gate
     assert not kb_first.runnable
@@ -516,7 +517,7 @@ def test_plan_native_upstream_proposes_retirement(
     assert "every fork feature" not in rendered
     assert "all 5 probed fork terms" in rendered
     assert "human decision" in rendered
-    assert f"git log v0.9.57..{FORK_SHA}" in rendered
+    assert f"git -C {roots.fork} log v0.9.57..{FORK_SHA}" in rendered
     assert (
         "openai-cli=3 fallback-backend=3 _run_semantic_extract=1 "
         "UNWIND $rows=1 _codex_resolvable_disable_args=1 control claude-cli=18"
@@ -559,3 +560,11 @@ def test_cli_registration_passes_flags_through() -> None:
     args = setup_parser().parse_args(["graphify-fleet", "apply", "--leg", "kb"])
     assert args.command == "graphify-fleet"
     assert args.fleet_argv == ["apply", "--leg", "kb"]
+
+
+def test_skill_names_every_probed_fork_term() -> None:
+    skill = Path(__file__).parent.parent / ".claude/skills/graphify-fleet/SKILL.md"
+    text = skill.read_text(encoding="utf-8")
+    for term in graphify_fleet.FORK_FEATURE_TERMS:
+        assert f"`{term}`" in text, term
+    assert f"{len(graphify_fleet.FORK_FEATURE_TERMS)} probed fork terms" in text

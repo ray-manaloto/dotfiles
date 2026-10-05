@@ -51,9 +51,10 @@ once and orders the work; each leg's own tooling still does the writing.
   `claude-cli`. A control count of 0 means the probe is blind, and a behind KB
   then turns the verdict `unverifiable`. `native=True` means the probe found
   every one of the 5 probed fork terms at the upstream tag. Retiring the fork
-  (manifest `clears_when`) is a human decision that should be confirmed against
-  the fork's commit list (`git log v<base>..<fork commit>`); the plan says so
-  instead of printing a rebase.
+  (KB `currency.toml` `[tool.graphify.fork]` `clears_when`) is a human decision
+  that should be confirmed against the fork's commit list
+  (`git -C <fork clone> log v<base>..<fork commit>`); the plan says so instead
+  of printing a rebase. A test binds this term list to `FORK_FEATURE_TERMS`.
 - KB `drift` means its own sites disagree (pyproject vs `uv.lock` vs manifest
   commit vs `base_ref`) — reconcile those before any version move.
 
