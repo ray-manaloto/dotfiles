@@ -24,12 +24,17 @@ before committing 8b3c3983.
 The real-run sections below were captured at 6b4719f7 and predate the fixes
 (the plan's step order and preview command differ now).
 
-## Real runs at the final tree (after the mattpocock-review fixes)
+## Real runs at the final tree (after the mattpocock + /code-review fixes)
+
+Upstream is now the PyPI latest (`mise latest pipx:graphifyy`), as the
+writers use. Negative arm re-run on the same tree: `status --kb-ref
+origin/no-such-ref-k3v` → `[kb] unverifiable` (`fatal: invalid object name`),
+`verdict: unverifiable (rc=2)`.
 
 `mise run graphify-fleet -- status` → rc=1 (sites as in the 6b4719f7 run below):
 
 ```text
-graphify-fleet: upstream Graphify-Labs/graphify latest 0.9.76
+graphify-fleet: upstream PyPI graphifyy (mise latest pipx:graphifyy) latest 0.9.76
 [dotfiles] behind 0.9.73
 [kb] behind 0.9.57
 [host] current 0.9.76

@@ -51,11 +51,14 @@ from dotfiles_setup.generated.graphify_fleet import (
     PlanStep,
     Upstream,
 )
-from dotfiles_setup.graphify_currency import _path_binary_probe
+from dotfiles_setup.graphify_currency import _latest_probe, _path_binary_probe
 
 type Run = Callable[..., subprocess.CompletedProcess[str]]
 
 UPSTREAM_REPO = graphify_currency.GITHUB_REPO
+UPSTREAM_SOURCE = (
+    f"PyPI {graphify_currency.DIST} (mise latest {graphify_currency.MISE_TOOL})"
+)
 KB_REF_DEFAULT = "origin/main"
 STAMP_PATHS = (
     Path(".claude/skills/graphify/.graphify_version"),
@@ -84,7 +87,6 @@ KB_NOT_WIRED = (
 )
 
 _GIT_TIMEOUT_SECONDS = 30
-_GH_TIMEOUT_SECONDS = 60
 _UV_TIMEOUT_SECONDS = 30
 _PYPROJECT_PIN_RE = re.compile(r'"graphifyy(?:\[[^\]]*\])?==([^";\s]+)"')
 _UV_TOOL_RE = re.compile(r"^graphifyy v(\S+)", re.MULTILINE)
@@ -182,6 +184,10 @@ class _LegBuilder:
 
     def build(self, upstream: str | None) -> Leg:
         state = LegState.current
+        if self.version is not None and not _is_version(self.version):
+            # A non-version pin ("latest", "0.9") can never compare against
+            # upstream, so it must not pass as current or loop as drift.
+            self.blind(f"pin {self.version!r} is not an exact version")
         if self.unverifiable or self.version is None:
             state = LegState.unverifiable
         elif upstream is None:
@@ -204,6 +210,14 @@ class _LegBuilder:
         )
 
 
+def _is_version(candidate: str) -> bool:
+    try:
+        Version(candidate)
+    except InvalidVersion:
+        return False
+    return True
+
+
 def _older(version: str, upstream: str) -> bool:
     try:
         return Version(version) < Version(upstream)
@@ -222,23 +236,17 @@ def _call(
 
 
 def probe_upstream(run: Run) -> Upstream:
-    """Return upstream's latest release tag (the only network call)."""
-    argv = ["gh", "release", "view", "-R", UPSTREAM_REPO, "--json", "tagName"]
-    result = _call(run, [*argv, "--jq", ".tagName"], timeout=_GH_TIMEOUT_SECONDS)
-    if isinstance(result, str):
-        return Upstream(repo=UPSTREAM_REPO, version=None, error=result)
-    tag = result.stdout.strip()
-    if result.returncode != 0 or not tag:
-        detail = result.stderr.strip() or f"gh release view exited {result.returncode}"
-        return Upstream(repo=UPSTREAM_REPO, version=None, error=detail)
-    version = tag.removeprefix("v")
-    try:
-        Version(version)
-    except InvalidVersion:
-        return Upstream(
-            repo=UPSTREAM_REPO, version=None, error=f"unparsable tag {tag!r}"
-        )
-    return Upstream(repo=UPSTREAM_REPO, version=version, error=None)
+    """Return upstream's latest PyPI release (the only network call).
+
+    The same `mise latest pipx:graphifyy` probe `graphify-update` moves the
+    lock to, reused rather than re-implemented: every writer this plan hands
+    off to installs from PyPI, so a GitHub-only tag must not read as "latest"
+    (/code-review on 1e7a2911).
+    """
+    probe = _latest_probe(run=run)
+    return Upstream(
+        repo=UPSTREAM_SOURCE, version=probe.value, error=probe.error or None
+    )
 
 
 def _dotfiles_leg(roots: FleetRoots, probes: FleetProbes) -> _LegBuilder:
@@ -275,7 +283,12 @@ def _git(run: Run, repo: Path, *args: str, ok: tuple[int, ...] = (0,)) -> str:
     result = _call(run, ["git", "-C", str(repo), *args], timeout=_GIT_TIMEOUT_SECONDS)
     if isinstance(result, str):
         raise _ProbeError(result)
-    if result.returncode not in ok or result.stderr.strip():
+    # stderr only fails an otherwise-allowed rc when that rc is nonzero: git
+    # grep's rc=1 means "no match" only when it also printed nothing, while a
+    # warning on a successful command (an ambiguous refname) is not a failure.
+    if result.returncode not in ok or (
+        result.returncode != 0 and result.stderr.strip()
+    ):
         detail = result.stderr.strip() or f"exited {result.returncode}"
         message = f"git {' '.join(args)}: {detail}"
         raise _ProbeError(message)
@@ -340,8 +353,10 @@ def _kb_leg(run: Run, roots: FleetRoots) -> tuple[_LegBuilder, str | None, str |
         leg.blind("pyproject.toml has no exact graphifyy== pin")
     if lock_version != leg.version:
         leg.drifted(f"uv.lock version {lock_version} != pyproject {leg.version}")
+    # All three absent is a KB that pins upstream PyPI (a retired fork), not
+    # a disagreement; one present and another absent or different is.
     revs = {source_rev, lock_rev, manifest.get("commit")}
-    if len(revs) != 1 or None in revs:
+    if revs != {None} and (len(revs) != 1 or None in revs):
         leg.drifted(f"fork revisions disagree across sites: {sorted(map(str, revs))}")
     if base_ref is not None and leg.version and base_ref != f"v{leg.version}":
         leg.drifted(f"fork base_ref {base_ref} != v{leg.version}")
@@ -526,37 +541,42 @@ def _kb_steps(
                 f"{ctx.fork_commit or '<KB fork commit>'}`)"
             ),
         )
-        new_commit = "<upstream commit>"
-    else:
-        branch = f"kb-pin/openai-cli-backend-v{latest}"
-        commit = ctx.fork_commit or "<KB fork commit>"
-        fork_step = _human_step(
-            leg.name,
+        # No fork-style pin step: retirement is an `==` PyPI pin with the
+        # fork block deleted, not a move of the git rev (/code-review).
+        return [fork_step]
+    branch = f"kb-pin/openai-cli-backend-v{latest}"
+    commit = ctx.fork_commit or "<KB fork commit>"
+    fork_step = _human_step(
+        leg.name,
+        (
+            f"replay the fork payload onto v{latest} — HUMAN-REVIEWED; stop on "
+            "any conflict (fork-maintenance preview first, rebase is the fallback)"
+        ),
+        [
             (
-                f"replay the fork payload onto v{latest} — HUMAN-REVIEWED; stop on "
-                "any conflict (fork-maintenance preview first, rebase is the fallback)"
+                "mise -C <fork-maintenance checkout> run fork-maintenance -- "
+                f"preview --source-repo {roots.fork} --candidate {commit} "
+                f"--upstream-repository {UPSTREAM_REPO} "
+                f"--upstream-url https://github.com/{UPSTREAM_REPO}.git "
+                f"--output-plan {roots.fork.parent}/graphify.evidence/"
+                f"{latest}/plan.json"
             ),
-            [
-                (
-                    "mise -C <fork-maintenance checkout> run fork-maintenance -- "
-                    f"preview --source-repo {roots.fork} --candidate {commit} "
-                    f"--upstream-repository {UPSTREAM_REPO} "
-                    f"--upstream-url https://github.com/{UPSTREAM_REPO}.git "
-                    f"--output-plan {roots.fork.parent}/graphify.evidence/"
-                    f"{latest}/plan.json"
-                ),
-                f"git -C {roots.fork} switch -c {branch} {commit}",
-                (
-                    f"git -C {roots.fork} rebase --onto v{latest} "
-                    f"{ctx.fork_base_ref or '<old base tag>'}"
-                ),
-            ],
-        )
-        new_commit = "<new fork commit>"
+            f"git -C {roots.fork} switch -c {branch} {commit}",
+            (
+                f"git -C {roots.fork} rebase --onto v{latest} "
+                f"{ctx.fork_base_ref or '<old base tag>'}"
+            ),
+        ],
+    )
     pin_step = _human_step(
         leg.name,
         "move every KB pin site to the new fork commit (not wired until T8)",
-        [f"mise -C {roots.kb} run kb-graphify-pin -- {latest} {new_commit} v{latest}"],
+        [
+            (
+                f"mise -C {roots.kb} run kb-graphify-pin -- {latest} "
+                f"<new fork commit> v{latest}"
+            )
+        ],
     )
     return [fork_step, pin_step]
 

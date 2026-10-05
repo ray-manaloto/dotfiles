@@ -11,3 +11,7 @@ No actionable regressions were found. The corrected command, schema description,
 The lens's own pytest attempt failed on the read-only sandbox (uv cache, exit 2);
 the caller's targeted run of the same file is 30 passed, and the full gates ran
 on eb6fb8bd separately.
+
+## GitHub repos touched
+
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the reviewed commit

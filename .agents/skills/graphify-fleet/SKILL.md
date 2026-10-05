@@ -18,7 +18,8 @@ once and orders the work; each leg's own tooling still does the writing.
 ## Steps
 
 1. **Status.** `mise run graphify-fleet -- status` (add `--json` for the typed
-   `FleetPlan`). One network call — `gh release view` for upstream latest; the
+   `FleetPlan`). One network call — `mise latest pipx:graphifyy`, the same
+   PyPI "latest" `graphify-update` moves the lock to; the
    KB and the fork clone are read from local refs and never fetched, so fetch
    them yourself first when freshness matters. Done when you have read the
    `verdict` line and every `finding`.

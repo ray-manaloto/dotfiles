@@ -26,4 +26,11 @@ Full review comments:
 
 ## Disposition (added after receipt)
 
-To be filled after each finding is refuted or confirmed against the cited lines.
+All five confirmed against the cited lines (F4 against the fork-maintenance
+`build_parser()` required args) and fixed in 8b3c3983; each new test fails on
+6b4719f7 (5 failed / 16 passed).
+
+## GitHub repos touched
+
+- [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the reviewed commit
+- [ray-manaloto/graphify](https://github.com/ray-manaloto/graphify) — fork-maintenance `build_parser()` read to confirm F4

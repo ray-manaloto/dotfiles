@@ -85,6 +85,7 @@ class FakeRun:
         }
         self.uv_tools = "skypilot v0.13.0\n- sky\n"
         self.upgrade_rc = 0
+        self.git_warning = ""
 
     def __call__(self, argv: list[str], **_kwargs: object) -> Done:
         """Dispatch one subprocess call to the matching fake answer."""
@@ -92,8 +93,12 @@ class FakeRun:
         if argv[0] == "git":
             return self._git(argv)
         answers = {
-            ("gh", "release", "view"): lambda: _done(
-                argv, self.upstream_rc, self.upstream + "\n", "gh: boom"
+            # The PyPI latest probe graphify-update itself uses (not gh).
+            ("mise", "latest", "pipx:graphifyy"): lambda: _done(
+                argv,
+                self.upstream_rc,
+                self.upstream.removeprefix("v") + "\n",
+                "mise: boom",
             ),
             ("uv", "tool", "list"): lambda: _done(argv, out=self.uv_tools),
             ("mise", "run", "graphify-upgrade"): lambda: _done(argv, self.upgrade_rc),
@@ -111,10 +116,11 @@ class FakeRun:
                 return _done(argv, out=self.kb_files[path])
             return _done(argv, 128, err=f"fatal: invalid object name {ref}")
         if "rev-parse" in argv:
-            return _done(argv, 0 if self.tag_present else 1)
+            ok = self.tag_present
+            return _done(argv, 0 if ok else 1, err=self.git_warning if ok else "")
         hits = self.grep_hits[argv[argv.index("-lF") + 1]]
         out = "".join(f"tag:graphify/f{i}.py\n" for i in range(hits))
-        return _done(argv, 0 if hits else 1, out)
+        return _done(argv, 0 if hits else 1, out, self.git_warning if hits else "")
 
 
 @dataclass(frozen=True)
@@ -244,7 +250,8 @@ def test_upstream_failure_is_unverifiable_never_current(
     run.upstream_rc = 1
     status, _ = graphify_fleet.gather(run, roots, currency.probes)
     assert status.upstream.version is None
-    assert status.upstream.error == "gh: boom"
+    assert status.upstream.error == "mise: boom"
+    assert not any(argv[:1] == ["gh"] for argv in run.calls)
     assert set(_legs(status).values()) == {LegState.unverifiable}
     assert status.verdict is LegState.unverifiable
 
@@ -588,3 +595,53 @@ def test_skill_names_every_probed_fork_term() -> None:
     for term in graphify_fleet.FORK_FEATURE_TERMS:
         assert f"`{term}`" in text, term
     assert f"{len(graphify_fleet.FORK_FEATURE_TERMS)} probed fork terms" in text
+
+
+def test_kb_pinned_to_upstream_pypi_is_not_drift(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.kb_files.update(
+        {
+            "pyproject.toml": '[project]\ndependencies = ["graphifyy[all]==0.9.57"]\n',
+            "uv.lock": '[[package]]\nname = "graphifyy"\nversion = "0.9.57"\n',
+            "sources/graphify.manifest": "url = https://github.com/Graphify-Labs/graphify\n",
+            "currency.toml": "",
+        }
+    )
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    assert status.legs[1].state is LegState.current
+
+
+def test_native_upstream_prints_no_fork_pin_step(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"
+    run.grep_hits.update(dict.fromkeys(graphify_fleet.FORK_FEATURE_TERMS, 1))
+    status, ctx = graphify_fleet.gather(run, roots, currency.probes)
+    steps = graphify_fleet.plan(status, ctx, roots).steps
+    kb_steps = [step for step in steps if step.leg is LegName.kb]
+    assert len(kb_steps) == 1
+    assert not any("kb-graphify-pin" in c for s in kb_steps for c in s.commands)
+
+
+def test_git_warning_on_success_does_not_blind_the_fork_probe(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.git_warning = "warning: refname 'v0.9.57' is ambiguous.\n"
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    assert status.fork_probe.error is None
+    assert status.fork_probe.control_hits == CONTROL_HITS
+
+
+def test_non_version_host_pin_is_unverifiable(roots: Roots, currency: Currency) -> None:
+    roots.mise_global_config.write_text(
+        '[tools]\n"pipx:graphifyy" = "latest"\n', encoding="utf-8"
+    )
+    run = FakeRun()
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    host = status.legs[2]
+    assert host.state is LegState.unverifiable
+    assert any("'latest' is not an exact version" in f for f in host.findings)

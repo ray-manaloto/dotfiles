@@ -864,9 +864,10 @@ run = 'uv run --project python dotfiles-setup graphify check'
 [tasks.graphify-fleet]
 description = "Graphify pins across dotfiles, KB and host: status | plan | apply --leg <dotfiles|kb|host>"
 # Thin caller (zero-bash-logic); logic in graphify_fleet.py. status/plan are
-# read-only (one `gh release view`; the KB and fork are read from local refs,
-# never fetched). apply --leg dotfiles delegates to graphify-upgrade; --leg host
-# only PRINTS; --leg kb refuses until T8. Same ambient-PATH capture as
+# read-only (one `mise latest pipx:graphifyy`, the PyPI probe graphify-update
+# uses; the KB and fork are read from local refs, never fetched). apply --leg
+# dotfiles delegates to graphify-upgrade (refused while the host leg is behind);
+# --leg host only PRINTS; --leg kb refuses until T8. Same ambient-PATH capture as
 # graphify-check, so the host leg sees the user-global pin, not the uv venv.
 env = { DOTFILES_AMBIENT_PATH = "{{ get_env(name='DOTFILES_AMBIENT_PATH', default=env.PATH) }}" }
 run = 'uv run --project python dotfiles-setup graphify-fleet'
