@@ -506,12 +506,17 @@ def _cancel_live_processes() -> None:
 def default_runner(
     argv: list[str], *, timeout: float, env: dict[str, str]
 ) -> subprocess.CompletedProcess[bytes]:
-    """Run one bounded process group with captured byte streams."""
+    """Run one bounded process group with captured byte streams.
+
+    Every child's output is machine-parsed, so ``env`` is passed through
+    :func:`child_env.without_color_forcing` first (#1699): an ambient
+    ``FORCE_COLOR`` (Claude Code sets 3) otherwise puts ANSI escapes into stdout.
+    """
     process = subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=env,
+        env=child_env.without_color_forcing(env),
         start_new_session=True,
     )
     with _LIVE_PROCESSES_LOCK:

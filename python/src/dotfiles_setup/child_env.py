@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Strip credentials from the environment of processes this repo spawns.
+"""Scrub the environment of processes this repo spawns: credentials and colour forcing.
 
 `fnox activate` exports real credentials into the interactive shell, and mise
 records the whole delta in ``__MISE_DIFF`` (zlib+base64) so it can undo it on
@@ -23,6 +23,13 @@ Two strengths, because they carry different risk:
 
 **Neither touches your shell.** Both build a copy handed to
 :func:`subprocess.run`; mise still gets its ``__MISE_DIFF`` for directory exit.
+
+:func:`without_color_forcing` separately drops colour/TTY-forcing names and
+sets ``NO_COLOR=1`` for machine-parsed output (#1699). Measured gh output stays
+coloured with ``CLICOLOR_FORCE=1`` even when ``NO_COLOR=1``, so the forcing
+names must be removed rather than relying on ``NO_COLOR`` alone; Python 3.13+
+likewise lets ``PYTHON_COLORS=1`` override ``NO_COLOR``. Measurements:
+``docs/research/kb/reports/agents/ctx7-color-1699.md``.
 """
 
 from __future__ import annotations
@@ -33,6 +40,9 @@ import re
 # The compressed env delta. Its entire content is the leak, and no child reads
 # it — mise recomputes it from config.
 ENV_DIFF_NAME = "__MISE_DIFF"
+COLOR_FORCING_NAMES: frozenset[str] = frozenset(
+    {"FORCE_COLOR", "CLICOLOR_FORCE", "GH_FORCE_TTY", "PYTHON_COLORS"}
+)
 GIT_CONTEXT_NAMES = frozenset(
     {
         "GIT_DIR",
@@ -66,6 +76,14 @@ def without_env_diff(base: dict[str, str] | None = None) -> dict[str, str]:
     """
     source = os.environ if base is None else base
     return {k: v for k, v in source.items() if k != ENV_DIFF_NAME}
+
+
+def without_color_forcing(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Copy of the environment with colour/TTY forcing removed and NO_COLOR=1 set."""
+    source = os.environ if base is None else base
+    result = {k: v for k, v in source.items() if k not in COLOR_FORCING_NAMES}
+    result["NO_COLOR"] = "1"
+    return result
 
 
 def without_git_context(base: dict[str, str] | None = None) -> dict[str, str]:
