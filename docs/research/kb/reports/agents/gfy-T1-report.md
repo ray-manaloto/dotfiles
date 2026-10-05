@@ -25,3 +25,21 @@ Our modules call the vendor CLI only as `graphify update <target>` (`graphify.py
 ### Step 2 — `mise run graphify-check` → rc=0 (log `.agent/logs/gfy-t1-check.log`)
 - `graphifyy locked 0.9.76, latest 0.9.76`; path-binary 0.9.76; `graphify currency current`.
 - `graphify-health: missing (runtime=0.9.76)` — this worktree has no `graphify-out/graph.json` yet (gitignored, P3); the rebuild is the slot-gated step.
+
+### Step 3 — commit `71d071f0` (pre-commit hk hooks rc=0; first attempt hit a transient `index.lock`, gone on inspection, retry clean)
+Diff stat: 8 files, +105/-6 — `python/uv.lock`, 3 receipts, 3 stamps, this report. No hand edits.
+
+### Step 4 — SLOT REQUEST gfy-T1 sent to `dotfiles-20261004T181409.677303000-05.coordinator`; cc graphify-plan. Waiting for GO.
+- Coordinator reply: SLOT gfy-T1 QUEUED behind relay-rule gates -> instruction-budget gates; keep 71d071f0 unchanged. Idle until GO.
+- Coordinator handoff: report to dotfiles-20261004T200342.056321000-05.coordinator now. Queue unchanged (relay-rule-r2 -> instruction-budget -> gfy-T1). Waiting for GO.
+- GO received from dotfiles-20261004T200342.056321000-05.coordinator.
+
+### Step 5 — slot-gated (GO from `dotfiles-20261004T200342.056321000-05.coordinator`), on HEAD 71d071f0
+- `mise run graphify-rebuild` → rc=0 (`.agent/logs/gfy-t1-rebuild.log`): 2731 files AST-extracted, 42010 nodes / 64627 edges / 2469 communities; **`graphify-health: fresh (runtime=0.9.76)`**.
+- `mise run gate -- run lint` → rc=0, status passed, 46.8s (`.agent/logs/gfy-t1-gate-lint.log`, typed `.agent/gate-results/lint.log`). Its `failures` array holds two `fnhook_gates` informational "register.ts calls:" lines — status is `passed`, rc 0.
+- `mise run gate -- run pytest` → running (>600s foreground; moved to harness background).
+- `mise run gate -- run pytest` → rc=0, status passed, **5198 passed, 2 skipped** in 743s (`.agent/logs/gfy-t1-gate-pytest.log`, typed `.agent/gate-results/pytest.log`). Includes the native `backend_detection_env_vars()` scrub test in `tests/test_graphify.py` (no STOP condition).
+- `mise run gate -- run verify` → rc=0, status passed, **175 passed, 0 failed, 4 skipped** (`.agent/logs/gfy-t1-gate-verify.log`, typed `.agent/gate-results/verify.log`).
+- Slot RELEASED to the coordinator after verify.
+
+This report's Step-5 lines are an uncommitted edit on top of 71d071f0. The coordinator asked to keep 71d071f0 as it is, so committing them is the coordinator's call.
