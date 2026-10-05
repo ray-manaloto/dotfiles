@@ -63,7 +63,18 @@ STAMP_PATHS = (
 )
 # Terms only our fork's payload introduces; ``claude-cli`` is the control arm,
 # a sibling backend upstream DOES ship, so a blind grep cannot read as "absent".
-FORK_FEATURE_TERMS = ("openai-cli", "fallback-backend")
+FORK_FEATURE_TERMS: tuple[str, ...] = (
+    # 8adbc178, 45371550, 5c755a83: Codex CLI backend and credential/MCP wiring.
+    "openai-cli",
+    # fe4686da, 6a0ba926: retry a zero-success semantic pass on a second backend.
+    "fallback-backend",
+    # c38f63d5: watch --semantic extracts automatically on document changes.
+    "_run_semantic_extract",
+    # c71245de: batched Neo4j/FalkorDB graph push.
+    "UNWIND $rows",
+    # 3c9b930f: disable only MCP servers Codex can resolve in the extraction cwd.
+    "_codex_resolvable_disable_args",
+)
 FORK_CONTROL_TERM = "claude-cli"
 KB_NOT_WIRED = (
     "apply --leg kb is not wired until T8: the KB task `kb-graphify-pin` "
@@ -498,8 +509,11 @@ def _kb_steps(
         fork_step = PlanStep(
             leg=leg.name,
             summary=(
-                f"upstream {probe.tag} ships every fork feature natively: retiring "
-                "the fork is a human decision (manifest `clears_when`)"
+                f"upstream {probe.tag} contains all {len(probe.feature_hits)} probed "
+                "fork terms: retiring the fork is a human decision (manifest "
+                "`clears_when`); confirm against the fork commit list "
+                f"(`git log {ctx.fork_base_ref or '<old base tag>'}.."
+                f"{ctx.fork_commit or '<KB fork commit>'}`)"
             ),
             commands=[],
             human_gate=True,

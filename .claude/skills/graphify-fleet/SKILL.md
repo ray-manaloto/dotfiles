@@ -45,11 +45,15 @@ once and orders the work; each leg's own tooling still does the writing.
 - `UNVERIFIABLE: …` names a probe that could not answer — a missing ref, an
   absent tag, a failed `gh`. Resolve it; it never counts as current.
 - **fork-probe** greps upstream's latest tag in the local fork clone for the
-  fork-only features (`openai-cli`, `fallback-backend`) against the control arm
+  five fork terms: `openai-cli`, `fallback-backend`, `_run_semantic_extract`
+  (`watch --semantic`), `UNWIND $rows` (batched graph-db push), and
+  `_codex_resolvable_disable_args` (MCP resolvability), against the control arm
   `claude-cli`. A control count of 0 means the probe is blind, and a behind KB
-  then turns the verdict `unverifiable`. `native=True` means upstream now ships
-  every fork feature: retiring the fork (manifest `clears_when`) is a human
-  decision, and the plan says so instead of printing a rebase.
+  then turns the verdict `unverifiable`. `native=True` means the probe found
+  every one of the 5 probed fork terms at the upstream tag. Retiring the fork
+  (manifest `clears_when`) is a human decision that should be confirmed against
+  the fork's commit list (`git log v<base>..<fork commit>`); the plan says so
+  instead of printing a rebase.
 - KB `drift` means its own sites disagree (pyproject vs `uv.lock` vs manifest
   commit vs `base_ref`) — reconcile those before any version move.
 

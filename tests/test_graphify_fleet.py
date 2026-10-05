@@ -78,6 +78,9 @@ class FakeRun:
         self.grep_hits = {
             "openai-cli": 0,
             "fallback-backend": 0,
+            "_run_semantic_extract": 0,
+            "UNWIND $rows": 0,
+            "_codex_resolvable_disable_args": 0,
             "claude-cli": CONTROL_HITS,
         }
         self.uv_tools = "skypilot v0.13.0\n- sky\n"
@@ -318,6 +321,90 @@ def test_fork_probe_missing_tag_never_fetches(roots: Roots, currency: Currency) 
     assert not any("fetch" in argv for argv in run.calls)
 
 
+def test_plan_only_original_terms_hit_keeps_fork_replay(
+    roots: Roots, currency: Currency
+) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"
+    run.grep_hits.update({"openai-cli": 3, "fallback-backend": 3})
+    status, ctx = graphify_fleet.gather(run, roots, currency.probes)
+    assert status.fork_probe.native is False
+    assert status.fork_probe.feature_hits == {
+        "openai-cli": 3,
+        "fallback-backend": 3,
+        "_run_semantic_extract": 0,
+        "UNWIND $rows": 0,
+        "_codex_resolvable_disable_args": 0,
+    }
+    kb_first = next(
+        step
+        for step in graphify_fleet.plan(status, ctx, roots).steps
+        if step.leg is LegName.kb
+    )
+    assert "replay the fork payload" in kb_first.summary
+    assert any("rebase --onto v0.9.76 v0.9.57" in cmd for cmd in kb_first.commands)
+
+
+@pytest.mark.parametrize(
+    "missing_term",
+    [
+        "openai-cli",
+        "fallback-backend",
+        "_run_semantic_extract",
+        "UNWIND $rows",
+        "_codex_resolvable_disable_args",
+    ],
+)
+def test_fork_probe_each_missing_term_prevents_native(
+    roots: Roots, missing_term: str
+) -> None:
+    run = FakeRun()
+    run.grep_hits.update(
+        {
+            "openai-cli": 3,
+            "fallback-backend": 3,
+            "_run_semantic_extract": 1,
+            "UNWIND $rows": 1,
+            "_codex_resolvable_disable_args": 1,
+        }
+    )
+    run.grep_hits[missing_term] = 0
+    probe = graphify_fleet.probe_fork_features(run, roots, "0.9.76")
+    assert probe.native is False
+    assert probe.error is None
+
+
+def test_fork_probe_all_terms_still_requires_control(roots: Roots) -> None:
+    run = FakeRun()
+    run.grep_hits = {
+        "openai-cli": 3,
+        "fallback-backend": 3,
+        "_run_semantic_extract": 1,
+        "UNWIND $rows": 1,
+        "_codex_resolvable_disable_args": 1,
+        "claude-cli": 0,
+    }
+    probe = graphify_fleet.probe_fork_features(run, roots, "0.9.76")
+    assert probe.native is None
+    assert "probe is blind" in (probe.error or "")
+
+
+def test_fork_probe_passes_literal_dollar_to_fixed_string_git(roots: Roots) -> None:
+    run = FakeRun()
+    graphify_fleet.probe_fork_features(run, roots, "0.9.76")
+    assert [
+        "git",
+        "-C",
+        str(roots.fork),
+        "grep",
+        "-lF",
+        "UNWIND $rows",
+        "v0.9.76",
+        "--",
+        "graphify/",
+    ] in run.calls
+
+
 def test_plan_orders_host_then_dotfiles_then_human_fork_rebase(
     roots: Roots, currency: Currency, capsys: Capsys
 ) -> None:
@@ -398,13 +485,42 @@ def test_plan_native_upstream_proposes_retirement(
 ) -> None:
     run = FakeRun()
     run.upstream = "v0.9.76"
-    run.grep_hits.update({"openai-cli": 3, "fallback-backend": 1})
+    run.grep_hits.update(
+        {
+            "openai-cli": 3,
+            "fallback-backend": 3,
+            "_run_semantic_extract": 1,
+            "UNWIND $rows": 1,
+            "_codex_resolvable_disable_args": 1,
+        }
+    )
     status, ctx = graphify_fleet.gather(run, roots, currency.probes)
     assert status.fork_probe.native is True
-    steps = graphify_fleet.plan(status, ctx, roots).steps
-    kb_first = next(step for step in steps if step.leg is LegName.kb)
-    assert "natively" in kb_first.summary
+    assert status.fork_probe.feature_hits == {
+        "openai-cli": 3,
+        "fallback-backend": 3,
+        "_run_semantic_extract": 1,
+        "UNWIND $rows": 1,
+        "_codex_resolvable_disable_args": 1,
+    }
+    document = graphify_fleet.plan(status, ctx, roots)
+    kb_first = next(step for step in document.steps if step.leg is LegName.kb)
+    assert "every fork feature" not in kb_first.summary
+    assert "all 5 probed fork terms" in kb_first.summary
+    assert "human decision" in kb_first.summary
+    assert f"git log v0.9.57..{FORK_SHA}" in kb_first.summary
     assert kb_first.commands == []
+    assert kb_first.human_gate
+    assert not kb_first.runnable
+    rendered = graphify_fleet.render(document)
+    assert "every fork feature" not in rendered
+    assert "all 5 probed fork terms" in rendered
+    assert "human decision" in rendered
+    assert f"git log v0.9.57..{FORK_SHA}" in rendered
+    assert (
+        "openai-cli=3 fallback-backend=3 _run_semantic_extract=1 "
+        "UNWIND $rows=1 _codex_resolvable_disable_args=1 control claude-cli=18"
+    ) in rendered
 
 
 def test_apply_host_prints_uninstall_and_never_runs_it(
