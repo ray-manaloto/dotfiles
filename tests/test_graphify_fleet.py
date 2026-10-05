@@ -615,6 +615,14 @@ def test_kb_pinned_to_upstream_pypi_is_not_drift(
     status, _ = graphify_fleet.gather(run, roots, currency.probes)
     assert status.legs[1].state is LegState.current
 
+    # A PyPI-pinned KB whose manifest still describes an older release.
+    run.kb_files["sources/graphify.manifest"] = (
+        "url = https://github.com/Graphify-Labs/graphify\n"
+        f"ref = v0.9.50\ncommit = {OTHER_SHA}\n"
+    )
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    assert "manifest ref v0.9.50 != installed v0.9.57" in status.legs[1].findings
+
     # The manifest still needs ref + commit: KB's manifest loader rejects
     # a URL-only file, so a retired fork must not hide that as "current".
     run.kb_files["sources/graphify.manifest"] = (

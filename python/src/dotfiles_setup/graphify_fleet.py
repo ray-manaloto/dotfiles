@@ -361,7 +361,14 @@ def _kb_leg(run: Run, roots: FleetRoots) -> tuple[_LegBuilder, str | None, str |
     if missing:
         leg.drifted(f"sources/graphify.manifest lacks {', '.join(missing)}")
     install = {source_rev, lock_rev}
-    if install != {None}:
+    if install == {None}:
+        # PyPI-pinned: the manifest's release ref must describe the installed
+        # version (codex lens on 71800e4e). Its commit is not resolved to the
+        # tag here — that would need the upstream clone; recorded residue.
+        ref = manifest.get("ref")
+        if ref and leg.version and ref != f"v{leg.version}":
+            leg.drifted(f"manifest ref {ref} != installed v{leg.version}")
+    else:
         revs = install | {manifest.get("commit")}
         if len(revs) != 1 or None in revs:
             found = sorted(map(str, revs))

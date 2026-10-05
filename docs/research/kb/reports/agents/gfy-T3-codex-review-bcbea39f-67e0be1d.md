@@ -38,6 +38,25 @@ Review comment:
   absent together. The test fixture now carries ref + commit and a URL-only
   manifest asserts drift; reverting the check fails that test.
 
+## 71800e4e (verbatim)
+
+```text
+The PyPI exception now permits mismatched source and installation pins to report as current. Targeted pytest execution was blocked by sandbox restrictions on uv's cache.
+
+Review comment:
+
+- [P2] Check the PyPI manifest against the installed version — /Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/gfy-t3/python/src/dotfiles_setup/graphify_fleet.py:363-365
+  When a retired-fork KB pins PyPI `0.9.76` but retains a complete manifest for `v0.9.57`, both installation revisions are `None`, so this guard skips the comparison and the required-field check passes. `gather()` consequently reports the KB as `current`, and `plan()` emits no reconciliation step, although the KB source corpus describes an older version than the installed package. Validate the PyPI manifest's release ref and corresponding commit against the installed version rather than checking only that its fields exist.
+```
+
+Disposition: CONFIRMED and FIXED for the ref (a PyPI-pinned KB's manifest
+`ref` must equal `v<installed version>`; reverting the check fails its test).
+NOT FIXED: resolving the manifest `commit` to that tag — it needs the upstream
+clone at an arbitrary tag; recorded as residue. This was the second review
+round on the retired-fork branch, so per the codex-sdlc-team review-tier rule
+(stop after two rounds on one diff) the loop stops here and the residue goes to
+the coordinator.
+
 ## GitHub repos touched
 
 - [ray-manaloto/dotfiles](https://github.com/ray-manaloto/dotfiles) — the reviewed commits
