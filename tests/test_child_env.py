@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import os
+
+import pytest
 from dotfiles_setup.child_env import (
     ENV_DIFF_NAME,
     GIT_CONTEXT_NAMES,
     clean_env,
     dropped_names,
     is_credential,
+    without_color_forcing,
     without_env_diff,
     without_git_context,
 )
@@ -30,6 +34,49 @@ SAMPLE = {
     "AWS_REGION": "us-east-1",
     "TOKENIZER_BACKEND": "hf",
 }
+
+
+@pytest.mark.parametrize("use_ambient", [False, True])
+def test_without_color_forcing_drops_only_forcing_names(
+    monkeypatch: pytest.MonkeyPatch, *, use_ambient: bool
+) -> None:
+    """FAIL arm: retaining CLICOLOR_FORCE colours gh even with NO_COLOR=1."""
+    source = {
+        **SAMPLE,
+        "FORCE_COLOR": "3",
+        "CLICOLOR_FORCE": "1",
+        "GH_FORCE_TTY": "1",
+        "PYTHON_COLORS": "1",
+    }
+    before = dict(source)
+    # The explicit-base arm points os.environ elsewhere, so ignoring `base` fails.
+    monkeypatch.setattr(os, "environ", source if use_ambient else {"PATH": "/x"})
+
+    out = without_color_forcing(None if use_ambient else source)
+
+    assert out == {**SAMPLE, "NO_COLOR": "1"}
+    assert source == before
+    assert out is not source
+
+
+@pytest.mark.parametrize("no_color", ["", "0"])
+def test_without_color_forcing_overwrites_no_color(no_color: str) -> None:
+    source = {"NO_COLOR": no_color, "PATH": "/sentinel/bin"}
+
+    assert without_color_forcing(source) == {
+        "NO_COLOR": "1",
+        "PATH": "/sentinel/bin",
+    }
+    assert source["NO_COLOR"] == no_color
+
+
+def test_without_color_forcing_keeps_explicit_empty_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FAIL arm: treating an empty base as absent imports ambient names."""
+    monkeypatch.setattr(os, "environ", {"PATH": "/sentinel/bin"})
+
+    assert without_color_forcing({}) == {"NO_COLOR": "1"}
 
 
 def test_without_env_diff_drops_only_the_blob() -> None:

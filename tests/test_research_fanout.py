@@ -736,6 +736,32 @@ def test_multiline_stderr_keeps_summary_to_one_line_per_source(
     assert "[process-failed]" in lines[1]
 
 
+def test_default_runner_neutralises_color_forcing_in_real_child() -> None:
+    """FAIL arm: env=env leaks all forcing names and omits NO_COLOR."""
+    script = (
+        "import os; "
+        "print(' '.join(name for name in "
+        "('FORCE_COLOR', 'CLICOLOR_FORCE', 'GH_FORCE_TTY', 'PYTHON_COLORS') "
+        "if name in os.environ)); "
+        "print(os.environ.get('NO_COLOR', '<absent>'))"
+    )
+
+    result = default_runner(
+        [sys.executable, "-c", script],
+        timeout=5.0,
+        env={
+            "FORCE_COLOR": "3",
+            "CLICOLOR_FORCE": "1",
+            "GH_FORCE_TTY": "1",
+            "PYTHON_COLORS": "1",
+            "PATH": os.environ["PATH"],
+        },
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.splitlines() == [b"", b"1"]
+
+
 def test_default_runner_bounds_drain_when_detached_descendant_holds_pipe(
     tmp_path: Path,
 ) -> None:
@@ -1219,6 +1245,47 @@ def test_github_releases_require_every_retained_query_term(
 
     assert result.status is Status.EMPTY_VERIFIED
     assert result.items == ()
+
+
+def test_context7_real_runner_resolves_library_under_forced_color(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FAIL arm: ANSI reset bytes enter the ID and make ctx7 docs reject it."""
+    _install_path_tools(tmp_path, monkeypatch, "ctx7")
+    (tmp_path / "ctx7").write_text(
+        r"""#!/bin/sh
+case "$1" in
+    library)
+        if [ -n "${FORCE_COLOR:-}" ] && [ "${NO_COLOR+x}" != x ]; then
+            printf '\033[36mContext7-compatible library ID: /owner/library\033[39m\n'
+        else
+            printf 'Context7-compatible library ID: /owner/library\n'
+        fi
+        ;;
+    docs)
+        if [ "$2" != /owner/library ]; then
+            printf '✖ Library "%s" not found\n' "$2" >&2
+            exit 1
+        fi
+        printf '### Title\nSource: https://docs.test/x\nbody\n'
+        ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FORCE_COLOR", "3")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+    [result] = fan_out(
+        FanoutRequest("topic", "owner/library", ("context7",), 10, 5.0),
+        runner=default_runner,
+        http=FakeHttp({}),
+    )
+
+    assert result.status is Status.OK
+    assert len(result.items) == 1
+    assert result.items[0].title == "Title"
+    assert result.items[0].url == "https://docs.test/x"
 
 
 def test_context7_uses_first_library_and_parses_sections(
