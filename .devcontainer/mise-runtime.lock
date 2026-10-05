@@ -853,37 +853,37 @@ conda_deps = [
 ]
 
 [[tools.fnox]]
-version = "1.36.0"
+version = "1.38.1"
 backend = "packslip:github.com/jdx/fnox"
 
 [tools.fnox."platforms.linux-arm64"]
-checksum = "sha256:a479fc6cdf52db7ec5fab8027e62debbbe7ee18f2829bcdcc4766c9dc3ef123e"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-aarch64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:1c4458f67c627d65ef13187480a8c5c5c2cc71b649dcdae8477651ccf211a11d"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-aarch64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [tools.fnox."platforms.linux-arm64-musl"]
-checksum = "sha256:1d7f21441c6dfb23fe9e27c4eed98d821c8e7f8587a7040c8f7471c79c3ed76f"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-aarch64-unknown-linux-musl.tar.gz"
+checksum = "sha256:f56ec46395965f8a8627dbaf77ec6b7fa99fc233980c1aeb8d35e0f21ed338f2"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-aarch64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [tools.fnox."platforms.linux-x64"]
-checksum = "sha256:9c4f4dd2ae9b704016798eef18e74fecb61f954cabb8ec4b97f848332954463d"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:6cd4a4699b1038cd4c2014d29d18821b65e843010b7b1509417679194367e9f1"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-x86_64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [tools.fnox."platforms.linux-x64-baseline"]
-checksum = "sha256:9c4f4dd2ae9b704016798eef18e74fecb61f954cabb8ec4b97f848332954463d"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-x86_64-unknown-linux-gnu.tar.gz"
+checksum = "sha256:6cd4a4699b1038cd4c2014d29d18821b65e843010b7b1509417679194367e9f1"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-x86_64-unknown-linux-gnu.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [tools.fnox."platforms.linux-x64-musl"]
-checksum = "sha256:4cc3b4e82d6be720078f723280a8cb918429c555aa54232be245b79440869f99"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-x86_64-unknown-linux-musl.tar.gz"
+checksum = "sha256:3e6f196d67127701313907eaa73e241dedf2bae23f4502f2f2f33ff70661b261"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-x86_64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [tools.fnox."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:4cc3b4e82d6be720078f723280a8cb918429c555aa54232be245b79440869f99"
-url = "https://github.com/jdx/fnox/releases/download/v1.36.0/fnox-x86_64-unknown-linux-musl.tar.gz"
+checksum = "sha256:3e6f196d67127701313907eaa73e241dedf2bae23f4502f2f2f33ff70661b261"
+url = "https://github.com/jdx/fnox/releases/download/v1.38.1/fnox-x86_64-unknown-linux-musl.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/fnox/.github/workflows/release.yml"
 
 [[tools."github:cli/cli"]]
