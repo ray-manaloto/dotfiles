@@ -321,7 +321,10 @@ def _isolated_wiring_contract(tmp_path: Path) -> dict[str, Any]:
         ),
         (
             "tests/test_instruction_total.py",
-            "def test_wiring_contract_rejects_missing_paths(",
+            (
+                "def test_wiring_contract_rejects_missing_paths("
+                "tmp_path: Path, relative: str) -> None:"
+            ),
         ),
         (
             "tests/test_instruction_total.py",
