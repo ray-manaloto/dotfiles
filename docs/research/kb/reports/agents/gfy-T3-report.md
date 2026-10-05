@@ -4,7 +4,25 @@ Lane gfy-T3, worktree `.claude/worktrees/gfy-t3`, branch `feat/graphify-fleet`.
 Spec: `docs/specs/graphify-0976-plan-2026-10-04.md` §3 (T3), §4, §7 (in the
 `graphify-plan` worktree).
 
-## Status: IN PROGRESS — module, schema, codegen job, CLI, mise task done; tests/skill/gates pending
+## Status: GATES GREEN on eb6fb8bd — final bundled /code-review + mattpocock review pending
+
+| Commit | What | Review |
+|---|---|---|
+| 6b4719f7 | graphify-fleet module, schema + codegen job, CLI, mise task, skill + mirror | codex lens (gpt-6-astra, xhigh): 5 P2 — all confirmed (`gfy-T3-codex-review-6b4719f7.md`) |
+| 8b3c3983 | fixes for those 5: host step before dotfiles; KB drift outranks behind; unanswered probe → command-free step; full fork-maintenance preview argv; malformed KB TOML → unverifiable | 5 new tests fail on 6b4719f7 (5 failed / 16 passed) |
+| 6563119b | fork probe covers every fork change family (5 terms), retirement wording no longer overclaims — codex SDLC team run aa78bf7b (python + documentation specialists) | Opus cold review: SHIP, 5 LOW / 3 INFO (`gfy-T3-cold-review-6563119b.md`) |
+| eb6fb8bd | LOW F1/F2/F3/F5 from that review (F4 → plan T5; F6–F8 INFO) | codex lens: no actionable regressions (`gfy-T3-codex-review-eb6fb8bd.md`) |
+
+Full gates on eb6fb8bd (heavy SLOT, `mise run gate -- run`, sequential): lint rc=0,
+pytest rc=0, verify rc=0 (175 passed / 0 failed / 4 skipped), lint-docs rc=0.
+
+Incident: a mutation control arm used `git checkout HEAD -- <file>`, which also
+reset the index and erased the uncommitted F1–F5 fixes from disk; recovered
+byte-exact from the unreachable blob (`git fsck --unreachable` → 6a22f245)
+before committing 8b3c3983.
+
+The real-run sections below were captured at 6b4719f7 and predate the fixes
+(the plan's step order and preview command differ now).
 
 ## Real read-only `status` run
 
