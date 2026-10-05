@@ -29,18 +29,6 @@ worked.
     `agent-harness-docs/docs/{claude-code,codex,cursor,opencode,pi}` — the
     **vendor's own docs**, on disk, greppable, zero round-trips.
 
-    ```bash
-    KB=~/dev/github/ray-manaloto/knowledge-base/sources
-    CC=$KB/agent-harness-docs/docs/claude-code   # cited as `$CC/...` elsewhere
-    grep -rn "<topic>" "$CC/"
-    ```
-
-    **This is where every question about how the harness itself behaves is
-    answered** — hook events and their matcher values, settings precedence and
-    reload semantics, tool input schemas, permission modes, the SDK surface.
-    Anything of the form *"does Claude Code do X"* is a **step-00 question**,
-    and reaching the web for it is a step you already had cheaper.
-
     ⚠️ **An unanswered question whose answer is already on this disk is pure
     loss** — a session once shipped a PreToolUse gate reporting two harness
     facts as "unproven" while both sat in `$CC/`. Why this is step 00:
@@ -95,11 +83,7 @@ worked.
 
 ## Never `mcp2cli` a per-repo mintlify MCP URL
 
-`mcp2cli https://mintlify.com/<owner>/<repo>/mcp <tool>` was once step 2
-of this chain. **It does not work.** Those URLs are GET-only *preview
-descriptors*: a `curl GET` returns a plausible JSON tool-schema, while
-the POST `mcp2cli` sends returns `404`. There is no server behind them,
-and an API key does not unlock one (Mintlify keys are org-scoped).
+Probe history: `docs/rules-evidence/research-doc-sources.md`.
 
 The ban is specific to per-repo mintlify subpath URLs. `mcp2cli` stays
 in active use for real MCP servers (`@github`, `@docker`, or a
@@ -109,13 +93,8 @@ scope limit: `docs/rules-evidence/research-doc-sources.md`.
 
 ## MCP: two lanes. Which lane you are in decides the answer
 
-Claude Code presents MCP tools **deferred — names only**, loading a schema on
-demand via `ToolSearch` (measured 33× smaller than eager schemas), so a
-registration's context cost is small; never refuse one on context grounds.
+A registration's context cost is small; never refuse one on context grounds.
 Method and per-server table: `docs/rules-evidence/research-doc-sources.md`.
-
-The residual cost is small and the same either way. What actually differs
-between the lanes is whether you control the alternative.
 
 **Lane 1 — a third-party plugin or skill requires MCP: ALLOWED, no
 justification needed.** Enabling a plugin that bundles an MCP server, or a tool
@@ -132,11 +111,6 @@ order:
 3. **`mcp2cli`** — process-spawn, pays zero per-conversation schema cost;
 4. native registration — **last resort**, and say in the commit body why 1–3
    could not do it.
-
-The asymmetry is deliberate, but **the reason is simplicity, not context spend.**
-In lane 1 registration buys a capability we cannot build; in lane 2 it buys
-something a `curl` already does, while adding a spawned process, a version to
-pin, an auth path and a failure mode for the doctor to police.
 
 **If you are unsure which lane you are in, you are in lane 2.** Lane 1 is
 specifically "an external plugin/skill I did not write requires it"; everything

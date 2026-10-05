@@ -7,30 +7,9 @@ native/framework mechanism. When a native feature supersedes custom code,
 **retire the custom code in the same change** and update every doc that
 describes it.
 
-This is the currency-over-time sibling of `use-tool-builtins.md`: that rule says
-*prefer the built-in over inventing one now*; this rule says *keep checking,
-because the built-in you needed may have shipped since you last looked — and the
-custom code you wrote last year may now be dead weight.*
-
 ## Why this rule exists
 
-The managed tools here (mise, hk, Renovate, uv, docker, chezmoi) move fast, and
-their **docs lag their code** — the merged CHANGELOG/PRs are often the only
-truthful source. Stated twice by Ray (2026-07-04).
-
-Canonical case: **Renovate's native `mise` manager + the
-`github>jdx/renovate-config` preset** made **8 of 11** hand-rolled
-`customManagers` redundant (PR #161).
-
-The failure mode this prevents: shipping (or preserving) homegrown machinery for
-a problem the tool already solves — paying maintenance cost forever, and often
-getting a *weaker* result (version-only vs sha256-verified) than the native path.
-
-Two lessons the case history is worth reading for: an *assumption* about a tool
-lags its code exactly as docs do (the conda-lockfile claim that failed 0/3 on
-probing), and a superseded file can leave two of your own docs asserting
-opposite things for weeks. Cases, tables and the currency-engine wiring:
-`docs/rules-evidence/tool-currency-and-native-first.md`.
+Case history: `docs/rules-evidence/tool-currency-and-native-first.md`.
 
 ## Rules
 
@@ -77,10 +56,6 @@ this natively now?" surface area.
 
 ## How currency is checked now
 
-Version-currency MECHANICS live in the **shared `kb_setup.currency` engine** (a
-SHA-pinned `uv` git dep on the knowledge-base package — one implementation, both
-repos). This repo declares `currency.toml` and two thin tasks:
-
 - `mise run tool-currency` → `kb-setup currency daily` — the daily report
   `refresh.yml` upserts as the standing issue.
 - `mise run tool-currency-check` → `kb-setup currency check` — the offline drift
@@ -90,11 +65,7 @@ The engine tracks **versions**. This rule's remaining, un-automatable job is the
 **native-first judgment**: is a piece of custom code now superseded by a tool
 feature? Only a human decides retirement.
 
-Machine enforcement is partial by nature — `workflow.tool-currency-wiring`
-(suites.toml) asserts the whole chain exists, `pin_parity` catches drift across
-every declared pin site, Renovate PRs carry the CHANGELOG, and agnix
-validates this file structurally. Detail:
-`docs/rules-evidence/tool-currency-and-native-first.md`.
+Wiring inventory: `docs/rules-evidence/tool-currency-and-native-first.md`.
 
 ## See also
 

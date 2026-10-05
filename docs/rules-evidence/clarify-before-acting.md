@@ -88,3 +88,34 @@ matcher like `code-reviewer` took the regex path and also fired for
 `ai-cli-invocation.md`:** a lane restated a rule of thumb that is true of *most*
 harnesses, attached a nearby line number, and produced something that reads as
 sourced. A citation is only evidence if the cited line says the thing.
+
+
+## From the rule: Why this rule exists
+
+Session 2026-06-29: the user requested hk-hang prevention and asked to be
+questioned until the approach was certain. The selected idea—per-step hk
+timeouts—proved impossible because hk has no timeout support. Surfacing that
+before implementation and confirming the outer-timeout pivot prevented the
+wrong system from being built.
+
+
+## From the rule: The gate and its boundary — native anchors
+
+Current native anchors (re-read 2026-09-09): ordinary subagents lose
+`AskUserQuestion` even when explicitly allowed, while forks retain the parent
+pool (`$CC/sub-agents.md:379-384`); project settings reload without restart
+(`$CC/settings.md:646`); and a hook `deny` prevents the tool call
+(`$CC/hooks.md:1744-1745`). Timeout scope and behavior are documented at
+`$CC/settings-reference.md:2759-2774` and `$CC/tools-reference.md:125-137`.
+
+
+## From the rule: The gate and its boundary — enforcement audit explanation
+
+The prose path has no enforcement callback. Its protection is the explicit
+stop, which prevents work from racing ahead of the answer.
+
+The hook cannot detect a question that was never attempted, cannot grade prose
+fallbacks, and cannot make a stripped tool reappear. Judgment therefore stays
+in this eager rule; automation only protects the call surface it can observe.
+The standard has drifted repeatedly, so the ask-quality implementation remains
+the mechanical layer for tool-based asks.

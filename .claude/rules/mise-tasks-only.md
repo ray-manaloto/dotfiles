@@ -29,7 +29,7 @@ library, zero-bash-logic) in the same change.
 | `npx <tool>` | the mise-pinned binary directly |
 | `chezmoi apply/update` on the Mac host | nothing — devcontainer-only |
 | `git commit --no-verify` / `-n` / `-nm`, `git push --no-verify` | nothing — fix what the hook reports. pre-commit is what runs `no_commit_to_branch`; pre-push runs the suite. Git skips a hook BEFORE it exists as a process, so no hook can catch its own suppression and this guard is the only layer (#400). `git push -n` is `--dry-run` and stays allowed |
-| `echo`/`printf` of a credential variable (`"$DOPPLER_TOKEN"`, `"${API_KEY:-none}"`) | nothing — print a FLAG, never a value: `[ -n "$VAR" ] && echo SET \|\| echo ABSENT`. **`:-` and `:=` emit the VALUE** for a set variable, so `${VAR:+SET}${VAR:-ABSENT}` prints the secret — that is how a live Doppler token reached a transcript (2026-08-02). Handing a credential to a consumer stays allowed; stdout is the transcript |
+| `echo`/`printf` of a credential variable (`"$DOPPLER_TOKEN"`, `"${API_KEY:-none}"`) | nothing — print a FLAG, never a value: `[ -n "$VAR" ] && echo SET \|\| echo ABSENT`. **`:-` and `:=` emit the VALUE** for a set variable, so `${VAR:+SET}${VAR:-ABSENT}` prints the secret. Handing a credential to a consumer stays allowed; stdout is the transcript |
 | an unquoted `echo ====` / `echo ===APPLY` separator | `echo '===='` — zsh `=`-expands the word into a command lookup, rc=1 aborts the rest of the chain (#1388) |
 | `sh $CLAUDE_PLUGIN_ROOT/scripts/attest-plan.sh` (or `/plan-attest`) | `mise run plan-attest` — agent-runnable since 2026-09-26 (Ray); it resolves the version-pinned plugin path. `-- --show` reads; the bare form WRITES. The plugin's set-active-plan script stays denied |
 | hand-editing `schemas/*.json` or its `version` in `schemas/sources.toml` | `mise run schema-vendor-refresh` — re-downloads at the pinned tag and rewrites both; `mise run schema-vendor-check` is the offline drift check `verify` runs |
@@ -55,15 +55,12 @@ judgement call at the call site. Incident history:
 
 ## Enforcement layers (deep-research verified, 2026-07-07)
 
-Five layers, earliest first: the **PreToolUse hook** (hard deny, deterministic,
-applies even in bypassPermissions mode); the **ship/land `hook-selfcheck` gate**
-driving the wired guard end-to-end, so a hook regression fails a PR like
-lint/pytest; **this rule + the `pr-workflow`/`devcontainer-sync` skills**
-(markdown alone is "relying on the LLM", never the only layer); the
-**self-learning loop `mise run command-audit`**, run on demand (its
-`SessionEnd` hook was retired 2026-10-02 for host load), which mines transcripts
-for one-off commands the guard does not yet cover; and **contracts** in
-suites.toml asserting the whole chain exists. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
+**This rule + the `pr-workflow`/`devcontainer-sync` skills**
+(markdown alone is "relying on the LLM", never the only layer).
+
+The **self-learning loop `mise run command-audit`**, run on demand (its
+`SessionEnd` hook was retired 2026-10-02 for host load), mines transcripts
+for one-off commands the guard does not yet cover. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
 
 ⚠️ **The hook fails OPEN on its own errors** and records every one (#343) — so a
 green session is not proof the guard ran. Hard bans that must never fail open
@@ -82,8 +79,7 @@ Only **`bypass`** is an alarm: a command that matched a rule ALREADY LIVE
 those for false positives), `pre_rule` predates its rule, `one_off` is noisy.
 
 ⚠️ **"Nothing has evaded the matcher" is not "nothing has evaded the guard".**
-#343 found **125** commands that bypassed it by never reaching it. Both defect
-stories and the 3,615-command measurement: `docs/rules-evidence/mise-tasks-only.md`.
+
 ## Extending
 
 New redirect = new `_RULES` entry in `hook_guard.py` + a test + a row in the
@@ -98,8 +94,7 @@ Never bump it on a reword — but **widening a pattern to cover a NEW shape is n
 a reword and needs its own date.** One `Rule` carries one `since`, so a widened
 rule must be **split into two entries** (`_V1` / `_V1B`). **A proxy goes stale
 silently:** when a bypass count moves, check the rule's history (`git log -S` on
-the pattern) before believing it. The #308 back-dating that proved this:
-`docs/rules-evidence/mise-tasks-only.md`.
+the pattern) before believing it.
 
 Rules match AFTER `_inert_masked` has neutered every separator that is data, so
 write the pattern against real shell syntax and let masking handle quoting — do

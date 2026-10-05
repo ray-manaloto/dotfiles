@@ -171,3 +171,33 @@ intended side effects actually happened.
   its rules, and issues #264/#265/#266/#308/#343/#369.
 - [ray-manaloto/knowledge-base](https://github.com/ray-manaloto/knowledge-base) —
   the sibling repo whose PRs exposed the repo-aware dispatch defect.
+
+
+## From the rule: Enforcement layers — research audit inventory
+
+Five layers, earliest first: the **PreToolUse hook** (hard deny, deterministic,
+applies even in bypassPermissions mode); the **ship/land `hook-selfcheck` gate**
+driving the wired guard end-to-end, so a hook regression fails a PR like
+lint/pytest; **this rule + the `pr-workflow`/`devcontainer-sync` skills**
+(markdown alone is "relying on the LLM", never the only layer); the
+**self-learning loop `mise run command-audit`**, run on demand (its
+`SessionEnd` hook was retired 2026-10-02 for host load), which mines transcripts
+for one-off commands the guard does not yet cover; and **contracts** in
+suites.toml asserting the whole chain exists. Full inventory: `docs/rules-evidence/mise-tasks-only.md`.
+
+
+## From the rule: Canonical task map — credential-transcript incident
+
+ — that is how a live Doppler token reached a transcript (2026-08-02).
+
+
+## From the rule: Reading the command-audit report — historical measurements
+
+#343 found **125** commands that bypassed it by never reaching it. Both defect
+stories and the 3,615-command measurement: `docs/rules-evidence/mise-tasks-only.md`.
+
+
+## From the rule: Extending — since-date backdating incident
+
+ The #308 back-dating that proved this:
+`docs/rules-evidence/mise-tasks-only.md`.
