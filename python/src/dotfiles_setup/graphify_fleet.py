@@ -27,6 +27,7 @@ mechanism is reused (``graphify_currency.check``/``_path_binary_probe``).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import re
 import subprocess
 import sys
@@ -87,10 +88,12 @@ _GH_TIMEOUT_SECONDS = 60
 _UV_TIMEOUT_SECONDS = 30
 _PYPROJECT_PIN_RE = re.compile(r'"graphifyy(?:\[[^\]]*\])?==([^";\s]+)"')
 _UV_TOOL_RE = re.compile(r"^graphifyy v(\S+)", re.MULTILINE)
+# Same order as `_LegBuilder.build`: drift outranks behind, because a version
+# move planned over disagreeing sites carries the disagreement forward.
 _SEVERITY = {
     LegState.current: 0,
-    LegState.drift: 1,
-    LegState.behind: 2,
+    LegState.behind: 1,
+    LegState.drift: 2,
     LegState.unverifiable: 3,
 }
 # Host first: graphify-upgrade's closing offline check requires the PATH
@@ -468,7 +471,9 @@ def gather(
     legs = [dotfiles.build(latest), kb.build(latest), host.build(latest)]
     fork_probe = probe_fork_features(run, roots, latest)
     verdict = max((leg.state for leg in legs), key=_SEVERITY.__getitem__)
-    kb_behind = legs[1].state is LegState.behind
+    kb_behind = any(
+        leg.name is LegName.kb and leg.state is LegState.behind for leg in legs
+    )
     if kb_behind and fork_probe.error is not None:
         verdict = LegState.unverifiable
     status = FleetPlan(
@@ -477,18 +482,25 @@ def gather(
     return status, _Context(fork_commit, base_ref, stray)
 
 
+def _human_step(leg: LegName, summary: str, commands: Sequence[str] = ()) -> PlanStep:
+    """A step this tool prints for a person and never runs."""
+    return PlanStep(
+        leg=leg,
+        summary=summary,
+        commands=list(commands),
+        human_gate=True,
+        runnable=False,
+    )
+
+
 def _kb_steps(
     status: FleetPlan, leg: Leg, ctx: _Context, roots: FleetRoots
 ) -> list[PlanStep]:
     latest = status.upstream.version
     if leg.state is LegState.drift:
         return [
-            PlanStep(
-                leg=leg.name,
-                summary="reconcile the KB's disagreeing pin sites (see findings)",
-                commands=[],
-                human_gate=True,
-                runnable=False,
+            _human_step(
+                leg.name, "reconcile the KB's disagreeing pin sites (see findings)"
             )
         ]
     probe = status.fork_probe
@@ -496,19 +508,16 @@ def _kb_steps(
         # An unanswered probe cannot establish that the fork is still needed,
         # so no replay or pin command is printed (codex lens F3).
         return [
-            PlanStep(
-                leg=leg.name,
-                summary=f"fork-feature probe UNVERIFIABLE ({probe.error}): resolve it "
+            _human_step(
+                leg.name,
+                f"fork-feature probe UNVERIFIABLE ({probe.error}): resolve it "
                 "before choosing between a fork replay and retiring the fork",
-                commands=[],
-                human_gate=True,
-                runnable=False,
             )
         ]
     if probe.native:
-        fork_step = PlanStep(
-            leg=leg.name,
-            summary=(
+        fork_step = _human_step(
+            leg.name,
+            (
                 f"upstream {probe.tag} contains all {len(probe.feature_hits)} probed "
                 "fork terms: retiring the fork is a human decision (KB "
                 "`currency.toml` [tool.graphify.fork] `clears_when`); confirm "
@@ -516,21 +525,18 @@ def _kb_steps(
                 f"{ctx.fork_base_ref or '<old base tag>'}.."
                 f"{ctx.fork_commit or '<KB fork commit>'}`)"
             ),
-            commands=[],
-            human_gate=True,
-            runnable=False,
         )
         new_commit = "<upstream commit>"
     else:
         branch = f"kb-pin/openai-cli-backend-v{latest}"
         commit = ctx.fork_commit or "<KB fork commit>"
-        fork_step = PlanStep(
-            leg=leg.name,
-            summary=(
+        fork_step = _human_step(
+            leg.name,
+            (
                 f"replay the fork payload onto v{latest} — HUMAN-REVIEWED; stop on "
                 "any conflict (fork-maintenance preview first, rebase is the fallback)"
             ),
-            commands=[
+            [
                 (
                     "mise -C <fork-maintenance checkout> run fork-maintenance -- "
                     f"preview --source-repo {roots.fork} --candidate {commit} "
@@ -545,18 +551,12 @@ def _kb_steps(
                     f"{ctx.fork_base_ref or '<old base tag>'}"
                 ),
             ],
-            human_gate=True,
-            runnable=False,
         )
         new_commit = "<new fork commit>"
-    pin_step = PlanStep(
-        leg=leg.name,
-        summary="move every KB pin site to the new fork commit (not wired until T8)",
-        commands=[
-            f"mise -C {roots.kb} run kb-graphify-pin -- {latest} {new_commit} v{latest}"
-        ],
-        human_gate=True,
-        runnable=False,
+    pin_step = _human_step(
+        leg.name,
+        "move every KB pin site to the new fork commit (not wired until T8)",
+        [f"mise -C {roots.kb} run kb-graphify-pin -- {latest} {new_commit} v{latest}"],
     )
     return [fork_step, pin_step]
 
@@ -581,12 +581,8 @@ def plan(status: FleetPlan, ctx: _Context, roots: FleetRoots) -> FleetPlan:
             continue
         if leg.state is LegState.unverifiable:
             steps.append(
-                PlanStep(
-                    leg=leg.name,
-                    summary="UNVERIFIABLE — resolve the probe failure before planning",
-                    commands=[],
-                    human_gate=True,
-                    runnable=False,
+                _human_step(
+                    leg.name, "UNVERIFIABLE — resolve the probe failure before planning"
                 )
             )
         elif leg.name is LegName.dotfiles:
@@ -603,12 +599,10 @@ def plan(status: FleetPlan, ctx: _Context, roots: FleetRoots) -> FleetPlan:
             steps.extend(_kb_steps(status, leg, ctx, roots))
         else:
             steps.append(
-                PlanStep(
-                    leg=leg.name,
-                    summary="user-level change: printed only, run it yourself",
-                    commands=_host_commands(leg, status.upstream.version, ctx),
-                    human_gate=True,
-                    runnable=False,
+                _human_step(
+                    leg.name,
+                    "user-level change: printed only, run it yourself",
+                    _host_commands(leg, status.upstream.version, ctx),
                 )
             )
     return FleetPlan(
@@ -665,9 +659,9 @@ def apply_leg(
     if leg is LegName.kb:
         sys.stderr.write(KB_NOT_WIRED + "\n")
         return int(DriftVerdict.ERROR)
+    status, ctx = gather(run, roots, probes)
+    host = next(item for item in status.legs if item.name is LegName.host)
     if leg is LegName.host:
-        status, ctx = gather(run, roots, probes)
-        host = next(item for item in status.legs if item.name is LegName.host)
         if host.state is LegState.current:
             sys.stdout.write("host leg current; nothing to run\n")
             return int(DriftVerdict.IN_SYNC)
@@ -675,6 +669,16 @@ def apply_leg(
         for command in _host_commands(host, status.upstream.version, ctx):
             sys.stdout.write(f"  $ {command}\n")
         return int(_EXIT[host.state])
+    if host.state is not LegState.current:
+        # Same prerequisite `plan` orders first: graphify-upgrade's closing
+        # check needs the PATH binary at the new version, so refuse before
+        # the lock moves rather than fail after it (mattpocock spec c1).
+        sys.stderr.write(
+            f"apply --leg dotfiles refused: the host leg is {host.state}; run "
+            "`mise run graphify-fleet -- apply --leg host` and its printed "
+            "commands first\n"
+        )
+        return int(DriftVerdict.ERROR)
     try:
         result = run(
             ["mise", "run", "graphify-upgrade"], cwd=roots.dotfiles, check=False
@@ -712,8 +716,8 @@ def graphify_fleet_main(
     """CLI entry: ``status`` / ``plan`` / ``apply --leg``; rc per DriftVerdict."""
     args = _parser().parse_args(list(argv))
     defaults = default_roots(project_root)
-    roots = FleetRoots(
-        dotfiles=project_root,
+    roots = dataclasses.replace(
+        defaults,
         kb=args.kb_root or defaults.kb,
         kb_ref=args.kb_ref,
         fork=args.fork_root or defaults.fork,

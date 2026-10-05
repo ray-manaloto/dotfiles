@@ -553,7 +553,27 @@ def test_apply_dotfiles_delegates_to_graphify_upgrade(
     run.upgrade_rc = upgrade_rc
     rc = _main(_argv("apply", roots, "--leg", "dotfiles"), run, roots, currency)
     assert rc == upgrade_rc
-    assert run.calls == [["mise", "run", "graphify-upgrade"]]
+    assert run.calls.count(["mise", "run", "graphify-upgrade"]) == 1
+    assert run.calls[-1] == ["mise", "run", "graphify-upgrade"]
+
+
+def test_apply_dotfiles_refuses_while_host_leg_is_not_current(
+    roots: Roots, currency: Currency, capsys: Capsys
+) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"  # user-global pin 0.9.57 is now behind
+    rc = _main(_argv("apply", roots, "--leg", "dotfiles"), run, roots, currency)
+    assert rc == 2
+    assert "apply --leg host" in capsys.readouterr().err
+    assert ["mise", "run", "graphify-upgrade"] not in run.calls
+
+
+def test_drift_outranks_behind_in_the_verdict(roots: Roots, currency: Currency) -> None:
+    run = FakeRun()
+    run.upstream = "v0.9.76"  # dotfiles and host behind
+    run.kb_files["sources/graphify.manifest"] = _MANIFEST.replace(FORK_SHA, OTHER_SHA)
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    assert status.verdict is LegState.drift
 
 
 def test_cli_registration_passes_flags_through() -> None:

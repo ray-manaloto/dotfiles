@@ -24,7 +24,40 @@ before committing 8b3c3983.
 The real-run sections below were captured at 6b4719f7 and predate the fixes
 (the plan's step order and preview command differ now).
 
-## Real read-only `status` run
+## Real runs at the final tree (after the mattpocock-review fixes)
+
+`mise run graphify-fleet -- status` → rc=1 (sites as in the 6b4719f7 run below):
+
+```text
+graphify-fleet: upstream Graphify-Labs/graphify latest 0.9.76
+[dotfiles] behind 0.9.73
+[kb] behind 0.9.57
+[host] current 0.9.76
+fork-probe v0.9.76: openai-cli=0 fallback-backend=0 _run_semantic_extract=0 UNWIND $rows=0 _codex_resolvable_disable_args=0 control claude-cli=18 -> native=False
+verdict: behind (rc=1)
+```
+
+`mise run graphify-fleet -- plan` → rc=1 (host is current, so no host step):
+
+```text
+step 1 [dotfiles] (auto) update lock, receipts, skills and stamps; rebuild graph
+    $ mise run graphify-fleet -- apply --leg dotfiles
+step 2 [kb] (HUMAN) replay the fork payload onto v0.9.76 — HUMAN-REVIEWED; stop on any conflict (fork-maintenance preview first, rebase is the fallback)
+    $ mise -C <fork-maintenance checkout> run fork-maintenance -- preview --source-repo /Users/rmanaloto/dev/github/ray-manaloto/graphify --candidate 3c9b930f386f80c393fe658e1afb685030828c6a --upstream-repository Graphify-Labs/graphify --upstream-url https://github.com/Graphify-Labs/graphify.git --output-plan /Users/rmanaloto/dev/github/ray-manaloto/graphify.evidence/0.9.76/plan.json
+    $ git -C /Users/rmanaloto/dev/github/ray-manaloto/graphify switch -c kb-pin/openai-cli-backend-v0.9.76 3c9b930f386f80c393fe658e1afb685030828c6a
+    $ git -C /Users/rmanaloto/dev/github/ray-manaloto/graphify rebase --onto v0.9.76 v0.9.57
+step 3 [kb] (HUMAN) move every KB pin site to the new fork commit (not wired until T8)
+    $ mise -C /Users/rmanaloto/dev/github/ray-manaloto/knowledge-base run kb-graphify-pin -- 0.9.76 <new fork commit> v0.9.76
+verdict: behind (rc=1)
+```
+
+`apply --leg dotfiles` was deliberately NOT run for real: it would move this
+worktree's lock (T1 owns that move). Its delegation and its new host-not-current
+refusal are covered by fixtures. `<fork-maintenance checkout>` stays a
+placeholder: the tool lives only on the fork's unmerged `tools/fork-maintenance`
+branch (T10), so there is no stable path to print yet.
+
+## Real read-only `status` run (historical, at 6b4719f7)
 
 `mise run graphify-fleet -- status` (host load avg ~90 at the time):
 
