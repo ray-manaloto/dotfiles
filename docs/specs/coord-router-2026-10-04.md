@@ -145,7 +145,18 @@ PreToolUse `updatedInput` on `SendMessage` as the settings-hook alternative
    resolved coordinator. No tier may grant a slot, shipping custody or queue
    writer admission merely by routing.
 
-   Tier 4 is **disabled pending evaluation**. If selected, use a Python
+   **Superseded by Ray's ruling "Router agent session" (2026-10-04) and the
+   evidence review `coord-router-evidence-review-2026-10-04.md` (run 5317956b):**
+   tier 4 is NOT an in-hook SDK call. Python deterministic policy appends the
+   message to PR2 custody and delivers residual free text to the resolved
+   `router` ROLE (a slim-context standing session); the router agent forwards
+   only after custody is preserved, and ambiguous cases return to the
+   coordinator. The stage stays disabled/shadow until the paired offline
+   replay (policy A vs A+excerpt vs A+full-body, temporal hold-out ≥150, second
+   reviewer) in that review's "Smallest additional decision measurement" is
+   run. The text below is retained for history only.
+
+   ~~Tier 4 is **disabled pending evaluation**. If selected, use a Python
    Anthropic SDK call with fixed labels `{slot-arbiter, shipper,
    question-batcher, handoff-scribe, coordinator}` plus explicit `abstain`,
    a versioned prompt/model, and a validated confidence field. A self-score
@@ -153,7 +164,7 @@ PreToolUse `updatedInput` on `SendMessage` as the settings-hook alternative
    threshold; `$.model.classify` supplies no confidence. Auth would be native
    `ANTHROPIC_API_KEY` for this SDK route, independently verified by presence
    and a real call; neither CLI login nor Exa/Firecrawl injection proves that
-   credential exists. No credential is read into the audit body.
+   credential exists. No credential is read into the audit body.~~
 
    Every decision is cached by PR2 message ID with original policy/model/prompt
    revision, label, confidence (`null` for non-probabilistic tiers), reason,

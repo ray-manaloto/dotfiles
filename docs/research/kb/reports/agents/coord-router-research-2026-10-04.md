@@ -291,11 +291,19 @@ sender name + `text_first_300` only, labels hidden; rubric = the gold rubric
 Cost $1.49 for 163 messages in 4 batched calls (≈$0.009/message batched; a
 per-message `claude -p` turn costs far more — anthropics/claude-code#99049
 measured $0.15–0.28). Limits: 300-char excerpts vs full-body labels, one run,
-one labeller, prefix sample. The production router agent reads the FULL
-message, so these are a floor, not a ceiling.
+one labeller, prefix sample. This evaluates 300-character excerpts against
+full-body labels. Full-body classification is unmeasured; added context can
+resolve ambiguity or reveal mixed obligations, so the direction of the change
+is unknown. (Corrected per evidence review 5317956b; the earlier "floor, not a
+ceiling" overstated it.)
 
-**Reading for Ray:** keywords alone 1.2%; a confidence-gated LLM ~10% with
-~0 misroutes; ungated 36% with 1-in-3 of routed messages wrong. The ceiling
-is 58%. The largest error class is the shipper-vs-handoff-scribe boundary
+**Reading for Ray:** keywords alone 1.2%; a confidence-gated LLM routes 18
+of 163 (11.0%) with one wrong specialist route among 163 messages, or one
+among 18 routed; ungated 36% with 1-in-3 of routed messages wrong. 94 of 163
+sampled messages received a specialist gold label; this is a sample-specific
+taxonomy opportunity, not a ceiling or a saving (the sample covers only the
+first six deliveries per session — 32.8% of the 549 deliveries in the full
+census, `coord-router-evidence-review-2026-10-04.md` "Whole-population
+traffic census"). The largest error class is the shipper-vs-handoff-scribe boundary
 ("READY <sha>" reports), which a narrow sender report contract fixes better
 than a classifier.
