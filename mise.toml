@@ -126,6 +126,11 @@ opencode = "1.18.34"
 # an image build input, and unused by hk/CI (so ci-local-parity rule 2 does not
 # bind it). Auth is per-user via FIRECRAWL_API_KEY.
 "npm:firecrawl-cli" = "1.25.3"
+# webclaw: the credit-exhaustion fallback for firecrawl scrape in the research
+# fan-out mirror probe (research_fanout.py). Same pin and rationale as KB
+# mise.toml:118-123 (#837/#847). Deliberately NOT in pin-parity.toml: dotfiles/KB
+# parity for it is a manual coordinator cross-check (credit-fallback spec §5.3).
+"github:0xMassi/webclaw" = "0.6.23"
 
 [settings]
 experimental = true

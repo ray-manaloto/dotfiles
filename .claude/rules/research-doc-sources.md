@@ -17,6 +17,9 @@ worked.
 4. **Always an offline firecrawl mirror of every link you are given**:
    `mise exec -- firecrawl scrape <url> --format markdown --only-main-content` into
    `docs/research/kb/raw/<report-slug>/links/`. A link that will not fetch is a named gap.
+   Use the mirror probe (`mise run research-fanout -- --probe-out <p> --mirror-url <u>
+   --mirror-path <f>`) for credit-exhaustion fallback: it falls back to webclaw and
+   records the mirror as provisional; a bare `firecrawl scrape` has no fallback.
 
 ## The chain
 

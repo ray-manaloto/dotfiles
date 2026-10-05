@@ -6198,6 +6198,65 @@ url = "https://github.com/editorconfig-checker/editorconfig-checker/releases/dow
 url_api = "https://api.github.com/repos/editorconfig-checker/editorconfig-checker/releases/assets/574675794"
 provenance = "github-attestations"
 
+[[tools."github:0xMassi/webclaw"]]
+version = "0.6.23"
+backend = "github:0xMassi/webclaw"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-arm64"]
+checksum = "sha256:3a4c767824930a3b0a71135095dc24b942143616266771a62affd068f63038e4"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279404"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-arm64-musl"]
+checksum = "sha256:81423196776e6b8d4d9b4bcfa9de8e92273509466cfe975f680b87ec8c46743c"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279405"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-x64"]
+checksum = "sha256:5717a050948ef9e9ca5755585bc163ed1d95750cc7513071baa850bb5a9c5f71"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279403"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-x64-baseline"]
+checksum = "sha256:5717a050948ef9e9ca5755585bc163ed1d95750cc7513071baa850bb5a9c5f71"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279403"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-x64-musl"]
+checksum = "sha256:5a739734ea73426b6f6d63aba45e83b5c09e7edcb12a55477fc41337fc2e58d4"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279445"
+
+[tools."github:0xMassi/webclaw"."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:5a739734ea73426b6f6d63aba45e83b5c09e7edcb12a55477fc41337fc2e58d4"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279445"
+
+[tools."github:0xMassi/webclaw"."platforms.macos-arm64"]
+checksum = "sha256:9085efc94d5c030f3c2208ec1ef965a88e82e6be7768c4a24bf3da78c76771d7"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279402"
+
+[tools."github:0xMassi/webclaw"."platforms.macos-x64"]
+checksum = "sha256:f0ac5e19ad0583c42383bc7b2bfc9d3433434de3523862e38aad1c828ebb3880"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279407"
+
+[tools."github:0xMassi/webclaw"."platforms.macos-x64-baseline"]
+checksum = "sha256:f0ac5e19ad0583c42383bc7b2bfc9d3433434de3523862e38aad1c828ebb3880"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279407"
+
+[tools."github:0xMassi/webclaw"."platforms.windows-x64"]
+checksum = "sha256:209e68f4e50dd66c5ba1ef7651208c2145ddfbd339f14f221b2baab0e6def5ed"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279452"
+
+[tools."github:0xMassi/webclaw"."platforms.windows-x64-baseline"]
+checksum = "sha256:209e68f4e50dd66c5ba1ef7651208c2145ddfbd339f14f221b2baab0e6def5ed"
+url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6.23-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279452"
+
 [[tools."github:agent-sh/agnix"]]
 version = "0.56.4"
 backend = "github:agent-sh/agnix"

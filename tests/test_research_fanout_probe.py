@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -282,7 +283,7 @@ def test_fanout_manifest_names_a_required_source_that_failed(
     assert row["exists"] is True
     assert row["query"] == "mise"
     assert row["fresh"] is True
-    assert row["required_failed"] == ["github-issues: error (exited 1: HTTP 422)"]
+    assert row["required_failed"] == ["github-issues: error (process-failed)"]
 
     # control arm: every required source answered -> nothing failed
     _fanout_manifest(manifest, dict.fromkeys(_DEP.split(","), "ok"), age_s=10)
@@ -355,8 +356,10 @@ def test_mirror_measures_what_landed_and_never_a_stale_file(
         "path": str(target),
         "rc": 0,
         "http_status": 200,
+        "route": "firecrawl",
+        "provisional": False,
         "bytes": 7,
-        "reason": "",
+        "code": "",
     }
     assert target.read_text(encoding="utf-8") == "# page\n"
 
@@ -370,7 +373,7 @@ def test_mirror_measures_what_landed_and_never_a_stale_file(
     row = _only(payload)
     assert row["bytes"] == 0
     assert row["rc"] == 1
-    assert row["reason"] == "Error: request failed"
+    assert row["code"] == "process-failed"
 
 
 def test_mirror_of_an_error_page_is_not_a_mirror(
@@ -395,7 +398,7 @@ def test_mirror_of_an_error_page_is_not_a_mirror(
     assert row["bytes"] == 0
     assert not (tmp_path / "raw/links/2.md").exists()
     assert row["http_status"] == 404
-    assert row["reason"] == "HTTP 404"
+    assert row["code"] == "http-error"
 
     runner = Runner([lambda a: _done(a, 0, b"not json")])
     _, payload = _probe(
@@ -404,7 +407,7 @@ def test_mirror_of_an_error_page_is_not_a_mirror(
         runner,
         capsys,
     )
-    assert _only(payload)["reason"] == "firecrawl output was not JSON"
+    assert _only(payload)["code"] == "invalid-json"
 
 
 def test_mirror_index_is_written_from_the_probe_files(
@@ -421,7 +424,7 @@ def test_mirror_index_is_written_from_the_probe_files(
                 "path": str(links / "1.md"),
                 "rc": 0,
                 "bytes": 42,
-                "reason": "",
+                "code": "",
             }
         ],
     }
@@ -494,7 +497,7 @@ def test_mirror_index_never_lists_an_earlier_runs_probe_as_a_mirror(
                 "path": str(links / "1.md"),
                 "rc": 0,
                 "bytes": 42,
-                "reason": "",
+                "code": "",
             }
         ],
     }
@@ -554,3 +557,435 @@ def test_fanout_manifest_request_id_must_match_this_run(
             capsys,
         )
         assert _only(payload)["fresh"] is fresh, expect
+
+
+_CREDIT_FIXTURES = Path(__file__).parent / "fixtures/research_fanout"
+_CAPTURED_CREDIT_RC = 1  # coordinator f9467b, 2026-10-03; fc402/rc.txt
+
+
+@pytest.fixture
+def mirror_credit_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    for key in ("FIRECRAWL_API_KEY", "EXA_API_KEY", "SERPER_API_KEY", "SERP_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("PATH", str(tmp_path / "isolated-bin"))
+
+
+@pytest.mark.parametrize("defensive", [False, True])
+def test_mirror_credit_fallback_records_success_and_readme(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mirror_credit_env: None,
+    *,
+    defensive: bool,
+) -> None:
+    del mirror_credit_env
+    url = "https://primary.test/doc/"
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            return (
+                _done(
+                    argv,
+                    0,
+                    b'{"success":false,"error":"Insufficient credits","status":402}',
+                )
+                if defensive
+                else _done(
+                    argv,
+                    _CAPTURED_CREDIT_RC,
+                    (_CREDIT_FIXTURES / "firecrawl-402-scrape.out").read_bytes(),
+                    (_CREDIT_FIXTURES / "firecrawl-402-scrape.err").read_bytes(),
+                )
+            )
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": "# mirrored\n"},
+                    "metadata": {"url": "https://primary.test/doc#fragment"},
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    links = tmp_path / "links"
+    assert (
+        main(
+            [
+                "--probe-out",
+                str(links / "1.probe.json"),
+                "--mirror-url",
+                url,
+                "--mirror-path",
+                str(links / "1.md"),
+            ],
+            tmp_path,
+            runner=runner,
+            timing=Timing().timing(),
+        )
+        == 0
+    )
+    row = _only(json.loads((links / "1.probe.json").read_text()))
+    detail = row["detail"]
+    assert isinstance(detail, dict)
+    assert (
+        row["route"],
+        row["provisional"],
+        row["rc"],
+        row["http_status"],
+        detail["reason"],
+    ) == ("webclaw", True, 0, 0, "")
+    assert (links / "1.md").read_text() == "# mirrored\n"
+    assert "Insufficient credits" in str(detail["primary_reason"])
+    assert runner.calls[1] == ["webclaw", "-f", "json", url]
+    _probe(
+        tmp_path,
+        ["--mirror-index", str(links), "--mirror-count", "1"],
+        Runner([]),
+        capsys,
+    )
+    readme = (links / "README.md").read_text()
+    assert "| route |" in readme
+    assert "| 0 | 11 |  | webclaw |" in readme
+    assert "provisional" in readme
+
+
+def test_webclaw_markdown_redacts_credentials_and_caps_primary_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mirror_credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    del mirror_credit_env
+    sentinel = "webclaw-credential-sentinel"
+    monkeypatch.setenv("SERP_API_KEY", sentinel)
+    url = "https://primary.test/doc"
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            return _done(argv, 1, err=b"Insufficient credits " + b"diagnostic " * 100)
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": f"# mirror {sentinel}"},
+                    "metadata": {"url": url},
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-url", url, "--mirror-path", str(tmp_path / "mirror.md")],
+        runner,
+        capsys,
+    )
+    row = _only(payload)
+    assert row["provisional"] is True
+    disk = json.loads((tmp_path / "out/probe.json").read_text())
+    detail = _only(disk)["detail"]
+    assert isinstance(detail, dict)
+    assert len(str(detail["primary_reason"])) <= 300
+    assert (tmp_path / "mirror.md").read_text() == "# mirror [REDACTED]"
+    assert sentinel not in json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    "failure", ["auth", "redirect", "missing", "timeout", "invalid", "empty"]
+)
+def test_mirror_credit_controls_never_write_bad_content(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mirror_credit_env: None,
+    failure: str,
+) -> None:
+    del mirror_credit_env
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            stderr = (
+                b"Unauthorized"
+                if failure == "auth"
+                else (_CREDIT_FIXTURES / "firecrawl-402-scrape.err").read_bytes()
+            )
+            return _done(argv, 1, err=stderr)
+        if failure == "missing":
+            raise FileNotFoundError
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired(argv, 1)
+        if failure == "invalid":
+            return _done(argv, 0, b"invalid JSON")
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": "" if failure == "empty" else "bad"},
+                    "metadata": {
+                        "url": "https://other.test/doc"
+                        if failure == "redirect"
+                        else "https://primary.test/doc"
+                    },
+                }
+            ).encode(),
+        )
+
+    runner = Runner([answer])
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-url", "https://primary.test/doc", "--mirror-path", "links/1.md"],
+        runner,
+        capsys,
+    )
+    row = _only(payload)
+    assert not (tmp_path / "links/1.md").exists()
+    assert row["code"]
+    assert row["provisional"] is False
+    if failure == "auth":
+        assert len(runner.calls) == 1
+        assert row["route"] == "firecrawl"
+    else:
+        assert len(runner.calls) == 2
+        assert row["route"] == "webclaw"
+    if failure == "missing":
+        assert row["rc"] == 127
+        assert row["code"] == "not-found"
+    if failure == "timeout":
+        assert row["rc"] == 124
+        assert row["code"] == "timeout"
+
+
+def test_fanout_manifest_provisional_is_derived_and_clear_for_control(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = tmp_path / "manifest.json"
+    _fanout_manifest(manifest, {"firecrawl-search": "ok"}, 0)
+    data = json.loads(manifest.read_text())
+    data["sources"][0].update(
+        route="serper",
+        provisional=True,
+        attempts=[{"route": "firecrawl-search", "reason": "Insufficient credits"}],
+    )
+    manifest.write_text(json.dumps(data))
+    _, payload = _probe(
+        tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
+    )
+    assert _only(payload)["provisional"] == [
+        {"source": "firecrawl-search", "route": "serper"}
+    ]
+    _fanout_manifest(manifest, {"firecrawl-search": "ok"}, 0)
+    _, payload = _probe(
+        tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
+    )
+    assert _only(payload)["provisional"] == []
+
+
+def test_projection_manifest_rows_are_bounded_and_structured(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """T10: projected diagnostic rows retain codes and validated provenance."""
+    sentinel = "probe-diagnostic-" + uuid.uuid4().hex
+    path = tmp_path / "manifest.json"
+    rows = [
+        {
+            "source": "github-issues",
+            "status": "error",
+            "reason": "exited 1: " + sentinel,
+        },
+        {
+            "source": "firecrawl-search",
+            "status": "ok",
+            "route": "serper",
+            "provisional": True,
+            "reason": sentinel,
+            "attempts": [{"reason": sentinel}],
+        },
+    ]
+    path.write_text(json.dumps({"sources": rows}))
+    _, payload = _probe(
+        tmp_path,
+        ["--fanout-manifest", str(path), "--require", "github-issues"],
+        Runner([]),
+        capsys,
+    )
+    row = _only(payload)
+    assert row["required_failed"] == ["github-issues: error (process-failed)"]
+    assert row["provisional"] == [{"source": "firecrawl-search", "route": "serper"}]
+    assert sentinel not in json.dumps(payload)
+    rows += [
+        {"source": sentinel, "status": sentinel, "provisional": True},
+        {"source": "exa", "status": sentinel},
+        {
+            "source": "firecrawl-developer",
+            "status": "skipped",
+            "route": sentinel,
+            "provisional": True,
+        },
+    ]
+    rows += [
+        {
+            "source": "firecrawl-search",
+            "route": "serper",
+            "status": "ok",
+            "provisional": True,
+        }
+    ] * 9
+    path.write_text(json.dumps({"sources": rows}))
+    _, payload = _probe(
+        tmp_path,
+        ["--fanout-manifest", str(path), "--require", "exa"],
+        Runner([]),
+        capsys,
+    )
+    row = _only(payload)
+    sources = row["sources"]
+    assert isinstance(sources, dict)
+    assert sources["exa"] == "invalid"
+    assert sentinel not in sources
+    assert row["required_failed"] == ["exa: invalid (other)"]
+    assert row["provisional_invalid"] is True
+    provisional = row["provisional"]
+    assert isinstance(provisional, list)
+    assert len(provisional) == 8
+    assert sentinel not in json.dumps(payload)
+
+
+@pytest.mark.parametrize("arm", ["process", "redirect", "credit"])
+def test_projection_mirror_stdout_excludes_disk_diagnostics(
+    tmp_path: Path,
+    mirror_credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+    arm: str,
+) -> None:
+    """T11: every stdout line projects; the on-disk detail retains evidence."""
+    del mirror_credit_env
+    sentinel = "mirror-diagnostic-" + uuid.uuid4().hex
+    url = "https://caller.test/a"
+    target = tmp_path / "mirror.md"
+
+    def answer(argv: list[str]) -> subprocess.CompletedProcess[bytes]:
+        if argv[0] == "firecrawl":
+            text = sentinel if arm == "process" else "Insufficient credits " + sentinel
+            return _done(argv, 1, err=text.encode())
+        return _done(
+            argv,
+            0,
+            json.dumps(
+                {
+                    "content": {"markdown": "# page"},
+                    "metadata": {
+                        "url": url
+                        if arm == "credit"
+                        else "https://redirect.test/" + sentinel
+                    },
+                }
+            ).encode(),
+        )
+
+    assert (
+        main(
+            [
+                "--probe-out",
+                "out/probe.json",
+                "--mirror-url",
+                url,
+                "--mirror-path",
+                str(target),
+            ],
+            tmp_path,
+            runner=Runner([answer]),
+            timing=Timing().timing(),
+        )
+        == 0
+    )
+    stdout = capsys.readouterr().out
+    payload = json.loads(
+        next(
+            line.removeprefix("PROBE-JSON ")
+            for line in stdout.splitlines()
+            if line.startswith("PROBE-JSON ")
+        )
+    )
+    row = _only(payload)
+    assert (
+        row["code"]
+        == {"process": "process-failed", "redirect": "redirected", "credit": ""}[arm]
+    )
+    assert "detail" not in row
+    assert "reason" not in row
+    assert "primary_reason" not in row
+    assert sentinel not in stdout
+    disk = json.loads((tmp_path / "out/probe.json").read_text())
+    assert sentinel in json.dumps(_only(disk)["detail"])
+    assert {k: v for k, v in _only(disk).items() if k != "detail"} == row
+
+
+@pytest.mark.parametrize("code", ["process-failed", "missing", "invalid"])
+def test_projection_readme_accepts_only_failure_codes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    code: str,
+) -> None:
+    """T12: old or forged diagnostic columns fail closed."""
+    sentinel = "readme-diagnostic-" + uuid.uuid4().hex
+    directory = tmp_path / "links"
+    directory.mkdir()
+    row = {
+        "kind": "mirror",
+        "url": "https://caller.test/a",
+        "path": str(directory / "1.md"),
+        "rc": 1,
+        "bytes": 0,
+        "reason": sentinel,
+        "detail": {"reason": sentinel},
+    }
+    if code != "missing":
+        row["code"] = sentinel if code == "invalid" else code
+    (directory / "1.probe.json").write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.fromtimestamp(_NOW, UTC).isoformat(),
+                "probes": [row],
+            }
+        )
+    )
+    _, payload = _probe(
+        tmp_path,
+        ["--mirror-index", str(directory), "--mirror-count", "1"],
+        Runner([]),
+        capsys,
+    )
+    text = (directory / "README.md").read_text()
+    assert "| failure code |" in text
+    assert sentinel not in text
+    assert _only(payload)["missing"] == (0 if code == "process-failed" else 1)
+    assert (
+        "process-failed"
+        if code == "process-failed"
+        else "mirror probe missing or unreadable"
+    ) in text
+
+
+def test_projection_repo_name_rejects_diagnostic_bytes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sentinel = "repo-diagnostic-" + uuid.uuid4().hex
+    _, payload = _probe(
+        tmp_path,
+        ["--repo-check", "owner/repo"],
+        Runner(
+            [
+                lambda a: _done(
+                    a, 0, _gh_out(200, {"full_name": "owner/repo; " + sentinel})
+                )
+            ]
+        ),
+        capsys,
+    )
+    assert _only(payload)["full_name"] == ""
+    assert sentinel not in json.dumps(payload)
