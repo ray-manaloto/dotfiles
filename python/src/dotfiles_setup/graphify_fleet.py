@@ -353,11 +353,19 @@ def _kb_leg(run: Run, roots: FleetRoots) -> tuple[_LegBuilder, str | None, str |
         leg.blind("pyproject.toml has no exact graphifyy== pin")
     if lock_version != leg.version:
         leg.drifted(f"uv.lock version {lock_version} != pyproject {leg.version}")
-    # All three absent is a KB that pins upstream PyPI (a retired fork), not
-    # a disagreement; one present and another absent or different is.
-    revs = {source_rev, lock_rev, manifest.get("commit")}
-    if revs != {None} and (len(revs) != 1 or None in revs):
-        leg.drifted(f"fork revisions disagree across sites: {sorted(map(str, revs))}")
+    # The manifest always needs url/ref/commit (KB kb_setup.manifest.load
+    # rejects a missing one), fork or not. Only the INSTALL revisions are
+    # optional: both absent is a KB pinned to upstream PyPI (a retired fork);
+    # otherwise both must match each other and the manifest commit.
+    missing = [key for key in ("url", "ref", "commit") if not manifest.get(key)]
+    if missing:
+        leg.drifted(f"sources/graphify.manifest lacks {', '.join(missing)}")
+    install = {source_rev, lock_rev}
+    if install != {None}:
+        revs = install | {manifest.get("commit")}
+        if len(revs) != 1 or None in revs:
+            found = sorted(map(str, revs))
+            leg.drifted(f"fork revisions disagree across sites: {found}")
     if base_ref is not None and leg.version and base_ref != f"v{leg.version}":
         leg.drifted(f"fork base_ref {base_ref} != v{leg.version}")
     return leg, source_rev, base_ref

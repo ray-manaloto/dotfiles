@@ -605,12 +605,25 @@ def test_kb_pinned_to_upstream_pypi_is_not_drift(
         {
             "pyproject.toml": '[project]\ndependencies = ["graphifyy[all]==0.9.57"]\n',
             "uv.lock": '[[package]]\nname = "graphifyy"\nversion = "0.9.57"\n',
-            "sources/graphify.manifest": "url = https://github.com/Graphify-Labs/graphify\n",
+            "sources/graphify.manifest": (
+                "url = https://github.com/Graphify-Labs/graphify\n"
+                f"ref = v0.9.57\ncommit = {OTHER_SHA}\n"
+            ),
             "currency.toml": "",
         }
     )
     status, _ = graphify_fleet.gather(run, roots, currency.probes)
     assert status.legs[1].state is LegState.current
+
+    # The manifest still needs ref + commit: KB's manifest loader rejects
+    # a URL-only file, so a retired fork must not hide that as "current".
+    run.kb_files["sources/graphify.manifest"] = (
+        "url = https://github.com/Graphify-Labs/graphify\n"
+    )
+    status, _ = graphify_fleet.gather(run, roots, currency.probes)
+    kb = status.legs[1]
+    assert kb.state is LegState.drift
+    assert "sources/graphify.manifest lacks ref, commit" in kb.findings
 
 
 def test_native_upstream_prints_no_fork_pin_step(
