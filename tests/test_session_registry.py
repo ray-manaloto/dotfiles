@@ -592,6 +592,8 @@ def test_lane_cards_public_write_uses_codex_claim_and_claude_handback(
             "--write",
             "--repo-root",
             str(roots[0]),
+            "--repo-root",
+            str(roots[1]),
             "--jobs-dir",
             str(jobs),
             *flags,
