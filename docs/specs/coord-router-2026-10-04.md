@@ -350,7 +350,7 @@ Alignment (not a router-owned type; Ray rulings via process-hardening, 2026-10-0
 1. **`command_id` = PR2's `event_id`** — the opaque id PR2 assigns when it
    appends the durable event. It is the ONE identifier: this spec's "ingress
    ID" and the `message_id` field in `coord-router route` input are names for
-   that same `event_id` (:62, :68, :124-128, :184), and both the router's dedup
+   that same `event_id` (:62, :68, :124-128, :195), and both the router's dedup
    and 04's seen-set key on it. **No minting** (Ray): 04 stage 2 ships code
    now, and live grants start only when PR2 lands and supplies `event_id`.
 2. `CoordinatorIdentity` = PR2's coordinator role binding; "coordinator
