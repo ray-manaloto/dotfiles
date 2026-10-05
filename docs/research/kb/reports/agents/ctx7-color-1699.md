@@ -98,3 +98,9 @@ Sibling ticket filed: #1700.
 ## sdlc-team review (run c7baa7c5, mode review) of the fold-in delta 470efafd..c4ee7886
 SHIP, 0 LOW+ findings; specialists claimed=observed=[python, documentation]. Verbatim: `sdlc-review-1699-foldins.md`.
 Lane side effect: a gh probe created an untracked `.local/state/gh/device-id` (36 B) in the worktree; architect removed it unread. Coverage now: Opus cold review → 470efafd (codex code); codex lens + sdlc-team review → c4ee7886 (incl. Claude fold-ins).
+
+## Post-rebase onto origin/main 805d7833 (credit-fallback #1701 merged)
+Rebase clean (merge-tree pre-check: no conflicts). Targeted 4-file pytest: 372 passed rc=0. Mutation env=env -> 2 new fanout tests FAIL (rc=1), restored.
+Real strict-five from this Claude bg shell, FORCE_COLOR present, no env -u (`--repo jdx/mise --strict-five --request-id lane1699-rebased2`):
+`strict-five pass [provisional: firecrawl-search skipped: credits-exhausted; no fallback succeeded; serper: prerequisite; serpapi: prerequisite]`, rc=0; context7 ok 5 items; last30days ok 5 items.
+The serper/serpapi fallback could not run because SERPER_API_KEY/SERP_API_KEY are absent from this shell (part B: daemon env predates the declaration). (An earlier last30days failure was my plan fixture missing intent/freshness_mode/cluster_mode, not this change.)
