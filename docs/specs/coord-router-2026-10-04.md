@@ -376,3 +376,14 @@ Alignment (not a router-owned type; Ray rulings via process-hardening, 2026-10-0
   sonnet ≥0.80 confidence ≈11% offload / 0.6% misroute on 300-char excerpts;
   ungated 36% / 11.7%; haiku cannot run with the default session context, so
   the router session needs a slim context profile.
+- Stage-enable objective (relayed by coordinator
+  `dotfiles-20261004T232612.947371000-05.coordinator`, 2026-10-04 ~23:30): the
+  router stage is enabled only if the paired hold-out replay from
+  `docs/research/kb/reports/agents/coord-router-evidence-review-2026-10-04.md`
+  ("Smallest additional decision measurement") shows **tokens saved per
+  coordinator hour > 0, with ZERO hold-out misroutes**. Measure it as coordinator
+  tokens on the same replayed workload, with the router minus without the
+  router, per coordinator hour. It must be net of the router session's own
+  tokens, the residual notifications and the returned messages, from billing
+  or usage receipts, not from routed-message counts. Report the interval.
+  Until the replay passes this gate, the stage stays disabled/shadow.
