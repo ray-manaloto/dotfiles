@@ -6,10 +6,14 @@ user-invocable: true
 
 # Dispatching the codex SDLC team
 
-Six agents in `.codex/agents/codex-sdlc-*.toml` cover dispatch, Python, config,
-workflows, images, and documentation. Codex spawns and routes them; callers use
-the typed task seam rather than invoking `codex exec` themselves. The eager
-summary is `.claude/rules/codex-sdlc-team.md`.
+The CLI root is the dispatcher. It directly spawns the five named specialists
+configured in `.codex/agents/codex-sdlc-*.toml`: Python, config, documentation,
+image, and workflows. There is no dispatcher child or additional agent.
+Use parallel spawning within available capacity; sequential spawning is allowed
+when needed. Wait for all five and synthesize their results. A spawn failure
+stops the work with its error text; the dispatcher never substitutes for that
+specialist. Callers use the typed task seam rather than invoking `codex exec`
+themselves. The eager summary is `.claude/rules/codex-sdlc-team.md`.
 
 ## When this team earns its cost
 
@@ -101,6 +105,8 @@ Settlement records the dispatcher's claimed specialists separately from child
 sessions observed in Codex rollout files. A missing parent id, unavailable scan,
 zero observed children, or claimed/observed mismatch fails closed even when the
 Codex process exits zero; inspect both rosters and the reconciliation errors.
+Participation success does not establish completed implementation: preserve
+licensed dissent, failed research, and partial-task findings in the synthesis.
 
 Lane receipts belong to `lane_result`, not to the run-artifact directory. Their
 defaults are `.agent/lane-results/<run-id>.json` and
@@ -117,6 +123,17 @@ supervisor writes both through the public lane-result composition at settlement.
 - Review mode is intentionally told not to run gates or write its own report;
   nothing but the prompt enforces that. The supervisor still captures output,
   settlement, and lane receipts.
+- In implementation mode, specialists run only the scoped checks authorized by
+  the spec. The coordinator owns and serializes full gates; leave unauthorized
+  gates pending with their limitations. Commit ownership defaults to `caller`:
+  specialists leave changes unstaged and do not commit or push.
+- End the dispatcher final with `Specialists spawned:` and exactly one Markdown
+  list item per spawned specialist: ``- `<agent_role>` — `<agent_path>` ``.
+  State that no others were spawned. Report only actual children; on spawn
+  failure keep the partial roster and explicit failure. For full-team rehearsals,
+  the caller independently checks the expected five-role set against observed
+  direct children. Unit fixtures and historical replay are not fresh rehearsal
+  proof; actual CLI and hook-replacement evidence is required by the repair spec.
 - `hook_guard` denies a visible `codex exec` command that references an SDLC
   artifact path and redirects it to `mise run sdlc-team`. The general piped
   prompt case is not detectable from the command string, so put every required
@@ -153,7 +170,8 @@ routing, and verification. Every lane below is codex or Anthropic.
 
 **Fallback chain:** codex lane, then an Opus subagent (`Agent`, `model: "opus"`)
 with the same spec. Say in the report that it fell back; a lane never silently
-becomes another model.
+becomes another model. This architect-side chain does not authorize extra
+agents or replacement children inside the five-specialist SDLC team.
 
 ### The spec contract
 
@@ -165,7 +183,8 @@ Every delegation carries seven parts, inline or as a `SPEC FILE: <absolute path>
 4. **Constraints and invariants** — conventions, untouchables, consumers; a pinned
    mechanism only with its ruling cited.
 5. **Verification** — the smallest command bundle that proves the change.
-6. **Commit** — `lane` (default) or `caller`.
+6. **Commit** — `caller` (default). Any explicit `lane` ownership belongs to a
+   separately authorized lane; this team's generated prompt uses `COMMIT: caller`.
 7. **PREMISES** — one row per factual claim, each cited from a read made THIS
    session: `L` literal (name = value — file:line), `I` interface, `P` precedent
    (plus a data-level match), `E` emission (field ← filler, bounded?, PII class),

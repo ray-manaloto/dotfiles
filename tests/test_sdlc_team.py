@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,9 @@ from dotfiles_setup.config import ContainerConfig, DotfilesConfig, MiseConfig
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+_BOUNDARY_WAIT_S = 10.0
+_BOUNDARY_POLL_S = 0.01
 
 
 class _DetachedProcess:
@@ -1871,3 +1875,196 @@ def test_arm_31_review_thread_only_child_does_not_mask_zero_spawns(
     assert [node.status for node in receipt.agents if node.name == review_id] == [
         "review-thread"
     ]
+
+
+def _boundary_children(fault: str, parent: str) -> list[dict[str, str]]:
+    """Prepare independent child metadata for the selected reconciliation axis."""
+    child = {
+        "id": "child-python",
+        "parent_thread_id": parent,
+        "agent_role": "sdlc-python-specialist",
+        "agent_path": "/root/python",
+    }
+    children = [child]
+    if fault == "missing":
+        children = [
+            {
+                **child,
+                "agent_role": "sdlc-config-specialist",
+                "agent_path": "/root/config",
+            }
+        ]
+    elif fault == "zero":
+        children = []
+    elif fault == "late-child":
+        children.append(
+            {
+                **child,
+                "id": "child-later",
+                "agent_role": "sdlc-config-specialist",
+                "agent_path": "/root/later",
+            }
+        )
+    elif fault == "wrong-role":
+        children = [{**child, "agent_role": "sdlc-config-specialist"}]
+    elif fault == "wrong-path":
+        children = [{**child, "agent_path": "/root/different"}]
+    return children
+
+
+def _write_boundary_runner(
+    tmp_path: Path,
+    fixture: Mapping[str, object],
+    parent: str,
+) -> Path:
+    """Install a synthetic process boundary; it never invokes the real CLI."""
+    fixture_path = tmp_path / "boundary-input.json"
+    fixture_path.write_bytes(codec.encode(fixture))
+    runner = tmp_path / "mise"
+    runner.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "from datetime import UTC, datetime\n"
+        "from pathlib import Path\n"
+        f"fixture = json.loads(Path({str(fixture_path)!r}).read_bytes())\n"
+        "root = Path(os.environ['CODEX_HOME']) / 'sessions'\n"
+        "root.mkdir(parents=True)\n"
+        "stamp = datetime.now(UTC).isoformat()\n"
+        "records = [{**record, 'timestamp': stamp} for record in fixture['records']]\n"
+        f"parent_file = root / 'rollout-parent-{parent}.jsonl'\n"
+        "parent_file.write_text(''.join(\n"
+        "    json.dumps(record) + '\\n' for record in records))\n"
+        "for index, child in enumerate(fixture['children']):\n"
+        "    record = {'type': 'session_meta', 'timestamp': stamp, 'payload': child}\n"
+        "    child_file = root / f'rollout-child-{index}.jsonl'\n"
+        "    child_file.write_text(json.dumps(record) + '\\n')\n"
+        "Path(sys.argv[sys.argv.index('-o') + 1]).write_text(fixture['captured'])\n"
+        f"print({_codex_banner(parent)!r}, flush=True)\n"
+    )
+    runner.chmod(0o755)
+    return runner
+
+
+def _await_boundary_settlement(
+    tmp_path: Path,
+    dispatched: sdlc_team.SdlcTeamDispatch,
+) -> sdlc_team.SdlcTeamSettlement:
+    """Wait on the public status interface under a short explicit bound."""
+    deadline = time.monotonic() + _BOUNDARY_WAIT_S
+    settled = None
+    while time.monotonic() < deadline:
+        observed_status = sdlc_team.read_status(
+            tmp_path, dispatched.run_id, pid=dispatched.pid
+        )
+        if observed_status in {
+            sdlc_team.SdlcSettledStatus.COMPLETED,
+            sdlc_team.SdlcSettledStatus.FAILED,
+        }:
+            settled = codec.decode(
+                (
+                    tmp_path
+                    / sdlc_team.SDLC_RUNS_DIR
+                    / dispatched.run_id
+                    / "settlement.json"
+                ).read_bytes(),
+                sdlc_team.SdlcTeamSettlement,
+            )
+            break
+        time.sleep(_BOUNDARY_POLL_S)
+    assert settled is not None, "isolated supervisor did not settle within bound"
+    return settled
+
+
+@pytest.mark.parametrize(
+    "fault", ["none", "missing", "zero", "late-child", "wrong-role", "wrong-path"]
+)
+def test_public_dispatch_native_recovery_reconciles_every_child(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fault: str,
+) -> None:
+    """Synthetic executable boundary control, not a real native CLI rehearsal."""
+    parent = "01a10dde-dd10-7a00-bff8-85bee3a499c4"
+    turn = "01a10dde-e47c-7740-be11-e482a63f5e49"
+    report = (
+        "Overall status: partial failure. Licensed dissent remains.\n\n"
+        "Specialists spawned:\n\n"
+        "- `sdlc-python-specialist` — `/root/python`\n"
+    )
+    captured = "Research receipt: PROVISIONAL."
+    children = _boundary_children(fault, parent)
+    payloads = [
+        {"type": "session_meta", "payload": {"id": parent}},
+        {
+            "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": turn, "root_turn_id": turn},
+        },
+        *(
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": text}],
+                    "internal_chat_message_metadata_passthrough": {"turn_id": turn},
+                },
+            }
+            for text in (report, captured)
+        ),
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "turn_id": turn,
+                "last_agent_message": captured,
+            },
+        },
+    ]
+    fixture = {"records": payloads, "children": children, "captured": captured}
+    runner = _write_boundary_runner(tmp_path, fixture, parent)
+    monkeypatch.setattr(sdlc_team.shutil, "which", lambda _name: str(runner))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "isolated-home"))
+    monkeypatch.setenv(
+        "PYTHONPATH", str(Path(__file__).parent.parent / "python" / "src")
+    )
+    spec = tmp_path / "spec.md"
+    spec.write_text("# isolated boundary fixture\n")
+    request = sdlc_team.SdlcTeamRequest(
+        spec_file=str(spec),
+        run_id="native-boundary",
+        timeout_s=5.0,
+        output_file=str(tmp_path / "shared-output.md") if fault == "none" else "",
+    )
+    dispatched = sdlc_team.dispatch(request, tmp_path)
+    assert dispatched.status is sdlc_team.SdlcStatus.DISPATCHED
+    assert dispatched.pid is not None
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    assert settled.codex_returncode == 0
+    assert settled.specialists_claimed == ("sdlc-python-specialist",)
+    assert Path(dispatched.output_file).read_text() == captured
+    assert Path(dispatched.log_file).read_text().startswith("OpenAI Codex")
+    provenance = (
+        tmp_path / sdlc_team.SDLC_RUNS_DIR / dispatched.run_id / "roster-provenance.md"
+    ).read_text()
+    assert "selection reason: prior-final-absence" in provenance
+    assert "Overall status" not in provenance
+    assert "Research receipt" not in provenance
+    if fault == "none":
+        assert not (tmp_path / "roster-provenance.md").exists()
+        assert settled.status is sdlc_team.SdlcSettledStatus.COMPLETED
+        assert settled.errors == ()
+        assert "participation outcome: consistent" in provenance
+    else:
+        assert settled.status is sdlc_team.SdlcSettledStatus.FAILED
+        assert settled.errors
+        assert "participation outcome: failed" in provenance
+        if fault == "late-child":
+            assert any("was not claimed" in error for error in settled.errors)
+        elif fault == "zero":
+            assert any("zero specialists observed" in error for error in settled.errors)
+        else:
+            assert any(
+                error.startswith("spawn reconciliation: claimed")
+                for error in settled.errors
+            )

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import quote
 
-from dotfiles_setup import codec, lane_result
+from dotfiles_setup import codec, lane_result, sdlc_final_report
 from dotfiles_setup.codex_lane_mirror import SOL_MODEL
 
 __all__ = [
@@ -269,7 +269,9 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
     return (
         f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Route this to your "
         "specialists per your roster, spawn them in parallel, wait for all, and "
-        "synthesize their results.\n\n"
+        "synthesize their results. Sequential routing is permitted within capacity. "
+        "Root remains dispatcher; spawn specialists directly, with no dispatcher "
+        "child or additional agents.\n\n"
         f"TASK: {task}\n"
         f"SPEC FILE: {Path(request.spec_file).resolve()}\n"
         f"MODE: {request.mode.value}\n"
@@ -283,6 +285,10 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
         "FILE ALLOWLIST:\n"
         f"{allowlist}\n\n"
         "COMMIT: caller\n\n"
+        "Implementation specialists run only scoped checks authorized by the spec. "
+        "Full gates are owned and serialized by the coordinator. Participation "
+        "success does not establish delivery: preserve licensed dissent, research "
+        "failures and partial implementation status.\n\n"
         "If a specialist cannot be spawned, stop and report the spawn failure with "
         "its error text; do not do that specialist's work yourself.\n\n"
         "Never pipe a command into head, tail, sed, awk, or another pager to read its "
@@ -930,7 +936,7 @@ def read_status(
 
 
 def _write_lane_receipts(
-    payload: _SupervisorPayload, duration_s: float
+    payload: _SupervisorPayload, duration_s: float, finished_at: str
 ) -> tuple[tuple[str, ...], SpawnReconciliation]:
     """Compose truthful lane_result receipts from sources available to this request."""
     errors: list[str] = []
@@ -943,12 +949,22 @@ def _write_lane_receipts(
             available=False,
             error=f"dispatcher output could not be read: {error}",
         )
+        report_text = ""
     try:
         log_text = Path(payload.log_file).read_text()
     except OSError, UnicodeError:
         parent_thread_id = None
     else:
         parent_thread_id = lane_result.parse_parent_thread_id(log_text)
+    selection = sdlc_final_report.select_final_report(
+        report_text,
+        parent_id=parent_thread_id,
+        sessions_root=Path(payload.sessions_root),
+        started_at=payload.started_at,
+        finished_at=finished_at,
+    )
+    if self_report.available or report_text:
+        self_report = selection.self_report
     if payload.sessions_root:
         observed = lane_result.collect_session_files(
             parent_thread_id or "",
@@ -979,12 +995,24 @@ def _write_lane_receipts(
         started_at=payload.started_at,
         duration_s=duration_s,
     )
+    provenance = sdlc_final_report.render_provenance(
+        selection,
+        identity=(payload.run_id, parent_thread_id),
+        captured_path=Path(payload.output_file),
+        interval=(payload.started_at, finished_at),
+        participation_consistent=reconciliation.consistent,
+    )
     for path, content, label in (
         (Path(payload.receipt_json), codec.encode(result) + b"\n", "JSON"),
         (
             Path(payload.receipt_md),
             lane_result.render_receipt(result).encode(),
             "Markdown",
+        ),
+        (
+            Path(payload.settlement_file).parent / "roster-provenance.md",
+            provenance.encode(),
+            "roster provenance",
         ),
     ):
         try:
@@ -1030,7 +1058,10 @@ def _supervise(payload: _SupervisorPayload) -> int:
         errors.append(f"could not run codex: {error}")
 
     duration_s = time.monotonic() - started
-    receipt_errors, reconciliation = _write_lane_receipts(payload, duration_s)
+    finished_at = _utc_now()
+    receipt_errors, reconciliation = _write_lane_receipts(
+        payload, duration_s, finished_at
+    )
     errors.extend(reconciliation.errors)
     errors.extend(receipt_errors)
     if status is SdlcSettledStatus.COMPLETED and not reconciliation.consistent:
@@ -1040,7 +1071,7 @@ def _supervise(payload: _SupervisorPayload) -> int:
         status=status,
         codex_returncode=returncode,
         codex_pid=codex_pid,
-        finished_at=_utc_now(),
+        finished_at=finished_at,
         duration_s=duration_s,
         errors=tuple(errors),
         parent_thread_id=reconciliation.parent_thread_id,
