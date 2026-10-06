@@ -4559,63 +4559,63 @@ url_api = "https://api.github.com/repos/betterleaks/betterleaks/releases/assets/
 provenance = "cosign"
 
 [[tools."aqua:jackchuka/mdschema"]]
-version = "0.15.4"
+version = "0.15.5"
 backend = "aqua:jackchuka/mdschema"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-arm64"]
-checksum = "sha256:fe9b672788eab21d12878d21f68753bebaad352357723cd6187dc19309d1a93a"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888496"
+checksum = "sha256:ee0469b903f3ae44f94fb4bc2d7b049c452677633850dc83808bc6ca54ddf6cb"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254420"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-arm64-musl"]
-checksum = "sha256:fe9b672788eab21d12878d21f68753bebaad352357723cd6187dc19309d1a93a"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888496"
+checksum = "sha256:ee0469b903f3ae44f94fb4bc2d7b049c452677633850dc83808bc6ca54ddf6cb"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254420"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-x64"]
-checksum = "sha256:29f32c98fddcde9dc5381e56df0490f5e45436df7260aeb8afa0161eab63fb81"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888497"
+checksum = "sha256:f82a6c79820e36cd52465bccfaebeda94b2a8014675cc7054d831b7a57ea204f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254415"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-x64-baseline"]
-checksum = "sha256:29f32c98fddcde9dc5381e56df0490f5e45436df7260aeb8afa0161eab63fb81"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888497"
+checksum = "sha256:f82a6c79820e36cd52465bccfaebeda94b2a8014675cc7054d831b7a57ea204f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254415"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-x64-musl"]
-checksum = "sha256:29f32c98fddcde9dc5381e56df0490f5e45436df7260aeb8afa0161eab63fb81"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888497"
+checksum = "sha256:f82a6c79820e36cd52465bccfaebeda94b2a8014675cc7054d831b7a57ea204f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254415"
 
 [tools."aqua:jackchuka/mdschema"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:29f32c98fddcde9dc5381e56df0490f5e45436df7260aeb8afa0161eab63fb81"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888497"
+checksum = "sha256:f82a6c79820e36cd52465bccfaebeda94b2a8014675cc7054d831b7a57ea204f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254415"
 
 [tools."aqua:jackchuka/mdschema"."platforms.macos-arm64"]
-checksum = "sha256:72be30f1e92752fc2d4006b7f592fe3dee53361577620de6cc319268152ef9a9"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888492"
+checksum = "sha256:81f946f5e714cb8d8723626900bba2850ec0707c55886d0e492a7c858796160d"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254429"
 
 [tools."aqua:jackchuka/mdschema"."platforms.macos-x64"]
-checksum = "sha256:6b8e397e86326b7408ca4903b935970be476783852bfa9cf04fc46fcf6025484"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888493"
+checksum = "sha256:3ef8d58466bd403da7f836fb1fe4f3f1ffa6de1c9e04c57838f00fa05a5af4d1"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254495"
 
 [tools."aqua:jackchuka/mdschema"."platforms.macos-x64-baseline"]
-checksum = "sha256:6b8e397e86326b7408ca4903b935970be476783852bfa9cf04fc46fcf6025484"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888493"
+checksum = "sha256:3ef8d58466bd403da7f836fb1fe4f3f1ffa6de1c9e04c57838f00fa05a5af4d1"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254495"
 
 [tools."aqua:jackchuka/mdschema"."platforms.windows-x64"]
-checksum = "sha256:2f68ff569964fba621825c498cbc30f23756057233c627bda9e8cb7602e302d1"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_windows_amd64.zip"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888522"
+checksum = "sha256:c1671d7e7bb368c7da0e90f4bbf3e96aef78cbffecaa943895d944f85631861f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_windows_amd64.zip"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254502"
 
 [tools."aqua:jackchuka/mdschema"."platforms.windows-x64-baseline"]
-checksum = "sha256:2f68ff569964fba621825c498cbc30f23756057233c627bda9e8cb7602e302d1"
-url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.4/mdschema_0.15.4_windows_amd64.zip"
-url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/569888522"
+checksum = "sha256:c1671d7e7bb368c7da0e90f4bbf3e96aef78cbffecaa943895d944f85631861f"
+url = "https://github.com/jackchuka/mdschema/releases/download/v0.15.5/mdschema_0.15.5_windows_amd64.zip"
+url_api = "https://api.github.com/repos/jackchuka/mdschema/releases/assets/614254502"
 
 [[tools."aqua:rtk-ai/rtk"]]
 version = "0.51.0"
