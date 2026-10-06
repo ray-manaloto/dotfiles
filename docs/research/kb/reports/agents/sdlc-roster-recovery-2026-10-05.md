@@ -861,3 +861,106 @@ Failed inspections retained: config/image rg rc=2 (missing config).
 `/root/documentation`: report Markdown/diff/prefix rc=0; scoped checks only.
 Native ordering/Stop/same-ID renderer/settlement are coordinator-owned;
 missing proof = FAIL. No providers/full gates/delivery; caller commits.
+
+## Cold-review correction — bounded implementation receipt
+
+Root/Python report: native role and path each pass full grammar before
+compatibility collection; fence closure accepts only whitespace after a
+sufficient same-marker run; generated root prompt explicitly requires ALL FIVE
+original direct specialists.
+Public signatures/schemas and compatibility semantics remain unchanged; opening
+fences and quote exclusions are preserved. This is the ratified
+`.agent/plans/sdlc-cold-correction.md` correction on `d7d05f9a`.
+Python scoped pytest (`tests/test_sdlc_final_report.py`,
+`tests/test_sdlc_team.py`, `tests/test_lane_result.py`) rc=0, 255 passed; Ruff
+check/format-check and configured ty rc=0; independent root pytest rc=0, 255
+passed.
+Isolated public-interface reverts/restored controls: identities red rc=1 (2
+failed/1 passed), green rc=0 (3 passed); fences red rc=1 (8 failed), green rc=0
+(8 passed); prompt red rc=1 (4 failed), green rc=0 (4 passed).
+The initially weak fence assertion was corrected to role plus path.
+Config/image/workflows completed read-only inspection with no consumer changes
+or dissent; guessed config filenames failed reads, then corrected routes
+resolved them.
+Append preserves the original 47,545-byte prefix SHA256
+`714a3e720c0ed414040827c508c741e951f7680ddb81981037b8f1ebe6a3fb9d`, all historic
+receipts, HEAD `d7d05f9a`, and the inherited untracked report (baseline/hash
+checks rc=0).
+Root trusted-hook refresh: native fnox/mise/uv/Python fanout and manifest
+identity/raw-hash verification rc=0; gh, Exa HTTPS, ctx7 CLI, Firecrawl
+developer HTTPS, Firecrawl search CLI plus Serper HTTPS, Last30Days plugin
+Python script and primary web reads ran; no connector/research MCP. Root applied
+codex-sdlc-team; primary refs: [CommonMark
+fences](https://spec.commonmark.org/0.31.2/#fenced-code-blocks), [Codex
+subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents).
+RESEARCH INCOMPLETE: Firecrawl search primary blocker `Error: Request failed
+with status code 402`; skipped credits-exhausted, Serper HTTP200 substitute,
+receipt PROVISIONAL. Root receipt:
+`/Users/rmanaloto/.codex/research-coverage/01a10f08-e6a8-7653-8c43-2b5969a86dd2/01a10f08-ec99-7a13-8130-acb8a981f71a/manifest.json`;
+prior route failures remain preserved.
+Implementation remains partial: unit controls and five-role participation do not
+prove final runtime acceptance (ordinary CI excludes codex_exec). Coordinator
+next: fresh real review/implementation/trusted Stop rehearsal and final-HEAD
+acceptance; caller owns commits/full gates. No delivery claim.
+
+## Third bounded correction — timestamp diagnostic receipt
+
+At the fixed `datetime.fromisoformat` ValueError boundary, Python now raises
+`native timestamp is invalid ISO format` from None; missing/nontext/timezone
+refusals and valid offset-aware behavior remain covered, with the inherited a221
+edits and committed `d7d05f9a` preserved.
+Scope is error/diagnostic fields only: no raw malformed timestamp is copied into
+collector/reconciliation/encoded diagnostics; arbitrary caller-supplied interval
+metadata is not sanitized and no broader metadata privacy claim is made.
+Public selector and `reconcile_spawns` controls plant fake canaries in native
+records and supervised endpoints; valid offset-aware controls remain green.
+These are isolated synthetic controls, not real native acceptance.
+Exact argv, rc, first failure, stdout/stderr, JUnit and fixture paths are
+preserved under `.agent/logs/sdlc-timestamp-python-0e7ad1c92c00/`:
+`frozen-red.json` records rc=1, first
+`test_invalid_timestamp_diagnostics_do_not_leak_canary[session-meta]`, the
+encoded-diagnostics leaked-canary assertion; fixture
+`.agent/state/sdlc-timestamp-python-0e7ad1c92c00/frozen-red-native/test_invalid_timestamp_diagnos0`.
+`frozen-restored-green.json` records rc=0, 179 passed, no first failure,
+fixtures
+`.agent/state/sdlc-timestamp-python-0e7ad1c92c00/frozen-restored-native`;
+`frozen-three-file.json` records rc=0, 268 passed, no first failure, fixtures
+`.agent/state/sdlc-timestamp-python-0e7ad1c92c00/frozen-current-native`.
+`frozen-ruff.json`, `frozen-format.json` and `frozen-ty.json` preserve the exact
+scoped commands, each rc=0/no first failure; `completed-summary.json` freezes
+module SHA256 `5a982936556a36f12f5fb7b71e670c6446a33ba1c4ef10f0922140cb32738493`
+and test SHA256
+`3f5b1341805dbc2b8c99b078b117736650a22152076dd061480c8cb14c519454`.
+Earlier failures remain retained: `red.json` rc=2 after seven leaked-canary
+assertions (xdist wrapper rc=1 expected-rc mismatch); `ruff.json` rc=1, first
+S101 at test line654 from bypassed repository config, plus corrected E501.
+Config completed read-only inspection without consumer changes or licensed
+dissent.
+RESEARCH INCOMPLETE: root native fnox strict-five rc=1; GitHub discussions
+`empty_unverified`, exact blocker `canary returned 0 items` /
+`github-discussions did not complete`. Firecrawl-search primary `Error: Request
+failed with status code 402` was skipped credits-exhausted; Serper HTTP200
+substitute is PROVISIONAL, not primary success. Manifest
+`/Users/rmanaloto/.codex/research-coverage/01a10f34-3b88-7621-bf77-ff81bded8089/01a10f34-4207-7712-b744-bda8b4c16762/manifest.json`;
+prior research failures remain.
+This append preserves the full prior 50,122-byte prefix SHA256
+`7b10cdbc4c58c086ce6bb0cbf442e8b1a4da5dea4de0c80137a674617e18f2a1`;
+documentation performs only scoped content/prefix/diff checks, invokes no
+research provider or additional agent, and changes no source, settings, hook or
+evidence index.
+Implementation remains partial: image/workflows inspection follows this
+addendum; final post-edit native acceptance after source freeze, full gates and
+final-HEAD reviews are coordinator-owned; caller commits. Historical
+native828/a221, scoped unit success and participation do not establish delivery.
+
+## Final-runtime rehearsal — scoped implementation
+
+Prior source implementation: `979a8d33425149e5a4116232afea2271`.
+Python bundle: rc=0, 268 passed; agent schema: rc=0, six valid.
+Lane mirror check: rc=0, twelve matches.
+Image/workflows focused read-only consumer checks remain pending.
+Root research rc=0 PROVISIONAL: firecrawl-search via Serper.
+Primary Firecrawl HTTP402 credits-exhausted; all routes retained.
+Hook replacement NOT_EXERCISED; no native-rendering result asserted.
+Full gates/native acceptance are coordinator-owned; caller commits.
+Participation/scoped checks do not establish delivery; prefix preserved.

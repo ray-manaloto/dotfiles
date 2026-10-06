@@ -186,6 +186,46 @@ def _request(tmp_path: Path, **changes: object) -> sdlc_team.SdlcTeamRequest:
     return sdlc_team.SdlcTeamRequest(**cast("dict[str, Any]", values))
 
 
+@pytest.mark.parametrize(
+    "mode", [sdlc_team.SdlcMode.REVIEW, sdlc_team.SdlcMode.IMPLEMENT]
+)
+@pytest.mark.parametrize("task", ["", "Inspect the authoritative specification."])
+def test_minimal_prompt_requires_all_five_direct_specialists(
+    tmp_path: Path, mode: sdlc_team.SdlcMode, task: str
+) -> None:
+    """Ordinary CLI roots cannot rely on an injected dispatcher roster."""
+    spec = tmp_path / "spec.md"
+    spec.write_text("# Minimal specification\n")
+    request = sdlc_team.SdlcTeamRequest(spec_file=str(spec), mode=mode, task=task)
+    prompt = sdlc_team.build_prompt(request, tmp_path)
+    assert "Spawn ALL FIVE specialists directly:" in prompt
+    for role in (
+        "sdlc-python-specialist",
+        "sdlc-config-specialist",
+        "sdlc-documentation-specialist",
+        "sdlc-image-specialist",
+        "sdlc-workflows-specialist",
+    ):
+        assert role in prompt
+    assert "Sequential routing is permitted within capacity" in prompt
+    assert "with no dispatcher child or additional agents" in prompt
+    assert (
+        "If a specialist cannot be spawned, stop and report the spawn failure" in prompt
+    )
+    assert "exactly one item per spawned specialist" in prompt
+    assert "partial implementation status" in prompt
+    assert "LICENSED DISSENT" in prompt
+    assert "TEST CRAFT" in prompt
+    assert "COMMIT: caller" in prompt
+    assert (
+        "Implementation specialists run only scoped checks authorized by the spec"
+        in prompt
+    )
+    assert ("Do not run repository gates" in prompt) is (
+        mode is sdlc_team.SdlcMode.REVIEW
+    )
+
+
 def _capture_dispatch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

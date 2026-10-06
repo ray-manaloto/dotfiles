@@ -267,8 +267,10 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
         )
     task = request.task.strip() or "Execute the authoritative specification."
     return (
-        f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Route this to your "
-        "specialists per your roster, spawn them in parallel, wait for all, and "
+        f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Spawn ALL FIVE "
+        "specialists directly: sdlc-python-specialist, sdlc-config-specialist, "
+        "sdlc-documentation-specialist, sdlc-image-specialist and "
+        "sdlc-workflows-specialist. Spawn them in parallel, wait for all, and "
         "synthesize their results. Sequential routing is permitted within capacity. "
         "Root remains dispatcher; spawn specialists directly, with no dispatcher "
         "child or additional agents.\n\n"

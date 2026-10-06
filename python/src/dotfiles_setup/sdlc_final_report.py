@@ -23,6 +23,8 @@ _HEADING = re.compile(
 )
 _FENCE = re.compile(r"^ {0,3}(?P<marker>`{3,}|~{3,})")
 _NATIVE_ITEM = re.compile(r"^\s*[-*+]\s+`([^`]+)`\s+—\s+`(/root/[^`]+)`\s*$")
+_NATIVE_ROLE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+_NATIVE_PATH = re.compile(r"/[A-Za-z0-9_./-]{1,200}")
 _CITATION_ENTRY = re.compile(
     r"(?P<path>[A-Za-z0-9_.][A-Za-z0-9_./-]*):"
     r"(?P<start>[1-9][0-9]*)-(?P<end>[1-9][0-9]*)"
@@ -125,7 +127,11 @@ def _blocks(text: str) -> tuple[str, ...]:
             token = marker.group("marker")
             if not fence:
                 fence = token
-            elif token[0] == fence[0] and len(token) >= len(fence):
+            elif (
+                token[0] == fence[0]
+                and len(token) >= len(fence)
+                and not line[marker.end() :].strip()
+            ):
                 fence = ""
             continue
         if not fence and _HEADING.fullmatch(line.strip()):
@@ -155,26 +161,30 @@ def _declarations(
     """Validate each declaration separately so a later block cannot mask it."""
     declarations: list[lane_result.CollectorOutcome] = []
     for block in _blocks(text):
-        declaration = lane_result.collect_spawn_report(block)
-        if not declaration.available:
-            msg = "malformed Specialists spawned declaration"
-            raise ValueError(msg)
+        entries = []
         if native:
             items = [line for line in block.splitlines()[1:] if line.strip()]
-            entries = []
             for line in items:
                 if not re.match(r"^\s*[-*+]\s+", line):
                     break
                 match = _NATIVE_ITEM.fullmatch(line)
-                if match is None:
+                if (
+                    match is None
+                    or _NATIVE_ROLE.fullmatch(match[1]) is None
+                    or _NATIVE_PATH.fullmatch(match[2]) is None
+                ):
                     msg = (
                         "invalid native roster item; expected backticked role and path"
                     )
                     raise ValueError(msg)
                 entries.append(match.groups())
-            if not entries or len(entries) != len(declaration.agents):
-                msg = "empty or invalid native Specialists spawned declaration"
-                raise ValueError(msg)
+        declaration = lane_result.collect_spawn_report(block)
+        if not declaration.available:
+            msg = "malformed Specialists spawned declaration"
+            raise ValueError(msg)
+        if native and (not entries or len(entries) != len(declaration.agents)):
+            msg = "empty or invalid native Specialists spawned declaration"
+            raise ValueError(msg)
         declarations.append(declaration)
     return tuple(declarations)
 
@@ -243,7 +253,11 @@ def _epoch(value: object) -> float:
     if not isinstance(value, str):
         msg = "native timestamp is missing or not text"
         raise TypeError(msg)
-    stamp = datetime.fromisoformat(value)
+    try:
+        stamp = datetime.fromisoformat(value)
+    except ValueError:
+        msg = "native timestamp is invalid ISO format"
+        raise ValueError(msg) from None
     if stamp.tzinfo is None:
         msg = "native timestamp has no timezone"
         raise ValueError(msg)

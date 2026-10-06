@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import codec, sdlc_final_report
+from dotfiles_setup import codec, lane_result, sdlc_final_report, sdlc_team
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -697,6 +697,139 @@ def _select(tmp_path: Path, captured: str) -> sdlc_final_report._FinalSelection:
     )
 
 
+@pytest.mark.parametrize(
+    "location",
+    [
+        "session-meta",
+        "task-started",
+        "rendered",
+        "final",
+        "task-complete",
+        "start",
+        "finish",
+    ],
+)
+def test_invalid_timestamp_diagnostics_do_not_leak_canary(
+    tmp_path: Path, location: str
+) -> None:
+    """Malformed records and interval endpoints fail safely in public errors."""
+    canary = "FAKE_TIMESTAMP_CANARY_" + location
+    records = _attested_records(_ROSTER)
+    started_at, finished_at = _START, _FINISH
+    if location == "start":
+        started_at = canary
+    elif location == "finish":
+        finished_at = canary
+    else:
+        index = [
+            "session-meta",
+            "task-started",
+            "rendered",
+            "final",
+            "task-complete",
+        ].index(location)
+        records[index]["timestamp"] = canary
+    _source(tmp_path, records)
+    selected = sdlc_final_report.select_final_report(
+        _ROSTER,
+        parent_id=_PARENT,
+        sessions_root=tmp_path,
+        started_at=started_at,
+        finished_at=finished_at,
+    )
+    observed = lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        agents=(
+            lane_result.AgentNode(
+                name="sdlc-python-specialist",
+                role="/root/python",
+                sources=(lane_result.AgentSource.OBSERVED,),
+            ),
+        ),
+    )
+    reconciled = sdlc_team.reconcile_spawns(
+        _PARENT, str(tmp_path), selected.self_report, observed
+    )
+    diagnostics = {
+        "selection_error": selected.error,
+        "collector_error": selected.self_report.error,
+        "reconciliation_errors": reconciled.errors,
+        "reconciliation_collector_error": reconciled.self_report.error,
+    }
+    assert canary.encode() not in codec.encode(diagnostics)
+    assert selected.reason == "refused"
+    assert selected.self_report.available is False
+    assert reconciled.consistent is False
+    expected = "native final selection refused: native timestamp is invalid ISO format"
+    assert selected.error == selected.self_report.error == expected
+    assert reconciled.self_report.error == expected
+    assert any(expected in error for error in reconciled.errors)
+    # Restore the same isolated source and valid endpoints as the acceptance arm.
+    _source(tmp_path, _attested_records(_ROSTER))
+    control = _select(tmp_path, _ROSTER)
+    assert control.self_report.available is True
+    assert control.error == ""
+    accepted = sdlc_team.reconcile_spawns(
+        _PARENT, str(tmp_path), control.self_report, observed
+    )
+    assert accepted.consistent is True
+    assert accepted.errors == ()
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [
+        (None, "native timestamp is missing or not text"),
+        (42, "native timestamp is missing or not text"),
+        ("2026-10-05T21:20:00", "native timestamp has no timezone"),
+    ],
+)
+def test_timestamp_refusals_remain_distinct(
+    tmp_path: Path, value: object, error: str
+) -> None:
+    """Missing, nontext and timezone-free records retain their existing refusals."""
+    records = _records(_ROSTER)
+    if value is None:
+        records[2].pop("timestamp")
+    else:
+        records[2]["timestamp"] = value
+    _source(tmp_path, records)
+    refused = _select(tmp_path, _ROSTER)
+    assert refused.self_report.available is False
+    assert refused.error == "native final selection refused: " + error
+    _source(tmp_path, _records(_ROSTER))
+    assert _select(tmp_path, _ROSTER).self_report.available is True
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    ["2026-10-05T21:20:00Z", "2026-10-05T16:20:00-05:00", "2026-10-06T02:50:00+05:30"],
+)
+def test_valid_offset_timestamps_preserve_public_selection(
+    tmp_path: Path, timestamp: str
+) -> None:
+    """Equivalent offset-aware records and supervised endpoints remain accepted."""
+    records = _records(_ROSTER)
+    for record in records:
+        record["timestamp"] = timestamp
+    _source(tmp_path, records)
+    selected = sdlc_final_report.select_final_report(
+        _ROSTER,
+        parent_id=_PARENT,
+        sessions_root=tmp_path,
+        started_at="2026-10-05T16:01:11-05:00",
+        finished_at="2026-10-06T02:51:53+05:30",
+    )
+    assert selected.self_report.available is True
+    assert selected.reason == "latest-native-declaration"
+    assert selected.report_text == _ROSTER
+    assert selected.selected_timestamp == timestamp
+    assert selected.error == ""
+    records[2]["timestamp"] = "2026-10-05T21:20:00"
+    _source(tmp_path, records)
+    assert _select(tmp_path, _ROSTER).self_report.available is False
+
+
 @pytest.mark.parametrize("earlier", [False, True])
 def test_each_citation_final_binds_its_own_rendered_message(
     tmp_path: Path, *, earlier: bool
@@ -1113,6 +1246,114 @@ def test_standalone_heading_formats_are_declarations(
     )
     assert selection.self_report.available is True
     assert selection.reason == "latest-native-declaration"
+
+
+@pytest.mark.parametrize(
+    ("role", "path", "observed_role", "valid"),
+    [
+        ("sdlc-python-specialist!", "/root/python", "", False),
+        ("sdlc-python-specialist", "/root/python!", "sdlc-python-specialist", False),
+        ("sdlc-python-specialist", "/root/python", "sdlc-python-specialist", True),
+    ],
+)
+def test_native_tokens_validate_before_identity_reconciliation(
+    tmp_path: Path, role: str, path: str, observed_role: str, *, valid: bool
+) -> None:
+    """Neither malformed token may disappear while the other matches a child."""
+    text = f"Specialists spawned:\n- `{role}` — `{path}`\n"
+    _source(tmp_path, _records(text))
+    selection = _select(tmp_path, text)
+    observed = lane_result.CollectorOutcome(
+        source=lane_result.AgentSource.OBSERVED,
+        agents=(
+            lane_result.AgentNode(
+                name=observed_role or "/root/python",
+                role="/root/python",
+                sources=(lane_result.AgentSource.OBSERVED,),
+            ),
+        ),
+    )
+    reconciled = sdlc_team.reconcile_spawns(
+        _PARENT, str(tmp_path), selection.self_report, observed
+    )
+    assert selection.self_report.available is valid
+    assert reconciled.consistent is valid
+    if valid:
+        assert selection.reason == "latest-native-declaration"
+        assert reconciled.specialists_claimed == ("sdlc-python-specialist",)
+    else:
+        assert selection.reason == "refused"
+        assert selection.error == (
+            "native final selection refused: invalid native roster item; "
+            "expected backticked role and path"
+        )
+        # Native absence retains the compatibility collector's accepted syntax.
+        direct = sdlc_final_report.select_final_report(
+            text,
+            parent_id=None,
+            sessions_root=tmp_path,
+            started_at=_START,
+            finished_at=_FINISH,
+        )
+        assert direct.self_report.available is True
+        assert (
+            sdlc_team.reconcile_spawns(
+                _PARENT, str(tmp_path), direct.self_report, observed
+            ).consistent
+            is True
+        )
+
+
+@pytest.mark.parametrize(
+    ("role", "path", "valid"),
+    [
+        ("a" * 64, "/root/" + "a" * 195, True),
+        ("a" * 65, "/root/python", False),
+        ("role", "/root/" + "a" * 196, False),
+        ("Role", "/root/python", False),
+        ("-role", "/root/python", False),
+        ("role name", "/root/python", False),
+        ("role", "/root/python name", False),
+        ("role", "/other/python", False),
+    ],
+)
+def test_native_token_grammar_boundaries(
+    tmp_path: Path, role: str, path: str, *, valid: bool
+) -> None:
+    """Pin both existing grammars and native root prefix independently."""
+    text = f"Specialists spawned:\n- `{role}` — `{path}`\n"
+    _source(tmp_path, _records(text))
+    selection = _select(tmp_path, text)
+    assert selection.self_report.available is valid
+    assert selection.reason == ("latest-native-declaration" if valid else "refused")
+
+
+@pytest.mark.parametrize("marker", ["```", "~~~"])
+@pytest.mark.parametrize("suffix", ["example", "~example"])
+@pytest.mark.parametrize("earlier", [False, True])
+def test_fence_suffix_stays_content_until_whitespace_only_closure(
+    tmp_path: Path, marker: str, suffix: str, *, earlier: bool
+) -> None:
+    """A false closure must not expose a conflicting example as a real claim."""
+    suffix = suffix.replace("~", marker[0])
+    example = _ROSTER.replace("/root/python", "/root/example")
+    decoration = (
+        f"{marker}markdown\n{marker}{suffix}\n{example}"
+        f"> {marker}\n> Specialists spawned:\n> - `quoted` — `/root/quoted`\n"
+        f"   {marker} \t\n"
+    )
+    original = decoration + _ROSTER
+    finals = (original, _RECEIPT) if earlier else (original,)
+    _source(tmp_path, _records(*finals))
+    selection = _select(tmp_path, finals[-1])
+    assert selection.self_report.available is True
+    assert selection.reason == (
+        "prior-final-absence" if earlier else "latest-native-declaration"
+    )
+    assert selection.report_text == original
+    assert tuple((node.name, node.role) for node in selection.self_report.agents) == (
+        ("sdlc-python-specialist", "`/root/python`"),
+    )
 
 
 @pytest.mark.parametrize(
