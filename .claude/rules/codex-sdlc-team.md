@@ -1,6 +1,9 @@
-# The codex SDLC Team: Six Specialists codex Itself Orchestrates
+# The codex SDLC Team: CLI Root Dispatcher and Five Specialists
 
-This repo has a codex-side subagent team, which codex itself orchestrates.
+The CLI root is the dispatcher. It directly spawns the five named specialists
+below, waits for all five, and synthesizes their results. Spawn in parallel
+within available capacity; sequential spawning is allowed when needed.
+There is no dispatcher child or additional agent.
 
 ## The roster
 
@@ -8,13 +11,24 @@ Declared in `.codex/agents/codex-sdlc-*.toml`. ⚠️ The **filenames** carry a
 `codex-` prefix the `name` fields do not — codex spawns by `name`.
 
 | `name` | owns | its gate |
-|---|---|---|
+| --- | --- | --- |
 | `sdlc-dispatcher` | routes, waits, synthesises — never edits | — |
 | `sdlc-python-specialist` | `python/src/`, `tests/` | pytest |
 | `sdlc-config-specialist` | `.pkl`, `.toml`, `.hcl` | `mise run lint` |
 | `sdlc-workflows-specialist` | `.github/workflows/` | `mise run pin-actions` |
-| `sdlc-image-specialist` | `.devcontainer/`, Dockerfile | `mise run verify-container-latest` |
-| `sdlc-documentation-specialist` | `docs/`, `.claude/rules/`, `AGENTS.md` | `mise run lint-docs` |
+| `sdlc-image-specialist` | image inputs¹ | container gate² |
+| `sdlc-documentation-specialist` | documentation³ | docs gate⁴ |
+
+1. Image inputs: `.devcontainer/` and Dockerfile.
+2. Container gate: `mise run verify-container-latest`.
+3. Documentation: `docs/`, `.claude/rules/`, and `AGENTS.md`.
+4. Docs gate: `mise run lint-docs`.
+
+Review mode has no writes or gates. In implementation mode, specialists run
+only spec-authorized scoped checks and leave changes unstaged. The caller owns
+commits and serializes the full gates listed above; scoped checks do not replace
+those gates or establish delivery. These mode restrictions are prompt contracts,
+with the enforcement limits described below.
 
 ## Invocation — `mise run sdlc-team`, never a hand-rolled `codex exec`
 
@@ -42,12 +56,15 @@ regardless.
 ⚠️ **The trailing `-` is why the task exists.** Omit it from a hand-rolled call
 and codex never reads the prompt; it hangs forever. The task always supplies it.
 
-⚠️ **A review lane is ASKED, not PREVENTED, from writing** — the task passes no `-s`
+⚠️ **A review lane is ASKED, not PREVENTED, from writing** — the task passes
+no `-s`
 (Ray 2026-09-15: it overrode the machine sandbox and cut the network). Put every
-prohibition in the spec, and still run the gates yourself rather than trusting a lane's.
+prohibition in the spec, and still run the gates yourself rather than trusting
+a lane's.
 
 ⚠️ **The lane owns the checkout while it runs.** Do not edit files it may touch,
-and name its allowlist in the spec — `.claude/rules/agent-report-persistence.md`
+and name its allowlist in the spec —
+`.claude/rules/agent-report-persistence.md`
 and the orchestration skill both bind here.
 
 ## codex drops an invalid agent file SILENTLY
