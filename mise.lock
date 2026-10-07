@@ -180,9 +180,9 @@ checksum = "sha256:4440c7ae251efa83bb7bc0d3fd25ba901640cc712b1284c75d7b8333e1c4b
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libgomp-16.2.0-h8acb6b2_7.conda"
 checksum = "sha256:4406fd67c5beeb99b9372f9bf07aa3e40ca141e337eceebac3ff64aa72799494"
 
-[conda-packages.linux-arm64."libharfbuzz-14.5.1-h8f7ccb3_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libharfbuzz-14.5.1-h8f7ccb3_0.conda"
-checksum = "sha256:9569596d9693bfc41d5269fa37dab20f8dbe15d56f80473f26da4538721ea502"
+[conda-packages.linux-arm64."libharfbuzz-14.6.0-h8f7ccb3_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libharfbuzz-14.6.0-h8f7ccb3_1.conda"
+checksum = "sha256:52e018610445a3df417eaec133ade7f14bfa642fb13ab49961efd4cabbfd87b1"
 
 [conda-packages.linux-arm64."libhwloc-2.15.0-default_h6575321_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libhwloc-2.15.0-default_h6575321_1001.conda"
@@ -668,9 +668,9 @@ checksum = "sha256:4440c7ae251efa83bb7bc0d3fd25ba901640cc712b1284c75d7b8333e1c4b
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libgomp-16.2.0-h8acb6b2_7.conda"
 checksum = "sha256:4406fd67c5beeb99b9372f9bf07aa3e40ca141e337eceebac3ff64aa72799494"
 
-[conda-packages.linux-arm64-musl."libharfbuzz-14.5.1-h8f7ccb3_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libharfbuzz-14.5.1-h8f7ccb3_0.conda"
-checksum = "sha256:9569596d9693bfc41d5269fa37dab20f8dbe15d56f80473f26da4538721ea502"
+[conda-packages.linux-arm64-musl."libharfbuzz-14.6.0-h8f7ccb3_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libharfbuzz-14.6.0-h8f7ccb3_1.conda"
+checksum = "sha256:52e018610445a3df417eaec133ade7f14bfa642fb13ab49961efd4cabbfd87b1"
 
 [conda-packages.linux-arm64-musl."libhwloc-2.15.0-default_h6575321_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libhwloc-2.15.0-default_h6575321_1001.conda"
@@ -1168,9 +1168,9 @@ checksum = "sha256:d1f0d51aea6bcc5d915969cbed32e72a8ed6a95931b87357ef8d086657368
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
 checksum = "sha256:92a0bb350c7be6a4eedcb4e111c60aefd176018e6b1c009a6e025dbe9bbcd758"
 
-[conda-packages.linux-x64."libharfbuzz-14.5.1-h23af247_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.5.1-h23af247_0.conda"
-checksum = "sha256:eb8ee0fd0f11bcd8f73d260fd2e64c7338e7c829ed204d9abbfd9dc75e55b031"
+[conda-packages.linux-x64."libharfbuzz-14.6.0-h23af247_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.6.0-h23af247_1.conda"
+checksum = "sha256:a5af64065d8fb70b77ce4551c9ae022b4f170f11b789249ee6efab3e83fedbe0"
 
 [conda-packages.linux-x64."libhwloc-2.15.0-default_hd7c4d0c_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda"
@@ -1696,9 +1696,9 @@ checksum = "sha256:d1f0d51aea6bcc5d915969cbed32e72a8ed6a95931b87357ef8d086657368
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
 checksum = "sha256:92a0bb350c7be6a4eedcb4e111c60aefd176018e6b1c009a6e025dbe9bbcd758"
 
-[conda-packages.linux-x64-baseline."libharfbuzz-14.5.1-h23af247_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.5.1-h23af247_0.conda"
-checksum = "sha256:eb8ee0fd0f11bcd8f73d260fd2e64c7338e7c829ed204d9abbfd9dc75e55b031"
+[conda-packages.linux-x64-baseline."libharfbuzz-14.6.0-h23af247_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.6.0-h23af247_1.conda"
+checksum = "sha256:a5af64065d8fb70b77ce4551c9ae022b4f170f11b789249ee6efab3e83fedbe0"
 
 [conda-packages.linux-x64-baseline."libhwloc-2.15.0-default_hd7c4d0c_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda"
@@ -2224,9 +2224,9 @@ checksum = "sha256:d1f0d51aea6bcc5d915969cbed32e72a8ed6a95931b87357ef8d086657368
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
 checksum = "sha256:92a0bb350c7be6a4eedcb4e111c60aefd176018e6b1c009a6e025dbe9bbcd758"
 
-[conda-packages.linux-x64-musl."libharfbuzz-14.5.1-h23af247_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.5.1-h23af247_0.conda"
-checksum = "sha256:eb8ee0fd0f11bcd8f73d260fd2e64c7338e7c829ed204d9abbfd9dc75e55b031"
+[conda-packages.linux-x64-musl."libharfbuzz-14.6.0-h23af247_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.6.0-h23af247_1.conda"
+checksum = "sha256:a5af64065d8fb70b77ce4551c9ae022b4f170f11b789249ee6efab3e83fedbe0"
 
 [conda-packages.linux-x64-musl."libhwloc-2.15.0-default_hd7c4d0c_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda"
@@ -2752,9 +2752,9 @@ checksum = "sha256:d1f0d51aea6bcc5d915969cbed32e72a8ed6a95931b87357ef8d086657368
 url = "https://conda.anaconda.org/conda-forge/linux-64/libgomp-16.2.0-he0feb66_7.conda"
 checksum = "sha256:92a0bb350c7be6a4eedcb4e111c60aefd176018e6b1c009a6e025dbe9bbcd758"
 
-[conda-packages.linux-x64-musl-baseline."libharfbuzz-14.5.1-h23af247_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.5.1-h23af247_0.conda"
-checksum = "sha256:eb8ee0fd0f11bcd8f73d260fd2e64c7338e7c829ed204d9abbfd9dc75e55b031"
+[conda-packages.linux-x64-musl-baseline."libharfbuzz-14.6.0-h23af247_1"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libharfbuzz-14.6.0-h23af247_1.conda"
+checksum = "sha256:a5af64065d8fb70b77ce4551c9ae022b4f170f11b789249ee6efab3e83fedbe0"
 
 [conda-packages.linux-x64-musl-baseline."libhwloc-2.15.0-default_hd7c4d0c_1001"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libhwloc-2.15.0-default_hd7c4d0c_1001.conda"
@@ -3192,9 +3192,9 @@ checksum = "sha256:4e1f5989561de4546209b42c935795a41fa4265e0b670861480f1adffec62
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libbrotlienc-1.2.0-h2ddc9cb_4.conda"
 checksum = "sha256:4d2da97825b221054a39f492e4dffe361e1931c8381d0367f1e0598a50d02f34"
 
-[conda-packages.macos-arm64."libcxx-23.1.2-h55c6f16_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.2-h55c6f16_0.conda"
-checksum = "sha256:087a610bacee7901d259ef72c6f060d795ab26831bd7541ba75ced786a5a63f9"
+[conda-packages.macos-arm64."libcxx-23.1.3-h55c6f16_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.3-h55c6f16_0.conda"
+checksum = "sha256:2d9d31172d7919bd276a8d1be338de567dd5afdd181e8d3d3d8c2d8695e09de2"
 
 [conda-packages.macos-arm64."libdav1d7-1.5.4-h74c22ad_4"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libdav1d7-1.5.4-h74c22ad_4.conda"
@@ -3228,9 +3228,9 @@ checksum = "sha256:d9b203d6484ad491b5b5f33d49a9d7a91189d776a9adae53d2b63af18ec11
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libglib-2.90.0-hccd281b_0.conda"
 checksum = "sha256:4ec64c476881b31f211842952f192208a3af0925a596da227f4d97fb9a63e0ac"
 
-[conda-packages.macos-arm64."libharfbuzz-14.5.1-hcda0f7c_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/libharfbuzz-14.5.1-hcda0f7c_0.conda"
-checksum = "sha256:a84540418ae803bd30ab51ee5d382d002e60d8681c66af892c3589d964a68d91"
+[conda-packages.macos-arm64."libharfbuzz-14.6.0-hcda0f7c_1"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/libharfbuzz-14.6.0-hcda0f7c_1.conda"
+checksum = "sha256:3ddd0668249555af41ef771442d4475a7ac92cce38348f4c1414c81528e3b17e"
 
 [conda-packages.macos-arm64."libhwloc-2.15.0-default_h98d0dc1_1001"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libhwloc-2.15.0-default_h98d0dc1_1001.conda"
@@ -3532,9 +3532,9 @@ checksum = "sha256:61d001395c040d0879bc25e1a012f0d80dff315a3b96da1f4018a68153414
 url = "https://conda.anaconda.org/conda-forge/osx-64/libbrotlienc-1.2.0-h3d41943_4.conda"
 checksum = "sha256:fb3c5a415789e7cbd6a6cd2453716ab18c360a66e46a8e2abb8b99b719535bb7"
 
-[conda-packages.macos-x64."libcxx-23.1.2-h19cb2f5_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/libcxx-23.1.2-h19cb2f5_0.conda"
-checksum = "sha256:0ad8c788c3681674f100820cf5e76fcc8ec88502e7aa64f4776581985009a7be"
+[conda-packages.macos-x64."libcxx-23.1.3-h19cb2f5_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/libcxx-23.1.3-h19cb2f5_0.conda"
+checksum = "sha256:19ec3adf903c04aac6f31b180d283f0beb6d0393c5c1603f1d57355eb3a8fd66"
 
 [conda-packages.macos-x64."libdav1d7-1.5.4-had63097_4"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/libdav1d7-1.5.4-had63097_4.conda"
@@ -3568,9 +3568,9 @@ checksum = "sha256:9c81d42ca311a1283fb8f79d05dae5659d86cf20f4e5d146a97836456537c
 url = "https://conda.anaconda.org/conda-forge/osx-64/libglib-2.90.0-h7e55108_0.conda"
 checksum = "sha256:68091b433dfa7105c294be490ab35803e287d9c50190e9f6654d2c209352549e"
 
-[conda-packages.macos-x64."libharfbuzz-14.5.1-h2974713_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/libharfbuzz-14.5.1-h2974713_0.conda"
-checksum = "sha256:463431e74e9f115436199910acb001c7e183c76fef098c8853b8a8918c678052"
+[conda-packages.macos-x64."libharfbuzz-14.6.0-h2974713_1"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/libharfbuzz-14.6.0-h2974713_1.conda"
+checksum = "sha256:428aea010269e031d1c74c1049172ff278954704ad3a102211f16d707e922565"
 
 [conda-packages.macos-x64."libhwy-1.4.0-ha8ee8a1_2"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/libhwy-1.4.0-ha8ee8a1_2.conda"
@@ -3808,9 +3808,9 @@ checksum = "sha256:61d001395c040d0879bc25e1a012f0d80dff315a3b96da1f4018a68153414
 url = "https://conda.anaconda.org/conda-forge/osx-64/libbrotlienc-1.2.0-h3d41943_4.conda"
 checksum = "sha256:fb3c5a415789e7cbd6a6cd2453716ab18c360a66e46a8e2abb8b99b719535bb7"
 
-[conda-packages.macos-x64-baseline."libcxx-23.1.2-h19cb2f5_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/libcxx-23.1.2-h19cb2f5_0.conda"
-checksum = "sha256:0ad8c788c3681674f100820cf5e76fcc8ec88502e7aa64f4776581985009a7be"
+[conda-packages.macos-x64-baseline."libcxx-23.1.3-h19cb2f5_0"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/libcxx-23.1.3-h19cb2f5_0.conda"
+checksum = "sha256:19ec3adf903c04aac6f31b180d283f0beb6d0393c5c1603f1d57355eb3a8fd66"
 
 [conda-packages.macos-x64-baseline."libdav1d7-1.5.4-had63097_4"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/libdav1d7-1.5.4-had63097_4.conda"
@@ -3844,9 +3844,9 @@ checksum = "sha256:9c81d42ca311a1283fb8f79d05dae5659d86cf20f4e5d146a97836456537c
 url = "https://conda.anaconda.org/conda-forge/osx-64/libglib-2.90.0-h7e55108_0.conda"
 checksum = "sha256:68091b433dfa7105c294be490ab35803e287d9c50190e9f6654d2c209352549e"
 
-[conda-packages.macos-x64-baseline."libharfbuzz-14.5.1-h2974713_0"]
-url = "https://conda.anaconda.org/conda-forge/osx-64/libharfbuzz-14.5.1-h2974713_0.conda"
-checksum = "sha256:463431e74e9f115436199910acb001c7e183c76fef098c8853b8a8918c678052"
+[conda-packages.macos-x64-baseline."libharfbuzz-14.6.0-h2974713_1"]
+url = "https://conda.anaconda.org/conda-forge/osx-64/libharfbuzz-14.6.0-h2974713_1.conda"
+checksum = "sha256:428aea010269e031d1c74c1049172ff278954704ad3a102211f16d707e922565"
 
 [conda-packages.macos-x64-baseline."libhwy-1.4.0-ha8ee8a1_2"]
 url = "https://conda.anaconda.org/conda-forge/osx-64/libhwy-1.4.0-ha8ee8a1_2.conda"
@@ -4096,9 +4096,9 @@ checksum = "sha256:cbc650854003e434d4ff6c7b1a2667e38a4242ad8a391a1c5ff8972162406
 url = "https://conda.anaconda.org/conda-forge/win-64/libglib-2.90.0-ha564072_0.conda"
 checksum = "sha256:55d9fad9d0884111826500629285dbd35c827e3f2b5fe04b50e3d7d67c71425e"
 
-[conda-packages.windows-x64."libharfbuzz-14.5.1-h03b5201_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/libharfbuzz-14.5.1-h03b5201_0.conda"
-checksum = "sha256:5413b0e567284f12001b219258d4b8e95429c775c7a3a411597ac47df51274fe"
+[conda-packages.windows-x64."libharfbuzz-14.6.0-h03b5201_1"]
+url = "https://conda.anaconda.org/conda-forge/win-64/libharfbuzz-14.6.0-h03b5201_1.conda"
+checksum = "sha256:689199e460f15021019266a54abdf18901b96e3b8bfd17edac18b19f40397f96"
 
 [conda-packages.windows-x64."libhwy-1.4.0-h2419aca_2"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libhwy-1.4.0-h2419aca_2.conda"
@@ -4348,9 +4348,9 @@ checksum = "sha256:cbc650854003e434d4ff6c7b1a2667e38a4242ad8a391a1c5ff8972162406
 url = "https://conda.anaconda.org/conda-forge/win-64/libglib-2.90.0-ha564072_0.conda"
 checksum = "sha256:55d9fad9d0884111826500629285dbd35c827e3f2b5fe04b50e3d7d67c71425e"
 
-[conda-packages.windows-x64-baseline."libharfbuzz-14.5.1-h03b5201_0"]
-url = "https://conda.anaconda.org/conda-forge/win-64/libharfbuzz-14.5.1-h03b5201_0.conda"
-checksum = "sha256:5413b0e567284f12001b219258d4b8e95429c775c7a3a411597ac47df51274fe"
+[conda-packages.windows-x64-baseline."libharfbuzz-14.6.0-h03b5201_1"]
+url = "https://conda.anaconda.org/conda-forge/win-64/libharfbuzz-14.6.0-h03b5201_1.conda"
+checksum = "sha256:689199e460f15021019266a54abdf18901b96e3b8bfd17edac18b19f40397f96"
 
 [conda-packages.windows-x64-baseline."libhwy-1.4.0-h2419aca_2"]
 url = "https://conda.anaconda.org/conda-forge/win-64/libhwy-1.4.0-h2419aca_2.conda"
@@ -4718,9 +4718,9 @@ url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854961"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-arm64-musl"]
-checksum = "sha256:d279c5e36af85d712a906284af0d2dd43d4baee8a36e2139f072c891fbeacfd9"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854959"
+checksum = "sha256:b1e422c4cf5de788553f612b3952deadd6cb7669b35659197af14c4b1f763fab"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-arm64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854961"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64"]
@@ -4736,15 +4736,15 @@ url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64-musl"]
-checksum = "sha256:6ae4389db2e140734af826963e677a6a78dca9690bb089127aef50d8f9edbadb"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854967"
+checksum = "sha256:629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:6ae4389db2e140734af826963e677a6a78dca9690bb089127aef50d8f9edbadb"
-url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64-musl"
-url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854967"
+checksum = "sha256:629a72d30e5b625b70723a651c510c0c2d4adc7c9b7334a690afe848ba4426ce"
+url = "https://github.com/biomejs/biome/releases/download/%40biomejs/biome%402.5.11/biome-linux-x64"
+url_api = "https://api.github.com/repos/biomejs/biome/releases/assets/532854966"
 provenance = "github-attestations"
 
 [tools.biome."platforms.macos-arm64"]
@@ -4877,7 +4877,7 @@ conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
-    "libharfbuzz-14.5.1-h8f7ccb3_0",
+    "libharfbuzz-14.6.0-h8f7ccb3_1",
     "libpng-1.6.59-hf9b7768_0",
     "libglib-2.90.0-h3584fe5_0",
     "cairo-1.18.6-hca320e2_0",
@@ -5005,7 +5005,7 @@ conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
-    "libharfbuzz-14.5.1-h8f7ccb3_0",
+    "libharfbuzz-14.6.0-h8f7ccb3_1",
     "libpng-1.6.59-hf9b7768_0",
     "libglib-2.90.0-h3584fe5_0",
     "cairo-1.18.6-hca320e2_0",
@@ -5137,7 +5137,7 @@ conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "libharfbuzz-14.5.1-h23af247_0",
+    "libharfbuzz-14.6.0-h23af247_1",
     "libpng-1.6.59-h922cc85_0",
     "libglib-2.90.0-h569388d_0",
     "cairo-1.18.6-h3c89d7e_0",
@@ -5275,7 +5275,7 @@ conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "libharfbuzz-14.5.1-h23af247_0",
+    "libharfbuzz-14.6.0-h23af247_1",
     "libpng-1.6.59-h922cc85_0",
     "libglib-2.90.0-h569388d_0",
     "cairo-1.18.6-h3c89d7e_0",
@@ -5413,7 +5413,7 @@ conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "libharfbuzz-14.5.1-h23af247_0",
+    "libharfbuzz-14.6.0-h23af247_1",
     "libpng-1.6.59-h922cc85_0",
     "libglib-2.90.0-h569388d_0",
     "cairo-1.18.6-h3c89d7e_0",
@@ -5551,7 +5551,7 @@ conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
     "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-16.2.0-h934c35e_7",
-    "libharfbuzz-14.5.1-h23af247_0",
+    "libharfbuzz-14.6.0-h23af247_1",
     "libpng-1.6.59-h922cc85_0",
     "libglib-2.90.0-h569388d_0",
     "cairo-1.18.6-h3c89d7e_0",
@@ -5677,10 +5677,10 @@ conda_deps = [
     "svt-av1-4.2.0-h484c67d_1",
     "bzip2-1.0.8-h4e30115_10",
     "gmp-6.3.0-hf5e55b1_3",
-    "libcxx-23.1.2-h55c6f16_0",
+    "libcxx-23.1.3-h55c6f16_0",
     "libdav1d7-1.5.4-h74c22ad_4",
     "libexpat-2.8.5-h6111c0a_0",
-    "libharfbuzz-14.5.1-hcda0f7c_0",
+    "libharfbuzz-14.6.0-hcda0f7c_1",
     "libpng-1.6.59-hf5e6511_0",
     "libglib-2.90.0-hccd281b_0",
     "cairo-1.18.6-h580cee5_0",
@@ -5757,10 +5757,10 @@ conda_deps = [
     "svt-av1-4.2.0-h6e061ac_1",
     "bzip2-1.0.8-h374f1ed_10",
     "gmp-6.3.0-h65442b7_3",
-    "libcxx-23.1.2-h19cb2f5_0",
+    "libcxx-23.1.3-h19cb2f5_0",
     "libdav1d7-1.5.4-had63097_4",
     "libexpat-2.8.5-h6e061ac_0",
-    "libharfbuzz-14.5.1-h2974713_0",
+    "libharfbuzz-14.6.0-h2974713_1",
     "libpng-1.6.59-h4382c61_0",
     "libglib-2.90.0-h7e55108_0",
     "cairo-1.18.6-h5791faa_0",
@@ -5832,10 +5832,10 @@ conda_deps = [
     "svt-av1-4.2.0-h6e061ac_1",
     "bzip2-1.0.8-h374f1ed_10",
     "gmp-6.3.0-h65442b7_3",
-    "libcxx-23.1.2-h19cb2f5_0",
+    "libcxx-23.1.3-h19cb2f5_0",
     "libdav1d7-1.5.4-had63097_4",
     "libexpat-2.8.5-h6e061ac_0",
-    "libharfbuzz-14.5.1-h2974713_0",
+    "libharfbuzz-14.6.0-h2974713_1",
     "libpng-1.6.59-h4382c61_0",
     "libglib-2.90.0-h7e55108_0",
     "cairo-1.18.6-h5791faa_0",
@@ -5908,7 +5908,7 @@ conda_deps = [
     "libdav1d-1.5.4-h11686cb_4",
     "libdav1d7-1.5.4-h6a83c73_4",
     "libexpat-2.8.5-hac47afa_0",
-    "libharfbuzz-14.5.1-h03b5201_0",
+    "libharfbuzz-14.6.0-h03b5201_1",
     "libpng-1.6.59-hdc8cecf_0",
     "libglib-2.90.0-ha564072_0",
     "cairo-1.18.6-h477c42c_0",
@@ -5977,7 +5977,7 @@ conda_deps = [
     "libdav1d-1.5.4-h11686cb_4",
     "libdav1d7-1.5.4-h6a83c73_4",
     "libexpat-2.8.5-hac47afa_0",
-    "libharfbuzz-14.5.1-h03b5201_0",
+    "libharfbuzz-14.6.0-h03b5201_1",
     "libpng-1.6.59-hdc8cecf_0",
     "libglib-2.90.0-ha564072_0",
     "cairo-1.18.6-h477c42c_0",
@@ -6514,6 +6514,54 @@ url = "https://github.com/lima-vm/lima/releases/download/v2.2.1/lima-2.2.1-Windo
 url_api = "https://api.github.com/repos/lima-vm/lima/releases/assets/607822585"
 provenance = "github-attestations"
 
+[[tools.node]]
+version = "24.21.0"
+backend = "core:node"
+
+[tools.node."platforms.linux-arm64"]
+checksum = "sha256:724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz"
+
+[tools.node."platforms.linux-arm64-musl"]
+checksum = "sha256:3048b0811e158ca0d8672b59c839861763e144492980d8d29b369dfee45747e4"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-arm64-musl.tar.gz"
+
+[tools.node."platforms.linux-x64"]
+checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
+
+[tools.node."platforms.linux-x64-baseline"]
+checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
+
+[tools.node."platforms.linux-x64-musl"]
+checksum = "sha256:01a713e34da98e7b4d2a3191ee7ca3f93dd0384d1a2ef23c379b2161ee6e133a"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-x64-musl.tar.gz"
+
+[tools.node."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:01a713e34da98e7b4d2a3191ee7ca3f93dd0384d1a2ef23c379b2161ee6e133a"
+url = "https://unofficial-builds.nodejs.org/download/release/v24.21.0/node-v24.21.0-linux-x64-musl.tar.gz"
+
+[tools.node."platforms.macos-arm64"]
+checksum = "sha256:bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz"
+
+[tools.node."platforms.macos-x64"]
+checksum = "sha256:1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+
+[tools.node."platforms.macos-x64-baseline"]
+checksum = "sha256:1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
+
+[tools.node."platforms.windows-x64"]
+checksum = "sha256:158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
+
+[tools.node."platforms.windows-x64-baseline"]
+checksum = "sha256:158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip"
+
 [[tools."npm:@contextlint/cli"]]
 version = "1.1.1"
 backend = "npm:@contextlint/cli"
@@ -6770,6 +6818,9 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-arm64-musl"]
+checksum = "sha256:7ff1dce33bdd18fd2a4affe63bdd47efcccca97b2cec1c1863ec26e9e2647540"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067643"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64"]
@@ -6785,9 +6836,15 @@ url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.linux-x64-musl-baseline"]
+checksum = "sha256:e65324f4430c2717591937edcec90ccbefaf14c174f8ec9415e03ca875b46e1a"
+url = "https://github.com/zizmorcore/zizmor/releases/download/v1.30.1/zizmor-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/zizmorcore/zizmor/releases/assets/552067642"
 provenance = "github-attestations"
 
 [tools.zizmor."platforms.macos-arm64"]
