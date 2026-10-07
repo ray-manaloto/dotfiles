@@ -43,10 +43,10 @@ editorconfig-checker = "4.0.2" # provides `editorconfig-checker` — hk editorco
 doppler = "3.76.6"
 colima = "0.10.3"                  # Alternate Docker runtime (VZ + Rosetta); Docker Desktop is the CURRENT supported runtime — see AGENTS.md Docker Runtimes + docs/research/runs/research-20260409c-dockerdesktop-ssh/
 lima = "2.2.1"
-"github:agent-sh/agnix" = "0.56.5"
+"github:agent-sh/agnix" = "0.56.6"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.139.0"
+"npm:renovate" = "44.140.0"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -65,7 +65,7 @@ zizmor = "1.30.1"
 lefthook = "2.1.17"
 "npm:ctx7" = "0.5.13"
 "aqua:rtk-ai/rtk" = "0.51.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
-"npm:skills" = "1.7.0"
+"npm:skills" = "1.7.1"
 "npm:agent-browser" = "0.38.2"
 "npm:portless" = "0.15.7"
 "pipx:deepagents-cli" = "0.3.0"
@@ -84,7 +84,7 @@ lefthook = "2.1.17"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.37.9", symlink_bins = "true" }
+aws-cli = { version = "2.37.10", symlink_bins = "true" }
 # pipx exists ONLY to serve the `uvx = false` below: that flag routes the
 # install through real pipx, and mise's own error names the fix ("Install
 # pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
@@ -100,7 +100,7 @@ pipx = "1.17.11"
 # lockfile path onto legacy version-only locking (see commit 3744cea).
 "pypi:azure-cli" = { version = "2.91.0", uvx = false }
 docker-cli = "29.8.2"
-opencode = "1.18.34"
+opencode = "1.18.35"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
@@ -125,7 +125,7 @@ opencode = "1.18.34"
 # Host-only like the executor-lane CLIs above: an operator research tool, never
 # an image build input, and unused by hk/CI (so ci-local-parity rule 2 does not
 # bind it). Auth is per-user via FIRECRAWL_API_KEY.
-"npm:firecrawl-cli" = "1.25.3"
+"npm:firecrawl-cli" = "1.26.3"
 # webclaw: the credit-exhaustion fallback for firecrawl scrape in the research
 # fan-out mirror probe (research_fanout.py). Same pin and rationale as KB
 # mise.toml:118-123 (#837/#847). Deliberately NOT in pin-parity.toml: dotfiles/KB
