@@ -6535,7 +6535,7 @@ version = "0.10.0"
 backend = "npm:claude-code-lint"
 
 [[tools."npm:ctx7"]]
-version = "0.5.13"
+version = "0.5.14"
 backend = "npm:ctx7"
 
 [[tools."npm:firecrawl-cli"]]
@@ -6555,7 +6555,7 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.142.0"
+version = "44.142.1"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]

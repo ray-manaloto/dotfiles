@@ -46,7 +46,7 @@ lima = "2.2.1"
 "github:agent-sh/agnix" = "0.56.6"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.142.0"
+"npm:renovate" = "44.142.1"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -63,7 +63,7 @@ zizmor = "1.30.1"
 "npm:oh-my-claude-sisyphus" = "5.6.2"
 "github:ast-grep/ast-grep" = "0.45.3"
 lefthook = "2.1.17"
-"npm:ctx7" = "0.5.13"
+"npm:ctx7" = "0.5.14"
 "aqua:rtk-ai/rtk" = "0.51.0"          # aqua is the registry's first backend (`mise registry rtk`); the old bare `rtk` resolved to github: and mise doctor flagged the mismatch
 "npm:skills" = "1.7.1"
 "npm:agent-browser" = "0.38.2"
