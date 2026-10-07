@@ -4677,35 +4677,35 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.51.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/605695127"
 
 [[tools.aws-cli]]
-version = "2.37.9"
+version = "2.37.10"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.10.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.10.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.9.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.9.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.9.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.9.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
 
 [[tools.biome]]
 version = "2.5.11"
@@ -6258,61 +6258,61 @@ url = "https://github.com/0xMassi/webclaw/releases/download/v0.6.23/webclaw-v0.6
 url_api = "https://api.github.com/repos/0xMassi/webclaw/releases/assets/564279452"
 
 [[tools."github:agent-sh/agnix"]]
-version = "0.56.5"
+version = "0.56.6"
 backend = "github:agent-sh/agnix"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64"]
-checksum = "sha256:52beec3eba4ab6c64dba50160d6c9b665feb2fc3ea6f33ae596a352d440db7ba"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158101"
+checksum = "sha256:555b96ca78356c22050c8427ff47d7353b04ab9d7b506b2bf4da2dc4245a2fb5"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860110"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-arm64-musl"]
-checksum = "sha256:52beec3eba4ab6c64dba50160d6c9b665feb2fc3ea6f33ae596a352d440db7ba"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158101"
+checksum = "sha256:555b96ca78356c22050c8427ff47d7353b04ab9d7b506b2bf4da2dc4245a2fb5"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860110"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64"]
-checksum = "sha256:8dd0af4cc27645fdeb9c4e2cafe2481f033bf8bbaf91af986097b71ea9602700"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158071"
+checksum = "sha256:3228e88286c44da93bd591cc6358549c4a3d685b44c9d64625955d668528a155"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860119"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-baseline"]
-checksum = "sha256:8dd0af4cc27645fdeb9c4e2cafe2481f033bf8bbaf91af986097b71ea9602700"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158071"
+checksum = "sha256:3228e88286c44da93bd591cc6358549c4a3d685b44c9d64625955d668528a155"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860119"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl"]
-checksum = "sha256:bf97084b73b4eb8f33cb622bf5cdac146490b9ef5001a0dfe510fded607ba911"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158068"
+checksum = "sha256:acf7e6905cf16e9cf5825e9443ffe0755ff7f602b1aef407f904bad34622847b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860100"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:bf97084b73b4eb8f33cb622bf5cdac146490b9ef5001a0dfe510fded607ba911"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158068"
+checksum = "sha256:acf7e6905cf16e9cf5825e9443ffe0755ff7f602b1aef407f904bad34622847b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860100"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.macos-arm64"]
-checksum = "sha256:8ec6ea72021deb9a594532c3d6bd57350ba25ee717a68a7abdb84cd184d8c67c"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158098"
+checksum = "sha256:07d304a7b2e57ea074f5b2027a9fec9cb2031dd1909c4b6389a51a41dab2aa97"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860121"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64"]
-checksum = "sha256:4e62d4da3d44db95bdaf21194c46f789aa068e69a4f35869313c0f4bbca68d3a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158070"
+checksum = "sha256:c006f00683b676e365d8c259b5ce30288a555d2e7ff0cfb5faa953ea2469fd1b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860105"
 provenance = "github-attestations"
 
 [tools."github:agent-sh/agnix"."platforms.windows-x64-baseline"]
-checksum = "sha256:4e62d4da3d44db95bdaf21194c46f789aa068e69a4f35869313c0f4bbca68d3a"
-url = "https://github.com/agent-sh/agnix/releases/download/v0.56.5/agnix-x86_64-pc-windows-msvc.zip"
-url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/613158070"
+checksum = "sha256:c006f00683b676e365d8c259b5ce30288a555d2e7ff0cfb5faa953ea2469fd1b"
+url = "https://github.com/agent-sh/agnix/releases/download/v0.56.6/agnix-x86_64-pc-windows-msvc.zip"
+url_api = "https://api.github.com/repos/agent-sh/agnix/releases/assets/615860105"
 provenance = "github-attestations"
 
 [[tools."github:ast-grep/ast-grep"]]
@@ -6539,7 +6539,7 @@ version = "0.5.13"
 backend = "npm:ctx7"
 
 [[tools."npm:firecrawl-cli"]]
-version = "1.25.3"
+version = "1.26.3"
 backend = "npm:firecrawl-cli"
 
 [[tools."npm:markdownlint-cli2"]]
@@ -6555,11 +6555,11 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.139.0"
+version = "44.140.0"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
-version = "1.7.0"
+version = "1.7.1"
 backend = "npm:skills"
 
 [[tools."npm:typescript"]]
@@ -6567,63 +6567,63 @@ version = "7.0.2"
 backend = "npm:typescript"
 
 [[tools.opencode]]
-version = "1.18.34"
+version = "1.18.35"
 backend = "aqua:anomalyco/opencode"
 
 [tools.opencode."platforms.linux-arm64"]
-checksum = "sha256:bbdb3f00c2c51e42e315525233151309724226a8776da8e9145e3b0fa3d5310f"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601904056"
+checksum = "sha256:f7f2ba59ee8aa94d388f9696575a32d20e71c2ee48def9f80fc693a60fec6c72"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520289"
 
 [tools.opencode."platforms.linux-arm64-musl"]
-checksum = "sha256:eaf0692e4b60dca382a126ca607d617be7b6eaf82d318a828f2b6eb1eacea99a"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-arm64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601904034"
+checksum = "sha256:f7f2ba59ee8aa94d388f9696575a32d20e71c2ee48def9f80fc693a60fec6c72"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520289"
 
 [tools.opencode."platforms.linux-x64"]
-checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
+checksum = "sha256:c8f888b451f5494a18f858fffb0e0b68f4e4baa9c241761c5f206884f0fa640d"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520362"
 
 [tools.opencode."platforms.linux-x64-baseline"]
-checksum = "sha256:0f22479647226d1d2dd99595d20082ee7bda3870b62dc6a90b41efc1a71d7e9a"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903965"
+checksum = "sha256:c8f888b451f5494a18f858fffb0e0b68f4e4baa9c241761c5f206884f0fa640d"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520362"
 
 [tools.opencode."platforms.linux-x64-musl"]
-checksum = "sha256:9dd4470885d07205e31b702465564aaee97be26ee3dc192ec6702a15e7a21272"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903962"
+checksum = "sha256:c8f888b451f5494a18f858fffb0e0b68f4e4baa9c241761c5f206884f0fa640d"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520362"
 
 [tools.opencode."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:9dd4470885d07205e31b702465564aaee97be26ee3dc192ec6702a15e7a21272"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-linux-x64-musl.tar.gz"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601903962"
+checksum = "sha256:c8f888b451f5494a18f858fffb0e0b68f4e4baa9c241761c5f206884f0fa640d"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-linux-x64.tar.gz"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616520362"
 
 [tools.opencode."platforms.macos-arm64"]
-checksum = "sha256:8522b70f545184b3a8d97c5ca4f814093b2476d72aebfda8c48bcd072ec31d1b"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-darwin-arm64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601909071"
+checksum = "sha256:80b05124357a77cd57945bfde36082a028e829c198d222d5e146617f49a2c4b7"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-darwin-arm64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527957"
 
 [tools.opencode."platforms.macos-x64"]
-checksum = "sha256:66bf0638cffad3b65bd6648cc3947619e1dd71f4bfeee0a81e087ac036bb1088"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-darwin-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601909069"
+checksum = "sha256:8127d69e8e94d7adc496e910435f2f73856d87d456e988d3a947f250c95c1be2"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-darwin-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527960"
 
 [tools.opencode."platforms.macos-x64-baseline"]
-checksum = "sha256:66bf0638cffad3b65bd6648cc3947619e1dd71f4bfeee0a81e087ac036bb1088"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-darwin-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601909069"
+checksum = "sha256:8127d69e8e94d7adc496e910435f2f73856d87d456e988d3a947f250c95c1be2"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-darwin-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527960"
 
 [tools.opencode."platforms.windows-x64"]
-checksum = "sha256:8ec42ed1ad8db108052394b83ab69d0331398f761fbfff5fe50f91d65bdd3548"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601908697"
+checksum = "sha256:c90d248cca75e42fd15422a29b5f83a1b30c441af83565635d6b2682adc58dd1"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527771"
 
 [tools.opencode."platforms.windows-x64-baseline"]
-checksum = "sha256:8ec42ed1ad8db108052394b83ab69d0331398f761fbfff5fe50f91d65bdd3548"
-url = "https://github.com/anomalyco/opencode/releases/download/v1.18.34/opencode-windows-x64.zip"
-url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/601908697"
+checksum = "sha256:c90d248cca75e42fd15422a29b5f83a1b30c441af83565635d6b2682adc58dd1"
+url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode-windows-x64.zip"
+url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527771"
 
 [[tools.pipx]]
 version = "1.17.11"
