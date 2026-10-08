@@ -20,6 +20,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import lock_integrity
@@ -308,3 +310,194 @@ def test_the_absolute_check_is_wired_into_check_lockfiles(tmp_path: Path) -> Non
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     findings = lock_integrity.check_lockfiles(tmp_path, ("x.lock",))
     assert any("no platform entries" in finding for finding in findings)
+
+
+# --- absolute check: asset platform tables need url or checksum (#1673) -----
+
+
+def _zizmor_lock(
+    musl_fields: str = 'provenance = "github-attestations"',
+    backend: str = "aqua:zizmorcore/zizmor",
+) -> str:
+    """The pre-fix shape: a complete GNU platform beside a musl stub."""
+    return "\n".join(
+        [
+            "[[tools.zizmor]]",
+            'version = "1.30.1"',
+            f'backend = "{backend}"',
+            "",
+            '[tools.zizmor."platforms.linux-x64"]',
+            'url = "https://example.com/zizmor-gnu.tar.gz"',
+            'checksum = "sha256:gnu"',
+            "",
+            '[tools.zizmor."platforms.linux-x64-musl"]',
+            musl_fields,
+            "",
+        ]
+    )
+
+
+def test_provenance_only_zizmor_platform_is_reported() -> None:
+    findings = lock_integrity.stub_platform_entries(_zizmor_lock())
+    assert len(findings) == 1
+    assert "zizmor@1.30.1 (aqua:zizmorcore/zizmor)" in findings[0]
+    assert "platform linux-x64-musl has no url/checksum" in findings[0]
+    assert "host mise >= 2026.10.0 fills it on install" in findings[0]
+    assert "jdx/mise#13857 for aqua gnu-only tools, #1673" in findings[0]
+
+
+@pytest.mark.parametrize(
+    "musl_fields",
+    [
+        'url = "https://example.com/zizmor-gnu.tar.gz"\nchecksum = "sha256:gnu"',
+        'url = "https://example.com/zizmor-gnu.tar.gz"',
+        'checksum = "sha256:gnu"',
+    ],
+)
+def test_platforms_with_url_or_checksum_pass(musl_fields: str) -> None:
+    """CONTROL: either asset field is enough; the check requires BOTH absent."""
+    assert lock_integrity.stub_platform_entries(_zizmor_lock(musl_fields)) == []
+
+
+def test_provenance_only_package_backend_platform_passes() -> None:
+    assert (
+        lock_integrity.stub_platform_entries(_zizmor_lock(backend="npm:zizmor")) == []
+    )
+
+
+@pytest.mark.parametrize("backend", sorted(lock_integrity.ASSET_BACKENDS))
+def test_stub_check_covers_every_asset_backend(backend: str) -> None:
+    findings = lock_integrity.stub_platform_entries(
+        _zizmor_lock(backend=f"{backend}:zizmorcore/zizmor")
+    )
+    assert len(findings) == 1
+    assert "platform linux-x64-musl has no url/checksum" in findings[0]
+    assert (
+        lock_integrity.stub_platform_entries(
+            _zizmor_lock('checksum = "sha256:gnu"', f"{backend}:zizmorcore/zizmor")
+        )
+        == []
+    )
+
+
+def test_stub_check_is_wired_into_untracked_lockfiles(tmp_path: Path) -> None:
+    """Binds the call before HEAD's untracked-file skip, with a repair control."""
+    lock = tmp_path / "x.lock"
+    lock.write_text(_zizmor_lock())
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    findings = lock_integrity.check_lockfiles(tmp_path, ("x.lock",))
+    assert len(findings) == 1
+    assert findings[0].startswith("x.lock: tool zizmor@1.30.1")
+    assert "platform linux-x64-musl has no url/checksum" in findings[0]
+    assert 'mise run lock -- "<config key>"' in findings[0]
+    lock.write_text(_zizmor_lock('checksum = "sha256:gnu"'))
+    assert lock_integrity.check_lockfiles(tmp_path, ("x.lock",)) == []
+
+
+def test_stub_check_reports_toml_parse_errors() -> None:
+    findings = lock_integrity.stub_platform_entries("[")
+    assert len(findings) == 1
+    assert "could not parse lockfile TOML:" in findings[0]
+    assert lock_integrity.stub_platform_entries("") == []
+
+
+def test_stub_check_inspects_later_versions_of_the_same_tool() -> None:
+    complete = _zizmor_lock('checksum = "sha256:gnu"')
+    second = _zizmor_lock().replace('version = "1.30.1"', 'version = "1.30.2"')
+    findings = lock_integrity.stub_platform_entries(complete + "\n" + second)
+    assert len(findings) == 1
+    assert "zizmor@1.30.2" in findings[0]
+    repaired = second.replace(
+        'provenance = "github-attestations"', 'checksum = "sha256:gnu"'
+    )
+    assert lock_integrity.stub_platform_entries(complete + "\n" + repaired) == []
+
+
+@pytest.mark.parametrize(
+    ("lockfile", "repair"),
+    [
+        ("mise.lock", 'mise run lock -- "<config key>"'),
+        (".config/mise/mise.lock", 'mise run lock-shared -- "<name>"'),
+        (".devcontainer/mise-system.lock", "mise run lock-image"),
+        (".devcontainer/mise-runtime.lock", "mise run lock-image"),
+    ],
+)
+def test_stub_repair_matches_lockfile_path(
+    tmp_path: Path, lockfile: str, repair: str
+) -> None:
+    lock = tmp_path / lockfile
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(_zizmor_lock())
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    findings = lock_integrity.check_lockfiles(tmp_path, (lockfile,))
+    assert len(findings) == 1
+    assert findings[0].startswith(f"{lockfile}: tool zizmor@1.30.1")
+    assert findings[0].endswith(f"re-lock: {repair}")
+    lock.write_text(_zizmor_lock('checksum = "sha256:gnu"'))
+    assert lock_integrity.check_lockfiles(tmp_path, (lockfile,)) == []
+
+
+@pytest.mark.parametrize(
+    ("body", "shape"),
+    [
+        ("tools = 3\n", "tools must be a table"),
+        (
+            '[tools.zizmor]\nversion = "1.30.1"\nbackend = "aqua:zizmorcore/zizmor"\n',
+            "tools.zizmor must be an array of tables",
+        ),
+        (
+            '[tools]\nzizmor = ["not a table"]\n',
+            "tools.zizmor array entry must be a table",
+        ),
+    ],
+)
+def test_stub_check_reports_unexpected_shapes(body: str, shape: str) -> None:
+    findings = lock_integrity.stub_platform_entries(body)
+    assert findings == [f"unexpected lockfile shape: {shape}"]
+    assert lock_integrity.stub_platform_entries(_zizmor_lock('checksum = "x"')) == []
+
+
+@pytest.mark.parametrize(
+    ("has_stub", "has_loss"), [(True, False), (False, True), (True, True)]
+)
+def test_main_summary_for_stubs_and_coverage_loss(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    *,
+    has_stub: bool,
+    has_loss: bool,
+) -> None:
+    lock = tmp_path / "mise.lock"
+    complete = _zizmor_lock('checksum = "sha256:gnu"')
+    baseline = complete + _conda_lock(("linux-x64",))
+    lock.write_text(baseline)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "add", "mise.lock"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Lock Integrity Test",
+            "-c",
+            "user.email=lock-integrity@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "Lockfile baseline",
+        ],
+        check=True,
+    )
+    candidate = _zizmor_lock() if has_stub else complete
+    if not has_loss:
+        candidate += _conda_lock(("linux-x64",))
+    lock.write_text(candidate)
+    assert lock_integrity.main(tmp_path, ("mise.lock",)) == 1
+    # Each summary appears exactly when its finding class does; a mixed run
+    # must keep the loss advice (checkout) next to the stub advice.
+    assert ("incomplete platform entry" in caplog.text) is has_stub
+    assert ("command in the finding" in caplog.text) is has_stub
+    assert ("lost platform coverage" in caplog.text) is has_loss
+    assert ("git checkout -- <lockfile>" in caplog.text) is has_loss
