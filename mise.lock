@@ -4677,35 +4677,35 @@ url = "https://github.com/rtk-ai/rtk/releases/download/v0.51.0/rtk-x86_64-pc-win
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/605695127"
 
 [[tools.aws-cli]]
-version = "2.37.10"
+version = "2.37.11"
 backend = "aqua:aws/aws-cli"
 
 [tools.aws-cli."platforms.linux-arm64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.11.zip"
 
 [tools.aws-cli."platforms.linux-arm64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-aarch64-2.37.11.zip"
 
 [tools.aws-cli."platforms.linux-x64"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.11.zip"
 
 [tools.aws-cli."platforms.linux-x64-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.11.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.11.zip"
 
 [tools.aws-cli."platforms.linux-x64-musl-baseline"]
-url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.10.zip"
+url = "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.37.11.zip"
 
 [tools.aws-cli."platforms.macos-arm64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.11.pkg"
 
 [tools.aws-cli."platforms.macos-x64"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.11.pkg"
 
 [tools.aws-cli."platforms.macos-x64-baseline"]
-url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.10.pkg"
+url = "https://awscli.amazonaws.com/AWSCLIV2-2.37.11.pkg"
 
 [[tools.biome]]
 version = "2.5.11"
@@ -6022,41 +6022,41 @@ conda_deps = [
 ]
 
 [[tools.docker-cli]]
-version = "29.8.2"
+version = "29.9.0"
 backend = "aqua:docker/cli"
 
 [tools.docker-cli."platforms.linux-arm64"]
-url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.linux-arm64-musl"]
-url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/aarch64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64-baseline"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.linux-x64-musl-baseline"]
-url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/linux/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.macos-arm64"]
-url = "https://download.docker.com/mac/static/stable/aarch64/docker-29.8.2.tgz"
+url = "https://download.docker.com/mac/static/stable/aarch64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.macos-x64"]
-url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.macos-x64-baseline"]
-url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.8.2.tgz"
+url = "https://download.docker.com/mac/static/stable/x86_64/docker-29.9.0.tgz"
 
 [tools.docker-cli."platforms.windows-x64"]
-url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.2.zip"
+url = "https://download.docker.com/win/static/stable/x86_64/docker-29.9.0.zip"
 
 [tools.docker-cli."platforms.windows-x64-baseline"]
-url = "https://download.docker.com/win/static/stable/x86_64/docker-29.8.2.zip"
+url = "https://download.docker.com/win/static/stable/x86_64/docker-29.9.0.zip"
 
 [[tools.doppler]]
 version = "3.77.0"
@@ -6555,7 +6555,7 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.147.0"
+version = "44.148.0"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
