@@ -46,7 +46,7 @@ lima = "2.2.1"
 "github:agent-sh/agnix" = "0.57.0"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.147.0"
+"npm:renovate" = "44.148.0"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -84,7 +84,7 @@ lefthook = "2.2.1"
 # conda:ffmpeg on platform linux-x64" and bricks lint. os-gating makes linux
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
-aws-cli = { version = "2.37.10", symlink_bins = "true" }
+aws-cli = { version = "2.37.11", symlink_bins = "true" }
 # pipx exists ONLY to serve the `uvx = false` below: that flag routes the
 # install through real pipx, and mise's own error names the fix ("Install
 # pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
@@ -99,7 +99,7 @@ pipx = "1.17.12"
 # `uvx = false` is load-bearing: it short-circuits 2026.9.7's --no-build
 # lockfile path onto legacy version-only locking (see commit 3744cea).
 "pypi:azure-cli" = { version = "2.91.0", uvx = false }
-docker-cli = "29.8.2"
+docker-cli = "29.9.0"
 opencode = "1.18.35"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
