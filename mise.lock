@@ -6374,6 +6374,15 @@ checksum = "sha256:e332ce9b10731c6d9bf142ed5ce2ab3795a8715e434dcca77de18e3e0f86e
 url = "https://github.com/ast-grep/ast-grep/releases/download/0.50.0/app-x86_64-pc-windows-msvc.zip"
 url_api = "https://api.github.com/repos/ast-grep/ast-grep/releases/assets/625198178"
 
+[[tools."github:router-for-me/CLIProxyAPI"]]
+version = "8.0.23"
+backend = "github:router-for-me/CLIProxyAPI"
+
+[tools."github:router-for-me/CLIProxyAPI"."platforms.macos-arm64"]
+checksum = "sha256:3c056b42ec4c80d06a74d3c5abf47ae0adb06285e32f5cf31a29bdd07017feb3"
+url = "https://github.com/router-for-me/CLIProxyAPI/releases/download/v8.0.23/CLIProxyAPI_8.0.23_darwin_aarch64.tar.gz"
+url_api = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/assets/625227469"
+
 [[tools.lefthook]]
 version = "2.2.1"
 backend = "aqua:evilmartians/lefthook"

@@ -114,6 +114,14 @@ opencode = "1.18.35"
 # volume at container create (docs/specs/native-cli-devcontainer-2026-10-01.md). The Claude architect stays the chair;
 # these are executor lanes only. Auth is per-user (codex login / Google account).
 
+# Optional loopback API bridge for AgentsView Recall extraction with Claude,
+# Codex, or Antigravity OAuth. AgentsView's extraction accepts an OpenAI-style
+# endpoint, not these CLIs directly. This is a separate credential broker,
+# Mac-only and inactive until explicitly configured and logged in; the native
+# executor-lane CLI ownership above is unchanged. The provider pilot and
+# single-writer activation procedure live in docs/specs/agentsview-recall-providers.md.
+"github:router-for-me/CLIProxyAPI" = { version = "8.0.23", os = ["macos"] }
+
 # Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
 # name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
 # `/firecrawl:firecrawl-search` dies on its first command. Measured 2026-09-13
