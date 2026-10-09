@@ -2,6 +2,14 @@
 
 A highly resilient, declarative dotfiles setup using **Chezmoi**, **Mise**, and **Python**, optimized for Linux-based devcontainers.
 
+For this Mac's user-global `~/.config/mise`, **dotfiles is the intended owner**
+through mise-native dotfiles; chezmoi is not part of that target design.
+The [takeover plan](docs/specs/mise-native-dotfiles-plan.md) is still pending
+on the host as of 2026-10-09: the live config is a standalone file, and an
+older MDE chezmoi source still registers the same path. Treat that registration
+as migration work, not as a reason to put new host mise changes in MDE.
+The existing chezmoi bootstrap below describes the container path.
+
 ## Quick Start
 
 ### Local Development

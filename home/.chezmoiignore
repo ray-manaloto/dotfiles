@@ -44,6 +44,13 @@ Library/**
   would overwrite ~/.config/mise/config.toml with container-only tooling,
   polluting the host. See memory feedback_devcontainer_only_mise_overlay.md.
 
+  This ignore controls THIS repo's chezmoi source only. The separate legacy
+  macos-development-environment source may still report the Mac host file in
+  `chezmoi managed` or `chezmoi source-path`; that registration is not this
+  repo's owner policy. Dotfiles is to take over the Mac's global mise config
+  through mise-native dotfiles (docs/specs/mise-native-dotfiles-plan.md).
+  Never resolve a host updater change by editing the MDE template.
+
   Verification: a CI assertion in .github/workflows/ci.yml runs
   `chezmoi init --apply=false` on the linux runner and asserts the file
   IS in `chezmoi managed`. The darwin path is the inverse and is verified

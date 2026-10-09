@@ -1,5 +1,37 @@
 # mise-native dotfiles for `~/.config/mise`, the devcontainer image and running devcontainers — plan (S29-M)
 
+## Mac host ownership and current state (checked 2026-10-09)
+
+**Policy:** this dotfiles repository is to become the sole source for this
+Mac's user-global `~/.config/mise/config.toml` and update scripts through
+mise-native dotfiles. The old `macos-development-environment` (MDE) chezmoi
+template is not the source for new host mise work, and chezmoi must not be a
+dependency of the completed host setup.
+
+The [global config migration issue](https://github.com/ray-manaloto/dotfiles/issues/220)
+tracks the file, though its original proposal predates this mise-native plan.
+The [broader takeover issue](https://github.com/ray-manaloto/dotfiles/issues/431)
+and [ownership decision](https://github.com/ray-manaloto/dotfiles/issues/448)
+provide the surrounding GitHub history. The closed decision issue does not
+mean the migration is complete.
+
+**Current state:** the live config is a regular `0600` file with no native
+`[dotfiles]` declaration, and this checkout does not yet carry its
+`home/.config/mise/config.toml` source. `mise config ls` loads the live file.
+The separate MDE `chezmoi managed` still lists `.config/mise/config.toml`,
+and `chezmoi source-path` points to MDE's old template. Those commands show a
+legacy registration, not an ownership decision. This repo's
+`home/.chezmoiignore` prevents its own devcontainer overlay from applying on
+macOS; it cannot unregister the separate MDE source. The zero-chezmoi
+takeover is **not yet complete**.
+
+For current host repairs, work against the active global mise files and
+record their exact result. Carry the durable source into this repo in the
+planned migration; do not edit the MDE template or run host `chezmoi apply`
+as a workaround. Before reporting the takeover complete, verify the live
+file's source and `mise dot status --missing`, and confirm MDE no longer
+registers the target.
+
 Lane S synthesis, 2026-09-29b, claude-fable-5-1. Plan only — nothing here is implemented. Inputs: the W/F/G/O lane
 reports named in §2, the offline mirror `docs/research/kb/raw/mise-dotfiles-2026-09-29/`, the cold review
 `cold-review-ef172a80-2026-09-29.md`, the live repo, two scratch-HOME probes (§1.2) and the read-only CLI probes in
@@ -958,13 +990,13 @@ need bumping as we adopt fixes. Citation: W report § Version; G report § Gotch
 **Q7 — `experimental = true` dependency.** Recommended: **keep it (already true in the live config) and record
 P0-1's answer (Recommended).** PRO: zero change. CON: if a future mise drops the flag's meaning the entry silently
 stops applying — `dot-status` in the SessionStart doctor catches that. Citation: G report tip 1 (cnwangjie), live
-`~/.config/mise/config.toml:4`.
+`~/.config/mise/config.toml` `[settings]`.
 
-**Q8 — Stale prose in the live config.** The `[env]` block (lines 57-61) still says "chezmoi renders
-`.chezmoi.sourceDir`" and cites `home/dot_zshrc.d/50-mde-secrets.zsh`, which does not exist in this repo (it is from
-`macos-development-environment`). Recommended: **fix in P1-1 as part of the byte-copy (Recommended)**; PRO the copy
-is reviewed anyway; CON the diff vs the live file is no longer "additions only" — P2-1's `diff -u` must list this
-hunk explicitly. Citation: live config lines 35-61.
+**Q8 — Stale prose in the live config.** The old `[env]` comment said "chezmoi renders
+`.chezmoi.sourceDir`" and cited `home/dot_zshrc.d/50-mde-secrets.zsh`, which does not exist in this repo (it is from
+`macos-development-environment`). The live file's ownership and path comments were corrected on 2026-10-09;
+P1-1 must preserve that correction when copying the file into this repo. PRO the copy is reviewed anyway; CON the
+diff vs older snapshots is no longer "additions only" — P2-1's `diff -u` must list this hunk explicitly.
 
 **Q9 (B) — Official source = detached worktree of `origin/main`, refreshed only by `mise run setup-source -- main`?**
 Recommended: **Yes (Recommended).** PRO: immutable between explicit refreshes (the review's HIGH is a moving-target
