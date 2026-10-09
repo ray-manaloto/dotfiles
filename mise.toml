@@ -100,7 +100,7 @@ pipx = "1.17.12"
 # lockfile path onto legacy version-only locking (see commit 3744cea).
 "pypi:azure-cli" = { version = "2.91.0", uvx = false }
 docker-cli = "29.9.0"
-opencode = "1.18.35"
+opencode = "2.0.26"
 # bun (the npm package_manager) is a host↔image SHARED tool → declared in
 # .config/mise/conf.d/shared.toml, not here (mise-parity: a tool used by both
 # sides lives only in the shared fragment).
