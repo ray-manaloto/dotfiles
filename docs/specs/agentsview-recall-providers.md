@@ -198,7 +198,15 @@ and one isolated session when enabling any model in the service environment.
 2. Confirm the chosen key exists **inside the service environment**, and the
    endpoint is reachable. A key visible in an interactive shell does not
    automatically reach the separate LaunchAgent; the scoped fnox launcher
-   above needs an owner-managed integration.
+   above needs an owner-managed integration. The project doctor now pins the
+   interactive, `codex_research`, and `codex_publish` fnox scopes in
+   `doctor.toml`; `mise run doctor-fnox` runs native, presence-only resolution
+   for each active scope, including `agentsview_recall` with its OpenRouter and
+   local proxy keys. The probe drops inherited secret variables and suppresses
+   provider output. The doctor also checks that the LaunchAgent declaration
+   selects the scoped fnox profile without embedding keys in its plist. This
+   verifies launch wiring; the service owner must still verify the running
+   AgentsView process after activation.
 3. First run `agentsview recall extract doctor` in an **isolated**
    `AGENTSVIEW_DATA_DIR` using the candidate config. Require exit 0 and a
    structured-output probe for the selected model. In that archive, scan

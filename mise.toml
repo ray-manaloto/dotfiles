@@ -718,7 +718,12 @@ description = "Project doctor: does the declared setup (doctor.toml) match reali
 #   mise run doctor                 # what the SessionStart hook runs
 #   mise run doctor -- --verbose    # print a PASS line per clean check
 #   mise run doctor -- --live       # + spawn each stdio server, diff its tools
+#   mise run doctor -- --fnox-live --strict  # resolve every fnox workflow scope
 run = 'uv run --project python dotfiles-setup doctor'
+
+[tasks.doctor-fnox]
+description = "Strict fnox workflow and MCP environment checks with presence-only native resolution"
+run = 'uv run --project python dotfiles-setup doctor --fnox-only --fnox-live --strict'
 
 [tasks.dag-tick]
 description = "launchd watchdog tick (#578): census this repo's background agents, classify ALIVE/DEAD/WEDGED/DONE, respawn DEAD; never stops a node (a DONE session may be an idle coordinator waiting for messages, 2026-10-03). WEDGED is log-only in this slice (#590)"

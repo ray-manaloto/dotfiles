@@ -59,6 +59,7 @@ import json
 import logging
 import os
 import platform
+import plistlib
 import re
 import shutil
 import subprocess
@@ -123,6 +124,7 @@ BASELINE_FILE = "doctor.toml"
 ERROR_LOG = Path.home() / ".local" / "state" / "dotfiles" / "doctor-error.log"
 
 _PROBE_TIMEOUT_S = 180.0
+_FNOX_LIVE_TIMEOUT_S = 25.0
 
 # `${VAR}` / `${VAR:-default}` — the interpolation Claude Code performs on an
 # MCP server's env and headers before spawning it.
@@ -189,6 +191,7 @@ class FnoxState:
     exists: bool
     env_mode: object = True
     per_secret: dict[str, object] = field(default_factory=dict)
+    profile_secrets: dict[str, frozenset[str]] = field(default_factory=dict)
     sync_blocks: int = 0
     error: str | None = None
 
@@ -314,10 +317,15 @@ def read_fnox(config_path: Path) -> FnoxState:
         per_secret[name] = fields.get("env")
         if isinstance(fields.get("sync"), dict):
             sync_blocks += 1
+    profiles = {
+        name: frozenset(_str_keys(_str_keys(entry).get("secrets")))
+        for name, entry in _str_keys(data.get("profiles")).items()
+    }
     return FnoxState(
         exists=True,
         env_mode=data.get("env", True),
         per_secret=per_secret,
+        profile_secrets=profiles,
         sync_blocks=sync_blocks,
     )
 
@@ -670,6 +678,223 @@ def check_fnox_baseline(setup: Setup) -> list[str]:
             f"block — the signature of a regenerated config, which drops sync, "
             f"the env mode and every opt-in together"
         )
+    return findings
+
+
+def _fnox_workflows(setup: Setup) -> dict[str, dict[str, object]]:
+    """Reviewed consumer scopes; contract fields contain names, never values."""
+    return {
+        name: _str_keys(value)
+        for name, value in _str_keys(setup.fnox_baseline().get("workflows")).items()
+    }
+
+
+def _workflow_names(setup: Setup, spec: dict[str, object]) -> set[str]:
+    required = spec.get("required")
+    if required == "env_true":
+        return set(_str_list(setup.fnox_baseline().get("env_true")))
+    return set(_str_list(required))
+
+
+def _workflow_declarations(setup: Setup, spec: dict[str, object]) -> set[str]:
+    return _workflow_names(setup, spec) | set(_str_list(spec.get("bootstrap")))
+
+
+def _workflow_scope(setup: Setup, spec: dict[str, object]) -> set[str] | None:
+    profile = spec.get("profile")
+    if not isinstance(profile, str):
+        return None
+    if profile == "default":
+        return set(setup.fnox.per_secret)
+    profile_names = setup.fnox.profile_secrets.get(profile)
+    if profile_names is None:
+        return None
+    names = set(profile_names)
+    if spec.get("no_defaults") is not True:
+        names.update(setup.fnox.per_secret)
+    return names
+
+
+def check_fnox_workflows(setup: Setup) -> list[str]:
+    """Every named consumer must see its required declarations in its scope.
+
+    This catches the OpenRouter failure class: a top-level secret exists, but
+    ``--profile codex_research --no-defaults`` excludes it. Resolution is a
+    separate opt-in live check because provider calls can block or prompt.
+    """
+    workflows = _fnox_workflows(setup)
+    if not workflows:
+        return [f"{BASELINE_FILE} has no [fnox.workflows] contracts"]
+    if setup.fnox.error is not None:
+        return ["fnox workflow scopes unverifiable: fnox config unreadable"]
+    findings: list[str] = []
+    for consumer, spec in sorted(workflows.items()):
+        required = _workflow_declarations(setup, spec)
+        profile = spec.get("profile")
+        if not required or not isinstance(profile, str):
+            findings.append(f"fnox workflow {consumer} has an invalid contract")
+            continue
+        scope = _workflow_scope(setup, spec)
+        if scope is None:
+            findings.append(f"fnox workflow {consumer} profile {profile} is absent")
+            continue
+        if missing := sorted(required - scope):
+            findings.append(
+                f"fnox workflow {consumer} profile {profile} cannot expose {missing}"
+            )
+        if spec.get("no_defaults") is True and (extra := sorted(scope - required)):
+            findings.append(
+                f"fnox workflow {consumer} profile {profile} "
+                f"unexpectedly exposes {extra}"
+            )
+    return findings
+
+
+def check_fnox_services(setup: Setup) -> list[str]:
+    """A LaunchAgent must start under its declared scoped fnox profile.
+
+    Profile resolution in a fresh child does not prove the already-running
+    daemon received those variables. Inspect only launch structure and key
+    names; plist values may themselves be credentials and are never reported.
+    """
+    if setup.home is None:
+        return []
+    services = _str_keys(setup.fnox_baseline().get("services"))
+    if not services:
+        return [f"{BASELINE_FILE} has no [fnox.services] contracts"]
+    findings: list[str] = []
+    for service, raw in sorted(services.items()):
+        spec = _str_keys(raw)
+        plist_name = spec.get("launch_agent")
+        profile = spec.get("profile")
+        required = set(_str_list(spec.get("required")))
+        if (
+            not isinstance(plist_name, str)
+            or Path(plist_name).name != plist_name
+            or not isinstance(profile, str)
+            or not required
+        ):
+            findings.append(f"fnox service {service} has an invalid contract")
+            continue
+        path = setup.home / "Library" / "LaunchAgents" / plist_name
+        try:
+            data = plistlib.loads(path.read_bytes())
+        except OSError, ValueError, plistlib.InvalidFileException:
+            findings.append(f"fnox service {service} launch declaration is unreadable")
+            continue
+        if not isinstance(data, dict):
+            findings.append(f"fnox service {service} launch declaration is invalid")
+            continue
+        env_names = set(_str_keys(data.get("EnvironmentVariables")))
+        if embedded := sorted(required & env_names):
+            findings.append(
+                f"fnox service {service} puts {embedded} directly in its plist"
+            )
+        raw_args = data.get("ProgramArguments")
+        args = raw_args if isinstance(raw_args, list) else []
+        exec_at = args.index("exec") if "exec" in args else 0
+        fnox_args = args[:exec_at]
+        if (
+            not args
+            or not isinstance(args[0], str)
+            or Path(args[0]).name != "fnox"
+            or "--no-defaults" not in fnox_args
+            or not any(
+                fnox_args[index : index + 2] == ["--profile", profile]
+                for index in range(len(fnox_args) - 1)
+            )
+        ):
+            findings.append(
+                f"fnox service {service} launcher does not select "
+                f"profile {profile} with --no-defaults"
+            )
+    return findings
+
+
+_FNOX_CHILD_PROBE = (
+    "import json,os,sys;"
+    "names=json.loads(sys.argv[1]);"
+    "print(json.dumps([name for name in names if not os.environ.get(name)]))"
+)
+
+
+def _fnox_presence_probe(
+    setup: Setup,
+    consumer: str,
+    spec: dict[str, object],
+    config_path: Path,
+    parent_env: dict[str, str],
+) -> str | None:
+    required = sorted(_workflow_names(setup, spec))
+    command = [
+        "fnox",
+        "--config",
+        str(config_path),
+        "--profile",
+        str(spec["profile"]),
+        "--no-daemon",
+        "--non-interactive",
+        "--if-missing",
+        "error",
+    ]
+    if spec.get("no_defaults") is True:
+        command.append("--no-defaults")
+    command.extend(
+        ["exec", "--", sys.executable, "-c", _FNOX_CHILD_PROBE, json.dumps(required)]
+    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=setup.repo_root,
+            env=parent_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=_FNOX_LIVE_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return f"fnox workflow {consumer} resolution timed out"
+    except OSError:
+        return f"fnox workflow {consumer} could not start fnox"
+    if result.returncode != 0:
+        return (
+            f"fnox workflow {consumer} resolution failed "
+            f"(exit {result.returncode}); provider details suppressed"
+        )
+    try:
+        missing = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        missing = None
+    if not isinstance(missing, list) or any(
+        not isinstance(name, str) or name not in required for name in missing
+    ):
+        return f"fnox workflow {consumer} produced an invalid presence receipt"
+    if missing:
+        return f"fnox workflow {consumer} injected no value for {missing}"
+    return None
+
+
+def check_fnox_resolution(setup: Setup) -> list[str]:
+    """Ask native fnox to inject each consumer's names into a bounded child.
+
+    The parent drops inherited secret variables so a stale shell cannot make a
+    broken fnox profile pass. Neither provider diagnostics nor values are echoed.
+    """
+    findings = check_fnox_workflows(setup)
+    if findings:
+        return findings
+    config_path = (setup.home or Path.home()) / ".config" / "fnox" / "config.toml"
+    all_names = set(setup.fnox.per_secret)
+    for names in setup.fnox.profile_secrets.values():
+        all_names.update(names)
+    parent_env = {
+        key: value for key, value in setup.environ.items() if key not in all_names
+    }
+    for consumer, spec in sorted(_fnox_workflows(setup).items()):
+        finding = _fnox_presence_probe(setup, consumer, spec, config_path, parent_env)
+        if finding:
+            findings.append(finding)
     return findings
 
 
@@ -1811,6 +2036,8 @@ CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("mcp-env-opt-in", check_mcp_env_opt_in),
     ("mcp-scope", check_mcp_scope),
     ("fnox-baseline", check_fnox_baseline),
+    ("fnox-workflows", check_fnox_workflows),
+    ("fnox-services", check_fnox_services),
     ("fnox-exec-leak", check_exec_only_not_leaked),
     ("mcp-pin", check_mcp_pin),
     ("mcp-guard-coverage", check_mcp_guard_coverage),
@@ -1840,6 +2067,19 @@ LIVE_CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
     ("dependency-currency", check_dependency_currency),
 )
 
+FNOX_LIVE_CHECKS: tuple[tuple[str, Callable[[Setup], list[str]]], ...] = (
+    ("fnox-resolution", check_fnox_resolution),
+)
+
+
+@dataclass(frozen=True)
+class DoctorSelection:
+    """Choose optional live probes and a focused fnox-only view."""
+
+    live: bool = False
+    fnox_live: bool = False
+    fnox_only: bool = False
+
 
 def _record_crash(name: str, exc: BaseException, log_path: Path) -> None:
     """Append a crashed check to the error log; never raise while doing it."""
@@ -1856,6 +2096,8 @@ def run_checks(
     setup: Setup,
     *,
     live: bool = False,
+    fnox_live: bool = False,
+    fnox_only: bool = False,
     log_path: Path | None = None,
 ) -> list[tuple[str, list[str]]]:
     """Run every applicable check, containing a crash as a finding of its own.
@@ -1866,7 +2108,21 @@ def run_checks(
     """
     log_path = log_path or ERROR_LOG
     results: list[tuple[str, list[str]]] = []
-    for name, check in CHECKS + (LIVE_CHECKS if live else ()):
+    base_checks = (
+        tuple(
+            item
+            for item in CHECKS
+            if item[0].startswith("fnox-") or item[0] == "mcp-env-opt-in"
+        )
+        if fnox_only
+        else CHECKS
+    )
+    checks = (
+        base_checks
+        + (LIVE_CHECKS if live and not fnox_only else ())
+        + (FNOX_LIVE_CHECKS if fnox_live else ())
+    )
+    for name, check in checks:
         try:
             results.append((name, check(setup)))
         except Exception as exc:
@@ -1900,8 +2156,8 @@ def render(results: list[tuple[str, list[str]]], *, verbose: bool = False) -> li
         lines.append(
             f"doctor: {findings} finding(s) — each is a place where this host "
             f"stopped matching {BASELINE_FILE}. Fix the host, or change the "
-            f"baseline in a reviewed diff. `mise run doctor -- --live` adds "
-            f"the live MCP probes."
+            f"baseline in a reviewed diff. `--live` adds MCP probes; "
+            f"`mise run doctor-fnox` resolves fnox workflow scopes."
         )
     elif verbose:
         lines.append("doctor: OK — the declared setup matches this host")
@@ -1911,12 +2167,18 @@ def render(results: list[tuple[str, list[str]]], *, verbose: bool = False) -> li
 def doctor_main(
     repo_root: Path,
     *,
-    live: bool = False,
+    selection: DoctorSelection | None = None,
     strict: bool = False,
     verbose: bool = False,
 ) -> int:
     """Print drift and nothing else; 0 unless ``--strict`` and drift was found."""
-    results = run_checks(collect(repo_root), live=live)
+    selection = selection or DoctorSelection()
+    results = run_checks(
+        collect(repo_root),
+        live=selection.live,
+        fnox_live=selection.fnox_live,
+        fnox_only=selection.fnox_only,
+    )
     for line in render(results, verbose=verbose):
         sys.stdout.write(f"{line}\n")
     drifted = any(findings for _, findings in results)

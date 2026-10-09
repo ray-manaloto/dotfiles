@@ -97,6 +97,45 @@ env_true = [
     "TEMPO_S3_SECRET_KEY",
 ]
 
+# These are the process boundaries our workflows actually launch. A declaration
+# in the top-level config does not enter a --no-defaults profile. The regular
+# doctor checks names and scope without contacting providers; --fnox-live asks
+# native fnox to resolve every required name in a child process.
+[fnox.workflows.interactive]
+profile = "default"
+required = "env_true"
+
+[fnox.workflows.research]
+profile = "codex_research"
+no_defaults = true
+required = [
+    "CONTEXT7_API_KEY",
+    "EXA_API_KEY",
+    "FIRECRAWL_API_KEY",
+    "SERPER_API_KEY",
+    "SERP_API_KEY",
+]
+bootstrap = ["DOPPLER_TOKEN"]
+
+[fnox.workflows.publish]
+profile = "codex_publish"
+no_defaults = true
+required = ["DOPPLER_TOKEN", "GH_TOKEN"]
+
+# The separately owned AgentsView LaunchAgent uses this scoped profile for both
+# OpenRouter and the local Claude/Codex/Antigravity proxy. The live probe checks
+# a fresh fnox child; the owner must also verify the launched service process.
+[fnox.workflows.agentsview_recall]
+profile = "agentsview_recall"
+no_defaults = true
+required = ["OPENROUTER_API_KEY", "AGENTSVIEW_RECALL_PROXY_KEY"]
+bootstrap = ["DOPPLER_TOKEN"]
+
+[fnox.services.agentsview_recall]
+launch_agent = "dev.mise.com.raymanaloto.agentsview-native.plist"
+profile = "agentsview_recall"
+required = ["OPENROUTER_API_KEY", "AGENTSVIEW_RECALL_PROXY_KEY"]
+
 [mcp]
 # Servers whose command line declares a filesystem scope. Claude Code sends MCP
 # Roots, and roots REPLACE the server's own arguments — measured, from the

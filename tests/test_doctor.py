@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import plistlib
 import re
 import subprocess
 import sys
@@ -384,6 +385,234 @@ def test_read_fnox_never_retains_a_secret_value(tmp_path: Path) -> None:
     )
     state = doctor.read_fnox(config)
     assert "super-secret-material" not in repr(state)
+
+
+def test_read_fnox_keeps_profile_names_without_values(tmp_path: Path) -> None:
+    config = tmp_path / "config.toml"
+    config.write_text(
+        "[profiles.recall.secrets]\n"
+        'OPENROUTER_API_KEY = { provider = "p", value = "secret-value" }\n'
+    )
+    state = doctor.read_fnox(config)
+    assert state.profile_secrets == {"recall": frozenset({"OPENROUTER_API_KEY"})}
+    assert "secret-value" not in repr(state)
+
+
+def test_fnox_workflow_detects_top_level_key_excluded_by_no_defaults() -> None:
+    baseline = {
+        "fnox": {
+            "env_true": ["OPENROUTER_API_KEY"],
+            "workflows": {
+                "recall": {
+                    "profile": "recall",
+                    "no_defaults": True,
+                    "required": ["OPENROUTER_API_KEY"],
+                }
+            },
+        }
+    }
+    state = _fnox(per_secret={"OPENROUTER_API_KEY": True})
+    state = dataclasses.replace(
+        state, profile_secrets={"recall": frozenset({"DOPPLER_TOKEN"})}
+    )
+    findings = doctor.check_fnox_workflows(_setup(baseline=baseline, fnox=state))
+    assert len(findings) == 2
+    assert "cannot expose ['OPENROUTER_API_KEY']" in findings[0]
+
+
+def test_fnox_workflow_accepts_scoped_declarations_and_bootstrap() -> None:
+    baseline = {
+        "fnox": {
+            "workflows": {
+                "recall": {
+                    "profile": "recall",
+                    "no_defaults": True,
+                    "required": ["OPENROUTER_API_KEY"],
+                    "bootstrap": ["DOPPLER_TOKEN"],
+                }
+            }
+        }
+    }
+    state = dataclasses.replace(
+        _fnox(),
+        profile_secrets={"recall": frozenset({"DOPPLER_TOKEN", "OPENROUTER_API_KEY"})},
+    )
+    assert doctor.check_fnox_workflows(_setup(baseline=baseline, fnox=state)) == []
+
+
+def test_fnox_live_probe_ignores_inherited_key_and_reports_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    baseline = {
+        "fnox": {
+            "workflows": {
+                "recall": {
+                    "profile": "recall",
+                    "no_defaults": True,
+                    "required": ["OPENROUTER_API_KEY"],
+                }
+            }
+        }
+    }
+    state = dataclasses.replace(
+        _fnox(per_secret={"OPENROUTER_API_KEY": True}),
+        profile_secrets={"recall": frozenset({"OPENROUTER_API_KEY"})},
+    )
+    setup = _setup(
+        baseline=baseline,
+        fnox=state,
+        environ={"OPENROUTER_API_KEY": "inherited-secret", "PATH": "/bin"},
+        home=tmp_path,
+    )
+
+    def fake_run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert "--no-defaults" in argv
+        assert "--non-interactive" in argv
+        assert kwargs["env"] == {"PATH": "/bin"}
+        assert kwargs["stderr"] == subprocess.DEVNULL
+        return subprocess.CompletedProcess(argv, 0, '["OPENROUTER_API_KEY"]\n', "")
+
+    monkeypatch.setattr(doctor.subprocess, "run", fake_run)
+    assert doctor.check_fnox_resolution(setup) == [
+        "fnox workflow recall injected no value for ['OPENROUTER_API_KEY']"
+    ]
+
+    def present(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 0, "[]\n", "")
+
+    monkeypatch.setattr(doctor.subprocess, "run", present)
+    assert doctor.check_fnox_resolution(setup) == []
+
+
+def test_fnox_live_probe_suppresses_provider_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    setup = _setup(
+        baseline={
+            "fnox": {
+                "workflows": {
+                    "research": {
+                        "profile": "research",
+                        "no_defaults": True,
+                        "required": ["EXA_API_KEY"],
+                    }
+                }
+            }
+        },
+        fnox=dataclasses.replace(
+            _fnox(), profile_secrets={"research": frozenset({"EXA_API_KEY"})}
+        ),
+        home=tmp_path,
+    )
+
+    def fails(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 1, "", "sensitive-provider-detail")
+
+    monkeypatch.setattr(doctor.subprocess, "run", fails)
+    findings = doctor.check_fnox_resolution(setup)
+    assert findings == [
+        "fnox workflow research resolution failed (exit 1); provider details suppressed"
+    ]
+    assert "sensitive-provider-detail" not in repr(findings)
+
+
+def test_fnox_only_runs_the_scoped_doctor_checks(tmp_path: Path) -> None:
+    results = doctor.run_checks(_setup(), fnox_only=True, log_path=tmp_path / "err")
+    assert [name for name, _ in results] == [
+        "mcp-env-opt-in",
+        "fnox-baseline",
+        "fnox-workflows",
+        "fnox-services",
+        "fnox-exec-leak",
+    ]
+
+
+def test_fnox_service_flags_direct_launcher_without_printing_values(
+    tmp_path: Path,
+) -> None:
+    launch_dir = tmp_path / "Library" / "LaunchAgents"
+    launch_dir.mkdir(parents=True)
+    plist = launch_dir / "agentsview.plist"
+    plist.write_bytes(
+        plistlib.dumps(
+            {
+                "ProgramArguments": ["/opt/bin/agentsview", "serve"],
+                "EnvironmentVariables": {"OPENROUTER_API_KEY": "sensitive-material"},
+            }
+        )
+    )
+    baseline = {
+        "fnox": {
+            "services": {
+                "recall": {
+                    "launch_agent": plist.name,
+                    "profile": "recall",
+                    "required": ["OPENROUTER_API_KEY"],
+                }
+            }
+        }
+    }
+    findings = doctor.check_fnox_services(_setup(home=tmp_path, baseline=baseline))
+    assert len(findings) == 2
+    assert "puts ['OPENROUTER_API_KEY'] directly in its plist" in findings[0]
+    assert "launcher does not select profile recall" in findings[1]
+    assert "sensitive-material" not in repr(findings)
+
+
+def test_fnox_service_accepts_scoped_launcher(tmp_path: Path) -> None:
+    launch_dir = tmp_path / "Library" / "LaunchAgents"
+    launch_dir.mkdir(parents=True)
+    plist = launch_dir / "agentsview.plist"
+    plist.write_bytes(
+        plistlib.dumps(
+            {
+                "ProgramArguments": [
+                    "/opt/bin/fnox",
+                    "--profile",
+                    "recall",
+                    "--no-defaults",
+                    "exec",
+                    "--",
+                    "/opt/bin/agentsview",
+                    "serve",
+                ],
+                "EnvironmentVariables": {},
+            }
+        )
+    )
+    baseline = {
+        "fnox": {
+            "services": {
+                "recall": {
+                    "launch_agent": plist.name,
+                    "profile": "recall",
+                    "required": ["OPENROUTER_API_KEY"],
+                }
+            }
+        }
+    }
+    assert doctor.check_fnox_services(_setup(home=tmp_path, baseline=baseline)) == []
+
+    plist.write_bytes(
+        plistlib.dumps(
+            {
+                "ProgramArguments": [
+                    "/opt/bin/fnox",
+                    "exec",
+                    "--",
+                    "/opt/bin/agentsview",
+                    "--profile",
+                    "recall",
+                    "--no-defaults",
+                ]
+            }
+        )
+    )
+    findings = doctor.check_fnox_services(_setup(home=tmp_path, baseline=baseline))
+    assert len(findings) == 1
+    assert "launcher does not select profile recall" in findings[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -1163,7 +1392,9 @@ def test_every_check_function_is_actually_registered() -> None:
     stand-in failure `feedback_forbid_tokens_substring_fragile` names: assert
     the wiring, not just the thing being wired.
     """
-    registered = {fn for _, fn in doctor.CHECKS + doctor.LIVE_CHECKS}
+    registered = {
+        fn for _, fn in doctor.CHECKS + doctor.LIVE_CHECKS + doctor.FNOX_LIVE_CHECKS
+    }
     defined = {
         getattr(doctor, name)
         for name in dir(doctor)
@@ -1209,7 +1440,10 @@ def test_every_check_function_is_actually_registered() -> None:
     # installs on the host (Ray's ruling); a mise copy first on PATH, or none
     # native at all, fails. Blind without the captured ambient PATH, like
     # `path-drift`, whose ambient-PATH seam it reuses.
-    assert len(doctor.CHECKS) == 17, "every specified check must be wired"
+    # + `fnox-workflows`: declaration scope per real consumer, so a top-level
+    # key cannot falsely satisfy a --no-defaults profile.
+    # + `fnox-services`: a resolved profile does not attest the LaunchAgent.
+    assert len(doctor.CHECKS) == 19, "every specified check must be wired"
 
 
 def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None:
@@ -1231,6 +1465,18 @@ def test_the_shipped_baseline_parses_and_declares_what_the_checks_read() -> None
     # directions. A duplicate would silently shrink what is actually compared.
     assert opt_in, "env_true must not be empty — an empty set sanctions nothing"
     assert len(opt_in) == len(set(opt_in)), "env_true has duplicate names"
+    workflows = fnox.get("workflows")
+    assert isinstance(workflows, dict)
+    assert set(workflows) == {"interactive", "research", "publish", "agentsview_recall"}
+    recall = workflows["agentsview_recall"]
+    assert isinstance(recall, dict)
+    assert set(recall["required"]) == {
+        "OPENROUTER_API_KEY",
+        "AGENTSVIEW_RECALL_PROXY_KEY",
+    }
+    services = fnox.get("services")
+    assert isinstance(services, dict)
+    assert "agentsview_recall" in services
     mcp = setup.mcp_baseline()
     # KEY PRESENCE, not truthiness (#535). The arm's job is to distinguish "the
     # shipped doctor.toml was parsed" from "the parse returned {}" — and an empty
