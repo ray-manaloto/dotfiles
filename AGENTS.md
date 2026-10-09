@@ -123,8 +123,8 @@ locally before pushing Dockerfile changes.
 - **Research existing tools/services before custom code (HARD GATE)**: prefer an
   existing tool / native feature / CLI / service (`gh` auto-merge, `chezmoi.os`)
   over ANY homegrown code (last resort + justification). See `.claude/rules/use-tool-builtins.md`.
-- **Chezmoi is devcontainer-only on this Mac**: `chezmoi apply`/`update`
-  blocked on host (enforced by `.claude/settings.json` deny rules); read-only ok.
+- **Mac global mise**: dotfiles takeover pending; MDE chezmoi is legacy.
+  Host apply blocked. See `docs/specs/mise-native-dotfiles-plan.md`.
 - **Notepad enforcement**: Agents write findings to notepad during work, not at session end. See `.claude/rules/notepad-enforcement.md`.
 - **Agent artifact conventions**: Use standard `.agent/` paths, no ad-hoc
   directories. See `.claude/rules/agent-artifact-conventions.md`.
