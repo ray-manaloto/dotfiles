@@ -56,6 +56,7 @@ from dotfiles_setup.dag_tick import (
 )
 from dotfiles_setup.dependency_currency import dependency_currency_main
 from dotfiles_setup.dependency_ownership import dependency_ownership_main
+from dotfiles_setup.devcontainer_launch import launch_main
 from dotfiles_setup.devcontainer_names import (
     NAME_FIELDS,
     devcontainer_env_main,
@@ -381,6 +382,10 @@ def _add_platform_subcommands(subparsers: _SubParsers) -> None:
         help="Print shell exports for every localEnv substitution "
         'devcontainer.json makes — consumed as `eval "$(… devcontainer env)"`',
     )
+    launch_parser = devcontainer_sub.add_parser(
+        "launch", help="Run the native CLI for the mise up/rebuild tasks"
+    )
+    launch_parser.add_argument("--rebuild", action="store_true")
     devcontainer_name_parser = devcontainer_sub.add_parser(
         "name", help="Print one resolved devcontainer resource name"
     )
@@ -2404,6 +2409,8 @@ def handle_devcontainer(args: argparse.Namespace) -> int:
     """Dispatch `devcontainer native-clis`; every name verb goes to its own handler."""
     if getattr(args, "devcontainer_command", None) == "native-clis":
         return native_clis_container.main(args.native_clis_command)
+    if getattr(args, "devcontainer_command", None) == "launch":
+        return launch_main(rebuild=args.rebuild)
     return _handle_devcontainer_names(args)
 
 

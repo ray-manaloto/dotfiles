@@ -402,9 +402,9 @@ ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
 # container finds and reuses it, and the arch-scoped --name never matters.
 # Both labels are required: --id-label REPLACES the inferred set, so the arch
 # label alone would let two clones collide.
-fnox exec --non-interactive -- devcontainer up --workspace-folder . \
-  --id-label "${DEVCONTAINER_WORKSPACE_LABEL}" \
-  --id-label "${DEVCONTAINER_ARCH_LABEL}"
+# Canonical sync passes a live private override through this launch helper to
+# remove duplicate lifecycle smoke; a direct up uses devcontainer.json as-is.
+uv run --project python dotfiles-setup devcontainer launch
 '''
 
 [tasks.names]
@@ -442,10 +442,7 @@ set -euo pipefail
 _dc_env="$(uv run --project python dotfiles-setup devcontainer env)"
 eval "${_dc_env}"
 ssh-keygen -R "[localhost]:${DEVCONTAINER_SSH_PORT}" 2>/dev/null || true
-fnox exec --non-interactive -- devcontainer up --workspace-folder . \
-  --id-label "${DEVCONTAINER_WORKSPACE_LABEL}" \
-  --id-label "${DEVCONTAINER_ARCH_LABEL}" \
-  --remove-existing-container --build-no-cache
+uv run --project python dotfiles-setup devcontainer launch --rebuild
 '''
 
 [tasks.verify]

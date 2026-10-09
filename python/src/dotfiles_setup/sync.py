@@ -65,6 +65,7 @@ DOCKER_DEFAULT_PLATFORM, workspace hash, ssh known-hosts cleanup).
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 import logging
@@ -83,6 +84,11 @@ from dotfiles_setup.platform_target import (
     platform_arch,
     published_targets,
     resolve_platform,
+)
+from dotfiles_setup.sync_override import (
+    ActiveSyncOverride,
+    SyncOverrideError,
+    active_sync_override,
 )
 
 if TYPE_CHECKING:
@@ -431,13 +437,18 @@ def _stream(
     *,
     env: dict[str, str] | None = None,
     cwd: Path | None = None,
+    owner: ActiveSyncOverride | None = None,
 ) -> int:
     """Run a long operation streaming to the terminal (never wait blind)."""
+    child = child_env.without_git_context(env)
+    if owner is not None:
+        child = owner.child_env(child)
     return subprocess.run(
         cmd,
         check=False,
-        env=child_env.without_git_context(env),
+        env=child,
         cwd=cwd,
+        pass_fds=(owner.owner_fd,) if owner is not None else (),
     ).returncode
 
 
@@ -802,7 +813,13 @@ def _report_inflight(tag: str, *, wait: bool) -> None:
             raise SystemExit(1)
 
 
-def _converge(workspace: Path, status: SyncStatus, action: Action) -> tuple[bool, str]:
+def _converge(
+    workspace: Path,
+    status: SyncStatus,
+    action: Action,
+    *,
+    owner: ActiveSyncOverride | None = None,
+) -> tuple[bool, str]:
     """Execute the decided action; returns (ok, detail)."""
     if action == "verify-only":
         return True, "local tag current + container running (digest fast-path)"
@@ -827,17 +844,29 @@ def _converge(workspace: Path, status: SyncStatus, action: Action) -> tuple[bool
             ["mise", "run", "dev-rebuild"],
             env=_mise_env(status.image_ref),
             cwd=workspace,
+            owner=owner,
         )
         if rc == 0 and status.registry_digest:
             write_sync_record(workspace, status.image_ref, status.registry_digest)
         return rc == 0, f"dev-rebuild rc={rc}"
-    rc = _stream(["mise", "run", "up"], env=_mise_env(status.image_ref), cwd=workspace)
+    rc = _stream(
+        ["mise", "run", "up"],
+        env=_mise_env(status.image_ref),
+        cwd=workspace,
+        owner=owner,
+    )
     if rc == 0 and status.registry_digest:
         write_sync_record(workspace, status.image_ref, status.registry_digest)
     return rc == 0, f"up rc={rc}"
 
 
-def _verify(workspace: Path, *, full: bool, image_ref: str) -> bool:
+def _verify(
+    workspace: Path,
+    *,
+    full: bool,
+    image_ref: str,
+    owner: ActiveSyncOverride | None = None,
+) -> bool:
     """Run the post-converge gate: smoke by default, verify-local on --full."""
     if full:
         # Review finding [28]: verify-local must validate the SAME image
@@ -847,6 +876,7 @@ def _verify(workspace: Path, *, full: bool, image_ref: str) -> bool:
             ["mise", "run", "verify-local"],
             env=_mise_env(image_ref),
             cwd=workspace,
+            owner=owner,
         )
         sys.stdout.write(f"{'PASS' if rc == 0 else 'FAIL'}  verify-local rc={rc}\n")
         return rc == 0
@@ -921,16 +951,29 @@ def _sync_run(workspace: Path, options: SyncOptions | None) -> int:
 
     action = decide_action(status, force=opts.force)
     sys.stdout.write(f"==> action: {action}\n")
-    ok, detail = _converge(workspace, status, action)
-    sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  converge: {detail}\n")
-    if not ok:
-        return 1
+    # A canonical sync owns the one explicit smoke in _verify. When its
+    # converge or full verification creates a container, the live private
+    # override retains all setup hooks but omits the duplicate lifecycle smoke.
+    context = (
+        active_sync_override(workspace)
+        if action != "verify-only" or opts.full
+        else contextlib.nullcontext(None)
+    )
+    try:
+        with context as owner:
+            ok, detail = _converge(workspace, status, action, owner=owner)
+            sys.stdout.write(f"{'PASS' if ok else 'FAIL'}  converge: {detail}\n")
+            if not ok:
+                return 1
 
-    if not _verify(workspace, full=opts.full, image_ref=image_ref):
-        sys.stdout.write(
-            "\nsync: verification failed — the container is NOT a valid "
-            "environment (see .claude/rules/verify-before-advancing.md)\n"
-        )
+            if not _verify(workspace, full=opts.full, image_ref=image_ref, owner=owner):
+                sys.stdout.write(
+                    "\nsync: verification failed — the container is NOT a valid "
+                    "environment (see .claude/rules/verify-before-advancing.md)\n"
+                )
+                return 1
+    except (OSError, SyncOverrideError) as exc:
+        sys.stdout.write(f"FAIL  sync override: {exc}\n")
         return 1
     sys.stdout.write(f"\nsync: OK — container verified on {image_ref}\n")
     return 0
