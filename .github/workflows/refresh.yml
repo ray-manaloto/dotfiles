@@ -426,12 +426,12 @@ jobs:
         id: drift-check
         continue-on-error: true
         run: |
-          uv run --project python pytest \
+          uv run --project python python -m dotfiles_setup.pytest_runner --label image-lock-drift -- \
             tests/test_lock_coverage.py::test_system_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
             tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
-            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance
       - name: Regenerate image locks
         if: steps.drift-check.outcome == 'failure'
         env:
@@ -459,12 +459,12 @@ jobs:
         # so this re-check is the ONLY guard on what gets committed.
         if: steps.drift-check.outcome == 'failure'
         run: |
-          uv run --project python pytest \
+          uv run --project python python -m dotfiles_setup.pytest_runner --label image-lock-recheck -- \
             tests/test_lock_coverage.py::test_system_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
             tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
-            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance -q
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance
       - name: Confirm the diff is confined to the two image locks
         # Two guards in one step: (1) `continue-on-error: true` on the drift
         # check converts ANY non-pass outcome (a real failure, but also a

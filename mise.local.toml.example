@@ -30,7 +30,7 @@
 #     Default dev_personal (aligned 2026-08-03, PR #522); set to "dev" for the
 #     43-secret subset that omits AGE_PRIVATE_KEY and the host-only tokens.
 #   - PYTEST_XDIST_AUTO_NUM_WORKERS — pytest-xdist workers for the suite
-#     (pytest.ini runs `-n auto`). Default 4 (tests/conftest.py) because the
+#     (native pytest policy runs `-n auto`). Default 4 (tests/conftest.py) because the
 #     host is shared; raise it here to parallelize more on a quiet machine.
 #
 # DO NOT check in mise.local.toml; it is gitignored by design.

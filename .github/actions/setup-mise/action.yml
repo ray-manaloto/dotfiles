@@ -33,16 +33,16 @@ runs:
     # mise-action call first removes that ordering hazard. Each call keeps
     # mise-action's per-install_args caching, so subsets still cache independently.
     - name: Install mise + bun
-      uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+      uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
       with:
         # Pin CI's mise to the version the image bakes (Dockerfile ARG
         # MISE_VERSION). Unpinned, mise-action installs the latest release, so a
         # mise release (e.g. 2026.7.12's aube default) can change install
         # behavior mid-day and break CI with no repo change. Bump in lockstep.
-        version: "2026.9.8"
+        version: "2026.10.7"
         install_args: "bun pipx"
     - name: Install tools
-      uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+      uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
       with:
-        version: "2026.9.8"
+        version: "2026.10.7"
         install_args: ${{ inputs.install_args }}

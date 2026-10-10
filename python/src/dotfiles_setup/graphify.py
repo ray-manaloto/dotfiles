@@ -12,6 +12,7 @@ it by ``monkeypatch`` — mirroring :mod:`dotfiles_setup.ghcr`.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import subprocess
@@ -20,13 +21,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-
-from kb_setup.graph import GraphifyBuildReceipt
+from typing import TYPE_CHECKING
 
 from dotfiles_setup import codec
 from dotfiles_setup.child_env import without_env_diff
 from dotfiles_setup.graphify_currency import GraphifyCurrencyError, locked_version
 from dotfiles_setup.graphify_hook import NO_AUTO_REFRESH_ENV
+
+if TYPE_CHECKING:
+    from kb_setup.graph import GraphifyBuildReceipt
 
 _DEFAULT_BUDGET = 2000
 _GRAPH_SUBDIR = "graphify-out"
@@ -234,8 +237,12 @@ def _receipt_problem(
     receipt_path = graph_path.with_name(_BUILD_RECEIPT)
     if not receipt_path.is_file():
         return None
+    # The KB build pipeline is needed only when there is a receipt to decode.
+    receipt_type: type[GraphifyBuildReceipt] = importlib.import_module(
+        "kb_setup.graph"
+    ).GraphifyBuildReceipt
     try:
-        receipt = codec.decode(receipt_path.read_bytes(), GraphifyBuildReceipt)
+        receipt = codec.decode(receipt_path.read_bytes(), receipt_type)
     except (OSError, ValueError, TypeError) as exc:
         return HealthResult(GraphifyStatus.CORRUPT, runtime, str(exc))
     if not _receipt_matches(

@@ -10,7 +10,7 @@ the real local ``:dev`` image, asserting both the happy path and a tampered
 FAIL so a silently-non-running check can't pass green.
 
 **Gated, not silently skipped.** Every test is marked ``image_exec``, which the
-root ``pytest.ini`` deselects by default (``addopts = -m 'not image_exec'``), so
+native ``python/pyproject.toml`` pytest policy deselects by default, so
 ``mise run test`` and CI ``contract-preflight`` (no Docker, no ``:dev``) never
 run them. Invoke explicitly via ``mise run smoke-exec`` (``pytest -m
 image_exec`` re-selects — last ``-m`` wins). If Docker or the image is absent
@@ -43,7 +43,7 @@ from dotfiles_setup.image import (
 from dotfiles_setup.platform_target import expected_uname_machine, normalize_arch
 
 pytestmark = pytest.mark.image_exec
-# ONE xdist worker for the whole module (pytest.ini runs `-n auto --dist
+# ONE xdist worker for the whole module (native config runs `-n auto --dist
 # loadgroup`): its module-scoped fixtures exist to SHARE expensive real runs,
 # and spread across workers each worker would repeat them.
 pytestmark = [pytestmark, pytest.mark.xdist_group(name="image_smoke_exec")]

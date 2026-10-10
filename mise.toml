@@ -318,19 +318,19 @@ depends = ["pre-commit", "test"]
 
 [tasks.test]
 description = "Run Python test suite"
-run = "uv run --project python pytest tests/ -x -q"
+run = "uv run --project python python -m dotfiles_setup.pytest_runner --label mise-test -- tests/ -x"
 
 [tasks.test-hook-isolated]
 description = "Run the Python suite without credentials or hook-exported Git-local variables"
 # Queues on the host-wide heavy-gate lock (host_lock.py): this is the pre-push
 # suite, and under `mise run ship` it re-enters the lock ship already holds.
-run = "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- dotfiles-setup process git-isolated -- uv run --project python pytest tests/ -x -q"
+run = "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- dotfiles-setup process git-isolated -- uv run --project python python -m dotfiles_setup.pytest_runner --label pre-push -- tests/ -x"
 
 [tasks.smoke-exec]
 description = "Run the containerized real-toolchain exec tests against the local :dev image (needs Docker + `mise run sync`; tier-3 compiles under Rosetta — minutes)"
-# `-m image_exec` re-selects the tests the root pytest.ini deselects by default
+# `-m image_exec` re-selects the tests the native pytest config deselects by default
 # (last -m wins), so these run ONLY here, never in `mise run test` / CI.
-run = "uv run --project python pytest -m image_exec tests/test_image_smoke_exec.py -v"
+run = "uv run --project python python -m dotfiles_setup.pytest_runner --label image-exec -- -m image_exec tests/test_image_smoke_exec.py"
 
 [tasks.up]
 description = "Bring the devcontainer up via the official @devcontainers/cli (Mac-local)"
@@ -773,11 +773,11 @@ run = 'uv run --project python dotfiles-setup codex-lane'
 
 [tasks.codex-lane-e2e]
 description = "The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper, asserting an edge comes out. COSTS CREDITS — deselected from `mise run test` and CI by the codex_exec marker"
-# `-m codex_exec` re-selects what the root pytest.ini deselects by default
+# `-m codex_exec` re-selects what the native pytest config deselects by default
 # (last -m wins), the same gating shape as `mise run smoke-exec`. Everything in
 # #580 was unit-level, and a fixture that writes what the code reads structurally
 # cannot catch a producer/consumer mismatch — this is the arm that can.
-run = 'uv run --project python pytest -m codex_exec tests/test_codex_lane_e2e.py -v'
+run = 'uv run --project python python -m dotfiles_setup.pytest_runner --label codex-lane -- -m codex_exec tests/test_codex_lane_e2e.py'
 
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"

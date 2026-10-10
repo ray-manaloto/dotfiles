@@ -23,7 +23,7 @@ requires every non-`.claude/` `CLAUDE.md` be solely `@AGENTS.md`. So the index
 is on-demand reference — which is what it should be anyway.
 
 Collected counts drift fast, so measure rather than quote them:
-`uv run --project python pytest tests/ --collect-only -q`. Default runs
+`uv run --project python python -m dotfiles_setup.pytest_runner --label collect -- tests/ --collect-only`. Default runs
 deselect the gated exec tests — `image_exec` (`mise run smoke-exec`, needs
 Docker + the `:dev` image) and `codex_exec` (`mise run codex-lane-e2e`,
 spawns the real `codex` CLI and **costs credits**); inspect one with
@@ -33,13 +33,13 @@ spawns the real `codex` CLI and **costs credits**); inspect one with
 
 ```bash
 # Full pytest suite (from repo root):
-uv run --project python pytest tests/ -x -q
+mise run test
 
 # Single file:
-uv run --project python pytest tests/test_audit.py -x -q
+uv run --project python python -m dotfiles_setup.pytest_runner --label audit -- tests/test_audit.py -x
 
 # Single test by nodeid:
-uv run --project python pytest tests/test_config.py::test_container_paths -x -q
+uv run --project python python -m dotfiles_setup.pytest_runner --label config -- tests/test_config.py::test_container_paths -x
 
 # Bats tests (require bats-core):
 bats tests/infra/
@@ -119,8 +119,7 @@ substitutes a value and needs no patching at all.
 
 ## CI integration
 
-- `contract-preflight` job runs `uv run --project python pytest tests/
-  -x -q` as a blocking gate.
+- `contract-preflight` job runs the managed pytest runner as a blocking gate.
 - `smoke-test` job runs the image smoke check separately (not pytest).
 - Test failures must be investigated, not suppressed. See
   `.claude/rules/zero-skip-policy.md`.

@@ -579,7 +579,7 @@ def test_shared_lock_platforms_reads_the_real_committed_lockfile() -> None:
 
 # --- mise 2026.9.8 packslip quirk (#1398) ------------------------------------
 #
-# The image's and CI's pinned mise (2026.9.8) runs `mise lock <bare-name>` for a
+# The former image/CI mise pin (2026.9.8) runs `mise lock <bare-name>` for a
 # packslip-backend tool as a silent no-op (rc 0, no entry). Measured in the
 # devcontainer 2026-09-27 on `hk = "2.3.0"`: bare `hk` -> 0 lines, `hk@2.3.0`
 # -> the entry with its platform. So an exact pin must be named with its version.

@@ -240,7 +240,7 @@ def _workspace_mise_toml(repo_root: Path) -> str:
 def lock_target(repo_root: Path, tool: str) -> str:
     """``tool@version`` when the shared fragment pins an exact version string.
 
-    mise 2026.9.8 (the image's and CI's pinned mise) runs `mise lock <bare>` for
+    mise 2026.9.8 (the former image/CI pin) runs `mise lock <bare>` for
     a packslip-backend tool as a silent no-op: rc 0, no platform entries — into
     an empty lockfile it writes nothing at all; #1398 shipped a version-only
     entry (version + backend, no platforms) in the shared lock. Measured
