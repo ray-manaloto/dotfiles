@@ -70,7 +70,7 @@ from dotfiles_setup.doc_refs import (
     find_unresolved_task_refs,
 )
 from dotfiles_setup.docker import DevContainerManager
-from dotfiles_setup.doctor import doctor_main
+from dotfiles_setup.doctor import DoctorSelection, doctor_main
 from dotfiles_setup.env_blob_scan import env_blob_scan_main
 from dotfiles_setup.eval_cases import cases as eval_cases_for
 from dotfiles_setup.fnhook_gates import (
@@ -994,6 +994,18 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Also spawn each stdio MCP server and compare its real tool set to "
         "the baseline. Off the SessionStart path: a spawn per server is real "
         "latency for drift that changes rarely",
+    )
+    doctor_parser.add_argument(
+        "--fnox-live",
+        action="store_true",
+        help="Resolve each doctor.toml fnox workflow through native fnox in a "
+        "bounded child and check presence only; provider output is suppressed",
+    )
+    doctor_parser.add_argument(
+        "--fnox-only",
+        action="store_true",
+        help="Run only fnox checks; combine with --fnox-live --strict for a "
+        "focused workflow credential gate",
     )
     doctor_parser.add_argument(
         "--strict",
@@ -3195,7 +3207,11 @@ def _build_command_handlers(
         "doctor": lambda: sys.exit(
             doctor_main(
                 project_root,
-                live=args.live,
+                selection=DoctorSelection(
+                    live=args.live,
+                    fnox_live=args.fnox_live,
+                    fnox_only=args.fnox_only,
+                ),
                 strict=args.strict,
                 verbose=args.verbose,
             )
