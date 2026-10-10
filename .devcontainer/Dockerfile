@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.27@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e
+# syntax=docker/dockerfile:1.28@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 # check=error=true
 
 # ────────────────────────────────────────────────────────────────────
@@ -11,7 +11,7 @@
 # 26.04 manifest-list (multi-arch resolution preserved); Renovate bumps the
 # digest via the custom `ubuntu` manager (docker datasource). Keep in lockstep
 # with docker-bake.hcl's BASE_IMAGE default (the base hash reads bake).
-ARG BASE_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
+ARG BASE_IMAGE=ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 
 # Builder image for the clang-p2996 compile (#160 T11). DELIBERATELY a
 # separate, rarely-bumped variable (NOT Renovate-tracked): its digest is a
@@ -20,7 +20,7 @@ ARG BASE_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb
 # into the final image (only /opt/clang-p2996 is exported), so pinning it
 # older than BASE_IMAGE is ABI-safe while both are the same ubuntu series.
 # Keep in lockstep with docker-bake.hcl's BUILDER_IMAGE default.
-ARG BUILDER_IMAGE=ubuntu:26.04@sha256:2260313b31c8c011cd2eebe728008efac1b3982be73eb71348ea2648d2c0e09b
+ARG BUILDER_IMAGE=ubuntu:26.04@sha256:f144425ff09be612d6d9ad965196e9cdc23dae1f42110a8a11a3e9a8198759f7
 
 # NOTE (#160 T11): the former ARG P2996_SOURCE / ARG DEVCONTAINER_BASE_REF
 # FROM-indirection is retired. CI now injects prebuilt tiers as
@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # mise.run installer already chmods the binary; the explicit chmod is a
 # belt-and-braces guard against permission drift on the cache mount.
 # renovate: datasource=github-releases depName=jdx/mise
-ARG MISE_VERSION=2026.9.8
+ARG MISE_VERSION=2026.10.7
 RUN curl https://mise.run | MISE_VERSION="v${MISE_VERSION}" sh && \
     chmod +x ${MISE_INSTALL_PATH} && \
     mise --version
@@ -574,7 +574,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # jwakely.github.io index (see renovate.json). Compatibility with the current
 # base image is empirical; if `dpkg -i` fails, build from source.
 # renovate: datasource=custom.gcc-latest depName=gcc-latest versioning=loose
-ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
+ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20261004git30907bc0f06b.deb
 # Validation D (#160 T13): kayari publishes NO checksum or signature (all
 # 404), so this locally-computed pin is the .deb's only integrity handle.
 # NOT Renovate-managed (Renovate can't compute a sha): a GCC_LATEST_DEB bump
@@ -582,7 +582,7 @@ ARG GCC_LATEST_DEB=gcc-latest_17.0.0-20260816git8df013222dff.deb
 # the newly-pinned .deb and commits the fix to the Renovate branch — the pin
 # stays byte-exact without the old human-recompute friction. To repair by hand:
 # `uv run --project python dotfiles-setup gcc-sha` (or `--check` to dry-run).
-ARG GCC_LATEST_DEB_SHA256=a9c2f9f7d6189ccff55ccead9ae949d29d45fa32f93268de82ce319223aaa506
+ARG GCC_LATEST_DEB_SHA256=5ec51cc9ef5617a75b90d733e9f05a07d6e623be9c9f7c003ac1b102d5d39bb3
 # amd64 ONLY, permanently (#698). This is not a gap upstream may close — the
 # maintainer states the policy on the index page: "Only the C and C++ compilers
 # are included, and only for x86_64, in a single large package." Probed
