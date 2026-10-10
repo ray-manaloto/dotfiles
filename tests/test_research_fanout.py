@@ -859,20 +859,28 @@ def test_main_ctrl_c_terminates_real_child_and_returns_130(
     script.write_text(
         "import os, time\n"
         "from pathlib import Path\n"
-        f"Path({str(pid_file)!r}).write_text(str(os.getpid()))\n"
+        f"pid_path = Path({str(pid_file)!r})\n"
+        "pending_path = pid_path.with_suffix('.pending')\n"
+        "pending_path.write_text(str(os.getpid()))\n"
+        "pending_path.replace(pid_path)\n"
         "time.sleep(30)\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("LAST30DAYS_SCRIPT", str(script))
 
+    stop_interruptor = threading.Event()
+    signal_sent_at: list[float] = []
+
     def interrupt_when_child_runs() -> None:
-        deadline = time.monotonic() + 3.0
-        while not pid_file.exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        os.kill(os.getpid(), signal.SIGINT)
+        deadline = time.monotonic() + 8.0
+        while not stop_interruptor.is_set() and time.monotonic() < deadline:
+            if pid_file.is_file():
+                signal_sent_at.append(time.monotonic())
+                os.kill(os.getpid(), signal.SIGINT)
+                return
+            stop_interruptor.wait(0.01)
 
     interruptor = threading.Thread(target=interrupt_when_child_runs)
-    started = time.monotonic()
     interruptor.start()
     try:
         rc = main(
@@ -881,15 +889,17 @@ def test_main_ctrl_c_terminates_real_child_and_returns_130(
             runner=default_runner,
             http=FakeHttp({}),
         )
-        elapsed = time.monotonic() - started
+        finished_at = time.monotonic()
+        assert signal_sent_at, "child PID was not published"
         assert pid_file.is_file()
         child_pid = int(pid_file.read_text())
 
         assert rc == 130
-        assert elapsed <= 3.0
+        assert finished_at - signal_sent_at[0] <= 3.0
         with pytest.raises(ProcessLookupError):
             os.kill(child_pid, 0)
     finally:
+        stop_interruptor.set()
         interruptor.join(timeout=1.0)
         if pid_file.is_file():
             with suppress(ProcessLookupError):

@@ -344,10 +344,11 @@ def test_every_devcontainer_invocation_in_mise_toml_is_arch_scoped() -> None:
 
 
 _FNOX_DEVCONTAINER_UP = "fnox exec --non-interactive -- devcontainer up "
+_NATIVE_LAUNCH = "uv run --project python dotfiles-setup devcontainer launch"
 
 
 def _devcontainer_up_sites(mise_text: str) -> list[tuple[str, str]]:
-    """Enumerate executable up commands from every declared mise task."""
+    """Enumerate executable up or launch commands from every mise task."""
     tasks = tomllib.loads(mise_text)["tasks"]
     sites: list[tuple[str, str]] = []
     for name, task in tasks.items():
@@ -357,7 +358,7 @@ def _devcontainer_up_sites(mise_text: str) -> list[tuple[str, str]]:
             command = line.strip()
             if command.startswith("#"):
                 continue
-            if re.search(r"\bdevcontainer\s+up(?:\s|$)", command):
+            if re.search(r"\bdevcontainer\s+(?:up|launch)(?:\s|$)", command):
                 sites.append((name, command))
     return sites
 
@@ -365,10 +366,18 @@ def _devcontainer_up_sites(mise_text: str) -> list[tuple[str, str]]:
 def _assert_devcontainer_up_sites_are_fnox_scoped(mise_text: str) -> None:
     sites = _devcontainer_up_sites(mise_text)
     assert len(sites) >= 2, f"devcontainer up enumeration went blind: {sites}"
-    unscoped = []
+    unscoped: list[str] = []
     for name, command in sites:
-        if not command.startswith(_FNOX_DEVCONTAINER_UP):
+        if name == "up":
+            scoped = command == _NATIVE_LAUNCH
+        elif name == "dev-rebuild":
+            scoped = command == f"{_NATIVE_LAUNCH} --rebuild"
+        else:
+            scoped = command.startswith(_FNOX_DEVCONTAINER_UP)
+        if not scoped:
             unscoped.append(name)
+    named = {name for name, _ in sites}
+    assert {"up", "dev-rebuild"} <= named, f"public up routes missing: {sites}"
     assert not unscoped, f"unscoped devcontainer up tasks: {unscoped}"
 
 
@@ -377,8 +386,8 @@ def _remove_fnox_scope_from_task(mise_text: str, task_name: str) -> str:
     start = mise_text.index(header)
     end = mise_text.find("\n[tasks.", start + len(header))
     section = mise_text[start:] if end == -1 else mise_text[start:end]
-    assert section.count(_FNOX_DEVCONTAINER_UP) == 1
-    mutated = section.replace(_FNOX_DEVCONTAINER_UP, "devcontainer up ", 1)
+    assert section.count(_NATIVE_LAUNCH) == 1
+    mutated = section.replace(_NATIVE_LAUNCH, "devcontainer up", 1)
     return (
         mise_text[:start] + mutated
         if end == -1
@@ -407,7 +416,7 @@ def test_each_public_up_route_independently_requires_fnox_scope(
     with pytest.raises(AssertionError, match=mutated_task):
         _assert_devcontainer_up_sites_are_fnox_scoped(mutated)
     sites = dict(_devcontainer_up_sites(mutated))
-    assert sites[protected_task].startswith(_FNOX_DEVCONTAINER_UP)
+    assert sites[protected_task].startswith(_NATIVE_LAUNCH)
 
 
 def test_every_task_resolves_the_env_before_its_first_devcontainer_call() -> None:

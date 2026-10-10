@@ -104,6 +104,8 @@ SURFACE_PATTERNS: tuple[str, ...] = (
     # #1183: on-create renders this file and the smoke preflight depends on it.
     "home/dot_gitconfig.tmpl",
     "python/src/dotfiles_setup/devcontainer_names.py",
+    "python/src/dotfiles_setup/devcontainer_launch.py",
+    "python/src/dotfiles_setup/sync_override.py",
     "python/src/dotfiles_setup/container.py",
     "python/src/dotfiles_setup/sync.py",
     "python/src/dotfiles_setup/image.py",

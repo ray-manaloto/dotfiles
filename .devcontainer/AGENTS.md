@@ -1,5 +1,5 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-04-07 | Updated: 2026-04-07 -->
+<!-- Generated: 2026-04-07 | Updated: 2026-10-09 -->
 
 # .devcontainer/ — Devcontainer Spec, Dockerfile, System-Wide mise Config
 
@@ -35,11 +35,11 @@ spec), not a bootstrap shell wrapper:
 - `onCreateCommand` (in container, once): native self-updating claude/codex/agy into the home volume
   (`devcontainer native-clis install`), then `chezmoi init --apply` against `/workspaces/<basename>` (scoped
   `safe.directory`, #1183), chowns named-volume mountpoints to `${USER}:${USER}`.
-- `postCreateCommand` (once): chowns the magic SSH socket, installs
-  `authorized_keys` from `/tmp/dotfiles-host-state/` for R1, seeds
-  `~/.ssh/known_hosts`, runs `scripts/devcontainer-smoke.sh` tier 1/2/3
-  (exit 0 required). `postStartCommand` re-chowns the socket on EVERY
-  start (it reverts to root:root on DD restart) — R2's durable fix.
+- `postCreateCommand` (once): chowns the SSH socket, installs R1 keys,
+  seeds `known_hosts`, then runs tier 1/2/3 smoke on direct `mise run up`.
+  Canonical sync passes a private `--override-config` that retains setup,
+  omits lifecycle smoke, and waits through `postStartCommand` before one
+  explicit smoke. `postStartCommand` re-chowns the socket on each start for R2.
 
 ## Secrets Injection (Doppler)
 

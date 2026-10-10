@@ -35,6 +35,16 @@ _NAMES_CLONE_B = resolve_names(
 )
 
 
+def _workspace_with_source_config(tmp_path: Path) -> Path:
+    """Create the real lifecycle source document under an isolated workspace."""
+    workspace = tmp_path / "dotfiles"
+    directory = workspace / ".devcontainer"
+    directory.mkdir(parents=True)
+    source = Path(__file__).parent.parent / ".devcontainer" / "devcontainer.json"
+    (directory / "devcontainer.json").write_bytes(source.read_bytes())
+    return workspace
+
+
 @pytest.fixture(autouse=True)
 def _isolated_sync_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """No test may touch the REAL sync state (defense-in-depth).
@@ -661,8 +671,7 @@ def test_sync_exits_unknown_when_docker_fails_after_the_lifecycle_succeeds(
     monkeypatch.setenv("DOTFILES_PLATFORM", "linux/amd64/v2")
     monkeypatch.delenv("DEVCONTAINER_SSH_PORT", raising=False)
 
-    workspace = tmp_path / "dotfiles"  # `up` runs with the workspace as cwd
-    workspace.mkdir()
+    workspace = _workspace_with_source_config(tmp_path)
 
     assert sync.sync_main(workspace) == 2
     # `up` really ran (the lifecycle succeeded) before the late docker failure;
@@ -1012,7 +1021,7 @@ def test_sync_fast_path_skips_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_sync_stale_refreshes_tag_then_rebuilds(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     events: list[str] = []
     monkeypatch.setattr(sync, "observe", lambda *_a: _status(local=_DIGEST_OLD))
@@ -1029,7 +1038,7 @@ def test_sync_stale_refreshes_tag_then_rebuilds(
         sync, "_stream", lambda cmd, **_k: events.append(" ".join(cmd[:3])) or 0
     )
     monkeypatch.setattr(sync, "verify_latest", lambda *_a, **_k: [])
-    assert sync.sync_main(_WORKSPACE) == 0
+    assert sync.sync_main(_workspace_with_source_config(tmp_path)) == 0
     assert events == ["refresh", "mise run dev-rebuild", "record"]
 
 
@@ -1111,12 +1120,15 @@ def test_sync_verify_failure_returns_1(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sync.sync_main(_WORKSPACE) == 1
 
 
-def test_sync_full_runs_verify_local(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_sync_full_runs_verify_local(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     streamed: list[list[str]] = []
     monkeypatch.setattr(sync, "observe", lambda *_a: _status())
     monkeypatch.setattr(sync, "_report_inflight", lambda *_a, **_k: None)
     monkeypatch.setattr(sync, "_stream", lambda cmd, **_k: streamed.append(cmd) or 0)
-    assert sync.sync_main(_WORKSPACE, sync.SyncOptions(full=True)) == 0
+    workspace = _workspace_with_source_config(tmp_path)
+    assert sync.sync_main(workspace, sync.SyncOptions(full=True)) == 0
     assert ["mise", "run", "verify-local"] in streamed
 
 

@@ -146,6 +146,9 @@ graphify-out/
 /progress.md
 /.planning/
 /.active_plan
+# A canonical sync may write a private, same-directory native override while
+# it owns a live operation. The file is removed when that operation ends.
+/.devcontainer/.sync-override-*.json
 # The attestation is a SHA of the working-tree plan bytes, which change on every
 # plan edit -- tracking it would guarantee a mismatch for anyone else. The
 # sibling `.mode` file IS tracked: it is a reviewed project setting.
