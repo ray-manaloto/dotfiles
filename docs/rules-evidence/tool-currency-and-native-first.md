@@ -99,3 +99,48 @@ _Named in the extracted text but **not** resolved during this extraction (do not
 treat these as verified links): `jdx/mise` (issue #7700, the
 `github>jdx/renovate-config` preset) and the knowledge-base sibling repo that
 hosts `kb_setup.currency`._
+
+
+## From the rule: Why this rule exists
+
+The managed tools here (mise, hk, Renovate, uv, docker, chezmoi) move fast, and
+their **docs lag their code** — the merged CHANGELOG/PRs are often the only
+truthful source. Stated twice by Ray (2026-07-04).
+
+Canonical case: **Renovate's native `mise` manager + the
+`github>jdx/renovate-config` preset** made **8 of 11** hand-rolled
+`customManagers` redundant (PR #161).
+
+The failure mode this prevents: shipping (or preserving) homegrown machinery for
+a problem the tool already solves — paying maintenance cost forever, and often
+getting a *weaker* result (version-only vs sha256-verified) than the native path.
+
+Two lessons the case history is worth reading for: an *assumption* about a tool
+lags its code exactly as docs do (the conda-lockfile claim that failed 0/3 on
+probing), and a superseded file can leave two of your own docs asserting
+opposite things for weeks. Cases, tables and the currency-engine wiring:
+`docs/rules-evidence/tool-currency-and-native-first.md`.
+
+
+## From the rule: Introduction — relationship to the earlier native-first rule
+
+This is the currency-over-time sibling of `use-tool-builtins.md`: that rule says
+*prefer the built-in over inventing one now*; this rule says *keep checking,
+because the built-in you needed may have shipped since you last looked — and the
+custom code you wrote last year may now be dead weight.*
+
+
+## From the rule: How currency is checked now — engine architecture
+
+Version-currency MECHANICS live in the **shared `kb_setup.currency` engine** (a
+SHA-pinned `uv` git dep on the knowledge-base package — one implementation, both
+repos). This repo declares `currency.toml` and two thin tasks:
+
+
+## From the rule: How currency is checked now — audit wiring inventory
+
+Machine enforcement is partial by nature — `workflow.tool-currency-wiring`
+(suites.toml) asserts the whole chain exists, `pin_parity` catches drift across
+every declared pin site, Renovate PRs carry the CHANGELOG, and agnix
+validates this file structurally. Detail:
+`docs/rules-evidence/tool-currency-and-native-first.md`.

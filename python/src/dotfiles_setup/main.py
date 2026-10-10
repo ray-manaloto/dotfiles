@@ -112,6 +112,7 @@ from dotfiles_setup.image import ImageCommand
 from dotfiles_setup.image import main as image_main
 from dotfiles_setup.image_lock import image_lock_main
 from dotfiles_setup.install_doctor import install_doctor_main
+from dotfiles_setup.instruction_total import DEFAULT_LIMIT, instruction_total_main
 from dotfiles_setup.instructions_report import instructions_report_main
 from dotfiles_setup.lane_result import lane_receipt_main
 from dotfiles_setup.lint import (
@@ -573,6 +574,17 @@ def _add_session_evidence_arguments(review_parser: argparse.ArgumentParser) -> N
     )
 
 
+def _add_instruction_total_subcommand(subparsers: _SubParsers) -> None:
+    """Register the aggregate gate outside the honesty helper's statement budget."""
+    instruction_total_parser = subparsers.add_parser(
+        "instruction-total",
+        help="Bound the aggregate eager instruction character count at launch",
+    )
+    instruction_total_parser.add_argument("--root", type=Path)
+    instruction_total_parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    instruction_total_parser.add_argument("--json", action="store_true")
+
+
 def _add_instructions_report_subcommand(subparsers: _SubParsers) -> None:
     """Register `instructions-report` (#917).
 
@@ -958,6 +970,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         ".devcontainer/scripts/*.sh must be allowlisted and within its "
         "per-file line budget (new/grown scripts fail — move logic to python/)",
     )
+    _add_instruction_total_subcommand(subparsers)
     _add_instructions_report_subcommand(subparsers)
     _add_audit_aggregate_subcommand(subparsers)
     subparsers.add_parser(
@@ -3162,6 +3175,13 @@ def _build_command_handlers(
             apt_pins_main(project_root, json_output=args.json)
         ),
         "bash-budget": lambda: sys.exit(bash_budget_main(project_root)),
+        "instruction-total": lambda: sys.exit(
+            instruction_total_main(
+                args.root or project_root,
+                limit=args.limit,
+                json_output=args.json,
+            )
+        ),
         "skills-mirror": lambda: sys.exit(
             skills_mirror_main(project_root, check=args.check)
         ),
