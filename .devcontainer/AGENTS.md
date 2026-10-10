@@ -189,10 +189,10 @@ contract rejects stderr suppression, so do not add `2>/dev/null`.
 the magic socket path is Docker-Desktop-only and silently breaks on
 Colima (`abiosoft/colima#1330`, `#942`; tracked in issue #78).
 
-DD exposes the macOS launchd SSH agent at
-`/run/host-services/ssh-auth.sock`. Bind-mount it and set
-`SSH_AUTH_SOCK` via `containerEnv` (not `remoteEnv`). Authority:
-`devcontainers/cli#441`. Research:
+DD exposes the macOS SSH agent at `/run/host-services/ssh-auth.sock`.
+Bind-mount it; set `SSH_AUTH_SOCK` via `runArgs --env` (not `remoteEnv`),
+avoiding a CLI-generated Dockerfile `ENV` sensitive-key warning.
+Authority: `devcontainers/cli#441`. Research:
 `docs/research/runs/research-20260409c-dockerdesktop-ssh/`.
 
 **R1 inbound**: `ghcr.io/devcontainers/features/sshd@1.1.0` on internal

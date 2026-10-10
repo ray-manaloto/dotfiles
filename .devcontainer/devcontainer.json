@@ -38,8 +38,9 @@
 // (R2) OUTBOUND agent: `ssh -T git@github.com` inside the container
 //      reaches the host's launchd SSH agent via Docker Desktop's
 //      native `/run/host-services/ssh-auth.sock` magic socket,
-//      bind-mounted into the container and pointed at by
-//      `containerEnv.SSH_AUTH_SOCK`. The socket arrives as
+//      bind-mounted into the container and pointed at by the
+//      container-wide `SSH_AUTH_SOCK` passed through `runArgs --env`.
+//      The socket arrives as
 //      root:root 0660 and must be chowned to the container user.
 //      This chown runs in BOTH `postCreateCommand` (so first-create
 //      smoke, which runs inside postCreate, sees an accessible socket)
@@ -114,6 +115,10 @@
     // workspace's hash and arch, so two concurrent `up`s cannot share it.
     // Supplied by `mise run up` via `dotfiles-setup devcontainer env`.
     "${localEnv:DEVCONTAINER_ENV_FILE}",
+    // Keep R2 available to every container process without baking the
+    // SSH_AUTH_SOCK key into the CLI-generated Dockerfile ENV layer.
+    "--env",
+    "SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock",
     "--platform=${localEnv:DOTFILES_PLATFORM}",
   ],
   "remoteUser": "${localEnv:USER}",
@@ -220,14 +225,6 @@
     // feedback_devcontainer_only_mise_overlay.md (auto-memory).
     "DEVCONTAINER": "true",
 
-    // Docker Desktop's native magic socket for SSH agent forwarding
-    // (R2 outbound: `ssh -T git@github.com` inside the container reaches
-    // the host's launchd SSH agent — no host-side proxy needed). The
-    // socket is bind-mounted via `mounts` above; this env var points
-    // tools at it. Docker-Desktop-only — Colima has no equivalent
-    // (`abiosoft/colima#1330`, #942; deferred follow-up #78). See
-    // docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md.
-    "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock",
   },
   "features": {
     "ghcr.io/devcontainers/features/sshd:1": {},
