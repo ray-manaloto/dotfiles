@@ -144,7 +144,7 @@ jobs:
           auto-merge: "true"
       - name: Upload diagnostic logs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: lock-refresh-logs
           path: /tmp/mise.log
@@ -196,7 +196,7 @@ jobs:
         run: mise run standing-issue -- --repo "$REPO" --title "LLVM major currency (daily)" --close --close-comment "LLVM major current, nothing held."
       - name: Upload LLVM report artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: llvm-currency-report
           path: /tmp/llvm-currency.md
@@ -238,7 +238,7 @@ jobs:
         run: mise run standing-issue -- --repo "$REPO" --title "apt pin liveness (daily)" --close --close-comment "All exact pins are published in the live index for each arch."
       - name: Upload apt publication report artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: apt-pin-liveness-report
           path: /tmp/apt-pin-liveness.md
@@ -309,7 +309,7 @@ jobs:
           fi
       - name: Upload report artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tool-currency-report
           path: /tmp/tool-currency.md
