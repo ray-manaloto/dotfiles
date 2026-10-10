@@ -176,7 +176,7 @@ per_path_tokens = { ".devcontainer/devcontainer.json" = [
 
 [[suite]]
 name = "build.ssh-r2-outbound-native-docker-desktop-wired"
-description = "R2 OUTBOUND: ssh -T git@github.com inside the container reaches the host launchd SSH agent via Docker Desktop's native /run/host-services/ssh-auth.sock magic socket. Requires: (1) devcontainer.json bind-mounts /run/host-services/ssh-auth.sock; (2) containerEnv.SSH_AUTH_SOCK points at /run/host-services/ssh-auth.sock; (3) initializeCommand still writes authorized_keys (for R1 orthogonally). Research: docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md. Runtime pin: Docker Desktop only — Colima has no equivalent (abiosoft/colima#1330, #942), tracked for follow-up in issue #78."
+description = "R2 OUTBOUND: ssh -T git@github.com inside the container reaches the host launchd SSH agent via Docker Desktop's native /run/host-services/ssh-auth.sock magic socket. Requires: (1) devcontainer.json bind-mounts /run/host-services/ssh-auth.sock; (2) runArgs passes SSH_AUTH_SOCK to the whole container without a Dockerfile ENV layer; (3) initializeCommand still writes authorized_keys (for R1 orthogonally). Research: docs/research/runs/research-20260409c-dockerdesktop-ssh/report.md. Runtime pin: Docker Desktop only — Colima has no equivalent (abiosoft/colima#1330, #942), tracked for follow-up in issue #78."
 category = "build"
 check_type = "static"
 handler = "require_tokens"
@@ -184,9 +184,19 @@ paths = [".devcontainer/devcontainer.json"]
 per_path_tokens = { ".devcontainer/devcontainer.json" = [
     "source=/run/host-services/ssh-auth.sock",
     "target=/run/host-services/ssh-auth.sock",
-    "\"SSH_AUTH_SOCK\": \"/run/host-services/ssh-auth.sock\"",
+    "\"--env\"",
+    "\"SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock\"",
     "dotfiles-setup docker initialize-host\"",
 ] }
+
+[[suite]]
+name = "build.ssh-agent-socket-not-baked-into-overlay"
+description = "The CLI generates Dockerfile ENV instructions from containerEnv; placing SSH_AUTH_SOCK there triggers BuildKit's SecretsUsedInArgOrEnv warning. The socket path belongs in runArgs --env, which the R2 contract above requires."
+category = "build"
+check_type = "static"
+handler = "regex_forbid"
+paths = [".devcontainer/devcontainer.json"]
+pattern = '(?m)^\s*"SSH_AUTH_SOCK"\s*:'
 
 [[suite]]
 name = "build.devcontainer-no-secret-argv"
