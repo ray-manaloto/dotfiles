@@ -28,7 +28,9 @@ def _invoke(
         capture_output=True,
         text=True,
         env=env,
-        timeout=3,
+        # Cold subprocess startup under the AMD64 devcontainer can exceed 3s.
+        # This is a hang guard, not a hook latency assertion.
+        timeout=15,
         check=True,
     )
     return json.loads(result.stdout)
