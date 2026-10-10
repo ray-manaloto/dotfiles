@@ -258,6 +258,29 @@ def test_no_bump_keeps_mise_native_preserve_semantics() -> None:
     assert [a for a in bumped if a != "--bump"] == kept
 
 
+def test_native_upgrade_preserves_versions_and_targets_every_image_platform() -> None:
+    argv = image_lock.lock_command(
+        Path("/m"),
+        Path("/s"),
+        ("linux-x64", "linux-arm64"),
+        bump=False,
+        upgrade=True,
+    )
+    assert argv == [
+        "/m",
+        "lock",
+        "--upgrade",
+        "--platform",
+        "linux-x64",
+        "--platform",
+        "linux-arm64",
+        "-C",
+        "/s",
+    ]
+    with pytest.raises(ValueError, match="preserve existing versions"):
+        image_lock.lock_command(Path("/m"), Path("/s"), ("linux-x64",), upgrade=True)
+
+
 def test_no_bump_survives_the_route_into_the_container(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -276,6 +299,29 @@ def test_no_bump_survives_the_route_into_the_container(
     settings = image_lock.LockRun(bump=False)
     assert image_lock.image_lock_main(Path("/repo"), settings=settings) == 0
     assert seen == [["dc", "--no-bump"]]
+
+
+def test_native_upgrade_survives_the_container_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[list[str]] = []
+    monkeypatch.setattr(image_lock, "host_can_lock", lambda: (False, "macOS"))
+
+    def fake_run(argv: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
+        seen.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(image_lock.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        image_lock, "container_command", lambda _root, extra=(): ["dc", *extra]
+    )
+    assert (
+        image_lock.image_lock_main(
+            Path("/repo"), settings=image_lock.LockRun(bump=False, upgrade=True)
+        )
+        == 0
+    )
+    assert seen == [["dc", "--no-bump", "--upgrade"]]
 
 
 def test_the_composite_delegates_instead_of_re_inlining_the_recipe(

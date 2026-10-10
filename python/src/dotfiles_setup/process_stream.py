@@ -60,6 +60,9 @@ def terminate_group(process: subprocess.Popen[bytes]) -> None:
     _send_group_signal(process, signal.SIGTERM)
     expires_at = time.monotonic() + _TERM_GRACE_S
     while time.monotonic() < expires_at:
+        # Reap an exited leader before probing its group: on Linux, an
+        # unreaped zombie keeps killpg(..., 0) reporting that group as alive.
+        process.poll()
         if not _group_alive(process):
             break
         time.sleep(0.05)

@@ -6,7 +6,7 @@ separately so each only invalidates when ITS inputs change:
 
 - `:base-<base_hash>` — devcontainer-base stage (apt + mise install +
   cargo crates). ~30 min cold. Invalidates on Dockerfile base-section
-  changes, mise-system.lock drift, BASE_IMAGE bump.
+  changes, mise-system.lock or referenced sidecar drift, BASE_IMAGE bump.
 - `:p2996-<p2996_hash>` — clang-builder-cold + p2996-export stages.
   ~80-120 min cold. Invalidates on CLANG_P2996_REF bump, p2996-section
   Dockerfile changes, BUILDER_IMAGE digest bump, or PLATFORM change.
@@ -34,6 +34,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.lock_sidecars import verify_lock_sidecars
 from dotfiles_setup.platform_target import platform_arch
 
 if TYPE_CHECKING:
@@ -76,6 +77,7 @@ class BaseHashInputs:
     platform: str
     base_section_digest: str
     mise_lock_digest: str
+    mise_sidecars_digest: str
     mise_system_config_digest: str
     shared_config_digest: str
     hk_config_digest: str
@@ -90,6 +92,7 @@ class BaseHashInputs:
         for field_name in (
             "base_section_digest",
             "mise_lock_digest",
+            "mise_sidecars_digest",
             "mise_system_config_digest",
             "shared_config_digest",
             "hk_config_digest",
@@ -147,8 +150,8 @@ class DevHashInputs:
 
     The devcontainer-runtime stage (#160 T9/T10) COPYs two repo files
     OUTSIDE the base sentinels — mise-runtime.toml and mise-runtime.lock —
-    so their BYTES are dev-hash inputs here (the COPY-input rule that
-    #140/#156 established for the base tier).
+    plus the runtime lock's native sidecars, so their BYTES are dev-hash
+    inputs here (the COPY-input rule that #140/#156 established for base).
     """
 
     base_hash: str
@@ -158,6 +161,7 @@ class DevHashInputs:
     dev_target_digest: str
     runtime_config_digest: str
     runtime_lock_digest: str
+    runtime_sidecars_digest: str
 
     def __post_init__(self) -> None:
         """Reject empty literals + ill-shaped hashes."""
@@ -179,6 +183,7 @@ class DevHashInputs:
             "dev_target_digest",
             "runtime_config_digest",
             "runtime_lock_digest",
+            "runtime_sidecars_digest",
         ):
             _validate_hex_digest(
                 getattr(self, field_name), f"DevHashInputs.{field_name}"
@@ -330,6 +335,25 @@ def _file_digest(path: Path) -> str:
     return _sha256_hex(path.read_bytes())
 
 
+def _sidecar_digest(lock_path: Path, root: Path) -> str:
+    """Hash every referenced native graph byte, after checking its lock digest.
+
+    mise's lock digest covers the native lockfile but not its companion
+    manifest. Docker COPYs both, so a manifest-only edit must move the cache
+    key as well. Include paths to distinguish equal bytes under different
+    graph names, and ignore unreferenced files the collector never copies.
+    """
+    paths = (
+        file for graph in verify_lock_sidecars(lock_path, root) for file in graph.files
+    )
+    resolved_root = root.resolve()
+    return _sha256_hex(
+        RECORD_SEPARATOR.join(
+            f"{file.relative_to(resolved_root)}={_file_digest(file)}" for file in paths
+        )
+    )
+
+
 def gather_base_inputs(
     repo_root: Path, *, platform: str | None = None
 ) -> BaseHashInputs:
@@ -343,13 +367,10 @@ def gather_base_inputs(
     base_section = _extract_dockerfile_section(
         dockerfile_text, BASE_SECTION_BEGIN, BASE_SECTION_END
     )
-    # The Dockerfile base section COPYs mise-system.lock verbatim into the
-    # image (/usr/local/share/mise/mise.lock) and `mise install --system
-    # --locked` consumes it, so its BYTES are a build input. The lock (rattler
-    # conda sha256 + version pins for all backends) replaces the retired
-    # version-only mise-system-resolved.json snapshot: conda-forge drift now
-    # moves the lock's checksums, busting the cache deterministically. See
-    # epic #160.
+    # The Dockerfile base section COPYs mise-system.lock and its referenced
+    # native graphs into the image. The lock hashes each uv/aube lockfile but
+    # not its companion manifest, so both graph files must feed the base key.
+    # The lock itself also records rattler conda sha256 and version pins.
     lock_path = repo_root / ".devcontainer" / "mise-system.lock"
     # The base section also COPYs mise-system.toml verbatim into the image
     # (/usr/local/share/mise/config.toml), so its BYTES are a build input. The
@@ -379,6 +400,9 @@ def gather_base_inputs(
         platform=resolve_bake_platform(bake_text, override=platform),
         base_section_digest=_sha256_hex(base_section),
         mise_lock_digest=_file_digest(lock_path),
+        mise_sidecars_digest=_sidecar_digest(
+            lock_path, repo_root / ".devcontainer/.mise/locks"
+        ),
         mise_system_config_digest=_file_digest(mise_system_config_path),
         shared_config_digest=_file_digest(shared_config_path),
         hk_config_digest=hk_config_digest,
@@ -395,6 +419,7 @@ def compute_base_hash(inputs: BaseHashInputs) -> str:
             f"platform={inputs.platform}",
             f"base_section={inputs.base_section_digest}",
             f"mise_lock={inputs.mise_lock_digest}",
+            f"mise_sidecars={inputs.mise_sidecars_digest}",
             f"mise_system_config={inputs.mise_system_config_digest}",
             f"shared_config={inputs.shared_config_digest}",
             f"hk_config={inputs.hk_config_digest}",
@@ -505,6 +530,10 @@ def gather_dev_inputs(
         runtime_lock_digest=_sha256_hex(
             (repo_root / ".devcontainer" / "mise-runtime.lock").read_text()
         ),
+        runtime_sidecars_digest=_sidecar_digest(
+            repo_root / ".devcontainer/mise-runtime.lock",
+            repo_root / ".devcontainer/.mise/locks",
+        ),
     )
 
 
@@ -521,6 +550,7 @@ def compute_dev_hash(inputs: DevHashInputs) -> str:
             f"dev_target={inputs.dev_target_digest}",
             f"runtime_config={inputs.runtime_config_digest}",
             f"runtime_lock={inputs.runtime_lock_digest}",
+            f"runtime_sidecars={inputs.runtime_sidecars_digest}",
         ],
     )
     return _sha256_hex(canonical)[:HASH_LENGTH]

@@ -33,6 +33,13 @@ from dotfiles_setup.main import setup_parser
 from dotfiles_setup.platform_target import mise_lock_platforms
 
 REPO_ROOT = Path(__file__).parent.parent
+_REAL_WRITER_MATCHES_IMAGE = lock_shared.writer_matches_image
+
+
+@pytest.fixture(autouse=True)
+def _known_compatible_writer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Existing command-shape tests fake the external version preflight."""
+    monkeypatch.setattr(lock_shared, "writer_matches_image", lambda *_a, **_k: True)
 
 
 def _completed(rc: int, stdout: str = "") -> subprocess.CompletedProcess[str]:
@@ -49,6 +56,74 @@ def _workspace_mise_toml() -> str:
     basename without hardcoding "dotfiles" and without being tautological.
     """
     return f"/workspaces/{resolve_names(workspace=REPO_ROOT).basename}/mise.toml"
+
+
+@pytest.mark.parametrize(
+    ("reported", "expected"),
+    [("2026.10.7 linux-x64", "match"), ("2026.9.8 linux-x64", "reject")],
+)
+def test_writer_version_probe_blocks_old_guest_before_a_lock_call(
+    monkeypatch: pytest.MonkeyPatch, reported: str, expected: str
+) -> None:
+    monkeypatch.setattr(lock_shared, "writer_matches_image", _REAL_WRITER_MATCHES_IMAGE)
+    calls: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        return _completed(0, reported)
+
+    monkeypatch.setattr(lock_shared.subprocess, "run", fake_run)
+    assert lock_shared.writer_matches_image(REPO_ROOT, route=True) is (
+        expected == "match"
+    )
+    assert len(calls) == 1
+    assert calls[0][-2:] == ["mise", "--version"]
+
+
+def test_old_guest_is_rejected_before_shared_lock_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(lock_shared, "writer_matches_image", _REAL_WRITER_MATCHES_IMAGE)
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (False, "Darwin"))
+    calls: list[list[str]] = []
+
+    def fake_run(
+        argv: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        return _completed(0, "2026.9.8 linux-x64")
+
+    monkeypatch.setattr(lock_shared.subprocess, "run", fake_run)
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"]) == 1
+    assert len(calls) == 1
+    assert calls[0][-2:] == ["mise", "--version"]
+
+
+def test_shared_lock_stops_before_coverage_when_native_graph_is_damaged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(lock_shared, "host_can_lock", lambda: (True, "Linux/x86_64"))
+    monkeypatch.setattr(lock_shared.subprocess, "run", lambda *_a, **_k: _completed(0))
+
+    def reject_graph(*_args: object, **_kwargs: object) -> None:
+        msg = "bad graph"
+        raise ValueError(msg)
+
+    monkeypatch.setattr(
+        lock_shared,
+        "verify_lock_sidecars",
+        reject_graph,
+    )
+    checked: list[str] = []
+    monkeypatch.setattr(
+        lock_shared,
+        "lock_integrity_main",
+        lambda _root: (checked.append("ran"), 0)[1],
+    )
+    assert lock_shared.lock_shared_main(REPO_ROOT, ["uv"], container=False) == 1
+    assert not checked
 
 
 # --------------------------------------------------------------------------- #

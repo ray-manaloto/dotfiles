@@ -40,9 +40,13 @@ runs:
         # mise release (e.g. 2026.7.12's aube default) can change install
         # behavior mid-day and break CI with no repo change. Bump in lockstep.
         version: "2026.10.7"
+        # mise-action v5.1.1 hashes *.toml/*.lock configs but omits native v3
+        # graph files. A manifest-only edit must miss its installed-tool cache.
+        cache_key_prefix: mise-v3-${{ hashFiles('.mise/locks/**', '.config/mise/locks/**') }}
         install_args: "bun pipx"
     - name: Install tools
       uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
       with:
         version: "2026.10.7"
+        cache_key_prefix: mise-v3-${{ hashFiles('.mise/locks/**', '.config/mise/locks/**') }}
         install_args: ${{ inputs.install_args }}

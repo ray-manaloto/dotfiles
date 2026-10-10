@@ -37,6 +37,10 @@ hadolint = "2.15.1"
 hk = "2.3.0"
 jq = "1.8.2"
 pinact = "5.0.0"
+# Host azure-cli and image CodeChecker use native mise's `uvx = false`
+# version-only route because their published releases are source-only. Both
+# therefore need pipx before installation; setup-mise installs it in pass 1.
+pipx = "1.17.12"
 "pipx:check-jsonschema" = "0.38.0"
 pixi = "0.78.0"
 pkl = "0.32.1"

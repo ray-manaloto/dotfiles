@@ -136,6 +136,7 @@ BASE_INPUT_PATTERNS: tuple[str, ...] = (
     ".devcontainer/Dockerfile",
     ".devcontainer/mise-system.toml",
     ".devcontainer/mise-system.lock",
+    ".devcontainer/.mise/locks/**",
     ".devcontainer/mise-runtime.toml",
     ".devcontainer/mise-runtime.lock",
     ".config/mise/conf.d/shared.toml",

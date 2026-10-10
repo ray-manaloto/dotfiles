@@ -135,9 +135,12 @@ jobs:
           branch: chore/lock-refresh
           paths: |
             mise.lock
+            .mise/locks/**
             .config/mise/mise.lock
+            .config/mise/locks/**
             .devcontainer/mise-system.lock
             .devcontainer/mise-runtime.lock
+            .devcontainer/.mise/locks/**
             .devcontainer/devcontainer-lock.json
           labels: lockfile
           summary-heading: Lock refresh
@@ -431,7 +434,8 @@ jobs:
             tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
             tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
-            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance \
+            tests/test_lock_coverage.py::test_image_sidecars_match_locks
       - name: Regenerate image locks
         if: steps.drift-check.outcome == 'failure'
         env:
@@ -464,8 +468,9 @@ jobs:
             tests/test_lock_coverage.py::test_runtime_lock_versions_match_pins \
             tests/test_lock_coverage.py::test_system_lock_covers_merged_config \
             tests/test_lock_coverage.py::test_runtime_lock_covers_runtime_config \
-            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance
-      - name: Confirm the diff is confined to the two image locks
+            tests/test_lock_coverage.py::test_image_locks_carry_no_provenance \
+            tests/test_lock_coverage.py::test_image_sidecars_match_locks
+      - name: Confirm the diff is confined to image locks and sidecars
         # Two guards in one step: (1) `continue-on-error: true` on the drift
         # check converts ANY non-pass outcome (a real failure, but also a
         # pytest collection error, a renamed node ID, a network flake) into
@@ -484,7 +489,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          unexpected=$(git status --porcelain -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock')
+          unexpected=$(git status --porcelain -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' ':!.devcontainer/.mise/locks/**')
           if [ -n "$unexpected" ]; then
             echo "regeneration touched files outside the image locks:" >&2
             echo "$unexpected" >&2
@@ -496,8 +501,8 @@ jobs:
             # self-diagnosing. Untracked files have no diff; the status
             # lines above already name them.
             echo "--- what changed in the unexpected tracked paths ---" >&2
-            git diff --stat -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' >&2
-            git diff -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' >&2
+            git diff --stat -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' ':!.devcontainer/.mise/locks/**' >&2
+            git diff -- . ':!.devcontainer/mise-system.lock' ':!.devcontainer/mise-runtime.lock' ':!.devcontainer/.mise/locks/**' >&2
             exit 1
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -537,6 +542,7 @@ jobs:
         if: steps.drift-check.outcome == 'failure' && steps.confine-check.outputs.changed == 'true'
         run: |
           git add .devcontainer/mise-system.lock .devcontainer/mise-runtime.lock
+          git add -A .devcontainer/.mise/locks
           git commit -m "chore: regenerate image locks for this PR's pin bump (#887)"
       - name: Push to the PR branch
         # Pushed via a tokenized remote URL (App token in env, never
