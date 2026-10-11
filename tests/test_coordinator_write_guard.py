@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -29,6 +30,17 @@ _LANE = "dotfiles-20261003T120000.L1-docs-rules"
 _PROJECT = Path(__file__).resolve().parent.parent
 _TWO_CALLS = 2
 _GIT_ERROR = 128
+
+
+@pytest.fixture(autouse=True)
+def _base_git_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep five-second guard probes independent of mise shim startup load."""
+    git = shutil.which("git", path=os.defpath)
+    assert git is not None, "base-OS Git is required by tests/AGENTS.md"
+    git_bin = tmp_path / "git-bin"
+    git_bin.mkdir()
+    (git_bin / "git").symlink_to(git)
+    monkeypatch.setenv("PATH", f"{git_bin}{os.pathsep}{os.environ['PATH']}")
 
 
 def _git(root: Path, *args: str) -> None:

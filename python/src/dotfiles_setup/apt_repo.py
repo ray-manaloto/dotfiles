@@ -34,15 +34,16 @@ this testable offline (`tests/test_apt_repo.py`).
 from __future__ import annotations
 
 import gzip
+import importlib
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from debian.deb822 import Packages
-
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+
+    from debian.deb822 import Packages
 
     Fetcher = Callable[[str], bytes]
 
@@ -150,8 +151,9 @@ def parse_packages(raw: bytes) -> list[AptPackage]:
     `use_apt_pkg=False` selects python-debian's pure-python parser, so this
     runs anywhere — including hosts with no libapt.
     """
+    packages_type: type[Packages] = importlib.import_module("debian.deb822").Packages
     out: list[AptPackage] = []
-    for para in Packages.iter_paragraphs(raw, use_apt_pkg=False):
+    for para in packages_type.iter_paragraphs(raw, use_apt_pkg=False):
         name = para.get("Package")
         if not name:
             continue

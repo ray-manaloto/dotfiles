@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,8 +35,16 @@ def _payload(tool: str, **tool_input: str) -> str:
 
 
 @pytest.fixture
-def worktree_session(tmp_path: Path) -> tuple[Path, Path, Path]:
+def worktree_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path, Path]:
     """A real main checkout and two registered managed worktrees (P2/P3)."""
+    git = shutil.which("git", path=os.defpath)
+    assert git is not None, "base-OS Git is required by tests/AGENTS.md"
+    git_bin = tmp_path / "git-bin"
+    git_bin.mkdir()
+    (git_bin / "git").symlink_to(git)
+    monkeypatch.setenv("PATH", f"{git_bin}{os.pathsep}{os.environ['PATH']}")
     main = tmp_path / "repo"
     main.mkdir()
     commands = [

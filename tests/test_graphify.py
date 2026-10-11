@@ -61,6 +61,39 @@ from dotfiles_setup.graphify_hook import hook_guard_main, rewrite_hook_nudge
 GRAPHIFY_VERSION = locked_version(Path(__file__).parent.parent)
 
 
+def test_cli_parser_leaves_receipt_and_package_parsers_unloaded() -> None:
+    """CLI parsing needs neither KB receipt decoding nor Debian package parsing.
+
+    This file imports GraphifyBuildReceipt during collection, so only a fresh
+    interpreter can prove the CLI's startup boundary. Use the test runner's
+    interpreter and an explicit source path to keep dependency and cwd parity.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import json, sys\n"
+                "sys.path.insert(0, sys.argv[1])\n"
+                "from dotfiles_setup.main import setup_parser\n"
+                "args = setup_parser().parse_args(['session-review'])\n"
+                "tracked = ('kb_setup.graph', 'debian.deb822')\n"
+                "print(json.dumps({'command': args.command, "
+                "'loaded': [name for name in tracked if name in sys.modules]}))\n"
+            ),
+            str(repo / "python/src"),
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"command": "session-review", "loaded": []}
+
+
 @pytest.fixture(autouse=True)
 def locked_graphify_version(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep graph-health fixtures independent of a synthetic uv.lock."""

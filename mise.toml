@@ -85,19 +85,15 @@ lefthook = "2.2.1"
 # skip the tool entirely, so no linux URL is demanded.
 "conda:ffmpeg" = { version = "9.0.1", os = ["macos"] }
 aws-cli = { version = "2.37.12", symlink_bins = "true" }
-# pipx exists ONLY to serve the `uvx = false` below: that flag routes the
-# install through real pipx, and mise's own error names the fix ("Install
-# pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
-# mise-action pass, alongside bun, because mise does not guarantee ordering
-# within one pass -- the same hazard that comment already documents for bun.
-pipx = "1.17.12"
+# pipx is pinned in shared.toml: host azure-cli and image CodeChecker both
+# need the real pipx installer for their source-only PyPI releases.
 # Backend-qualified deliberately. The bare `azure-cli` name resolves only
 # through mise's registry, and the `azure-cli -> pypi:azure-cli` alias is
 # absent in older mise (2026.9.1 answered "not found in mise tool registry",
 # suggesting `azure`), so a version skew between host and CI silently breaks
 # one side. Naming the backend skips the lookup on every version.
-# `uvx = false` is load-bearing: it short-circuits 2026.9.7's --no-build
-# lockfile path onto legacy version-only locking (see commit 3744cea).
+# `uvx = false` is load-bearing: this source-only package cannot produce a
+# wheel-only native graph, so mise uses version-only locking through pipx.
 "pypi:azure-cli" = { version = "2.91.0", uvx = false }
 docker-cli = "29.9.0"
 opencode = "1.18.35"
@@ -318,19 +314,19 @@ depends = ["pre-commit", "test"]
 
 [tasks.test]
 description = "Run Python test suite"
-run = "uv run --project python pytest tests/ -x -q"
+run = "uv run --project python python -m dotfiles_setup.pytest_runner --label mise-test -- tests/ -x"
 
 [tasks.test-hook-isolated]
 description = "Run the Python suite without credentials or hook-exported Git-local variables"
 # Queues on the host-wide heavy-gate lock (host_lock.py): this is the pre-push
 # suite, and under `mise run ship` it re-enters the lock ship already holds.
-run = "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- dotfiles-setup process git-isolated -- uv run --project python pytest tests/ -x -q"
+run = "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- dotfiles-setup process git-isolated -- uv run --project python python -m dotfiles_setup.pytest_runner --label pre-push -- tests/ -x"
 
 [tasks.smoke-exec]
 description = "Run the containerized real-toolchain exec tests against the local :dev image (needs Docker + `mise run sync`; tier-3 compiles under Rosetta — minutes)"
-# `-m image_exec` re-selects the tests the root pytest.ini deselects by default
+# `-m image_exec` re-selects the tests the native pytest config deselects by default
 # (last -m wins), so these run ONLY here, never in `mise run test` / CI.
-run = "uv run --project python pytest -m image_exec tests/test_image_smoke_exec.py -v"
+run = "uv run --project python python -m dotfiles_setup.pytest_runner --label image-exec -- -m image_exec tests/test_image_smoke_exec.py"
 
 [tasks.up]
 description = "Bring the devcontainer up via the official @devcontainers/cli (Mac-local)"
@@ -773,11 +769,11 @@ run = 'uv run --project python dotfiles-setup codex-lane'
 
 [tasks.codex-lane-e2e]
 description = "The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper, asserting an edge comes out. COSTS CREDITS — deselected from `mise run test` and CI by the codex_exec marker"
-# `-m codex_exec` re-selects what the root pytest.ini deselects by default
+# `-m codex_exec` re-selects what the native pytest config deselects by default
 # (last -m wins), the same gating shape as `mise run smoke-exec`. Everything in
 # #580 was unit-level, and a fixture that writes what the code reads structurally
 # cannot catch a producer/consumer mismatch — this is the arm that can.
-run = 'uv run --project python pytest -m codex_exec tests/test_codex_lane_e2e.py -v'
+run = 'uv run --project python python -m dotfiles_setup.pytest_runner --label codex-lane -- -m codex_exec tests/test_codex_lane_e2e.py'
 
 [tasks.apt-repo]
 description = "List the packages an apt repository publishes (defaults to apt.llvm.org)"

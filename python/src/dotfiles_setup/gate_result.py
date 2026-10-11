@@ -6,14 +6,14 @@ from __future__ import annotations
 import argparse
 import enum
 import re
-import subprocess
+import shutil
 import sys
 import time
 from pathlib import Path
 from typing import Final
 from urllib.parse import quote
 
-from dotfiles_setup import codec, host_lock
+from dotfiles_setup import codec, host_lock, process_stream
 
 __all__ = [
     "GATE_COMMANDS",
@@ -57,7 +57,20 @@ RESULTS_DIR: Final = ".agent/gate-results"
 # This is policy data, not discovery. Unknown names never become commands.
 GATE_COMMANDS: Final[dict[str, tuple[str, ...]]] = {
     "lint": ("mise", "run", "lint"),
-    "pytest": ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
+    "pytest": (
+        "uv",
+        "run",
+        "--project",
+        "python",
+        "python",
+        "-m",
+        "dotfiles_setup.pytest_runner",
+        "--label",
+        "gate-pytest",
+        "--",
+        "tests/",
+        "-x",
+    ),
     "verify": ("mise", "run", "verify"),
     "lint-docs": ("mise", "run", "lint-docs"),
     "pin-actions": ("mise", "run", "pin-actions"),
@@ -168,7 +181,10 @@ def run_gate(repo_root: Path, gate: str, timeout_s: float | None = None) -> Gate
         with host_lock.held(
             host_lock.HEAVY_GATE, f"gate {gate} ({repo_root})", wait_s=timeout_s
         ) as lock_fd:
-            return _run_declared(repo_root, gate, command, timeout_s, lock_fd)
+            effective_fd = (
+                lock_fd if lock_fd is not None else host_lock.inherited_heavy_lock_fd()
+            )
+            return _run_declared(repo_root, gate, command, timeout_s, effective_fd)
     except host_lock.HostLockTimeoutError as error:
         result = GateResult(
             gate=gate,
@@ -194,39 +210,36 @@ def _run_declared(
     ``lock_fd`` (the heavy-gate lock) is inherited by the child, so the lock
     stays held while the gate runs even if this process is killed.
     """
-    log_path = _log_path(repo_root, gate)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    run_dir = process_stream.new_run_dir(repo_root, f"gate-{gate}")
+    log_path = run_dir / "console.log"
+    stable_log = _log_path(repo_root, gate)
+    stable_log.unlink(missing_ok=True)
     started = time.perf_counter()
+    sys.stderr.write(f"[gate][start] {gate} console={log_path}\n")
+    sys.stderr.flush()
     try:
-        process = subprocess.Popen(
+        streamed = process_stream.run_streamed(
             command,
             cwd=repo_root,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            log_path=log_path,
+            timeout_s=timeout_s,
             pass_fds=() if lock_fd is None else (lock_fd,),
         )
-        try:
-            output, _ = process.communicate(timeout=timeout_s)
-            returncode = process.returncode
-            if returncode is None:
-                msg = "gate process was reaped without a return code"
-                raise RuntimeError(msg)
-            status = _status_for(returncode)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            output, _ = process.communicate()
-            returncode = process.returncode
-            if returncode is None:
-                msg = "timed-out gate process was reaped without a return code"
-                raise RuntimeError(msg) from None
-            status = _status_for(returncode, timed_out=True)
+        returncode = streamed.returncode
+        status = _status_for(returncode, timed_out=streamed.timed_out)
     except FileNotFoundError as error:
-        output = f"{error}\n".encode()
+        log_path.write_bytes(f"{error}\n".encode())
         returncode = STATUS_EXIT_CODES[GateStatus.TOOL_MISSING]
         status = _status_for(returncode, tool_missing=True)
 
     duration_s = time.perf_counter() - started
-    log_path.write_bytes(output)
+    output = log_path.read_bytes()
+    shutil.copyfile(log_path, stable_log)
+    sys.stderr.write(
+        f"[gate][end] {gate} rc={returncode} status={status.value} "
+        f"elapsed={duration_s:.2f}s console={log_path}\n"
+    )
+    sys.stderr.flush()
     result = GateResult(
         gate=gate,
         status=status,

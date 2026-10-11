@@ -6,7 +6,6 @@ from __future__ import annotations
 import itertools
 import json
 import shlex
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -165,39 +164,20 @@ def test_missing_executable_is_distinct_from_a_failing_gate(
     assert Path(result.log_path).is_file()
 
 
-def test_timeout_is_typed_without_waiting_on_wall_clock(
+def test_timeout_is_typed_and_retains_pre_deadline_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An immediate fake timeout retains the killed child's real return code."""
-
-    class TimedOutProcess:
-        returncode: int | None = None
-        killed = False
-
-        def communicate(self, timeout: float | None = None) -> tuple[bytes, None]:
-            if not self.killed:
-                assert timeout is not None
-                raise subprocess.TimeoutExpired(
-                    ("mise", "run", "lint"), timeout, output=b"ERROR partial\n"
-                )
-            return b"ERROR partial\n", None
-
-        def kill(self) -> None:
-            self.killed = True
-            self.returncode = -9
-
-    process = TimedOutProcess()
-    monkeypatch.setattr(
-        gate_result.subprocess, "Popen", lambda *_args, **_kwargs: process
-    )
+    """A real child is stopped after its first flush, retaining its signal rc."""
+    bin_dir = _fake_mise(tmp_path, "printf '%s' 'ERROR partial'\n/bin/sleep 30")
+    monkeypatch.setenv("PATH", str(bin_dir))
 
     result = gate_result.run_gate(tmp_path, "lint", timeout_s=0.25)
 
     assert result.status is gate_result.GateStatus.TIMED_OUT
-    assert result.returncode == -9
+    assert result.returncode != 0
     assert result.duration_s == 0.25
     assert result.failures == ("ERROR partial",)
-    assert Path(result.log_path or "").read_bytes() == b"ERROR partial\n"
+    assert Path(result.log_path or "").read_bytes() == b"ERROR partial"
 
 
 def test_main_cli_run_and_read_emit_matching_json_and_exit_codes(

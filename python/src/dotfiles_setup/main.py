@@ -777,6 +777,12 @@ def _add_image_lock_subcommand(subparsers: _SubParsers) -> None:
         "removes or edits a tool, so the lock diff is that tool alone. The daily "
         "refresh keeps the default --bump",
     )
+    image_lock_parser.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Migrate both image locks to mise's latest native format and "
+        "dependency sidecars; pair with --no-bump to preserve versions",
+    )
     container = image_lock_parser.add_mutually_exclusive_group()
     container.add_argument(
         "--container",
@@ -3192,7 +3198,9 @@ def _build_command_handlers(
                 platforms=tuple(args.platforms),
                 stage=args.stage,
                 container=args.container,
-                settings=image_lock.LockRun(passes=args.passes, bump=args.bump),
+                settings=image_lock.LockRun(
+                    passes=args.passes, bump=args.bump, upgrade=args.upgrade
+                ),
             )
         ),
         "path-drift": lambda: sys.exit(

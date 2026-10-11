@@ -39,8 +39,8 @@ Requires **Python 3.14**.
 ## Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q                # Run the test suite
-uv run --project python pytest tests/test_audit.py -x -q   # Single file
+mise run test                                                # Run the test suite
+uv run --project python python -m dotfiles_setup.pytest_runner --label audit -- tests/test_audit.py -x  # Single file
 ```
 
 Tests live at repo-root `tests/`, **not** `python/tests/`. They cover

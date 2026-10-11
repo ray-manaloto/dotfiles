@@ -12,6 +12,14 @@ cannot resolve linux assets, and verifies platform coverage afterwards. The
 recipe lives in `python/src/dotfiles_setup/lock_shared.py`; the task is a thin
 caller (`.claude/rules/zero-bash-logic.md`).
 
+The writer must match the Dockerfile's pinned mise version before any lock
+call. Native v3 locks carry referenced dependency graphs under
+`.config/mise/locks/`; the task validates those files and their digests after
+writing. An older running devcontainer (2026.9.8 supports only lock format 2)
+is refused. Refresh that guest to the pinned image before a routine re-lock;
+for a mise-version migration, stage the shared fragment with the pinned Linux
+mise, preserve every existing platform, and verify the candidate before copy.
+
 ```bash
 mise run lock-shared -- "uv"              # derive host capability, auto-route
 mise run lock-shared -- "uv" "yq" "bun"   # several at once
@@ -86,6 +94,10 @@ it cannot drift into being an eleventh place to update.
 - **`lock-integrity OK: every lockfile kept its platform coverage`** must
   appear. Without it, coverage was lost; repair with `git checkout --` on the
   lockfile and re-run scoped, never by hand-editing.
+- **Writer version and native graphs** must pass first. A version mismatch
+  means the guest needs the pinned mise; a missing or digest-mismatched graph
+  means the lock and its `.config/mise/locks/` sidecars were not collected
+  together.
 - **`No tools configured to lock`** with rc=0 means it locked *nothing* —
   the name was not recognised, or `MISE_IGNORED_CONFIG_PATHS` still hid the
   fragment. The task fails on this deliberately.

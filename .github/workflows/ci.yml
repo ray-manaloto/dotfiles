@@ -238,11 +238,11 @@ jobs:
         # on neither path. That is how #778 (a lockfile bot PR) turned `main`
         # red on a test ABOUT lockfiles and merged green.
         #
-        # No `-m` here on purpose: pytest.ini's addopts already deselects
+        # No `-m` here on purpose: the native pytest addopts already deselects
         # image_exec/codex_exec, and a command-line `-m` would REPLACE it.
         # The five genuinely host-only tests skip themselves via $CI —
         # GitHub sets it — in tests/conftest.py.
-        run: uv run --project python pytest tests/ -q
+        run: uv run --project python python -m dotfiles_setup.pytest_runner --label ci-contract -- tests/
   # ============================================================
   # Change detection: gate the Docker build chain (base-prep →
   # p2996-prep → build → smoke-test) AND `promote` on whether the

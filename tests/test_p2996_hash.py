@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
@@ -48,6 +49,7 @@ def _stub_base_inputs(**overrides: str) -> BaseHashInputs:
         "platform": "linux/amd64/v2",
         "base_section_digest": "a" * 64,
         "mise_lock_digest": "c" * 64,
+        "mise_sidecars_digest": "4" * 64,
         "mise_system_config_digest": "f" * 64,
         "shared_config_digest": "9" * 64,
         "hk_config_digest": "b" * 64,
@@ -76,6 +78,7 @@ def _stub_dev_inputs(**overrides: str) -> DevHashInputs:
         "dev_target_digest": "e" * 64,
         "runtime_config_digest": "a" * 64,
         "runtime_lock_digest": "b" * 64,
+        "runtime_sidecars_digest": "4" * 64,
     }
     base.update(overrides)
     return DevHashInputs(**base)
@@ -139,6 +142,27 @@ def _seed_repo(tmp_path: Path) -> Path:
     shared_dir.mkdir(parents=True)
     (shared_dir / "shared.toml").write_text('[tools]\nhk = "1.46.0"\n')
     return tmp_path
+
+
+def _seed_native_sidecar(repo_root: Path, lock_name: str) -> Path:
+    """Add one valid v3 uv graph to a synthetic image lock."""
+    namespace = "mise.runtime/" if lock_name == "mise-runtime.lock" else ""
+    relative = f".mise/locks/{namespace}pipx-fixture/1.0.0"
+    graph = repo_root / ".devcontainer" / relative
+    graph.mkdir(parents=True)
+    native = graph / "uv.lock"
+    native.write_text("version = 1\n")
+    manifest = graph / "pyproject.toml"
+    manifest.write_text('[project]\nname = "fixture"\n')
+    digest = hashlib.sha256(native.read_bytes()).hexdigest()
+    (repo_root / ".devcontainer" / lock_name).write_text(
+        "lockfile_version = 3\n"
+        '[[tools."pipx:fixture"]]\n'
+        'version = "1.0.0"\n'
+        'backend = "pipx:fixture"\n'
+        f'uv = {{ path = "{relative}", digest = "sha256:{digest}" }}\n'
+    )
+    return manifest
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -469,6 +493,46 @@ def test_repo_p2996_hash_unchanged_when_mise_lock_edited(tmp_path: Path) -> None
     assert compute_repo_p2996_hash(tmp_path) == before
 
 
+def test_base_sidecar_manifest_changes_base_and_dev_but_not_compiler(
+    tmp_path: Path,
+) -> None:
+    _seed_repo(tmp_path)
+    manifest = _seed_native_sidecar(tmp_path, "mise-system.lock")
+    before = (
+        compute_repo_base_hash(tmp_path),
+        compute_repo_p2996_hash(tmp_path),
+        compute_repo_dev_hash(tmp_path),
+    )
+    manifest.write_text('[project]\nname = "changed"\n')
+    after = (
+        compute_repo_base_hash(tmp_path),
+        compute_repo_p2996_hash(tmp_path),
+        compute_repo_dev_hash(tmp_path),
+    )
+    assert after[0] != before[0]
+    assert after[1] == before[1]
+    assert after[2] != before[2]
+
+
+def test_runtime_sidecar_manifest_changes_only_dev_cache(tmp_path: Path) -> None:
+    _seed_repo(tmp_path)
+    manifest = _seed_native_sidecar(tmp_path, "mise-runtime.lock")
+    before = (
+        compute_repo_base_hash(tmp_path),
+        compute_repo_p2996_hash(tmp_path),
+        compute_repo_dev_hash(tmp_path),
+    )
+    manifest.write_text('[project]\nname = "changed"\n')
+    after = (
+        compute_repo_base_hash(tmp_path),
+        compute_repo_p2996_hash(tmp_path),
+        compute_repo_dev_hash(tmp_path),
+    )
+    assert after[0] == before[0]
+    assert after[1] == before[1]
+    assert after[2] != before[2]
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Phase D (#120): clang_p2996_ref override
 # ──────────────────────────────────────────────────────────────────────
@@ -718,6 +782,7 @@ def test_dev_hash_kind_namespacing_differs_from_base_and_p2996() -> None:
             platform="x",
             base_section_digest="a" * 64,
             mise_lock_digest="a" * 64,
+            mise_sidecars_digest="a" * 64,
             mise_system_config_digest="a" * 64,
             shared_config_digest="a" * 64,
             hk_config_digest="a" * 64,

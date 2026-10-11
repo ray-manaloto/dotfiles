@@ -139,6 +139,8 @@ from dotfiles_setup.devcontainer_names import resolve_names
 from dotfiles_setup.image_lock import devcontainer_exec_prefix, host_can_lock
 from dotfiles_setup.lock_integrity import declared_tools, tool_platforms
 from dotfiles_setup.lock_integrity import main as lock_integrity_main
+from dotfiles_setup.lock_refresh import pinned_mise_version
+from dotfiles_setup.lock_sidecars import NATIVE_LOCK_FORMAT, verify_lock_sidecars
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -193,6 +195,40 @@ GITHUB_ATTESTATIONS_VAR = "MISE_GITHUB_ATTESTATIONS"
 _NO_TOOLS_MARKER = "No tools configured to lock"
 
 
+def writer_matches_image(repo_root: Path, *, route: bool) -> bool:
+    """Refuse an older guest before it can rewrite a native v3 shared lock."""
+    try:
+        expected = pinned_mise_version(repo_root / ".devcontainer/Dockerfile")
+        argv = (
+            [*devcontainer_exec_prefix(repo_root), "mise", "--version"]
+            if route
+            else ["mise", "--version"]
+        )
+        result = subprocess.run(
+            argv,
+            cwd=None if route else repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError, ValueError:
+        logger.exception("lock-shared: cannot verify the mise writer version")
+        return False
+    observed = (
+        result.stdout.split(maxsplit=1)[0] if result.stdout.strip() else "<missing>"
+    )
+    if result.returncode != 0 or observed != expected:
+        logger.error(
+            "lock-shared: writer mise %s (rc=%d) differs from image pin %s; "
+            "update the guest before writing the shared lock",
+            observed,
+            result.returncode,
+            expected,
+        )
+        return False
+    return True
+
+
 def shared_lock_platforms(repo_root: Path) -> tuple[str, ...]:
     """Every platform the COMMITTED shared lockfile already covers.
 
@@ -240,7 +276,7 @@ def _workspace_mise_toml(repo_root: Path) -> str:
 def lock_target(repo_root: Path, tool: str) -> str:
     """``tool@version`` when the shared fragment pins an exact version string.
 
-    mise 2026.9.8 (the image's and CI's pinned mise) runs `mise lock <bare>` for
+    mise 2026.9.8 (the former image/CI pin) runs `mise lock <bare>` for
     a packslip-backend tool as a silent no-op: rc 0, no platform entries — into
     an empty lockfile it writes nothing at all; #1398 shipped a version-only
     entry (version + backend, no platforms) in the shared lock. Measured
@@ -353,6 +389,25 @@ def _lock_each(repo_root: Path, tools: list[str], *, route: bool) -> int:
     return 0
 
 
+def _lock_and_verify(repo_root: Path, tools: list[str], *, route: bool) -> int:
+    """Run one compatible writer, then verify graphs and platform coverage."""
+    if not writer_matches_image(repo_root, route=route):
+        return 1
+    locked = _lock_each(repo_root, tools, route=route)
+    if locked != 0:
+        return locked
+    try:
+        verify_lock_sidecars(
+            repo_root / SHARED_LOCK,
+            repo_root / ".config/mise/locks",
+            require_format=NATIVE_LOCK_FORMAT,
+        )
+    except OSError, TypeError, ValueError:
+        logger.exception("lock-shared: native dependency graph is incomplete")
+        return 1
+    return lock_integrity_main(repo_root)
+
+
 def lock_shared_main(
     repo_root: Path,
     tools: list[str],
@@ -440,7 +495,4 @@ def lock_shared_main(
         else:
             logger.info("lock-shared: routing into the devcontainer: %s", reason)
 
-    locked = _lock_each(repo_root, tools, route=route)
-    if locked != 0:
-        return locked
-    return lock_integrity_main(repo_root)
+    return _lock_and_verify(repo_root, tools, route=route)
