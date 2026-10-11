@@ -1,0 +1,218 @@
+# Curated code searches for every local issue linked in Phase 9 of the
+# mac-global-mise-ownership PWF plan. Rerun with:
+# mise run research-saved-search -- rerun docs/research/saved-searches/phase9-code-examples-2026-10-11.toml
+# Code matches are leads, not proof of equivalent behavior. Read source and tests
+# before applying a pattern. A zero requires the runner's same-shape controls.
+schema_version = 1
+question = "Which GitHub code examples inform all 19 dotfiles Phase 9 issue links?"
+origin = "report:docs/research/kb/reports/agents/phase9-code-examples-2026-10-11.md"
+
+[[watch]]
+id = "p9-160-buildx-attest"
+kind = "code"
+question = "How does Buildx create and inspect published provenance for image build inputs?"
+tags = ["phase9", "issue-160", "buildx", "provenance"]
+queries = ["repo:docker/buildx provenance"]
+collect = "all"
+
+[[watch]]
+id = "p9-167-mise-oci-packages"
+kind = "code"
+question = "How does mise OCI package system dependencies in a reproducible layer?"
+tags = ["phase9", "issue-167", "mise-oci", "packages"]
+queries = ["repo:jdx/mise system_packages oci"]
+collect = "all"
+
+[[watch]]
+id = "p9-699-buildx-gha-cache"
+kind = "code"
+question = "Which Buildx code and examples describe cache export choices?"
+tags = ["phase9", "issue-699", "buildx", "gha-cache"]
+queries = ["repo:docker/buildx cache-to"]
+collect = "all"
+
+[[watch]]
+id = "p9-838-mise-oci-index"
+kind = "code"
+question = "How does mise update a multi-architecture OCI index?"
+tags = ["phase9", "issue-838", "mise-oci", "multiarch"]
+queries = ["repo:jdx/mise update_index"]
+collect = "all"
+
+[[watch]]
+id = "p9-909-devcontainer-image-probe"
+kind = "code"
+question = "How does the Dev Container CLI inspect a container beyond an image digest?"
+tags = ["phase9", "issue-909", "devcontainer", "liveness"]
+queries = ["repo:devcontainers/cli getContainerProperties"]
+collect = "all"
+
+[[watch]]
+id = "p9-1481-ship-worktree-preflight"
+kind = "code"
+question = "Where does ship decide a linked worktree needs a full sync?"
+tags = ["phase9", "issue-1481", "worktree", "ship"]
+queries = ["repo:ray-manaloto/dotfiles needs_full_sync"]
+collect = "all"
+
+[[watch]]
+id = "p9-1555-land-worktree-preflight"
+kind = "code"
+question = "How does this repo detect linked worktrees for land and full sync?"
+tags = ["phase9", "issue-1555", "worktree", "land"]
+queries = ["repo:ray-manaloto/dotfiles is_linked_worktree"]
+collect = "all"
+
+[[watch]]
+id = "p9-1685-devcontainer-lifecycle"
+kind = "code"
+question = "How does the Dev Container CLI run post-create lifecycle commands?"
+tags = ["phase9", "issue-1685", "devcontainer", "smoke"]
+queries = ["repo:devcontainers/cli postCreateCommand run"]
+collect = "all"
+
+[[watch]]
+id = "p9-1754-gh-pr-watch"
+kind = "code"
+question = "How does GitHub CLI wait for checks while keeping a single PR workflow?"
+tags = ["phase9", "issue-1754", "gh", "orchestration"]
+queries = ["repo:cli/cli watch checks"]
+collect = "all"
+
+[[watch]]
+id = "p9-1761-ship-gate-reuse"
+kind = "code"
+question = "Where is this repo's ship gate runner and how are repeated suites selected?"
+tags = ["phase9", "issue-1761", "ship", "suite-reuse"]
+queries = ["repo:ray-manaloto/dotfiles run_gates"]
+collect = "all"
+
+[[watch]]
+id = "p9-1762-mise-otel"
+kind = "code"
+question = "What task trace primitives does mise expose for phase timing?"
+tags = ["phase9", "issue-1762", "mise", "tracing"]
+queries = ["repo:jdx/mise otel"]
+collect = "all"
+
+[[watch]]
+id = "p9-1824-runtime-staleness"
+kind = "code"
+question = "How does a worktree-aware devcontainer project track runtime-config staleness?"
+tags = ["phase9", "issue-1824", "devcontainer", "runtime-config"]
+queries = ["repo:xorq-labs/devcontainer staleness hash"]
+collect = "all"
+
+[[watch]]
+id = "p9-1825-sync-container-absent"
+kind = "code"
+question = "Where does sync decide whether an absent container is current?"
+tags = ["phase9", "issue-1825", "sync", "liveness"]
+queries = ["repo:ray-manaloto/dotfiles container_current"]
+collect = "all"
+
+[[watch]]
+id = "p9-1826-devcontainer-worktree-mount"
+kind = "code"
+question = "How does the Dev Container CLI mount a Git worktree common directory?"
+tags = ["phase9", "issue-1826", "devcontainer", "worktree"]
+queries = ["repo:devcontainers/cli mountGitWorktreeCommonDir"]
+collect = "all"
+
+[[watch]]
+id = "p9-1827-pinact-token"
+kind = "code"
+question = "How does pinact consume an authenticated token without printing it?"
+tags = ["phase9", "issue-1827", "pinact", "auth"]
+queries = ["repo:suzuki-shunsuke/pinact PINACT_GITHUB_TOKEN"]
+collect = "all"
+
+[[watch]]
+id = "p9-1828-apt-pin-preflight"
+kind = "code"
+question = "Where does ship select the apt-pin gate, and can it run earlier?"
+tags = ["phase9", "issue-1828", "ship", "apt"]
+queries = ["repo:ray-manaloto/dotfiles verify-apt-pins"]
+collect = "all"
+
+[[watch]]
+id = "p9-1829-per-leg-smoke"
+kind = "code"
+question = "How does the current workflow gate its architecture smoke matrix?"
+tags = ["phase9", "issue-1829", "github-actions", "smoke"]
+queries = ["repo:ray-manaloto/dotfiles smoke-test needs"]
+collect = "all"
+
+[[watch]]
+id = "p9-1830-hk-trace"
+kind = "code"
+question = "What tracing and diagnostics does current hk provide?"
+tags = ["phase9", "issue-1830", "hk", "tracing"]
+queries = ["repo:jdx/hk trace"]
+collect = "all"
+
+[[watch]]
+id = "p9-1831-mise-deps-parallel"
+kind = "code"
+question = "How does mise schedule dependent tasks in parallel?"
+tags = ["phase9", "issue-1831", "mise", "task-fanout"]
+queries = ["repo:jdx/mise path:src/task parallel"]
+collect = "all"
+
+# Positive controls share each repository-qualified query shape. The runner
+# generates a fresh known-absent nonce for every shape on each rerun.
+[[watch]]
+id = "p9-control-buildx"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:docker/buildx buildx"]
+
+[[watch]]
+id = "p9-control-mise"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:jdx/mise mise"]
+
+[[watch]]
+id = "p9-control-devcontainer-cli"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:devcontainers/cli devcontainer"]
+
+[[watch]]
+id = "p9-control-dotfiles"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:ray-manaloto/dotfiles mise"]
+
+[[watch]]
+id = "p9-control-gh-cli"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:cli/cli gh"]
+
+[[watch]]
+id = "p9-control-xorq-devcontainer"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:xorq-labs/devcontainer devcontainer"]
+
+[[watch]]
+id = "p9-control-pinact"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:suzuki-shunsuke/pinact pinact"]
+
+[[watch]]
+id = "p9-control-hk"
+kind = "code"
+role = "must-hit"
+tags = ["control"]
+queries = ["repo:jdx/hk hk"]
