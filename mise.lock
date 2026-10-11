@@ -6614,7 +6614,7 @@ version = "0.15.7"
 backend = "npm:portless"
 
 [[tools."npm:renovate"]]
-version = "44.149.2"
+version = "44.149.3"
 backend = "npm:renovate"
 
 [[tools."npm:skills"]]
@@ -6685,53 +6685,53 @@ url = "https://github.com/anomalyco/opencode/releases/download/v1.18.35/opencode
 url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/616527771"
 
 [[tools.pipx]]
-version = "1.17.12"
+version = "1.17.13"
 backend = "aqua:pypa/pipx"
 
 [tools.pipx."platforms.linux-arm64"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.linux-arm64-musl"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.linux-x64"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.linux-x64-baseline"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.linux-x64-musl"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.macos-arm64"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.macos-x64"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [tools.pipx."platforms.macos-x64-baseline"]
-checksum = "sha256:e27cb4aecff5da2784d7d8e0ee64af6f01d12eead2668ec366f040dece79c93e"
-url = "https://github.com/pypa/pipx/releases/download/1.17.12/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/619690377"
+checksum = "sha256:a2e0c584d795eb9b16e286e71174b3fc6151b27d68fa4330c6dc17df8981c72f"
+url = "https://github.com/pypa/pipx/releases/download/1.17.13/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/629020743"
 
 [[tools."pipx:deepagents-cli"]]
 version = "0.3.0"
