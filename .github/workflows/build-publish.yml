@@ -794,7 +794,7 @@ jobs:
         # a hard error on upload-artifact v4+, so the arm64 leg would fail with
         # a conflict that says nothing about architectures.
         if: steps.probe.outputs.hit != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-hash-report-${{ matrix.target.arch }}
           path: /tmp/build-hash-report.txt
@@ -1022,7 +1022,7 @@ jobs:
             --status-json /tmp/bootstrap-gap-report.json
       - name: Upload bootstrap gap report artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bootstrap-gap-report-${{ matrix.target.arch }}
           path: /tmp/bootstrap-gap-report.json
