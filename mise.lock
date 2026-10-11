@@ -94,9 +94,9 @@ checksum = "sha256:1f9f5f1e9a2c0e83dae98b02c32b9b0363c9786cda2ef9aefd37139fa8aef
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.2.0-h52b7260_0.conda"
 checksum = "sha256:0176a71d64fcb5aec43c9e8ab4ae72faa6c6b0b1cda8f40b65e19429ce13c84d"
 
-[conda-packages.linux-arm64."libabseil-20260526.0-cxx17_hc5e897d_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_hc5e897d_2.conda"
-checksum = "sha256:2f21286b1c8c978c629cf2fd18c6715f15c5c57fa6d9283587b8f66290bfbfc3"
+[conda-packages.linux-arm64."libabseil-20260526.0-cxx17_hc5e897d_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_hc5e897d_3.conda"
+checksum = "sha256:e59c284b0449ab46569966c6ecad5b22848da3b18bb9f441c3907100c0f9ce03"
 
 [conda-packages.linux-arm64."libass-0.17.5-h0b8cbcc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libass-0.17.5-h0b8cbcc_1.conda"
@@ -582,9 +582,9 @@ checksum = "sha256:1f9f5f1e9a2c0e83dae98b02c32b9b0363c9786cda2ef9aefd37139fa8aef
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/lerc-4.2.0-h52b7260_0.conda"
 checksum = "sha256:0176a71d64fcb5aec43c9e8ab4ae72faa6c6b0b1cda8f40b65e19429ce13c84d"
 
-[conda-packages.linux-arm64-musl."libabseil-20260526.0-cxx17_hc5e897d_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_hc5e897d_2.conda"
-checksum = "sha256:2f21286b1c8c978c629cf2fd18c6715f15c5c57fa6d9283587b8f66290bfbfc3"
+[conda-packages.linux-arm64-musl."libabseil-20260526.0-cxx17_hc5e897d_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libabseil-20260526.0-cxx17_hc5e897d_3.conda"
+checksum = "sha256:e59c284b0449ab46569966c6ecad5b22848da3b18bb9f441c3907100c0f9ce03"
 
 [conda-packages.linux-arm64-musl."libass-0.17.5-h0b8cbcc_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libass-0.17.5-h0b8cbcc_1.conda"
@@ -1082,9 +1082,9 @@ checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72f
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.33.1-h7148c6a_0.conda"
 checksum = "sha256:ae6bc49a784c442b4cf5b1306a342a4f85667b2f489509c01bb77edec0f9e0f3"
 
-[conda-packages.linux-x64."libabseil-20260526.0-cxx17_h0dc7533_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_2.conda"
-checksum = "sha256:7bb3d495411b7059e85225aae500d84e7846a4bb02ebd77e4450200b20c180f0"
+[conda-packages.linux-x64."libabseil-20260526.0-cxx17_h0dc7533_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_3.conda"
+checksum = "sha256:24708450d80f4d542fc357c941909446e0b6caffb8baca478a0da1f74820e688"
 
 [conda-packages.linux-x64."libass-0.17.5-h3b6f6bf_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libass-0.17.5-h3b6f6bf_1.conda"
@@ -1610,9 +1610,9 @@ checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72f
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.33.1-h7148c6a_0.conda"
 checksum = "sha256:ae6bc49a784c442b4cf5b1306a342a4f85667b2f489509c01bb77edec0f9e0f3"
 
-[conda-packages.linux-x64-baseline."libabseil-20260526.0-cxx17_h0dc7533_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_2.conda"
-checksum = "sha256:7bb3d495411b7059e85225aae500d84e7846a4bb02ebd77e4450200b20c180f0"
+[conda-packages.linux-x64-baseline."libabseil-20260526.0-cxx17_h0dc7533_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_3.conda"
+checksum = "sha256:24708450d80f4d542fc357c941909446e0b6caffb8baca478a0da1f74820e688"
 
 [conda-packages.linux-x64-baseline."libass-0.17.5-h3b6f6bf_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libass-0.17.5-h3b6f6bf_1.conda"
@@ -2138,9 +2138,9 @@ checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72f
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.33.1-h7148c6a_0.conda"
 checksum = "sha256:ae6bc49a784c442b4cf5b1306a342a4f85667b2f489509c01bb77edec0f9e0f3"
 
-[conda-packages.linux-x64-musl."libabseil-20260526.0-cxx17_h0dc7533_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_2.conda"
-checksum = "sha256:7bb3d495411b7059e85225aae500d84e7846a4bb02ebd77e4450200b20c180f0"
+[conda-packages.linux-x64-musl."libabseil-20260526.0-cxx17_h0dc7533_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_3.conda"
+checksum = "sha256:24708450d80f4d542fc357c941909446e0b6caffb8baca478a0da1f74820e688"
 
 [conda-packages.linux-x64-musl."libass-0.17.5-h3b6f6bf_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libass-0.17.5-h3b6f6bf_1.conda"
@@ -2666,9 +2666,9 @@ checksum = "sha256:bf9fdebf55d8bc99d83531cdffda00703f4dc5f93a1a956768c147362c72f
 url = "https://conda.anaconda.org/conda-forge/linux-64/level-zero-1.33.1-h7148c6a_0.conda"
 checksum = "sha256:ae6bc49a784c442b4cf5b1306a342a4f85667b2f489509c01bb77edec0f9e0f3"
 
-[conda-packages.linux-x64-musl-baseline."libabseil-20260526.0-cxx17_h0dc7533_2"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_2.conda"
-checksum = "sha256:7bb3d495411b7059e85225aae500d84e7846a4bb02ebd77e4450200b20c180f0"
+[conda-packages.linux-x64-musl-baseline."libabseil-20260526.0-cxx17_h0dc7533_3"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libabseil-20260526.0-cxx17_h0dc7533_3.conda"
+checksum = "sha256:24708450d80f4d542fc357c941909446e0b6caffb8baca478a0da1f74820e688"
 
 [conda-packages.linux-x64-musl-baseline."libass-0.17.5-h3b6f6bf_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libass-0.17.5-h3b6f6bf_1.conda"
@@ -3174,9 +3174,9 @@ checksum = "sha256:5f9b511f918e13dfddb8495c1764aec894b66c5a88359737aa302b8899ae2
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/lerc-4.2.0-h1eee2c3_0.conda"
 checksum = "sha256:c97aa17d16d2ac332ba9f184e82ce8f72dcb10e9a10c5f299030be2d44e191b9"
 
-[conda-packages.macos-arm64."libabseil-20260526.0-cxx17_h4c27e2a_2"]
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/libabseil-20260526.0-cxx17_h4c27e2a_2.conda"
-checksum = "sha256:d9c62dae9d8f5bebadf72fcf369c00cc353183cb2521f9fffbf4c2f70b58bef9"
+[conda-packages.macos-arm64."libabseil-20260526.0-cxx17_h4c27e2a_3"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/libabseil-20260526.0-cxx17_h4c27e2a_3.conda"
+checksum = "sha256:27859d85276442961b01bcfc488dc85426109330ffb157d3224772a7eaa72a75"
 
 [conda-packages.macos-arm64."libass-0.17.5-h0a551c8_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libass-0.17.5-h0a551c8_1.conda"
@@ -4879,7 +4879,7 @@ conda_deps = [
     "openh264-2.6.0-h71d5e59_2",
     "svt-av1-4.2.0-h4154aff_1",
     "xorg-libx11-1.8.13-h63a1b12_1",
-    "libabseil-20260526.0-cxx17_hc5e897d_2",
+    "libabseil-20260526.0-cxx17_hc5e897d_3",
     "bzip2-1.0.8-h4777abc_10",
     "gmp-6.3.0-h4d6b352_3",
     "libdav1d7-1.5.4-h29ee22c_4",
@@ -5007,7 +5007,7 @@ conda_deps = [
     "openh264-2.6.0-h71d5e59_2",
     "svt-av1-4.2.0-h4154aff_1",
     "xorg-libx11-1.8.13-h63a1b12_1",
-    "libabseil-20260526.0-cxx17_hc5e897d_2",
+    "libabseil-20260526.0-cxx17_hc5e897d_3",
     "bzip2-1.0.8-h4777abc_10",
     "gmp-6.3.0-h4d6b352_3",
     "libdav1d7-1.5.4-h29ee22c_4",
@@ -5140,6 +5140,7 @@ conda_deps = [
     "openh264-2.6.0-h8c49934_2",
     "svt-av1-4.2.0-hd2095e1_1",
     "xorg-libx11-1.8.13-he1eb515_1",
+    "libabseil-20260526.0-cxx17_h0dc7533_3",
     "bzip2-1.0.8-hda65f42_10",
     "gmp-6.3.0-hfd2156b_3",
     "libdav1d7-1.5.4-hebe6cf0_4",
@@ -5176,7 +5177,6 @@ conda_deps = [
     "tbb-2023.1.0-haa8c3ee_2",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
-    "libabseil-20260526.0-cxx17_h0dc7533_2",
     "libprotobuf-7.35.1-h622638d_3",
     "snappy-1.2.2-h34e00bb_2",
     "libdovi-3.4.0-h39d0f39_1",
@@ -5278,6 +5278,7 @@ conda_deps = [
     "openh264-2.6.0-h8c49934_2",
     "svt-av1-4.2.0-hd2095e1_1",
     "xorg-libx11-1.8.13-he1eb515_1",
+    "libabseil-20260526.0-cxx17_h0dc7533_3",
     "bzip2-1.0.8-hda65f42_10",
     "gmp-6.3.0-hfd2156b_3",
     "libdav1d7-1.5.4-hebe6cf0_4",
@@ -5314,7 +5315,6 @@ conda_deps = [
     "tbb-2023.1.0-haa8c3ee_2",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
-    "libabseil-20260526.0-cxx17_h0dc7533_2",
     "libprotobuf-7.35.1-h622638d_3",
     "snappy-1.2.2-h34e00bb_2",
     "libdovi-3.4.0-h39d0f39_1",
@@ -5416,6 +5416,7 @@ conda_deps = [
     "openh264-2.6.0-h8c49934_2",
     "svt-av1-4.2.0-hd2095e1_1",
     "xorg-libx11-1.8.13-he1eb515_1",
+    "libabseil-20260526.0-cxx17_h0dc7533_3",
     "bzip2-1.0.8-hda65f42_10",
     "gmp-6.3.0-hfd2156b_3",
     "libdav1d7-1.5.4-hebe6cf0_4",
@@ -5452,7 +5453,6 @@ conda_deps = [
     "tbb-2023.1.0-haa8c3ee_2",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
-    "libabseil-20260526.0-cxx17_h0dc7533_2",
     "libprotobuf-7.35.1-h622638d_3",
     "snappy-1.2.2-h34e00bb_2",
     "libdovi-3.4.0-h39d0f39_1",
@@ -5554,6 +5554,7 @@ conda_deps = [
     "openh264-2.6.0-h8c49934_2",
     "svt-av1-4.2.0-hd2095e1_1",
     "xorg-libx11-1.8.13-he1eb515_1",
+    "libabseil-20260526.0-cxx17_h0dc7533_3",
     "bzip2-1.0.8-hda65f42_10",
     "gmp-6.3.0-hfd2156b_3",
     "libdav1d7-1.5.4-hebe6cf0_4",
@@ -5590,7 +5591,6 @@ conda_deps = [
     "tbb-2023.1.0-haa8c3ee_2",
     "ocl-icd-2.3.4-hb03c661_1",
     "level-zero-1.33.1-h7148c6a_0",
-    "libabseil-20260526.0-cxx17_h0dc7533_2",
     "libprotobuf-7.35.1-h622638d_3",
     "snappy-1.2.2-h34e00bb_2",
     "libdovi-3.4.0-h39d0f39_1",
@@ -5684,6 +5684,7 @@ conda_deps = [
     "openh264-2.6.0-hf8510ef_2",
     "sdl2-2.32.56-h784d473_0",
     "svt-av1-4.2.0-h484c67d_1",
+    "libabseil-20260526.0-cxx17_h4c27e2a_3",
     "bzip2-1.0.8-h4e30115_10",
     "gmp-6.3.0-hf5e55b1_3",
     "libcxx-23.1.3-h55c6f16_0",
@@ -5713,7 +5714,6 @@ conda_deps = [
     "libbrotlidec-1.2.0-h5295a6a_4",
     "libhwy-1.4.0-hd2bdd19_2",
     "tbb-2023.1.0-h81c76ee_2",
-    "libabseil-20260526.0-cxx17_h4c27e2a_2",
     "libprotobuf-7.35.1-h391e224_3",
     "snappy-1.2.2-h3951085_2",
     "shaderc-2026.3-hfd4ff19_1",
