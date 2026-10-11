@@ -82,6 +82,21 @@ def test_writer_version_probe_blocks_old_guest_before_a_lock_call(
     assert calls[0][-2:] == ["mise", "--version"]
 
 
+def test_writer_version_probe_fails_closed_when_guest_stalls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(lock_shared, "writer_matches_image", _REAL_WRITER_MATCHES_IMAGE)
+
+    def stalled_run(
+        argv: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        assert kwargs["timeout"] == 300
+        raise subprocess.TimeoutExpired(argv, timeout=300)
+
+    monkeypatch.setattr(lock_shared.subprocess, "run", stalled_run)
+    assert lock_shared.writer_matches_image(REPO_ROOT, route=True) is False
+
+
 def test_old_guest_is_rejected_before_shared_lock_mutation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -210,8 +210,9 @@ def writer_matches_image(repo_root: Path, *, route: bool) -> bool:
             check=False,
             capture_output=True,
             text=True,
+            timeout=300,
         )
-    except OSError, ValueError:
+    except OSError, ValueError, subprocess.TimeoutExpired:
         logger.exception("lock-shared: cannot verify the mise writer version")
         return False
     observed = (

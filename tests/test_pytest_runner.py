@@ -201,7 +201,8 @@ def test_repeated_runs_get_distinct_private_artifacts() -> None:
 
 def test_setup_and_teardown_failures_keep_phase_evidence() -> None:
     """The runner retains reports when fixtures fail on either side of call."""
-    test_file = _ROOT / "tests" / f"test_runner_phases_{os.getpid()}.py"
+    test_file = _ROOT / ".agent" / "state" / f"test_runner_phases_{os.getpid()}.py"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
     test_file.write_text(
         "import logging, pytest\n"
         "@pytest.fixture\n"
@@ -223,7 +224,7 @@ def test_setup_and_teardown_failures_keep_phase_evidence() -> None:
     before = set(_RUNS.glob(f"pytest-{label}-*"))
     try:
         result = subprocess.run(
-            _command(label, test_file),
+            [*_command(label, test_file), "-p", "tests.conftest"],
             cwd=_ROOT,
             capture_output=True,
             text=True,
@@ -248,7 +249,10 @@ def test_setup_and_teardown_failures_keep_phase_evidence() -> None:
 
 def test_xdist_worker_crash_keeps_other_worker_logs() -> None:
     """A dead worker remains visible while surviving workers keep their logs."""
-    test_file = _ROOT / "tests" / f"test_runner_worker_crash_{os.getpid()}.py"
+    test_file = (
+        _ROOT / ".agent" / "state" / f"test_runner_worker_crash_{os.getpid()}.py"
+    )
+    test_file.parent.mkdir(parents=True, exist_ok=True)
     test_file.write_text(
         "import os\n"
         "def test_crash():\n"
@@ -260,7 +264,14 @@ def test_xdist_worker_crash_keeps_other_worker_logs() -> None:
     before = set(_RUNS.glob(f"pytest-{label}-*"))
     try:
         result = subprocess.run(
-            [*_command(label, test_file)[:-2], "-n", "2", "--max-worker-restart=0"],
+            [
+                *_command(label, test_file)[:-2],
+                "-n",
+                "2",
+                "--max-worker-restart=0",
+                "-p",
+                "tests.conftest",
+            ],
             cwd=_ROOT,
             capture_output=True,
             text=True,
