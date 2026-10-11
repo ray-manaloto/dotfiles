@@ -19,18 +19,23 @@ The newest coordinator only (Ray ruled 2026-10-03 ~15:00):
 - ``queue-append`` appends to ``.agent/plans/main-checkout-ship-queue.md``.
 - ``inbox-edit`` applies a typed edit list to an inbox file (the stale-brief fix).
 
-The caller's identity is ``CLAUDE_CODE_SESSION_ID`` resolved through its
-harness job record; it must carry a coordinator name and the newest
-``createdAt`` of every coordinator-named record, whatever its ``state``: a
+The caller's identity is provider-qualified: ``CLAUDE_CODE_SESSION_ID`` resolves
+through a harness job record's ``sessionId``; ``CODEX_THREAD_ID`` resolves
+through an explicit ``coordinator-claim``. The newest coordinator is the max
+over ``(createdAt, provider, id)``, whatever a harness record's ``state``: a
 ``done`` record is an idle session that may still be live, so a state filter
 would let a superseded coordinator pass (Ray ruling 2026-10-03; the lockout a
 dead record can cause belongs to the gate redesign). It is checked again once
-the target's lock is held.
+the target's lock is held. A Codex claim uses compare-and-swap on the current
+newest name, rechecked under the claims lock; ``none`` bootstraps an empty
+store. ``coordinator-release`` retires only its caller's own claim. A Claude
+job created between a claim's check and write is outside that lock and may
+lose to the claim by timestamp; this inherent cross-provider race is accepted.
 
-Limits, stated so nobody relies on more: the variable is caller-supplied, and
+Limits, stated so nobody relies on more: the variables are caller-supplied, and
 an Agent-tool subagent inherits its parent's session id, so a coordinator's
 own delegates pass the gate, as does any process that exports the id or
-points ``--jobs-dir`` elsewhere. The gate stops a LANE session or a
+points ``--jobs-dir`` or ``--claims-dir`` elsewhere. The gate stops a LANE session or a
 SUPERSEDED coordinator writing by mistake; it is not an access control.
 
 An edit list is JSON: a list of ``{"replace": <old>, "with": <new>}`` and
@@ -51,11 +56,12 @@ import os
 import re
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from dotfiles_setup.session_common import (
+    COORDINATOR_CLAIMS,
     HANDOFF_INBOX,
     SHIP_QUEUE,
     SessionError,
@@ -64,7 +70,9 @@ from dotfiles_setup.session_common import (
     job_record,
     main_checkout,
     now_iso,
+    read_state,
     state_lock,
+    write_state,
 )
 
 if TYPE_CHECKING:
@@ -78,6 +86,8 @@ TASK_PLAN = Path("task_plan.md")
 LOCK_SUBDIR = Path(".agent") / "state" / "handoff-inbox"
 BACKUP_SUBDIR = LOCK_SUBDIR / "backups"
 SESSION_ENV = "CLAUDE_CODE_SESSION_ID"
+CODEX_ENV = "CODEX_THREAD_ID"
+CLAIMS_FILE = "coordinator-claims.json"
 BACKUPS_KEPT = 20
 
 RC_OK = 0
@@ -171,37 +181,216 @@ def _created_at(record_: Mapping[str, Any]) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-def require_newest_coordinator(env: Mapping[str, str], jobs_dir: Path) -> str:
-    """The caller's coordinator name, or InboxError when it is not the newest."""
-    session_id = env.get(SESSION_ENV, "")
-    own = job_record(session_id, jobs_dir) if session_id else None
-    name = None if own is None else own.get("name")
-    if own is None or not isinstance(name, str) or not is_coordinator(name):
-        msg = f"refused: caller is not a coordinator session (name={name!r})"
+def _claims(claims_dir: Path | None) -> dict[str, Any]:
+    if claims_dir is None:
+        return {}
+    path = claims_dir / CLAIMS_FILE
+    try:
+        store = read_state(path)
+    except OSError as exc:
+        msg = f"refused: {exc}"
+        raise InboxError(msg) from exc
+    claims = store.get("claims", {})
+    if (
+        (store and set(store) != {"claims"})
+        or not isinstance(claims, dict)
+        or any(
+            not isinstance(claim, dict)
+            or claim.get("provider") != "codex"
+            or claim.get("threadId") != thread_id
+            or not isinstance(thread_id, str)
+            or not thread_id
+            or not isinstance(claim.get("name"), str)
+            or not is_coordinator(claim["name"])
+            or _created_at(claim) is None
+            or ("retired" in claim and not isinstance(claim["retired"], bool))
+            for thread_id, claim in claims.items()
+        )
+    ):
+        msg = f"refused: malformed claims store {path}"
         raise InboxError(msg)
-    own_at = _created_at(own)
-    newest: tuple[datetime, str] | None = None
+    return claims
+
+
+def _claude_records(jobs_dir: Path) -> list[dict[str, Any]]:
+    records = []
     for path in sorted(jobs_dir.glob("*/state.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except OSError, ValueError:
             continue
-        other = data.get("name") if isinstance(data, dict) else None
-        at = _created_at(data) if isinstance(data, dict) else None
+        if isinstance(data, dict):
+            records.append(data)
+    return records
+
+
+def _coordinators(jobs_dir: Path, claims: Mapping[str, Any]) -> list[dict[str, Any]]:
+    coordinators = []
+    for data in _claude_records(jobs_dir):
+        other = data.get("name")
+        at = _created_at(data)
         if (
             isinstance(other, str)
             and is_coordinator(other)
             and at is not None
-            and (newest is None or at > newest[0])
+            and isinstance(data.get("sessionId"), str)
+            and data["sessionId"]
         ):
-            newest = (at, other)
-    if own_at is None or newest is None or newest[0] != own_at:
+            coordinators.append(
+                {"provider": "claude", "id": data["sessionId"], "name": other, "at": at}
+            )
+    coordinators.extend(
+        {
+            "provider": "codex",
+            "id": thread_id,
+            "name": claim["name"],
+            "at": _created_at(claim),
+        }
+        for thread_id, claim in claims.items()
+        if not claim.get("retired", False)
+    )
+    return coordinators
+
+
+def _newest(coordinators: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not coordinators:
+        return None
+    return max(
+        coordinators,
+        key=lambda row: (row["at"], row["provider"], row["id"]),
+    )
+
+
+def require_newest_coordinator(
+    env: Mapping[str, str], jobs_dir: Path, *, claims_dir: Path | None = None
+) -> str:
+    """The caller's name iff its provider and native ID identify the newest.
+
+    Direct callers must opt into a claims store; ``None`` reads no live claims
+    and preserves the isolated Claude-only interface.
+    """
+    session_id, thread_id = env.get(SESSION_ENV, ""), env.get(CODEX_ENV, "")
+    if session_id and thread_id:
+        msg = "refused: ambiguous provider identity (Claude and Codex are both set)"
+        raise InboxError(msg)
+    claims = _claims(claims_dir)
+    provider = "claude" if session_id else "codex"
+    native_id = session_id or thread_id
+    own = job_record(session_id, jobs_dir) if session_id else claims.get(thread_id)
+    name = None if own is None else own.get("name")
+    if (
+        own is None
+        or not isinstance(name, str)
+        or not is_coordinator(name)
+        or (provider == "codex" and own.get("retired", False))
+    ):
+        msg = f"refused: caller is not a coordinator session (name={name!r})"
+        raise InboxError(msg)
+    newest = _newest(_coordinators(jobs_dir, claims))
+    if (
+        _created_at(own) is None
+        or newest is None
+        or (newest["provider"], newest["id"]) != (provider, native_id)
+    ):
         msg = (
             f"refused: {name} is not the newest coordinator"
-            f" (newest is {None if newest is None else newest[1]!r})"
+            f" (newest is {None if newest is None else newest['name']!r},"
+            f" provider={None if newest is None else newest['provider']})"
         )
         raise InboxError(msg)
     return name
+
+
+def _codex_id(env: Mapping[str, str]) -> str:
+    thread_id = env.get(CODEX_ENV, "")
+    if not thread_id.strip() or SESSION_ENV in env:
+        msg = "refused: claim/release requires CODEX_THREAD_ID and no Claude identity"
+        raise InboxError(msg)
+    return thread_id
+
+
+def coordinator_claim(
+    env: Mapping[str, str],
+    jobs_dir: Path,
+    *,
+    claims_dir: Path,
+    takeover: tuple[str, str],
+    now: Callable[[], datetime] | None = None,
+) -> Path:
+    """Compare-and-swap an explicit Codex takeover using existing state primitives.
+
+    Neither harness provides this repository's cross-provider CAS; reuse the
+    OS-backed state lock and atomic replace rather than a new lock protocol.
+    """
+    thread_id = _codex_id(env)
+    name, supersedes = takeover
+    if not is_coordinator(name):
+        msg = f"refused: invalid coordinator name {name!r}"
+        raise InboxError(msg)
+    path = claims_dir / CLAIMS_FILE
+
+    def checked_claims() -> tuple[dict[str, Any], dict[str, Any] | None]:
+        claims = _claims(claims_dir)
+        coordinators = _coordinators(jobs_dir, claims)
+        newest = _newest(coordinators)
+        expected = "none" if newest is None else newest["name"]
+        if supersedes != expected:
+            msg = (
+                f"refused: --supersedes {supersedes!r} "
+                f"does not match newest {expected!r}"
+            )
+            raise InboxError(msg)
+        if any(row.get("name") == name for row in _claude_records(jobs_dir)) or any(
+            claim["name"] == name and owner != thread_id
+            for owner, claim in claims.items()
+        ):
+            msg = f"refused: coordinator name {name!r} is already used"
+            raise InboxError(msg)
+        return claims, newest
+
+    checked_claims()
+    with state_lock(path):
+        claims, newest = checked_claims()
+        moment = (now or (lambda: datetime.now(UTC)))()
+        stamp = moment.isoformat(timespec="microseconds")
+        if _created_at({"createdAt": stamp}) is None:
+            msg = "refused: claim clock must be timezone-aware"
+            raise InboxError(msg)
+        if newest is not None and (moment, "codex", thread_id) <= (
+            newest["at"],
+            newest["provider"],
+            newest["id"],
+        ):
+            msg = "refused: claim clock does not order after the newest coordinator"
+            raise InboxError(msg)
+        claims[thread_id] = {
+            "provider": "codex",
+            "threadId": thread_id,
+            "name": name,
+            "createdAt": stamp,
+        }
+        write_state(path, {"claims": claims})
+    return path
+
+
+def coordinator_release(env: Mapping[str, str], *, claims_dir: Path) -> Path:
+    """Retire only the caller's own claim, even after another provider supersedes it."""
+    thread_id = _codex_id(env)
+    path = claims_dir / CLAIMS_FILE
+
+    def checked_claims() -> dict[str, Any]:
+        claims = _claims(claims_dir)
+        if thread_id not in claims:
+            msg = "refused: caller has no coordinator claim to release"
+            raise InboxError(msg)
+        return claims
+
+    checked_claims()
+    with state_lock(path):
+        claims = checked_claims()
+        claims[thread_id]["retired"] = True
+        write_state(path, {"claims": claims})
+    return path
 
 
 def _key(checkout: Path, target: Path) -> str:
@@ -331,9 +520,20 @@ def add_subcommands(parser: argparse.ArgumentParser) -> None:
     )
     edit_parser.add_argument("--lane", required=True)
     edit_parser.add_argument("--edits", type=Path, required=True)
+    claim_parser = sub.add_parser(
+        "coordinator-claim", help="CAS takeover by a Codex session"
+    )
+    claim_parser.add_argument("--name", required=True)
+    claim_parser.add_argument("--supersedes", required=True)
+    sub.add_parser("coordinator-release", help="Retire the caller's own Codex claim")
     for child in sub.choices.values():
         child.add_argument(
             "--jobs-dir", type=Path, default=None, help="Override ~/.claude/jobs"
+        )
+        child.add_argument(
+            "--claims-dir",
+            type=Path,
+            help="Override coordinator claims directory",
         )
 
 
@@ -376,6 +576,9 @@ def _read(checkout: Path, lane: str) -> int:
 
 def _dispatch(args: argparse.Namespace, checkout: Path) -> int:
     command = args.inbox_command
+    jobs_dir = args.jobs_dir or default_jobs_dir()
+    claims_dir = args.claims_dir or checkout / COORDINATOR_CLAIMS
+    env = dict(os.environ)
     if command == "list":
         return _list(checkout)
     if command == "read":
@@ -383,12 +586,19 @@ def _dispatch(args: argparse.Namespace, checkout: Path) -> int:
     if command == "append":
         lane = valid_lane(args.lane)
         written = append(checkout, lane, _body(args), title=args.title)
+    elif command == "coordinator-claim":
+        written = coordinator_claim(
+            env,
+            jobs_dir,
+            claims_dir=claims_dir,
+            takeover=(args.name, args.supersedes),
+        )
+    elif command == "coordinator-release":
+        written = coordinator_release(env, claims_dir=claims_dir)
     else:
-        jobs_dir = args.jobs_dir or default_jobs_dir()
-        env = dict(os.environ)
 
         def authorize() -> str:
-            return require_newest_coordinator(env, jobs_dir)
+            return require_newest_coordinator(env, jobs_dir, claims_dir=claims_dir)
 
         # Fail fast for a caller that is plainly not the coordinator, before
         # reading any input; the binding check is the one inside the lock.

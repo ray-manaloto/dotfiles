@@ -1,0 +1,178 @@
+{
+  "generated_at": "2026-10-05T12:13:06.022066+00:00",
+  "out_dir": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/claude-github",
+  "policy_version": null,
+  "query": "AGENTS.md",
+  "repo": "anthropics/claude-code",
+  "request_id": null,
+  "sources": [
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 1.001789457979612,
+      "items": [
+        {
+          "date": "2026-09-25T20:17:07Z",
+          "snippet": "Since v2.1.277 Claude Code reads AGENTS.md, and the memory docs recommend a CLAUDE.md containing only `@AGENTS.md` when both tools share one file. /doctor's dedup (check 2), trim (check 3) and lazy-loading (check 4) checks are scoped to checked-in `CLAUDE.md`, `.claude/CLAUDE.md` and `.claude/rules/*.md`. In a repo using the recommended import stub, or AGENTS.md alone, those checks audit a one-line file and report it as lean while the real instructions go unexamined.\n\n**Expected:** the checks fo",
+          "title": "/doctor's CLAUDE.md checks skip AGENTS.md content",
+          "url": "https://github.com/anthropics/claude-code/issues/97261"
+        },
+        {
+          "date": "2026-09-21T07:26:38Z",
+          "snippet": "**Bug Description**\nYou guys recently added support for `AGENTS.md`, but for some reason you added only project level, but god damn, I want to have `AGENTS.md` global configurations. Like why should I still have these freaking links inside the `CLAUDE.md`? Please just do that in a good way.\n\nDoing that partially doesn't work. I'm so upset, but at the same time, I was so excited that you guys listened to the audience and added support of AGENTS.md. But oh my gosh, not this way. Please. Make that ",
+          "title": "[Feature Request] Add global AGENTS.md configuration support alongside project-level",
+          "url": "https://github.com/anthropics/claude-code/issues/95795"
+        },
+        {
+          "date": "2026-10-01T19:23:22Z",
+          "snippet": "## Description\n\nWith native AGENTS.md support (v2.1.277+) and the default **Project instructions** setting (`claude-md-or-agents-md`), a subdirectory's `AGENTS.md` loads when Claude opens a file there with the Read tool. It does not load when the user `@`-mentions a file in that directory.\n\nA nested `CLAUDE.md` *does* load on `@`-mention. Nested `AGENTS.md` should load on the same triggers as nested `CLAUDE.md`. Other harnesses (Codex, Cursor, etc.) pick up subdirectory `AGENTS.md` files.\n\n## En",
+          "title": "Nested `AGENTS.md` not loaded when a file in its directory is `@`-mentioned (nested `CLAUDE.md` is)",
+          "url": "https://github.com/anthropics/claude-code/issues/98796"
+        },
+        {
+          "date": "2026-09-24T00:47:46Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched [existing issues](https://github.com/anthropics/claude-code/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug) and this hasn't been reported yet\n- [x] This is a single bug report (please file separate reports for different bugs)\n- [x] I am using the latest version of Claude Code\n\n### What's Wrong?\n\nWhen launching `claude` in a repo with only AGENTS.md, it logs this noisy useless message:\n\n```\n\u23fa agents-md: no CLAUDE.md found; AGENTS.md loaded: /my/dir",
+          "title": "[BUG] agents-md: don't report when AGENTS.md was loaded instead of CLAUDE.md",
+          "url": "https://github.com/anthropics/claude-code/issues/96544"
+        },
+        {
+          "date": "2026-09-23T18:37:16Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched [existing requests](https://github.com/anthropics/claude-code/issues?q=is%3Aissue%20label%3Aenhancement) and this feature hasn't been requested yet\n- [x] This is a single feature request (not multiple features)\n\n### Problem Statement\n\n## Summary\n\nClaude Code 2.1.277 added native AGENTS.md support through the built-in `agents-md` plugin. The default mode, `claude-md-or-agents-md`, loads AGENTS.md only when no CLAUDE.md, `.claude/CLAUDE.md`, or CLAUDE",
+          "title": "[FEATURE] Always load AGENTS.md by default, even when CLAUDE.md exists, and make CLAUDE.md optional",
+          "url": "https://github.com/anthropics/claude-code/issues/96466"
+        },
+        {
+          "date": "2026-09-20T15:33:09Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched [existing issues](https://github.com/anthropics/claude-code/issues?q=is%3Aissue%20state%3Aopen%20label%3Amodel) for similar behavior reports\n- [x] This report does NOT contain sensitive information (API keys, passwords, etc.)\n\n### Type of Behavior Issue\n\nClaude modified files I didn't ask it to modify\n\n### What You Asked Claude to Do\n\nLet it go!!!!!!!\n\n### What Claude Actually Did\n\nStarting with 2.1.277, Claude Code claims support for AGENTS.md \u2014 \"i",
+          "title": "[MODEL] Claude Code's AGENTS.md Support: A Local Feature Locked Behind a Remote Switch",
+          "url": "https://github.com/anthropics/claude-code/issues/95690"
+        },
+        {
+          "date": "2026-09-22T18:55:15Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched existing issues. Closest: #95589 (AGENTS.md loading is intermittent with no CLAUDE.md anywhere) and #96005 (dedup of the AGENTS.md fallback against other instruction channels). Neither covers `CLAUDE.local.md`. This one is deterministic: 5/5 runs in every scenario below.\n- [x] This is a single bug report\n- [x] I am using the latest version of Claude Code (2.1.280)\n\n### What's Wrong?\n\nIn the default `instructionFiles` mode (`claude-md-or-agents-md`),",
+          "title": "[BUG] CLAUDE.local.md switches off the AGENTS.md fallback, so a personal note silently drops all shared project instructions",
+          "url": "https://github.com/anthropics/claude-code/issues/96117"
+        },
+        {
+          "date": "2026-09-28T16:57:23Z",
+          "snippet": "## Summary\nIn a Project (coordinator session + multiple thread sessions), a multi-issue server implementation went badly wrong. Several PRs had to be reverted, and the whole task had to restart from task breakdown. The same product works well for single-task investigate-and-fix projects (e.g. a Sentry auto-fix project), but fails badly for coordinated multi-thread implementation.\n\n## What happened\n- Thread sessions merged 2 PRs while CI was red, even though the project instructions required gree",
+          "title": "Projects: coordinator + thread sessions merged PRs with red CI and ignored AGENTS.md during multi-thread implementation",
+          "url": "https://github.com/anthropics/claude-code/issues/97924"
+        },
+        {
+          "date": "2026-09-25T07:11:37Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched [existing issues](https://github.com/anthropics/claude-code/issues?q=is%3Aissue%20state%3Aopen%20label%3Abug) and this hasn't been reported yet\n- [x] This is a single bug report (please file separate reports for different bugs)\n- [x] I am using the latest version of Claude Code\n\n### What's Wrong?\n\n/init always writes CLAUDE.md, even when the project's instructions already live in AGENTS.md.\n\nSince 2.1.277, AGENTS.md is read only where no CLAUDE.md e",
+          "title": "[BUG]   /init writes CLAUDE.md in an AGENTS.md project, silently disabling the instructions it just read",
+          "url": "https://github.com/anthropics/claude-code/issues/97004"
+        },
+        {
+          "date": "2026-09-19T19:50:28Z",
+          "snippet": "### Preflight Checklist\n\n- [x] I have searched existing issues. Closest: #89825 (root `AGENTS.md` not auto-loaded when no `CLAUDE.md` exists, 2.1.246 / Windows, filed before AGENTS.md support shipped in 2.1.277). That report describes a consistent failure; this one is about the same feature after it shipped, failing intermittently: on one machine, in one directory, some sessions load the files and some do not.\n- [x] This is a single bug report\n- [x] I am using the latest version of Claude Code (",
+          "title": "[BUG] AGENTS.md loading is intermittent on 2.1.278: same directory and flag state, some sessions load the files and some silently do not",
+          "url": "https://github.com/anthropics/claude-code/issues/95589"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/claude-github/github-issues.raw",
+      "raw_sha256": "44346fca7d3d5687f53da055153f9295ecdbbb3f076e60a5c9dcbbf1ba6a2306",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-issues",
+      "status": "ok"
+    },
+    {
+      "attempts": [],
+      "control": {
+        "count": 0,
+        "query": "claude-code"
+      },
+      "elapsed_s": 2.1767343339743093,
+      "items": [],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/claude-github/github-discussions.raw",
+      "raw_sha256": "e56779ec134a9f8d1d081cbb18e643fab4abb2dbcbc9b45057d681aa549f358e",
+      "reason": "canary returned 0 items",
+      "route": null,
+      "skip_reason": null,
+      "source": "github-discussions",
+      "status": "empty_unverified"
+    },
+    {
+      "attempts": [],
+      "control": null,
+      "elapsed_s": 1.5882470419746824,
+      "items": [
+        {
+          "date": "2026-10-02T20:19:57Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.288",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.288"
+        },
+        {
+          "date": "2026-10-01T18:00:22Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.287",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.287"
+        },
+        {
+          "date": "2026-09-30T19:10:13Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.286",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.286"
+        },
+        {
+          "date": "2026-09-29T19:27:30Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.285",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.285"
+        },
+        {
+          "date": "2026-09-28T18:02:03Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.284",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.284"
+        },
+        {
+          "date": "2026-09-25T21:50:12Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.283",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.283"
+        },
+        {
+          "date": "2026-09-24T18:38:05Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.282",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.282"
+        },
+        {
+          "date": "2026-09-23T19:19:15Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.281",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.281"
+        },
+        {
+          "date": "2026-09-22T16:38:14Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.280",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.280"
+        },
+        {
+          "date": "2026-09-18T18:06:32Z",
+          "snippet": "release body mentions a query term: yes",
+          "title": "v2.1.277",
+          "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.277"
+        }
+      ],
+      "provisional": false,
+      "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/claude-github/github-releases.raw",
+      "raw_sha256": "6f61ba3e50a71a8536ba67ee07518337678e3b2a71ef94767f1586ed8efd1540",
+      "reason": null,
+      "route": null,
+      "skip_reason": null,
+      "source": "github-releases",
+      "status": "ok"
+    }
+  ],
+  "strict_five": false
+}

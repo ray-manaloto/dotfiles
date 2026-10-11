@@ -1,0 +1,19 @@
+{
+  "source": "audit.md proposed XML",
+  "parse": "accepted",
+  "label": "dev.mise.dotfiles-takeover-check",
+  "start_interval": 900,
+  "run_at_load": false,
+  "keep_alive": false,
+  "argv": [
+    "/Users/rmanaloto/.local/bin/mise",
+    "-C",
+    "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "run",
+    "takeover-check",
+    "--",
+    "--check-only"
+  ],
+  "working_directory": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+  "note": "Syntax check of proposed artifact only; no LaunchAgent installed or loaded."
+}

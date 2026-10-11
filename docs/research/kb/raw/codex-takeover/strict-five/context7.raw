@@ -1,0 +1,90 @@
+### CHANGELOG entry for AGENTS.md support
+
+Source: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
+
+The release note announcing AGENTS.md support: 'in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead'. This is the user's exact CHANGELOG entry query.
+
+```markdown
+- Added AGENTS.md support: in a project with no CLAUDE.md, Claude Code reads AGENTS.md instead; change it under "Project instructions" in `/config` (not yet on Bedrock, Vertex or Foundry)
+```
+
+--------------------------------
+
+### CLAUDE.md discovery: filenames searched during directory walk
+
+Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/names/claude-names.ts
+
+Defines the three filenames that the engine's ancestor walk looks for in every directory above the working directory. This is the core discovery mechanism for project-level instruction files.
+
+```typescript
+export const CLAUDE_NAMES = [
+  'CLAUDE.md',
+  '.claude/CLAUDE.md',
+  'CLAUDE.local.md',
+] as const
+```
+
+--------------------------------
+
+### Fallback filter: AGENTS.md only outside directories with CLAUDE.md
+
+Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/hooks/frames/outside-claude-dirs.ts
+
+In claude-md-or-agents-md mode, only AGENTS.md files in directories that have no CLAUDE.md of their own are included — the native fallback without merging or importing.
+
+```typescript
+export function outsideClaudeDirs(
+  agents: readonly FsAncestor[],
+  claude: readonly FsAncestor[],
+): readonly FsAncestor[] {
+  const taken = new Set(claude.map(file => file.dir))
+  return agents.filter(file => !taken.has(file.dir))
+}
+```
+
+--------------------------------
+
+### Structure auto-discovered plugin command directory
+
+Source: https://github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/command-development/references/plugin-features-reference.md
+
+Claude Code discovers commands placed in the commands/ directory at plugin load time without requiring manual registration.
+
+```text
+plugin-name/
+├── commands/              # Auto-discovered commands
+│   ├── foo.md            # /foo (plugin:plugin-name)
+│   └── bar.md            # /bar (plugin:plugin-name)
+└── plugin.json           # Plugin manifest
+```
+
+### agents-md
+
+Source: https://github.com/anthropics/claude-code/blob/main/mods/agents-md/README.md
+
+`AGENTS.md` read the way Claude Code reads `CLAUDE.md`, as a plugin, under
+one option, `instructionFiles`:
+
+- `claude-md`: only `CLAUDE.md` is loaded, by the engine, as today. The plugin
+  adds nothing.
+- `claude-md-or-agents-md` (the default): a project with no instruction files
+  of its own gets its `AGENTS.md` files instead, loaded exactly where and how
+  `CLAUDE.md` would be. "Of its own" is read off what the engine loaded for
+  the context: a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in any
+  directory from the root down to the working directory leaves the whole
+  project to the engine, and the plugin stays out (the organization's managed
+  file, the person's `~/.claude/CLAUDE.md`, a `.claude/rules` file and an
+  added directory's `CLAUDE.md` do not count, as the nested walk does not see
+  them either). With none, every `AGENTS.md` and `.claude/AGENTS.md` on that
+  path joins the instruction files the engine renders, and a `Read` under a
+  subdirectory attaches that directory's `AGENTS.md` unless a `CLAUDE.md`
+  there claims it.
+- `claude-md-and-agents-md`: every `AGENTS.md` is loaded beside `CLAUDE.md`,
+  up and down the tree; a file `CLAUDE.md` already `@`-imports, or is a link
+  to, is not loaded a second time (compared by path, then by content).
+- `managed-only`: the project's checked-in and private instruction files and
+  the person's own are dropped from the context; the organization's managed
+  `CLAUDE.md` and the engine's memory stay. The engine's nested `CLAUDE.md`
+  attachments on `Read` are not an event yet and still arrive. (The engine's
+  `claudeMdExcludes` setting also exists, for user, project and local files,
+  and applies to the `AGENTS.md` files this plugin reads too.)

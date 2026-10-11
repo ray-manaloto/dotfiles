@@ -1,0 +1,75 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 72.01457316701999,
+  "items": [
+    {
+      "date": "2026-09-28",
+      "snippet": "Does Your Agent Actually Read AGENTS.md? Does your agent load the instructions you put in AGENTS.md? In First Principles 03, we test it with one small fact: my favorite animal is a cheetah. We start with an empty practice file, add the fact, compare an existing session with a fresh one, then remove it and ask again. Along the way: what belongs in a project instruction file, how AGENTS.md and CLAUDE.md are discovered, and why instructions guide behavior without guaranteeing it. Try the playground",
+      "title": "Does Your Agent Actually Read AGENTS.md?",
+      "url": "https://www.youtube.com/watch?v=7ZSkdWA9U-o"
+    },
+    {
+      "date": "2026-09-23",
+      "snippet": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+      "title": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+      "url": "https://blog.szypowi.cz/p/claude-code-reads-agents.md-only-when-telemetry-is-on/"
+    },
+    {
+      "date": "2026-09-29",
+      "snippet": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69\n\n\u7b2c 2 \u90e8\u5206 \u00b7 Agent \u5185\u6838\n\n# Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\n\n\u6280\u80fd\u4ece\u54ea\u4e9b\u6839\u76ee\u5f55\u88ab\u626b\u63cf\u51fa\u6765\u3001\u6e05\u5355\u600e\u6837\u5728\u9884\u7b97\u5185\u6324\u8fdb\u4e0a\u4e0b\u6587\u3001\u663e\u5f0f\u63d0\u53ca\u5982\u4f55\u89e3\u6790\u6210\u8981\u6ce8\u5165\u7684 SKILL.md\uff0c\u4ee5\u53ca\u201c\u81ea\u52a8\u9009\u7528\u201d\u5728 v0.158.0 \u5176\u5b9e\u4ecd\u7531\u6a21\u578b\u81ea\u5df1\u51b3\u5b9a\u2014\u2014\u4ee3\u7801\u91cc\u7684\u68c0\u7d22\u5f0f\u9009\u62e9\u5668\u53ea\u5728\u5f71\u5b50\u6a21\u5f0f\u4e0b\u8dd1\u5b9e\u9a8c\u6307\u6807\u3002\n\n\u4f5c\u8005 David\u00b7\u66f4\u65b0\u4e8e 2026-09-29\u00b7\u7b2c 36 \u7bc7\uff08\u5171 57 \u7bc7\uff09\u6536\u85cf\u5206\u4eab\n\n## Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n\u6280\u80fd\uff08skill\uff09\u662f\u4e00\u4e2a\u5e26 `SKILL.md` \u7684\u76ee\u5f55\u3002Codex \u7528\u6e10\u8fdb\u5f0f\u52a0\u8f7d\uff1a\u4e0a\u4e0b\u6587\u91cc\u5e73\u65f6\u53ea\u653e\u6bcf\u4e2a\u6280\u80fd\u7684\u540d\u5b57\u3001\u63cf\u8ff0\u548c\u4f4d\u7f6e\uff0c\u771f\u8981\u7528\u67d0\u4e2a\u6280\u80fd\u65f6\u624d\u8bfb\u5b83\u7684\u5168\u6587\u3002\u8fd9\u4e00\u7bc7\u6cbf\u7740\u201c\u53d1\u73b0 \u2192 \u6e05\u5355 \u2192 \u9009\u62e9 \u2192 \u6ce8\u5165\u201d\u8d70\u4e00\u904d\u3002\n\n## \u600e\u4e48\u7528\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n`SKILL.md` \u4ee5 YAML frontmatter \u5f00\u5934\uff0c\u5199 `name`\u3001`description`\uff0c\u53ef\u9009 `metadata.short-description`\uff1b\u540c\u76ee\u5f55\u53ef\u653e `agents/openai.yaml`\uff0c\u58f0\u660e\u754c\u9762\u4fe1",
+      "title": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69",
+      "url": "https://daiw.org/manual/codex-source/skills"
+    },
+    {
+      "date": "2026-09-18",
+      "snippet": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "title": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "url": "https://code.claude.com/docs/en/changelog"
+    },
+    {
+      "date": "2026-09-27",
+      "snippet": "The model has no way of knowing which option is best suited to the task. As it stands, you've essentially created a monkey randomly pressing buttons. It does, and it chooses them pretty accurately. Identifying grunt work vs requiring creativity and depth. Give it a try before throwing out random accusations. Doesn't switching models during a session consume more tokens because it breaks the prompt-caching continuity and forces the system to resend the entire conversation history?",
+      "title": "Amazing Agents.md instruction for best usage efficiency",
+      "url": "https://www.reddit.com/r/codex/comments/1wrok1q/amazing_agentsmd_instruction_for_best_usage/"
+    },
+    {
+      "date": "2026-09-18",
+      "snippet": "Anthropic finally adds AGENTS.md support to Claude Code",
+      "title": "Anthropic finally adds AGENTS.md support to Claude Code",
+      "url": "https://twitter.com/trq212/status/2101009392611278961"
+    },
+    {
+      "date": "2026-09-19",
+      "snippet": "Claude Code is getting native AGENTS.md support",
+      "title": "Claude Code Supports AGENTS.md",
+      "url": "https://github.com/anthropics/claude-code/tree/main/mods/agents-md"
+    },
+    {
+      "date": "2026-09-26",
+      "snippet": "This sub is trash. Unsubscribing. cool story bro. say hi to Mike. thanks for the disclosure. These guys don\u2019t know what they are doing, it\u2019s a science experiment that\u2019s already been done. They just don\u2019t know it.",
+      "title": "My friend gave Claude Code and Codex agents a way to talk to each other. Once this went over a hundred agents they reinvented bureaucracy.",
+      "url": "https://www.reddit.com/r/AI_Agents/comments/1wqij2i/my_friend_gave_claude_code_and_codex_agents_a_way/"
+    },
+    {
+      "date": "2026-09-20",
+      "snippet": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+      "title": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+      "url": "https://asyncdot.com/blog/chief-of-staff-pattern-orchestrating-claude-code-sessions/"
+    },
+    {
+      "date": "2026-09-18",
+      "snippet": "I actually think this is a huge QOL improvement. Especially because so many people are using both Claude Code and Codex, they need to stop fighting that. Creating a walled garden and not making things Still needs to read skills from .agents/skills so I can stop symlinking it. see @AGENTS.md every CLAUDE.md in my repos",
+      "title": "AGENTS.md now supported in Claude Code",
+      "url": "https://www.reddit.com/r/ClaudeCode/comments/1wk2q8v/agentsmd_now_supported_in_claude_code/"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/last30days.raw",
+  "raw_sha256": "59b2139dc2b29af4c9fcf7f0ad8d1dfa0a2403b739eb0a31a0aa3c3bc1f9f373",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "last30days",
+  "status": "ok"
+}

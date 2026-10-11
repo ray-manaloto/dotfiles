@@ -42,6 +42,7 @@ COORDINATOR_NAME_RE = re.compile(r"^dotfiles-.+\.coordinator$")
 #: The main checkout's gitignored coordination files (relative to its root).
 SHIP_QUEUE = Path(".agent") / "plans" / "main-checkout-ship-queue.md"
 HANDOFF_INBOX = Path(".agent") / "plans" / "handoff-inbox"
+COORDINATOR_CLAIMS = Path(".agent") / "state" / "coordinator-claims"
 
 
 class SessionError(RuntimeError):

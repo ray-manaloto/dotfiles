@@ -1,0 +1,17 @@
+{
+  "attempts": [],
+  "control": {
+    "count": 1,
+    "query": "anthropics/claude-code"
+  },
+  "elapsed_s": 2.5161085830186494,
+  "items": [],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-releases.raw",
+  "raw_sha256": "04d68ba10bb4c1fd3852a212957628288c83100212893a9abd0fcd02edee939d",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "github-releases",
+  "status": "empty_verified"
+}

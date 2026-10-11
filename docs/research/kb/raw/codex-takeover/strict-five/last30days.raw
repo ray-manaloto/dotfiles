@@ -1,0 +1,806 @@
+{
+  "clusters": [
+    {
+      "engagement_total": 4,
+      "sources": [
+        "youtube"
+      ],
+      "summary": "Does Your Agent Actually Read AGENTS.md? Does your agent load the instructions you put in AGENTS.md? In First Principles 03, we test it with one small fact: my favorite animal is a cheetah. We start with an empty practice file, add the fact, compare an existing session with a fresh one, then remove it and ask again. Along the way: what belongs in a project instruction file, how AGENTS.md and CLAUDE.md are discovered, and why instructions guide behavior without guaranteeing it. Try the playground: https://github.com/JayefBuilds/first-",
+      "title": "Does Your Agent Actually Read AGENTS.md?"
+    },
+    {
+      "engagement_total": 486,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+      "title": "Claude Code reads AGENTS.md only when telemetry is on [fixed]"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69\n\n\u7b2c 2 \u90e8\u5206 \u00b7 Agent \u5185\u6838\n\n# Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\n\n\u6280\u80fd\u4ece\u54ea\u4e9b\u6839\u76ee\u5f55\u88ab\u626b\u63cf\u51fa\u6765\u3001\u6e05\u5355\u600e\u6837\u5728\u9884\u7b97\u5185\u6324\u8fdb\u4e0a\u4e0b\u6587\u3001\u663e\u5f0f\u63d0\u53ca\u5982\u4f55\u89e3\u6790\u6210\u8981\u6ce8\u5165\u7684 SKILL.md\uff0c\u4ee5\u53ca\u201c\u81ea\u52a8\u9009\u7528\u201d\u5728 v0.158.0 \u5176\u5b9e\u4ecd\u7531\u6a21\u578b\u81ea\u5df1\u51b3\u5b9a\u2014\u2014\u4ee3\u7801\u91cc\u7684\u68c0\u7d22\u5f0f\u9009\u62e9\u5668\u53ea\u5728\u5f71\u5b50\u6a21\u5f0f\u4e0b\u8dd1\u5b9e\u9a8c\u6307\u6807\u3002\n\n\u4f5c\u8005 David\u00b7\u66f4\u65b0\u4e8e 2026-09-29\u00b7\u7b2c 36 \u7bc7\uff08\u5171 57 \u7bc7\uff09\u6536\u85cf\u5206\u4eab\n\n## Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n\u6280\u80fd\uff08skill\uff09\u662f\u4e00\u4e2a\u5e26 `SKILL.md` \u7684\u76ee\u5f55\u3002Codex \u7528\u6e10\u8fdb\u5f0f\u52a0\u8f7d\uff1a\u4e0a\u4e0b\u6587\u91cc\u5e73\u65f6\u53ea\u653e\u6bcf\u4e2a\u6280\u80fd\u7684\u540d\u5b57\u3001\u63cf\u8ff0\u548c\u4f4d\u7f6e\uff0c\u771f\u8981\u7528\u67d0\u4e2a\u6280\u80fd\u65f6\u624d\u8bfb\u5b83\u7684\u5168\u6587\u3002\u8fd9\u4e00\u7bc7\u6cbf\u7740\u201c\u53d1\u73b0 \u2192 \u6e05\u5355 \u2192 \u9009\u62e9 \u2192 \u6ce8\u5165\u201d\u8d70\u4e00\u904d\u3002\n\n## \u600e\u4e48\u7528\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n`SKILL.md` \u4ee5 YAML frontmatter \u5f00\u5934\uff0c\u5199 `name`\u3001`description`\uff0c\u53ef\u9009 `metadata.short-description`\uff1b\u540c\u76ee\u5f55\u53ef\u653e `agents/openai.yaml`\uff0c\u58f0\u660e\u754c\u9762\u4fe1",
+      "title": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69"
+    },
+    {
+      "engagement_total": 741,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "title": "Claude Code now reads AGENTS.md if there is no Claude.md"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "The model has no way of knowing which option is best suited to the task. As it stands, you've essentially created a monkey randomly pressing buttons. It does, and it chooses them pretty accurately. Identifying grunt work vs requiring creativity and depth. Give it a try before throwing out random accusations. Doesn't switching models during a session consume more tokens because it breaks the prompt-caching continuity and forces the system to resend the entire conversation history?",
+      "title": "Amazing Agents.md instruction for best usage efficiency"
+    },
+    {
+      "engagement_total": 52,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Anthropic finally adds AGENTS.md support to Claude Code",
+      "title": "Anthropic finally adds AGENTS.md support to Claude Code"
+    },
+    {
+      "engagement_total": 4,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Claude Code is getting native AGENTS.md support",
+      "title": "Claude Code Supports AGENTS.md"
+    },
+    {
+      "engagement_total": 36,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "This sub is trash. Unsubscribing. cool story bro. say hi to Mike. thanks for the disclosure. These guys don\u2019t know what they are doing, it\u2019s a science experiment that\u2019s already been done. They just don\u2019t know it.",
+      "title": "My friend gave Claude Code and Codex agents a way to talk to each other. Once this went over a hundred agents they reinvented bureaucracy."
+    },
+    {
+      "engagement_total": 25,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+      "title": "Orchestrating Claude Code Agents: The Chief of Staff Pattern"
+    },
+    {
+      "engagement_total": 421,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "I actually think this is a huge QOL improvement. Especially because so many people are using both Claude Code and Codex, they need to stop fighting that. Creating a walled garden and not making things Still needs to read skills from .agents/skills so I can stop symlinking it. see @AGENTS.md every CLAUDE.md in my repos",
+      "title": "AGENTS.md now supported in Claude Code"
+    },
+    {
+      "engagement_total": 8,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "title": "Claude Code now reads AGENTS.md if there is no Claude.md"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "claude-code-20260923T200701Z / documentation capture\n\n# One read of Claude Code CLI claude-code-20260923T200701Z\n\n## What this read moved\n\n### memory Changed \u00b7 +6 / -8 lines \n\n339 339 To change the default, for example to have Claude always read both files, read only `CLAUDE.md`, or read only your organization's managed instructions, [change the **Project instructions** setting](#choose-which-instruction-files-load).\n\n340 340 \n\n341 341 \n\n342 Reading `AGENTS.md` directly requires Claude Code v2.1",
+      "title": "claude-code-20260923T200701Z / documentation capture"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "AGENTS.md for Codex: setup, discovery and best practices\n\n# AGENTS.md for Codex: setup, discovery and best practices\n\n30 September 2026 5 min read The VibeiDE team\n\nHow Codex finds and combines AGENTS.md files, what to write in them, overrides and size limits, and how to share one file with Claude Code.\n\nCodex starts every run knowing nothing about your project except what you tell it. AGENTS.md is how you tell it once instead of in every prompt: the build command, the test command, the folder n",
+      "title": "AGENTS.md for Codex: setup, discovery and best practices"
+    },
+    {
+      "engagement_total": 3,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "What Claude Code's AGENTS.md fallback does not cover",
+      "title": "What Claude Code's AGENTS.md fallback does not cover"
+    },
+    {
+      "engagement_total": 7,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Show HN: Visually orchestrate Claude Code AI agents",
+      "title": "Show HN: Visually orchestrate Claude Code AI agents"
+    },
+    {
+      "engagement_total": 3,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Claude Code 2.1.277 adds support for AGENTS.md",
+      "title": "Claude Code 2.1.277 adds support for AGENTS.md"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it | Stackness\n\n# AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it\n\nSE Sergei Gordeichuk Senior Software engineer \u00b7 The master of Stackness\n\nPublished 24 September 2026 Updated 25 September 2026 10 min read\n\nClaude Code reads AGENTS.md only when there is no CLAUDE.md. More precisely, since version 2.1.277 it reads AGENTS.md when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md",
+      "title": "AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it | Stackness"
+    },
+    {
+      "engagement_total": 1261,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "\"native support\" bro it's just reading another file instead of it's usual one It's a well-kept industry secret that CLAUDE.md and AGENTS.md have incompatible formats. Trust me, I have years of experience in markdown engineering Can you not think for yourself",
+      "title": "Claude Code is getting native AGENTS.md support!"
+    },
+    {
+      "engagement_total": 5,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Show HN: Pixel Agents \u2013 A pixel-art mission control for your Claude Code agents",
+      "title": "Show HN: Pixel Agents \u2013 A pixel-art mission control for your Claude Code agents"
+    },
+    {
+      "engagement_total": 50,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Show HN: Self-hosted company OS, Claude Code and Codex agents in departments",
+      "title": "Show HN: Self-hosted company OS, Claude Code and Codex agents in departments"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362-Seo\u4f18\u5316-\u5854\u57ce\u5730\u533a\u7f51\u7ad9\u5efa\u8bbe\u516c\u53f8\n\n news 2026/9/26 9:17:46 \n\n# 24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362 \n\n \u5f20\u5c0f\u660e \n\n \u524d\u7aef\u5f00\u53d1\u5de5\u7a0b\u5e08 \n\n 24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362 \n\n### \u6982\u8ff0\n\nAGENTS.md \u662f Codex \u7684\u9ed8\u8ba4\u9879\u76ee\u6307\u4ee4\u6587\u4ef6\u540d\uff0c\u4f46\u5e76\u975e\u6240\u6709\u56e2\u961f\u90fd\u5e0c\u671b\u4f7f\u7528\u8fd9\u4e2a\u540d\u79f0\u3002\u6709\u4e9b\u56e2\u961f\u5df2\u7ecf\u6709\u4e86\u5185\u90e8\u7684\u5f00\u53d1\u6307\u5357\u6587\u6863\uff08\u5982`TEAM_GUIDE.md`\uff09\uff0c\u6709\u4e9b\u56e2\u961f\u5219\u5e0c\u671b\u4f7f\u7528\u66f4\u9690\u853d\u7684\u6587\u4ef6\u540d\uff08\u5982`.agents.md`\uff09\uff0c\u8fd8\u6709\u4e9b\u56e2\u961f\u9700\u8981\u5728\u4e0d\u540c\u7684\u5de5\u4f5c\u573a\u666f\u4e4b\u95f4\u5207\u6362\u4e0d\u540c\u7684\u914d\u7f6e\u96c6\u3002\n\nCodex \u63d0\u4f9b\u4e86\u4e09\u5927\u914d\u7f6e\u7075\u6d3b\u6027\u673a\u5236\u6765\u89e3\u51b3\u8fd9\u4e9b\u95ee\u9898\uff1a\n\n1. `project_doc_fallback_filenames`\uff1a\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u5217\u8868\n2. `project_doc_max_bytes`\uff1a\u8c03\u6574\u52a0\u8f7d\u5927\u5c0f\u4e0a\u9650\n3. `CODEX_HOME`\u73af\u5883\u53d8\u91cf + \u591a Profile \u7ba1\u7406\uff1a\u5728\u914d\u7f6e\u76ee\u5f55\u95f4\u5207\u6362\n\n\u672c\u6587\u5c06\u9010\u4e00\u6df1\u5165\u89e3\u6790\u8fd9\u4e9b\u673a\u5236\uff0c\u5e76\u63d0\u4f9b\u5b8c\u6574\u7684\u4f7f\u7528\u6848\u4f8b\u3002\n\n#### \u4e3a\u4ec0\u4e48\u9700\u8981\u81ea\u5b9a\u4e49\u6587\u4ef6\u540d\uff1f\n\n\u5728\u5b9e\u9645\u4f7f\u7528\u4e2d\uff0c\u4f60\u53ef\u80fd\u9047\u5230\u4ee5\u4e0b\u8fd9\u4e9b\u60c5\u51b5\uff1a\n\n- \u56e2\u961f\u5df2\u6709\u6587",
+      "title": "24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362-Seo\u4f18\u5316-\u5854\u57ce\u5730\u533a\u7f51\u7ad9\u5efa\u8bbe\u516c\u53f8"
+    },
+    {
+      "engagement_total": 1,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "[TLDR] AGENTS.md now supported in Claude Code [via r/ClaudeCode]",
+      "title": "[TLDR] AGENTS.md now supported in Claude Code [via r/ClaudeCode]"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "Does Claude Code read AGENTS.md? \u00b7 Harbor\n\n# Does Claude Code read AGENTS.md?\n\nPublished: September 23, 2026\n\nYes, since Claude Code v2.1.277. By default it reads `AGENTS.md` only when the project has no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` from the working directory up. The support depends on fetched feature flags, so sessions with telemetry off, on Bedrock or Vertex, or right after an upgrade still skip it.\n\nChecked on 2026-09-23 against Claude Code 2.1.280, the memory docs, t",
+      "title": "Does Claude Code read AGENTS.md? \u00b7 Harbor"
+    },
+    {
+      "engagement_total": 149461,
+      "sources": [
+        "github"
+      ],
+      "summary": "Project: anthropics/claude-code (149K stars, 14229 open issues, TypeScript)\n  Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows \n  README: # Claude Code\n\n![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://w",
+      "title": "anthropics/claude-code (149K stars) - 14229 open issues"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent - News - Cocoloop\n\n Claude Code 2026-09 English \n\n# Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent\n\nCocoloop Editorial \u00b7 localized from verified public sources\n\nStarting with 2.1.277, Claude Code reads AGENTS.md in any folder that has no CLAUDE.md; if both are present, CLAUDE.md wins. Enterprise users on Bedrock, Vertex, or Foundry can't use it yet, and Anthropic hasn't said when those channels will catch up.\n\nAnthropic's",
+      "title": "Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent - News - Cocoloop"
+    },
+    {
+      "engagement_total": 6,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "If you aren't highly skilled with it, have astra itself write a .md file for you. Definitely did a better job than i managed. tell it your priorities (quality/cost/speed/output format/etc) and astra w Tell it code style, what to do, what not to do, how to test, how not to test, how to deal with git, if you want branches, commits, uploads to a server, compilations. if you want it to chat during wait generating a base from Astra will be your best bet, especially if you're using a specific framework or engine for something. At minimum you want to specify what files it can read/write to, ban adding",
+      "title": "What does a good agents.md look like with Astra out?"
+    },
+    {
+      "engagement_total": 3,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "These are the ones I made, feel free to take a look: https://github.com/JonaCodes/coding-agent-resources thanks man.. will definitely check For sure, feel free to ask if you have questions",
+      "title": "Can someone help me out ? I need good prompts/AGENTS.md ideas/skills/tips to make models more efficient while performing tasks ..."
+    },
+    {
+      "engagement_total": 16,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "PSA: OpenAI has guidelines for Astrahttps://developers.openai.com/api/docs/guides/latest-modelExample Agents.md addition:If a skill causes you to ask for permission or confirmation, pause, leave reque Feedback on the memory block, since that is the part doing the most work here. The propose-and-approve shape is right, and most people skip it. Letting the model save on its own judgment is how a stor Thank you, Astra 6 on ChatGPT chat mode with Pro reasoning was being an absolute pain in the ass, I'm pointing it to the website and tell it to fix itself lol",
+      "title": "As recommended, I started using Astra with a blank agents.md, then I realised it needed some tweaks. Here's what I've got so far..."
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "Codex skills: where they live and how Codex picks one | Zest\n\n# Codex skills and how Codex picks one.\n\nA Codex skill is a folder with a SKILL.md that Codex loads when your request matches its description, or when you type $skill-name. Commit it to .agents/skills in the repo and everyone who clones it gets it; the same file works in Claude Code from .claude/skills.\n\n02 Share the best AI skills\n\n Weekly email Mon, Sep 7 \u00b7 9:00 AM\n\n#### AI stack worth sharing\n\n- Agree on the approach before coding.",
+      "title": "Codex skills: where they live and how Codex picks one | Zest"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "grounding"
+      ],
+      "summary": "Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained | AI Coding Guide\n\n# Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained\n\n Codex Published: Sep 10, 2026 Updated: Sep 20, 2026 \n\nproject_doc_max_bytes defaults to 32768 bytes, and once that total is reached Codex adds no further AGENTS.md files. How the cap applies, and how to raise it.\n\n Verified on Sep 20, 2026 These tools change quickly. Please also check the latest official documenta",
+      "title": "Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained | AI Coding Guide"
+    },
+    {
+      "engagement_total": 381,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "Wait, Codex can now invoke Claude Code sessions?",
+      "title": "Wait, Codex can now invoke Claude Code sessions?"
+    },
+    {
+      "engagement_total": 71,
+      "sources": [
+        "hackernews"
+      ],
+      "summary": "Coop \u2013 Isolated VM Environments for Running Claude Code and Codex",
+      "title": "Coop \u2013 Isolated VM Environments for Running Claude Code and Codex"
+    },
+    {
+      "engagement_total": 2,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "Everyone here has a CLAUDE.md. What happens to it when you open Cursor/Codex?",
+      "title": "Everyone here has a CLAUDE.md. What happens to it when you open Cursor/Codex?"
+    },
+    {
+      "engagement_total": 2,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "I run Claude Code, Codex and Cursor on the same project. Here's how I stopped losing context",
+      "title": "I run Claude Code, Codex and Cursor on the same project. Here's how I stopped losing context"
+    },
+    {
+      "engagement_total": 4,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "Your CLAUDE.md can reference code that no longer exists. I made a small pre-commit check for it",
+      "title": "Your CLAUDE.md can reference code that no longer exists. I made a small pre-commit check for it"
+    },
+    {
+      "engagement_total": 4,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "Let Codex delegate coding tasks to Claude Code",
+      "title": "Let Codex delegate coding tasks to Claude Code"
+    },
+    {
+      "engagement_total": 0,
+      "sources": [
+        "reddit"
+      ],
+      "summary": "I scanned 36 days of my Claude Code/Codex history and found $10k of API-equivalent usage",
+      "title": "I scanned 36 days of my Claude Code/Codex history and found $10k of API-equivalent usage"
+    }
+  ],
+  "freshness_verdicts": [],
+  "generated_at": "2026-10-05T12:28:21.641316Z",
+  "query": "AGENTS.md instructionFiles Claude Code Codex discovery",
+  "results": [
+    {
+      "candidate_id": "https://youtube.com/watch?v=7zskdwa9u-o",
+      "cluster": 0,
+      "engagement": {
+        "comments": 0,
+        "likes": 0,
+        "views": 4
+      },
+      "published_at": "2026-09-28",
+      "relevance_score": 0.4205,
+      "source": "youtube",
+      "summary": "Does Your Agent Actually Read AGENTS.md? Does your agent load the instructions you put in AGENTS.md? In First Principles 03, we test it with one small fact: my favorite animal is a cheetah. We start with an empty practice file, add the fact, compare an existing session with a fresh one, then remove it and ask again. Along the way: what belongs in a project instruction file, how AGENTS.md and CLAUDE.md are discovered, and why instructions guide behavior without guaranteeing it. Try the playground: https://github.com/JayefBuilds/first-",
+      "title": "Does Your Agent Actually Read AGENTS.md?",
+      "url": "https://www.youtube.com/watch?v=7ZSkdWA9U-o"
+    },
+    {
+      "candidate_id": "https://blog.szypowi.cz/p/claude-code-reads-agents.md-only-when-telemetry-is-on",
+      "cluster": 1,
+      "engagement": {
+        "comments": 284,
+        "points": 486
+      },
+      "published_at": "2026-09-23",
+      "relevance_score": 0.4078,
+      "source": "hackernews",
+      "summary": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+      "title": "Claude Code reads AGENTS.md only when telemetry is on [fixed]",
+      "url": "https://blog.szypowi.cz/p/claude-code-reads-agents.md-only-when-telemetry-is-on/"
+    },
+    {
+      "candidate_id": "https://daiw.org/manual/codex-source/skills",
+      "cluster": 2,
+      "engagement": {},
+      "published_at": "2026-09-29",
+      "relevance_score": 0.4038,
+      "source": "grounding",
+      "summary": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69\n\n\u7b2c 2 \u90e8\u5206 \u00b7 Agent \u5185\u6838\n\n# Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\n\n\u6280\u80fd\u4ece\u54ea\u4e9b\u6839\u76ee\u5f55\u88ab\u626b\u63cf\u51fa\u6765\u3001\u6e05\u5355\u600e\u6837\u5728\u9884\u7b97\u5185\u6324\u8fdb\u4e0a\u4e0b\u6587\u3001\u663e\u5f0f\u63d0\u53ca\u5982\u4f55\u89e3\u6790\u6210\u8981\u6ce8\u5165\u7684 SKILL.md\uff0c\u4ee5\u53ca\u201c\u81ea\u52a8\u9009\u7528\u201d\u5728 v0.158.0 \u5176\u5b9e\u4ecd\u7531\u6a21\u578b\u81ea\u5df1\u51b3\u5b9a\u2014\u2014\u4ee3\u7801\u91cc\u7684\u68c0\u7d22\u5f0f\u9009\u62e9\u5668\u53ea\u5728\u5f71\u5b50\u6a21\u5f0f\u4e0b\u8dd1\u5b9e\u9a8c\u6307\u6807\u3002\n\n\u4f5c\u8005 David\u00b7\u66f4\u65b0\u4e8e 2026-09-29\u00b7\u7b2c 36 \u7bc7\uff08\u5171 57 \u7bc7\uff09\u6536\u85cf\u5206\u4eab\n\n## Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n\u6280\u80fd\uff08skill\uff09\u662f\u4e00\u4e2a\u5e26 `SKILL.md` \u7684\u76ee\u5f55\u3002Codex \u7528\u6e10\u8fdb\u5f0f\u52a0\u8f7d\uff1a\u4e0a\u4e0b\u6587\u91cc\u5e73\u65f6\u53ea\u653e\u6bcf\u4e2a\u6280\u80fd\u7684\u540d\u5b57\u3001\u63cf\u8ff0\u548c\u4f4d\u7f6e\uff0c\u771f\u8981\u7528\u67d0\u4e2a\u6280\u80fd\u65f6\u624d\u8bfb\u5b83\u7684\u5168\u6587\u3002\u8fd9\u4e00\u7bc7\u6cbf\u7740\u201c\u53d1\u73b0 \u2192 \u6e05\u5355 \u2192 \u9009\u62e9 \u2192 \u6ce8\u5165\u201d\u8d70\u4e00\u904d\u3002\n\n## \u600e\u4e48\u7528\u590d\u5236\u672c\u8282\u94fe\u63a5\n\n`SKILL.md` \u4ee5 YAML frontmatter \u5f00\u5934\uff0c\u5199 `name`\u3001`description`\uff0c\u53ef\u9009 `metadata.short-description`\uff1b\u540c\u76ee\u5f55\u53ef\u653e `agents/openai.yaml`\uff0c\u58f0\u660e\u754c\u9762\u4fe1",
+      "title": "Skills \u00b7 \u53d1\u73b0\u3001\u9009\u62e9\u4e0e\u6ce8\u5165 \u00b7 Codex \u6e90\u7801\u89e3\u8bfb \u00b7 \u9053\u96fe\u8f69",
+      "url": "https://daiw.org/manual/codex-source/skills"
+    },
+    {
+      "candidate_id": "https://code.claude.com/docs/en/changelog",
+      "cluster": 3,
+      "engagement": {
+        "comments": 285,
+        "points": 741
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.3933,
+      "source": "hackernews",
+      "summary": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "title": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "url": "https://code.claude.com/docs/en/changelog"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/codex/comments/1wrok1q/amazing_agentsmd_instruction_for_best_usage",
+      "cluster": 4,
+      "engagement": {
+        "num_comments": 17,
+        "score": 0
+      },
+      "published_at": "2026-09-27",
+      "relevance_score": 0.3898,
+      "source": "reddit",
+      "summary": "The model has no way of knowing which option is best suited to the task. As it stands, you've essentially created a monkey randomly pressing buttons. It does, and it chooses them pretty accurately. Identifying grunt work vs requiring creativity and depth. Give it a try before throwing out random accusations. Doesn't switching models during a session consume more tokens because it breaks the prompt-caching continuity and forces the system to resend the entire conversation history?",
+      "title": "Amazing Agents.md instruction for best usage efficiency",
+      "url": "https://www.reddit.com/r/codex/comments/1wrok1q/amazing_agentsmd_instruction_for_best_usage/"
+    },
+    {
+      "candidate_id": "https://twitter.com/trq212/status/2101009392611278961",
+      "cluster": 5,
+      "engagement": {
+        "comments": 2,
+        "points": 52
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.389,
+      "source": "hackernews",
+      "summary": "Anthropic finally adds AGENTS.md support to Claude Code",
+      "title": "Anthropic finally adds AGENTS.md support to Claude Code",
+      "url": "https://twitter.com/trq212/status/2101009392611278961"
+    },
+    {
+      "candidate_id": "https://github.com/anthropics/claude-code/tree/main/mods/agents-md",
+      "cluster": 6,
+      "engagement": {
+        "comments": 0,
+        "points": 4
+      },
+      "published_at": "2026-09-19",
+      "relevance_score": 0.3842,
+      "source": "hackernews",
+      "summary": "Claude Code is getting native AGENTS.md support",
+      "title": "Claude Code Supports AGENTS.md",
+      "url": "https://github.com/anthropics/claude-code/tree/main/mods/agents-md"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/ai_agents/comments/1wqij2i/my_friend_gave_claude_code_and_codex_agents_a_way",
+      "cluster": 7,
+      "engagement": {
+        "num_comments": 37,
+        "score": 36
+      },
+      "published_at": "2026-09-26",
+      "relevance_score": 0.3779,
+      "source": "reddit",
+      "summary": "This sub is trash. Unsubscribing. cool story bro. say hi to Mike. thanks for the disclosure. These guys don\u2019t know what they are doing, it\u2019s a science experiment that\u2019s already been done. They just don\u2019t know it.",
+      "title": "My friend gave Claude Code and Codex agents a way to talk to each other. Once this went over a hundred agents they reinvented bureaucracy.",
+      "url": "https://www.reddit.com/r/AI_Agents/comments/1wqij2i/my_friend_gave_claude_code_and_codex_agents_a_way/"
+    },
+    {
+      "candidate_id": "https://asyncdot.com/blog/chief-of-staff-pattern-orchestrating-claude-code-sessions",
+      "cluster": 8,
+      "engagement": {
+        "comments": 23,
+        "points": 25
+      },
+      "published_at": "2026-09-20",
+      "relevance_score": 0.3734,
+      "source": "hackernews",
+      "summary": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+      "title": "Orchestrating Claude Code Agents: The Chief of Staff Pattern",
+      "url": "https://asyncdot.com/blog/chief-of-staff-pattern-orchestrating-claude-code-sessions/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/claudecode/comments/1wk2q8v/agentsmd_now_supported_in_claude_code",
+      "cluster": 9,
+      "engagement": {
+        "num_comments": 60,
+        "score": 421
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.3714,
+      "source": "reddit",
+      "summary": "I actually think this is a huge QOL improvement. Especially because so many people are using both Claude Code and Codex, they need to stop fighting that. Creating a walled garden and not making things Still needs to read skills from .agents/skills so I can stop symlinking it. see @AGENTS.md every CLAUDE.md in my repos",
+      "title": "AGENTS.md now supported in Claude Code",
+      "url": "https://www.reddit.com/r/ClaudeCode/comments/1wk2q8v/agentsmd_now_supported_in_claude_code/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/hackernews/comments/1wk358f/claude_code_now_reads_agentsmd_if_there_is_no",
+      "cluster": 10,
+      "engagement": {
+        "num_comments": 1,
+        "score": 8
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.3712,
+      "source": "reddit",
+      "summary": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "title": "Claude Code now reads AGENTS.md if there is no Claude.md",
+      "url": "https://www.reddit.com/r/hackernews/comments/1wk358f/claude_code_now_reads_agentsmd_if_there_is_no/"
+    },
+    {
+      "candidate_id": "https://changelogs.core-directive.com/docs/c/claude-code-20260923t200701z",
+      "cluster": 11,
+      "engagement": {},
+      "published_at": "2026-09-23",
+      "relevance_score": 0.3708,
+      "source": "grounding",
+      "summary": "claude-code-20260923T200701Z / documentation capture\n\n# One read of Claude Code CLI claude-code-20260923T200701Z\n\n## What this read moved\n\n### memory Changed \u00b7 +6 / -8 lines \n\n339 339 To change the default, for example to have Claude always read both files, read only `CLAUDE.md`, or read only your organization's managed instructions, [change the **Project instructions** setting](#choose-which-instruction-files-load).\n\n340 340 \n\n341 341 \n\n342 Reading `AGENTS.md` directly requires Claude Code v2.1",
+      "title": "claude-code-20260923T200701Z / documentation capture",
+      "url": "https://changelogs.core-directive.com/docs/c/claude-code-20260923T200701Z"
+    },
+    {
+      "candidate_id": "https://vibeide.dev/blog/agents-md-codex",
+      "cluster": 12,
+      "engagement": {},
+      "published_at": "2026-09-30",
+      "relevance_score": 0.3699,
+      "source": "grounding",
+      "summary": "AGENTS.md for Codex: setup, discovery and best practices\n\n# AGENTS.md for Codex: setup, discovery and best practices\n\n30 September 2026 5 min read The VibeiDE team\n\nHow Codex finds and combines AGENTS.md files, what to write in them, overrides and size limits, and how to share one file with Claude Code.\n\nCodex starts every run knowing nothing about your project except what you tell it. AGENTS.md is how you tell it once instead of in every prompt: the build command, the test command, the folder n",
+      "title": "AGENTS.md for Codex: setup, discovery and best practices",
+      "url": "https://vibeide.dev/blog/agents-md-codex/"
+    },
+    {
+      "candidate_id": "https://samplexbro.github.io/agentsmesh/guides/claude-md-vs-agents-md",
+      "cluster": 13,
+      "engagement": {
+        "comments": 0,
+        "points": 3
+      },
+      "published_at": "2026-09-20",
+      "relevance_score": 0.3541,
+      "source": "hackernews",
+      "summary": "What Claude Code's AGENTS.md fallback does not cover",
+      "title": "What Claude Code's AGENTS.md fallback does not cover",
+      "url": "https://samplexbro.github.io/agentsmesh/guides/claude-md-vs-agents-md/"
+    },
+    {
+      "candidate_id": "https://github.com/rondoflow/rondoflow",
+      "cluster": 14,
+      "engagement": {
+        "comments": 0,
+        "points": 7
+      },
+      "published_at": "2026-09-23",
+      "relevance_score": 0.3449,
+      "source": "hackernews",
+      "summary": "Show HN: Visually orchestrate Claude Code AI agents",
+      "title": "Show HN: Visually orchestrate Claude Code AI agents",
+      "url": "https://github.com/rondoflow/rondoflow"
+    },
+    {
+      "candidate_id": "https://github.com/anthropics/claude-code/commit/a92ea1cdb11ad21f9d583fad2db181dfdac918a6",
+      "cluster": 15,
+      "engagement": {
+        "comments": 0,
+        "points": 3
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.3431,
+      "source": "hackernews",
+      "summary": "Claude Code 2.1.277 adds support for AGENTS.md",
+      "title": "Claude Code 2.1.277 adds support for AGENTS.md",
+      "url": "https://github.com/anthropics/claude-code/commit/a92ea1cdb11ad21f9d583fad2db181dfdac918a6"
+    },
+    {
+      "candidate_id": "https://stackness.dev/blog/agents-md-vs-claude-md-which-file-claude-code-reads-and-the-flag-that-decided-it",
+      "cluster": 16,
+      "engagement": {},
+      "published_at": "2026-09-24",
+      "relevance_score": 0.3421,
+      "source": "grounding",
+      "summary": "AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it | Stackness\n\n# AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it\n\nSE Sergei Gordeichuk Senior Software engineer \u00b7 The master of Stackness\n\nPublished 24 September 2026 Updated 25 September 2026 10 min read\n\nClaude Code reads AGENTS.md only when there is no CLAUDE.md. More precisely, since version 2.1.277 it reads AGENTS.md when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md",
+      "title": "AGENTS.md vs CLAUDE.md: which file Claude Code reads, and the flag that decided it | Stackness",
+      "url": "https://stackness.dev/blog/agents-md-vs-claude-md-which-file-claude-code-reads-and-the-flag-that-decided-it"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/claudeai/comments/1wjxvwz/claude_code_is_getting_native_agentsmd_support",
+      "cluster": 17,
+      "engagement": {
+        "num_comments": 135,
+        "score": 1261
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.3405,
+      "source": "reddit",
+      "summary": "\"native support\" bro it's just reading another file instead of it's usual one It's a well-kept industry secret that CLAUDE.md and AGENTS.md have incompatible formats. Trust me, I have years of experience in markdown engineering Can you not think for yourself",
+      "title": "Claude Code is getting native AGENTS.md support!",
+      "url": "https://www.reddit.com/r/ClaudeAI/comments/1wjxvwz/claude_code_is_getting_native_agentsmd_support/"
+    },
+    {
+      "candidate_id": "https://mateovalle.github.io/pixel-agents",
+      "cluster": 18,
+      "engagement": {
+        "comments": 3,
+        "points": 5
+      },
+      "published_at": "2026-09-16",
+      "relevance_score": 0.3401,
+      "source": "hackernews",
+      "summary": "Show HN: Pixel Agents \u2013 A pixel-art mission control for your Claude Code agents",
+      "title": "Show HN: Pixel Agents \u2013 A pixel-art mission control for your Claude Code agents",
+      "url": "https://mateovalle.github.io/pixel-agents/"
+    },
+    {
+      "candidate_id": "https://github.com/otodock/oto-dock",
+      "cluster": 19,
+      "engagement": {
+        "comments": 15,
+        "points": 50
+      },
+      "published_at": "2026-09-09",
+      "relevance_score": 0.3353,
+      "source": "hackernews",
+      "summary": "Show HN: Self-hosted company OS, Claude Code and Codex agents in departments",
+      "title": "Show HN: Self-hosted company OS, Claude Code and Codex agents in departments",
+      "url": "https://github.com/OtoDock/oto-dock"
+    },
+    {
+      "candidate_id": "http://stapisi.com/news/3138503",
+      "cluster": 20,
+      "engagement": {},
+      "published_at": "2026-09-26",
+      "relevance_score": 0.3234,
+      "source": "grounding",
+      "summary": "24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362-Seo\u4f18\u5316-\u5854\u57ce\u5730\u533a\u7f51\u7ad9\u5efa\u8bbe\u516c\u53f8\n\n news 2026/9/26 9:17:46 \n\n# 24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362 \n\n \u5f20\u5c0f\u660e \n\n \u524d\u7aef\u5f00\u53d1\u5de5\u7a0b\u5e08 \n\n 24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362 \n\n### \u6982\u8ff0\n\nAGENTS.md \u662f Codex \u7684\u9ed8\u8ba4\u9879\u76ee\u6307\u4ee4\u6587\u4ef6\u540d\uff0c\u4f46\u5e76\u975e\u6240\u6709\u56e2\u961f\u90fd\u5e0c\u671b\u4f7f\u7528\u8fd9\u4e2a\u540d\u79f0\u3002\u6709\u4e9b\u56e2\u961f\u5df2\u7ecf\u6709\u4e86\u5185\u90e8\u7684\u5f00\u53d1\u6307\u5357\u6587\u6863\uff08\u5982`TEAM_GUIDE.md`\uff09\uff0c\u6709\u4e9b\u56e2\u961f\u5219\u5e0c\u671b\u4f7f\u7528\u66f4\u9690\u853d\u7684\u6587\u4ef6\u540d\uff08\u5982`.agents.md`\uff09\uff0c\u8fd8\u6709\u4e9b\u56e2\u961f\u9700\u8981\u5728\u4e0d\u540c\u7684\u5de5\u4f5c\u573a\u666f\u4e4b\u95f4\u5207\u6362\u4e0d\u540c\u7684\u914d\u7f6e\u96c6\u3002\n\nCodex \u63d0\u4f9b\u4e86\u4e09\u5927\u914d\u7f6e\u7075\u6d3b\u6027\u673a\u5236\u6765\u89e3\u51b3\u8fd9\u4e9b\u95ee\u9898\uff1a\n\n1. `project_doc_fallback_filenames`\uff1a\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u5217\u8868\n2. `project_doc_max_bytes`\uff1a\u8c03\u6574\u52a0\u8f7d\u5927\u5c0f\u4e0a\u9650\n3. `CODEX_HOME`\u73af\u5883\u53d8\u91cf + \u591a Profile \u7ba1\u7406\uff1a\u5728\u914d\u7f6e\u76ee\u5f55\u95f4\u5207\u6362\n\n\u672c\u6587\u5c06\u9010\u4e00\u6df1\u5165\u89e3\u6790\u8fd9\u4e9b\u673a\u5236\uff0c\u5e76\u63d0\u4f9b\u5b8c\u6574\u7684\u4f7f\u7528\u6848\u4f8b\u3002\n\n#### \u4e3a\u4ec0\u4e48\u9700\u8981\u81ea\u5b9a\u4e49\u6587\u4ef6\u540d\uff1f\n\n\u5728\u5b9e\u9645\u4f7f\u7528\u4e2d\uff0c\u4f60\u53ef\u80fd\u9047\u5230\u4ee5\u4e0b\u8fd9\u4e9b\u60c5\u51b5\uff1a\n\n- \u56e2\u961f\u5df2\u6709\u6587",
+      "title": "24-\u81ea\u5b9a\u4e49\u56de\u9000\u6587\u4ef6\u540d\u4e0e\u914d\u7f6e\u5207\u6362-Seo\u4f18\u5316-\u5854\u57ce\u5730\u533a\u7f51\u7ad9\u5efa\u8bbe\u516c\u53f8",
+      "url": "http://www.stapisi.com/news/3138503/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/claudecoding/comments/1wksyje/tldr_agentsmd_now_supported_in_claude_code_via",
+      "cluster": 21,
+      "engagement": {
+        "num_comments": 0,
+        "score": 1
+      },
+      "published_at": "2026-09-19",
+      "relevance_score": 0.3158,
+      "source": "reddit",
+      "summary": "[TLDR] AGENTS.md now supported in Claude Code [via r/ClaudeCode]",
+      "title": "[TLDR] AGENTS.md now supported in Claude Code [via r/ClaudeCode]",
+      "url": "https://www.reddit.com/r/ClaudeCoding/comments/1wksyje/tldr_agentsmd_now_supported_in_claude_code_via/"
+    },
+    {
+      "candidate_id": "https://gethrbr.com/blog/does-claude-code-read-agents-md",
+      "cluster": 22,
+      "engagement": {},
+      "published_at": "2026-09-23",
+      "relevance_score": 0.3147,
+      "source": "grounding",
+      "summary": "Does Claude Code read AGENTS.md? \u00b7 Harbor\n\n# Does Claude Code read AGENTS.md?\n\nPublished: September 23, 2026\n\nYes, since Claude Code v2.1.277. By default it reads `AGENTS.md` only when the project has no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` from the working directory up. The support depends on fetched feature flags, so sessions with telemetry off, on Bedrock or Vertex, or right after an upgrade still skip it.\n\nChecked on 2026-09-23 against Claude Code 2.1.280, the memory docs, t",
+      "title": "Does Claude Code read AGENTS.md? \u00b7 Harbor",
+      "url": "https://gethrbr.com/blog/does-claude-code-read-agents-md"
+    },
+    {
+      "candidate_id": "https://github.com/anthropics/claude-code",
+      "cluster": 23,
+      "engagement": {
+        "comments": 14229,
+        "stars": 149461
+      },
+      "published_at": "2026-10-03",
+      "relevance_score": 0.3128,
+      "source": "github",
+      "summary": "Project: anthropics/claude-code (149K stars, 14229 open issues, TypeScript)\n  Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows \n  README: # Claude Code\n\n![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://w",
+      "title": "anthropics/claude-code (149K stars) - 14229 open issues",
+      "url": "https://github.com/anthropics/claude-code"
+    },
+    {
+      "candidate_id": "https://news.cocoloop.cn/en/2026/09/claude-code-agents-md-fallback",
+      "cluster": 24,
+      "engagement": {},
+      "published_at": "2026-09-21",
+      "relevance_score": 0.3076,
+      "source": "grounding",
+      "summary": "Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent - News - Cocoloop\n\n Claude Code 2026-09 English \n\n# Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent\n\nCocoloop Editorial \u00b7 localized from verified public sources\n\nStarting with 2.1.277, Claude Code reads AGENTS.md in any folder that has no CLAUDE.md; if both are present, CLAUDE.md wins. Enterprise users on Bedrock, Vertex, or Foundry can't use it yet, and Anthropic hasn't said when those channels will catch up.\n\nAnthropic's",
+      "title": "Claude Code Adds AGENTS.md Fallback When CLAUDE.md Is Absent - News - Cocoloop",
+      "url": "https://news.cocoloop.cn/en/2026/09/claude-code-agents-md-fallback/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/codex/comments/1w9g2ms/what_does_a_good_agentsmd_look_like_with_astra_out",
+      "cluster": 25,
+      "engagement": {
+        "num_comments": 4,
+        "score": 6
+      },
+      "published_at": "2026-09-07",
+      "relevance_score": 0.2875,
+      "source": "reddit",
+      "summary": "If you aren't highly skilled with it, have astra itself write a .md file for you. Definitely did a better job than i managed. tell it your priorities (quality/cost/speed/output format/etc) and astra w Tell it code style, what to do, what not to do, how to test, how not to test, how to deal with git, if you want branches, commits, uploads to a server, compilations. if you want it to chat during wait generating a base from Astra will be your best bet, especially if you're using a specific framework or engine for something. At minimum you want to specify what files it can read/write to, ban adding",
+      "title": "What does a good agents.md look like with Astra out?",
+      "url": "https://www.reddit.com/r/codex/comments/1w9g2ms/what_does_a_good_agentsmd_look_like_with_astra_out/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/codex/comments/1w9zxpq/can_someone_help_me_out_i_need_good",
+      "cluster": 26,
+      "engagement": {
+        "num_comments": 6,
+        "score": 3
+      },
+      "published_at": "2026-09-07",
+      "relevance_score": 0.2875,
+      "source": "reddit",
+      "summary": "These are the ones I made, feel free to take a look: https://github.com/JonaCodes/coding-agent-resources thanks man.. will definitely check For sure, feel free to ask if you have questions",
+      "title": "Can someone help me out ? I need good prompts/AGENTS.md ideas/skills/tips to make models more efficient while performing tasks ...",
+      "url": "https://www.reddit.com/r/codex/comments/1w9zxpq/can_someone_help_me_out_i_need_good/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/codex/comments/1w8pc2m/as_recommended_i_started_using_astra_with_a_blank",
+      "cluster": 27,
+      "engagement": {
+        "num_comments": 6,
+        "score": 16
+      },
+      "published_at": "2026-09-06",
+      "relevance_score": 0.2831,
+      "source": "reddit",
+      "summary": "PSA: OpenAI has guidelines for Astrahttps://developers.openai.com/api/docs/guides/latest-modelExample Agents.md addition:If a skill causes you to ask for permission or confirmation, pause, leave reque Feedback on the memory block, since that is the part doing the most work here. The propose-and-approve shape is right, and most people skip it. Letting the model save on its own judgment is how a stor Thank you, Astra 6 on ChatGPT chat mode with Pro reasoning was being an absolute pain in the ass, I'm pointing it to the website and tell it to fix itself lol",
+      "title": "As recommended, I started using Astra with a blank agents.md, then I realised it needed some tweaks. Here's what I've got so far...",
+      "url": "https://www.reddit.com/r/codex/comments/1w8pc2m/as_recommended_i_started_using_astra_with_a_blank/"
+    },
+    {
+      "candidate_id": "https://meetzest.com/for/codex-skills",
+      "cluster": 28,
+      "engagement": {},
+      "published_at": "2026-09-07",
+      "relevance_score": 0.2711,
+      "source": "grounding",
+      "summary": "Codex skills: where they live and how Codex picks one | Zest\n\n# Codex skills and how Codex picks one.\n\nA Codex skill is a folder with a SKILL.md that Codex loads when your request matches its description, or when you type $skill-name. Commit it to .agents/skills in the repo and everyone who clones it gets it; the same file works in Claude Code from .claude/skills.\n\n02 Share the best AI skills\n\n Weekly email Mon, Sep 7 \u00b7 9:00 AM\n\n#### AI stack worth sharing\n\n- Agree on the approach before coding.",
+      "title": "Codex skills: where they live and how Codex picks one | Zest",
+      "url": "https://meetzest.com/for/codex-skills/"
+    },
+    {
+      "candidate_id": "https://aicoding-guide.com/en/posts/codex-agents-md-max-bytes-fallback",
+      "cluster": 29,
+      "engagement": {},
+      "published_at": "2026-09-10",
+      "relevance_score": 0.2507,
+      "source": "grounding",
+      "summary": "Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained | AI Coding Guide\n\n# Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained\n\n Codex Published: Sep 10, 2026 Updated: Sep 20, 2026 \n\nproject_doc_max_bytes defaults to 32768 bytes, and once that total is reached Codex adds no further AGENTS.md files. How the cap applies, and how to raise it.\n\n Verified on Sep 20, 2026 These tools change quickly. Please also check the latest official documenta",
+      "title": "Codex reads only 32 KiB of AGENTS.md by default: project_doc_max_bytes explained | AI Coding Guide",
+      "url": "https://aicoding-guide.com/en/posts/codex-agents-md-max-bytes-fallback/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/claudecode/comments/1wb0yxk/wait_codex_can_now_invoke_claude_code_sessions",
+      "cluster": 30,
+      "engagement": {
+        "num_comments": 160,
+        "score": 381
+      },
+      "published_at": "2026-09-08",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "Wait, Codex can now invoke Claude Code sessions?",
+      "title": "Wait, Codex can now invoke Claude Code sessions?",
+      "url": "https://www.reddit.com/r/ClaudeCode/comments/1wb0yxk/wait_codex_can_now_invoke_claude_code_sessions/"
+    },
+    {
+      "candidate_id": "https://github.com/trailofbits/coop",
+      "cluster": 31,
+      "engagement": {
+        "comments": 17,
+        "points": 71
+      },
+      "published_at": "2026-09-07",
+      "relevance_score": 0.0,
+      "source": "hackernews",
+      "summary": "Coop \u2013 Isolated VM Environments for Running Claude Code and Codex",
+      "title": "Coop \u2013 Isolated VM Environments for Running Claude Code and Codex",
+      "url": "https://github.com/trailofbits/coop"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/mcp/comments/1wh8g8d/everyone_here_has_a_claudemd_what_happens_to_it",
+      "cluster": 32,
+      "engagement": {
+        "num_comments": 18,
+        "score": 2
+      },
+      "published_at": "2026-09-15",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "Everyone here has a CLAUDE.md. What happens to it when you open Cursor/Codex?",
+      "title": "Everyone here has a CLAUDE.md. What happens to it when you open Cursor/Codex?",
+      "url": "https://www.reddit.com/r/mcp/comments/1wh8g8d/everyone_here_has_a_claudemd_what_happens_to_it/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/ai_agents/comments/1wjl2tl/i_run_claude_code_codex_and_cursor_on_the_same",
+      "cluster": 33,
+      "engagement": {
+        "num_comments": 19,
+        "score": 2
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "I run Claude Code, Codex and Cursor on the same project. Here's how I stopped losing context",
+      "title": "I run Claude Code, Codex and Cursor on the same project. Here's how I stopped losing context",
+      "url": "https://www.reddit.com/r/AI_Agents/comments/1wjl2tl/i_run_claude_code_codex_and_cursor_on_the_same/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/llmdevs/comments/1wk0oyy/your_claudemd_can_reference_code_that_no_longer",
+      "cluster": 34,
+      "engagement": {
+        "num_comments": 6,
+        "score": 4
+      },
+      "published_at": "2026-09-18",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "Your CLAUDE.md can reference code that no longer exists. I made a small pre-commit check for it",
+      "title": "Your CLAUDE.md can reference code that no longer exists. I made a small pre-commit check for it",
+      "url": "https://www.reddit.com/r/LLMDevs/comments/1wk0oyy/your_claudemd_can_reference_code_that_no_longer/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/codex/comments/1we3dpr/let_codex_delegate_coding_tasks_to_claude_code",
+      "cluster": 35,
+      "engagement": {
+        "num_comments": 5,
+        "score": 4
+      },
+      "published_at": "2026-09-12",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "Let Codex delegate coding tasks to Claude Code",
+      "title": "Let Codex delegate coding tasks to Claude Code",
+      "url": "https://www.reddit.com/r/codex/comments/1we3dpr/let_codex_delegate_coding_tasks_to_claude_code/"
+    },
+    {
+      "candidate_id": "https://reddit.com/r/claudeai/comments/1wputil/i_scanned_36_days_of_my_claude_codecodex_history",
+      "cluster": 36,
+      "engagement": {
+        "num_comments": 5,
+        "score": 0
+      },
+      "published_at": "2026-09-25",
+      "relevance_score": 0.0,
+      "source": "reddit",
+      "summary": "I scanned 36 days of my Claude Code/Codex history and found $10k of API-equivalent usage",
+      "title": "I scanned 36 days of my Claude Code/Codex history and found $10k of API-equivalent usage",
+      "url": "https://www.reddit.com/r/ClaudeAI/comments/1wputil/i_scanned_36_days_of_my_claude_codecodex_history/"
+    }
+  ],
+  "schema_version": "1.3",
+  "source_status": {
+    "github": "ok",
+    "grounding": "ok",
+    "hackernews": "ok",
+    "reddit": "ok",
+    "youtube": "ok"
+  },
+  "window_days": 30
+}

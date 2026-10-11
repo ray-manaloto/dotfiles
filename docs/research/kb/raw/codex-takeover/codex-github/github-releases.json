@@ -1,0 +1,27 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 9.793825707980432,
+  "items": [
+    {
+      "date": "2026-09-25T02:31:06Z",
+      "snippet": "release body mentions a query term: yes",
+      "title": "rust-v0.157.0",
+      "url": "https://github.com/openai/codex/releases/tag/rust-v0.157.0"
+    },
+    {
+      "date": "2026-09-22T19:51:01Z",
+      "snippet": "release body mentions a query term: yes",
+      "title": "rust-v0.156.0",
+      "url": "https://github.com/openai/codex/releases/tag/rust-v0.156.0"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github/github-releases.raw",
+  "raw_sha256": "8134a163f03b721d5909ceac1613a1860bc0b7d9fcbeda1837b8efb7044315a4",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "github-releases",
+  "status": "ok"
+}

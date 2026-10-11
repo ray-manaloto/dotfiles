@@ -1,0 +1,28 @@
+{
+  "intent": "how_to",
+  "freshness_mode": "evergreen_ok",
+  "cluster_mode": "workflow",
+  "subqueries": [
+    {
+      "label": "primary",
+      "search_query": "Claude Code agents-md AGENTS.md Codex instructions",
+      "ranking_query": "Which current Claude Code and Codex instruction-loading behaviors and reported bugs affect a shared AGENTS.md workflow?",
+      "sources": ["reddit", "hackernews", "youtube", "github", "web"],
+      "weight": 1.0
+    },
+    {
+      "label": "claude-mod",
+      "search_query": "Claude Code agents-md instructionFiles",
+      "ranking_query": "Is the Anthropic agents-md mod shipped as a built-in and what instruction-loader limits remain?",
+      "sources": ["github", "web", "hackernews"],
+      "weight": 0.8
+    },
+    {
+      "label": "codex-discovery",
+      "search_query": "OpenAI Codex project_doc_fallback_filenames skills discovery",
+      "ranking_query": "How does OpenAI Codex discover AGENTS.md and repository skills, and do fallback names add instructions?",
+      "sources": ["github", "web", "reddit"],
+      "weight": 0.8
+    }
+  ]
+}

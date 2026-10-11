@@ -1,0 +1,17 @@
+{
+  "attempts": [],
+  "control": {
+    "count": 0,
+    "query": "claude-code"
+  },
+  "elapsed_s": 1.2437359169707634,
+  "items": [],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/github-discussions.raw",
+  "raw_sha256": "e56779ec134a9f8d1d081cbb18e643fab4abb2dbcbc9b45057d681aa549f358e",
+  "reason": "canary returned 0 items",
+  "route": null,
+  "skip_reason": null,
+  "source": "github-discussions",
+  "status": "empty_unverified"
+}

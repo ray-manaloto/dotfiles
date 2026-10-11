@@ -1,0 +1,14 @@
+{
+  "command": "claude plugin list --json",
+  "rc": 0,
+  "json_type": "list",
+  "entry_count": 312,
+  "must_hit_plugin": true,
+  "agents_md_matches": [],
+  "builtin_named_count": 0,
+  "canary_examples": [
+    "planning-with-files@planning-with-files",
+    "planning-with-files@planning-with-files",
+    "planning-with-files@planning-with-files"
+  ]
+}

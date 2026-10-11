@@ -14,20 +14,25 @@ import hashlib
 import json
 import os
 import re
+import shlex
+import subprocess
 from base64 import b64decode
 from binascii import Error as Base64Error
 from dataclasses import asdict, dataclass, field, replace
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, unquote_to_bytes, urlparse
 
 from dotfiles_setup import codec, command_audit, session_gate
+from dotfiles_setup.session_common import main_checkout
 from dotfiles_setup.session_store import (
     AppendRebuildError,
     CacheStats,
     RunReceipt,
     SessionStore,
+    source_key,
 )
 
 if TYPE_CHECKING:
@@ -1453,6 +1458,16 @@ def discover_codex_transcripts(
     session_ids = {
         str(meta.get("session_id", meta.get("id", ""))) for _, meta, _ in roots
     }
+    # Native child threads have distinct ids; include all verified descendants.
+    changed = True
+    while changed:
+        previous = len(session_ids)
+        session_ids.update(
+            str(meta.get("session_id", meta.get("id", "")))
+            for _, meta, _ in rows
+            if str(meta.get("parent_thread_id", "")) in session_ids
+        )
+        changed = len(session_ids) != previous
     selected = [
         path
         for path, meta, _ in rows
@@ -2116,6 +2131,131 @@ def _codex_form_call(
         )
 
 
+# Output allowlist: arguments and arbitrary subcommands are never report text.
+_COMMAND_SHAPES = frozenset(
+    {
+        "git status",
+        "git diff",
+        "git log",
+        "git show",
+        "git fetch",
+        "git rebase",
+        "git gc",
+        "git worktree",
+        "git rev-parse",
+        "git commit",
+        "git push",
+        "gh api",
+        "gh issue",
+        "mise run",
+        "mise exec",
+        "uv run",
+        "uv sync",
+        "rg --files",
+        "rg",
+        "curl",
+        "python",
+        "pytest",
+        "ruff check",
+        "ruff format",
+        "docker inspect",
+        "docker exec",
+        "docker ps",
+        "docker context",
+        "fnox exec",
+    }
+)
+
+
+def approved_command_shape(command: str) -> str:
+    """Return only literal approved shapes; never expose an argument or path."""
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return ""
+    pair = " ".join(words[:2])
+    head = words[0] if words else ""
+    return pair if pair in _COMMAND_SHAPES else head if head in _COMMAND_SHAPES else ""
+
+
+def _claude_execution_proof(proof: object, *, is_error: object) -> str:
+    if isinstance(proof, dict) and "stdout" in proof:
+        return "executed"
+    if isinstance(proof, str) and re.match(r"^Error: Exit code \d+(?:\n|$)", proof):
+        return "executed"
+    return "refused" if is_error is True else "unknown"
+
+
+def _execution_proof(payload: Mapping[str, object]) -> str:
+    if "claude_result_proof" in payload:
+        return _claude_execution_proof(
+            payload["claude_result_proof"], is_error=payload.get("is_error")
+        )
+    output = payload.get("output")
+    if isinstance(output, str):
+        if output.startswith("approval policy is ") and "; reject command — " in output:
+            return "refused"
+        try:
+            structured = json.loads(output)
+        except ValueError:
+            structured = None
+        if isinstance(structured, dict):
+            output = structured
+        else:
+            header, separator, _ = output.partition("\nOutput:")
+            if (
+                separator
+                and re.search(r"(?:^|\n)Wall time: [0-9.]+ seconds(?:\n|$)", header)
+                and re.search(
+                    r"(?:^|\n)(?:Process exited with code -?\d+|"
+                    r"Process running with session ID \d+)(?:\n|$)",
+                    header,
+                )
+            ):
+                return "executed"
+    if (
+        isinstance(output, dict)
+        and type(output.get("wall_time_seconds")) in {int, float}
+        and isinstance(output.get("output"), str)
+        and (
+            type(output.get("exit_code")) is int
+            or type(output.get("session_id")) is int
+        )
+    ):
+        return "executed"
+    return "unknown"
+
+
+def _command_metadata(
+    payload: Mapping[str, object], *, result: bool
+) -> tuple[tuple[str, str], ...]:
+    if result:
+        return (("execution_status", _execution_proof(payload)),)
+    name = payload.get("name")
+    if name not in {"Bash", "exec_command", "functions.exec_command"}:
+        return (
+            (("command_omission", "opaque wrapper command"),)
+            if name in {"functions.exec", "exec"}
+            else ()
+        )
+    arguments = payload.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments)
+        except ValueError:
+            return (("command_omission", "malformed structured command arguments"),)
+    if not isinstance(arguments, dict):
+        return (("command_omission", "unsupported structured command arguments"),)
+    command = arguments.get("command" if name == "Bash" else "cmd")
+    if not isinstance(command, str):
+        return (("command_omission", "missing string command"),)
+    return (
+        ("command_shape", approved_command_shape(command)),
+        ("command_sha256", hashlib.sha256(command.encode()).hexdigest()),
+        ("command_timestamp", str(payload.get("projection_timestamp", ""))),
+    )
+
+
 def _codex_tool_event(
     payload: Mapping[str, object],
     evidence: EvidenceRef,
@@ -2130,6 +2270,7 @@ def _codex_tool_event(
     metadata = _metadata_pairs(payload, ("call_id", "name"))
     if opaque is not None:
         metadata += _digest_metadata("output" if result else "arguments", opaque)
+    metadata += _command_metadata(payload, result=result)
     kind = EventKind.TOOL_RESULT if result else EventKind.TOOL_CALL
     text = f"tool {'result' if result else 'call'} {name or call_id or 'unknown'}"
     _add_event(acc, CanonicalEvent(kind, "tool", text, evidence, metadata))
@@ -2594,6 +2735,7 @@ def _parse_codex(
         if record_type in {"token_usage", "token_usage_record"}:
             key = f"Codex record {record_type}"
             acc.skipped_records[key] = acc.skipped_records.get(key, 0) + 1
+        values = {**values, "projection_timestamp": obj.get("timestamp", "")}
         if record_type == "turn_context":
             state.active_turn_id = _turn_id(values)
         elif (
@@ -2655,8 +2797,21 @@ def _claude_content(
     record_type: str,
     evidence: EvidenceRef,
     acc: _Accumulator,
+    native_record: Mapping[str, object] | None = None,
 ) -> None:
     """Normalize the message-content half of one Claude record."""
+    native_record = native_record or {}
+    timestamp = str(native_record.get("timestamp", ""))
+    result_proof = native_record.get("toolUseResult")
+    if (
+        isinstance(content, list)
+        and sum(
+            isinstance(block, dict) and block.get("type") == "tool_result"
+            for block in content
+        )
+        != 1
+    ):
+        result_proof = None
     event_kind = (
         EventKind.ASSISTANT_MESSAGE
         if record_type == "assistant"
@@ -2677,6 +2832,7 @@ def _claude_content(
                 "call_id": block.get("id", ""),
                 "name": block.get("name", ""),
                 "arguments": block.get("input", {}),
+                "projection_timestamp": timestamp,
             }
             _codex_tool_event(synthetic, evidence, acc, result=False)
             if block.get("name") == "AskUserQuestion":
@@ -2685,6 +2841,8 @@ def _claude_content(
             synthetic = {
                 "call_id": block.get("tool_use_id", ""),
                 "output": block.get("content", ""),
+                "claude_result_proof": result_proof,
+                "is_error": block.get("is_error"),
             }
             _codex_tool_event(synthetic, evidence, acc, result=True)
         elif block.get("type") in {"image", "document", "file"}:
@@ -2886,7 +3044,13 @@ def _claude_message_event(
                 ),
             )
     else:
-        _claude_content(content, record_type=record_type, evidence=evidence, acc=acc)
+        _claude_content(
+            content,
+            record_type=record_type,
+            evidence=evidence,
+            acc=acc,
+            native_record=obj,
+        )
     result = _claude_form_result(obj)
     if result is not None:
         synthetic = {"output": json.dumps({"answers": result["answers"]})}
@@ -4491,3 +4655,356 @@ def render_coverage(
         out.append("_None._")
     out.append("")
     return _cap_utf8("\n".join(out))
+
+
+DEFAULT_COMMAND_SINCE = "2026-10-02T00:00:00-05:00"
+_COMMAND_DISCOVERY_LIMIT = 100000
+# Heterogeneous JSON projection: no new model corpus or serialization route.
+type CommandProjection = dict[str, Any]
+
+
+def command_cutoff(since: str) -> datetime:
+    """Require a timezone-aware date window and normalize it to UTC."""
+    parsed = datetime.fromisoformat(since)
+    if parsed.tzinfo is None:
+        message = "command cutoff requires an explicit timezone"
+        raise ValueError(message)
+    return parsed.astimezone(UTC)
+
+
+def _command_fact(
+    source: TranscriptSource, store: SessionStore
+) -> tuple[_SourceFacts | None, str]:
+    def cold(data: bytes) -> bytes:
+        return _encode_source_facts(_parse_source_facts(data, source, ()))
+
+    def append(prior: bytes, suffix: bytes) -> bytes:
+        state = _decode_source_facts(prior, source, ())
+        return _encode_source_facts(_parse_source_facts(suffix, source, (), state))
+
+    stored = store.resolve(
+        str(source.provider), source.path, cold_parser=cold, append_parser=append
+    )
+    if not stored.facts:
+        return None, stored.reason or "source unavailable"
+    return _decode_source_facts(
+        stored.facts, source, ()
+    ), stored.reason if not stored.complete else ""
+
+
+def _project_command(
+    state: _SourceFacts,
+    event: CanonicalEvent,
+    paired: CanonicalEvent | None,
+    cutoff: datetime,
+) -> tuple[CommandProjection | None, list[CommandProjection]]:
+    key = source_key(str(state.source.provider), state.source.path)
+    meta = dict(event.metadata)
+    omissions: list[CommandProjection] = []
+    if meta.get("command_omission"):
+        omissions.append(
+            {
+                "source_id": key,
+                "line": event.evidence.line,
+                "reason": meta["command_omission"],
+            }
+        )
+    if "command_sha256" not in meta:
+        return None, omissions
+    try:
+        timestamp = command_cutoff(meta.get("command_timestamp", ""))
+    except ValueError:
+        omissions.append(
+            {
+                "source_id": key,
+                "line": event.evidence.line,
+                "reason": "missing or invalid command timestamp",
+            }
+        )
+        return None, omissions
+    if timestamp < cutoff:
+        return None, omissions
+    status = (
+        dict(paired.metadata).get("execution_status", "unknown")
+        if paired
+        else "unknown"
+    )
+    if status == "unknown":
+        omissions.append(
+            {
+                "source_id": key,
+                "line": event.evidence.line,
+                "reason": "unverified or ambiguous execution result",
+            }
+        )
+    shape = meta.get("command_shape", "")
+    if not shape:
+        omissions.append(
+            {
+                "source_id": key,
+                "line": event.evidence.line,
+                "reason": "command shape outside output allowlist",
+            }
+        )
+    session = (
+        state.acc.lineage[0].session_id
+        if state.acc.lineage
+        else state.claude_session_id
+    )
+    return {
+        "provider": str(state.source.provider),
+        "source_id": key,
+        "event_ref": {
+            "line": event.evidence.line,
+            "record_sha256": event.evidence.record_sha256,
+        },
+        "call_id": hashlib.sha256(meta.get("call_id", "").encode()).hexdigest(),
+        "session_id": hashlib.sha256(
+            f"{state.source.provider}:{session}".encode()
+        ).hexdigest(),
+        "timestamp": timestamp.isoformat(),
+        "command_shape": shape,
+        "command_sha256": meta["command_sha256"],
+        "execution_status": status,
+        "result_ref": {
+            "line": paired.evidence.line,
+            "record_sha256": paired.evidence.record_sha256,
+        }
+        if paired
+        else None,
+    }, omissions
+
+
+def _project_fact(
+    state: _SourceFacts, cutoff: datetime
+) -> tuple[list[CommandProjection], list[CommandProjection]]:
+    results: dict[str, list[CanonicalEvent]] = {}
+    calls: dict[str, int] = {}
+    for event in state.acc.events:
+        call_id = dict(event.metadata).get("call_id", "")
+        if event.kind == EventKind.TOOL_RESULT:
+            results.setdefault(call_id, []).append(event)
+        elif event.kind == EventKind.TOOL_CALL:
+            calls[call_id] = calls.get(call_id, 0) + 1
+    projected: list[CommandProjection] = []
+    omissions: list[CommandProjection] = []
+    for event in state.acc.events:
+        if event.kind != EventKind.TOOL_CALL:
+            continue
+        call_id = dict(event.metadata).get("call_id", "")
+        matches = results.get(call_id, []) if call_id else []
+        paired = (
+            matches[0]
+            if len(matches) == 1
+            and calls.get(call_id) == 1
+            and matches[0].evidence.line > event.evidence.line
+            else None
+        )
+        row, errors = _project_command(state, event, paired, cutoff)
+        omissions.extend(errors)
+        if row:
+            projected.append(row)
+    # Native parser diagnostics may carry ids, filenames or payload text.
+    key = source_key(str(state.source.provider), state.source.path)
+    omissions.extend(
+        {
+            "source_id": key,
+            "reason": "native parser omission",
+            "diagnostic_sha256": hashlib.sha256(omission.encode()).hexdigest(),
+        }
+        for omission in state.acc.omissions
+    )
+    return projected, omissions
+
+
+def _command_worktrees(roots: tuple[Path, ...]) -> set[Path]:
+    worktrees: set[Path] = set()
+    for root in roots:
+        result = subprocess.run(
+            ["git", "-C", str(main_checkout(root)), "worktree", "list", "--porcelain"],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if result.returncode:
+            message = "registered worktree inventory unavailable"
+            raise ValueError(message)
+        worktrees.update(
+            Path(line.removeprefix("worktree ")).resolve()
+            for line in result.stdout.splitlines()
+            if line.startswith("worktree ")
+        )
+    return worktrees
+
+
+def _command_group(
+    state: _SourceFacts,
+    worktrees: set[Path],
+    bases: TranscriptBases,
+    parents: dict[str, str],
+) -> str:
+    if state.source.provider == Provider.CLAUDE:
+        base = bases.claude or command_audit.transcripts_base()
+        for root in worktrees:
+            project = command_audit.project_dir(base, root)
+            if state.source.path.is_relative_to(project):
+                relative = state.source.path.relative_to(project)
+                return f"claude:{project}:{relative.parts[0].removesuffix('.jsonl')}"
+        return state.source_id
+    lineage = state.acc.lineage[0] if state.acc.lineage else None
+    root_id = lineage.session_id if lineage else state.source_id
+    seen: set[str] = set()
+    while parents.get(root_id) and root_id not in seen:
+        seen.add(root_id)
+        root_id = parents[root_id]
+    return f"codex:{root_id}"
+
+
+def _command_sources(
+    worktrees: set[Path],
+    bases: TranscriptBases,
+    providers: frozenset[str],
+    omissions: list[CommandProjection],
+) -> list[TranscriptSource]:
+    for provider, base in (
+        ("claude", bases.claude or command_audit.transcripts_base()),
+        ("codex", bases.codex or codex_sessions_base()),
+    ):
+        if provider in providers and not base.is_dir():
+            omissions.append(
+                {"provider": provider, "reason": "provider transcript base unavailable"}
+            )
+    sources = {
+        (source.provider, source.path.resolve()): source
+        for root in sorted(worktrees)
+        for source in discover_sources(
+            root, limit=_COMMAND_DISCOVERY_LIMIT, bases=bases
+        )
+        if str(source.provider) in providers
+    }
+    # Source discovery cannot attribute malformed metadata to a repository;
+    # preserve that uncertainty instead of turning a skipped file into absence.
+    census = provider_census(min(worktrees), sources.values(), bases=bases)
+    omissions.extend(
+        {
+            "provider": str(row.provider),
+            "reason": "unattributable source discovery omission",
+            "malformed_sources": row.malformed,
+            "unreadable_sources": row.unreadable,
+        }
+        for row in census
+        if str(row.provider) in providers and (row.malformed or row.unreadable)
+    )
+    if len(sources) >= _COMMAND_DISCOVERY_LIMIT:
+        omissions.append({"reason": "discovery safety bound reached"})
+    return list(sources.values())
+
+
+def command_projection(
+    repo_roots: Iterable[Path],
+    *,
+    since: str = DEFAULT_COMMAND_SINCE,
+    providers: Iterable[str] = ("claude", "codex"),
+    session_limit: int = 50,
+    bases: TranscriptBases = DEFAULT_TRANSCRIPT_BASES,
+) -> CommandProjection:
+    """Date-selected safe command evidence using the existing native parser/store.
+
+    Session limits apply after inspecting event timestamps, never file mtimes.
+    Every registered worktree contributes; child sources retain their root slot.
+    Changed parser bytes invalidate even an unchanged source's cached facts.
+    """
+    cutoff = command_cutoff(since)
+    provider_set = frozenset(providers)
+    if not provider_set or not provider_set <= {"claude", "codex"} or session_limit < 1:
+        message = "invalid command providers or session limit"
+        raise ValueError(message)
+    roots = tuple(path.resolve() for path in repo_roots)
+    if not roots:
+        message = "at least one repository root is required"
+        raise ValueError(message)
+    omissions: list[CommandProjection] = []
+    worktrees = _command_worktrees(roots)
+    sources = _command_sources(worktrees, bases, provider_set, omissions)
+    store = SessionStore(
+        roots[0] / ".agent/state/session-review/command-projection",
+        parser_fingerprint=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        policy_fingerprint="command-projection-allowlist-v1",
+    )
+    facts = []
+    for source in sources:
+        state, error = _command_fact(source, store)
+        if error:
+            omissions.append(
+                {
+                    "source_id": source_key(str(source.provider), source.path),
+                    "reason": "source unavailable or incomplete",
+                    "diagnostic_sha256": hashlib.sha256(error.encode()).hexdigest(),
+                }
+            )
+        if state:
+            facts.append(state)
+    parents = {
+        lineage.session_id: lineage.parent_id
+        for state in facts
+        for lineage in state.acc.lineage
+        if state.source.provider == Provider.CODEX
+    }
+    groups: dict[str, list[tuple[_SourceFacts, list[CommandProjection]]]] = {}
+    for state in facts:
+        events, errors = _project_fact(state, cutoff)
+        omissions.extend(errors)
+        groups.setdefault(_command_group(state, worktrees, bases, parents), []).append(
+            (state, events)
+        )
+    eligible = [
+        (key, rows) for key, rows in groups.items() if any(events for _, events in rows)
+    ]
+    eligible.sort(
+        key=lambda pair: (
+            max(str(event["timestamp"]) for _, events in pair[1] for event in events),
+            pair[0],
+        ),
+        reverse=True,
+    )
+    selected = eligible[:session_limit]
+    excluded_sources = sum(len(rows) for _, rows in eligible[session_limit:])
+    if len(eligible) > session_limit:
+        omissions.append(
+            {
+                "reason": "session limit truncated date window",
+                "excluded_sessions": len(eligible) - session_limit,
+                "excluded_sources": excluded_sources,
+            }
+        )
+    commands = [event for _, rows in selected for _, events in rows for event in events]
+    counts = {
+        provider: {
+            "attempted": sum(event["provider"] == provider for event in commands),
+            "executed": sum(
+                event["provider"] == provider
+                and event["execution_status"] == "executed"
+                for event in commands
+            ),
+            "refused": sum(
+                event["provider"] == provider and event["execution_status"] == "refused"
+                for event in commands
+            ),
+        }
+        for provider in sorted(provider_set)
+    }
+    return {
+        "schema_version": 1,
+        "collected_at": datetime.now(UTC).isoformat(),
+        "since": cutoff.isoformat(),
+        "providers": sorted(provider_set),
+        "commands": commands,
+        "counts": counts,
+        "discovered_sources": len(sources),
+        "selected_sources": sum(len(rows) for _, rows in selected),
+        "selected_sessions": len(selected),
+        "excluded_sources": excluded_sources,
+        "omissions": omissions,
+        "coverage": "partial" if omissions else "complete",
+    }

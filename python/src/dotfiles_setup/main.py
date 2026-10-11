@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from kb_setup import evals
 
-from dotfiles_setup import image_lock, llvm_major, native_clis_container
+from dotfiles_setup import (
+    image_lock,
+    llvm_major,
+    native_clis_container,
+    session_ledger,
+    session_registry,
+)
 from dotfiles_setup.agentsview_pass import PassRequest
 from dotfiles_setup.agentsview_pass import main as agentsview_pass_main
 from dotfiles_setup.ai import AIOrchestrator
@@ -924,6 +930,7 @@ def _add_honesty_subcommands(subparsers: _SubParsers) -> None:
         help="Transcript window, in SESSIONS (not files)",
     )
     _add_session_evidence_arguments(review_parser)
+    _add_command_digest_arguments(review_parser)
     review_parser.add_argument(
         "--output",
         type=Path,
@@ -2125,6 +2132,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
         "against the repo root); by convention .agent/command-audit.md",
     )
 
+    _add_command_digest_arguments(command_audit_parser)
     memory_index_parser = subparsers.add_parser(
         "memory-index",
         help="Check the auto-memory index (MEMORY.md) before trimming it: "
@@ -2170,6 +2178,7 @@ def _add_report_parsers(subparsers: _SubParsers) -> None:
         help="Exit 1 when any update is pending (gate mode, per sync --check)",
     )
 
+    session_registry.add_subcommand(subparsers)
     _add_dag_tick_subcommand(subparsers)
     _add_dag_project_subcommand(subparsers)
     _add_codex_lane_subcommand(subparsers)
@@ -3054,8 +3063,14 @@ def _build_command_handlers(
             )
         ),
         "process": lambda: handle_process(args, project_root),
+        "lane-cards": lambda: sys.exit(session_registry.main(args, project_root)),
         "command-audit": lambda: sys.exit(
-            command_audit_main(project_root, limit=args.limit, output=args.output)
+            command_audit_main(
+                project_root,
+                limit=args.limit,
+                output=args.output,
+                **_command_digest_options(args),
+            )
         ),
         "memory-index": lambda: sys.exit(
             memory_index_main(project_root, output=args.output, refs=args.refs)
@@ -3266,6 +3281,7 @@ def _build_command_handlers(
                 ),
                 sessions=args.sessions,
                 output=args.output,
+                **_command_digest_options(args),
             )
         ),
         "token-audit": lambda: sys.exit(
@@ -3347,6 +3363,36 @@ def main() -> None:
     except Exception:
         logger.exception("Unexpected command failure")
         sys.exit(1)
+
+
+def _add_command_digest_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--digest",
+        action="store_true",
+        help="Safe dual-provider digest since 2026-10-02",
+    )
+    parser.add_argument("--since", help="Timezone-aware command timestamp cutoff")
+    parser.add_argument(
+        "--providers", action="append", default=[], help="claude,codex (repeatable)"
+    )
+    parser.add_argument("--repo-root", type=Path, action="append", default=[])
+    parser.add_argument("--codex-base", type=Path)
+    parser.add_argument("--claude-base", type=Path)
+
+
+def _command_digest_options(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "digest": args.digest,
+        "since": args.since,
+        "providers": tuple(
+            provider for group in args.providers for provider in group.split(",")
+        )
+        or ("claude", "codex"),
+        "repo_roots": tuple(args.repo_root) or None,
+        "bases": session_ledger.TranscriptBases(
+            codex=args.codex_base, claude=args.claude_base
+        ),
+    }
 
 
 if __name__ == "__main__":

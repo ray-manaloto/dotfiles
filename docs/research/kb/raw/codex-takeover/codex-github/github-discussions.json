@@ -1,0 +1,75 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 1.3806921250070445,
+  "items": [
+    {
+      "date": "2026-10-03T01:52:31Z",
+      "snippet": "I just noticed that the Codex repository no longer contains AGENTS.md or the Codex self repo-specific skills, removed somewhere around 30th September. An optimistic\u2014perhaps utopian\u2014interpretation is that this signals a broader reassessment of how much explicit scaffolding coding agents need as models evolve. But the Astra traces I\u2019ve seen in Langfuse still suggest a greedy approach to solving tasks: pursuing the next immediate step rather than reconsidering the overall approach. I still don\u2019t se",
+      "title": "AGENTS.md and project skills removed from codex source code",
+      "url": "https://github.com/openai/codex/discussions/50487"
+    },
+    {
+      "date": "2026-09-25T08:09:02Z",
+      "snippet": "Product: Codex desktop app for Windows\nProject setup: Local Codex project with Google Drive connected through the available app/connector\nI\u2019m working on a team project where Google Drive is the source of truth. We intentionally use an empty local project folder only as a placeholder. Project instructions prohibit reading from or writing to that local folder.\nWe need each new chat in the same Codex project to:\n\nRead the current AGENTS.md from Google Drive automatically, without requiring someone ",
+      "title": "Feature request: persistent Google Drive instructions and file creation in Codex for Windows",
+      "url": "https://github.com/openai/codex/discussions/48032"
+    },
+    {
+      "date": "2026-09-20T19:27:08Z",
+      "snippet": "I\u2019ve open-sourced Agent Lint, a linter for configuration used by Codex and other coding agents:\nhttps://github.com/zhupanov/agent-lint\nIt validates things including:\n.codex/ and .codex-plugin/\nAGENTS.md\n.agents/skills/\nMCP configuration\nClaude Code configuration\nCursor configuration\nThe project currently has ~300 lint rules, with a documented rule registry.\nIt supports configurable rule severity and suppression, running selected rules with --only, GitHub Actions integration, and prebuilt binarie",
+      "title": "Agent Lint: open-source linter for Codex, AGENTS.md, MCP, Claude Code, and Cursor config",
+      "url": "https://github.com/openai/codex/discussions/46874"
+    },
+    {
+      "date": "2026-09-24T03:02:50Z",
+      "snippet": "I build ghfs. It keeps a repository's GitHub issues on disk as Markdown files, mounted read-only at .ghfs/ in the repo, so a coding agent reads an issue with cat instead of calling GitHub in the middle of a task. Disclosure up front: it is a paid product and it is not open source. The free tier covers one repository; unlimited repositories are $5/month or $48/year.\nThe Codex-specific part is the sandbox. Codex CLI's default workspace-write sandbox runs with network access off, so gh issue view 4",
+      "title": "ghfs: GitHub issues as read-only local files, readable from inside Codex's sandbox",
+      "url": "https://github.com/openai/codex/discussions/47730"
+    },
+    {
+      "date": "2026-08-30T08:45:01Z",
+      "snippet": "The problem\nMy AGENTS.md and CLAUDE.md files kept growing, but I had no safe way to tell which instructions were still useful and which were stale, duplicated, or too broad.\nSo I built Skill Sunset, a local, read-only audit for agent instruction files. The important constraint is: TEST is not RETIRE. A suspicious rule is not removed just because a heuristic dislikes it.\nnpx skill-sunset@latest audit --codex --open\nIt scans AGENTS.md, CLAUDE.md, and generic SKILL.md files, then produces an eviden",
+      "title": "Skill Sunset: a local, read-only audit for stale AGENTS.md rules",
+      "url": "https://github.com/openai/codex/discussions/41635"
+    },
+    {
+      "date": "2026-09-21T20:41:41Z",
+      "snippet": "Instructions files are advice. The agent reads them, agrees, and then writes the thing you told it not to \u2014 a hardcoded connection string, a duplicate route handler, await on a synchronous call.\nSarge makes the rules enforceable instead of advisory. Every file the agent writes gets judged against a rule book in the repo \u2014 by a local model, not a regex \u2014 and the run refuses while a rule is broken. The agent gets the failure back and fixes it. Break the same rule twice and a tutor writes the corre",
+      "title": "Sarge: a rule check that refuses the run, instead of another line in the instructions file",
+      "url": "https://github.com/openai/codex/discussions/47107"
+    },
+    {
+      "date": "2026-10-01T13:37:50Z",
+      "snippet": "I run a few projects with Codex and Claude Code, and the part that wore me out was not the coding. It was being the operator: opening terminals, making worktrees, checking which agent was stuck, reading their pull requests, answering the same permission prompts. So I built the operations layer and open-sourced it.\nAgent 007 (https://github.com/bill10/agent-007) is a small web app, one command (npx @bill10/agent-007), that:\n\nstarts Codex (or Claude Code, or any CLI agent) in web terminals, each i",
+      "title": "Agent 007: a job board and a manager agent for Codex (and Claude Code) workers, in your browser",
+      "url": "https://github.com/openai/codex/discussions/49981"
+    },
+    {
+      "date": "2026-06-12T03:58:18Z",
+      "snippet": "I built a lightweight Codex plugin experiment around repository-local guidance maps:\nhttps://github.com/Heyu2002/Code-Project-Guidance-Map\nThe plugin generates and refreshes a compact AGENTS.md action map for a codebase. It focuses on information that future Codex sessions often need before editing:\n\nmodule ownership\ntask routing\ndependency boundaries\nproject-specific editing rules\nkey entry points for each module\n\nThe goal is not to create broad project documentation or replace reading source c",
+      "title": "Experiment: a Codex plugin for reusable project guidance maps in AGENTS.md",
+      "url": "https://github.com/openai/codex/discussions/27754"
+    },
+    {
+      "date": "2026-09-21T16:01:44Z",
+      "snippet": "Codex users need a reliable way to determine what instructions reached the agent, what capabilities are available, and what work was actually performed. These should be standard product safeguards rather than depend on custom prompts.\nRequested improvements\n\n\nInstruction-loading report\nShow applicable instruction files, their precedence, and whether each was fully loaded, overridden, skipped, or truncated. Display the effective instruction budget and warn explicitly when guidance is omitted. The",
+      "title": "Make instruction loading, available capabilities, and execution evidence visible and auditable",
+      "url": "https://github.com/openai/codex/discussions/47058"
+    },
+    {
+      "date": "2026-10-01T18:16:31Z",
+      "snippet": "I'm developing MAIOS Project Kernel, an open-source semantic operating kernel for AI agents. It keeps sources, intent, competences and consequences connected so the agent can maintain orientation as its work changes: understand what the situation calls for, form useful capacities and let what happens change how it continues.\nA competence carries domain knowledge, reasons, sources and ways of working. A piece of work can produce both a result and a reusable ability. The Kernel returns that learni",
+      "title": "MAIOS Project Kernel: maintaining orientation as an AI agent learns and changes",
+      "url": "https://github.com/openai/codex/discussions/50062"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/docs/research/kb/raw/codex-takeover/codex-github/github-discussions.raw",
+  "raw_sha256": "e25831e8f6666caf320554bdfffb010e6f5bcd20aa1725f1bd54b8a754e54578",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "github-discussions",
+  "status": "ok"
+}

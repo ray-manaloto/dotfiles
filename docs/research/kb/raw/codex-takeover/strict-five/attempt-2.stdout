@@ -1,0 +1,10 @@
+/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/manifest.json
+github-issues  ok  1 items  0.623s
+github-discussions  empty_unverified  0 items  1.244s  [canary-empty]
+github-releases  empty_verified  0 items  1.861s
+exa  ok  10 items  5.210s
+context7  ok  5 items  4.842s
+firecrawl-developer  ok  10 items  0.979s
+firecrawl-search  ok  10 items  3.785s  [provisional: firecrawl-search via serper (credits-exhausted)]
+last30days  ok  10 items  72.015s
+strict-five  fail  [github-discussions did not complete]

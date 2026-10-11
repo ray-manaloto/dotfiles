@@ -1,0 +1,75 @@
+{
+  "attempts": [],
+  "control": null,
+  "elapsed_s": 5.976558584021404,
+  "items": [
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Custom instructions with AGENTS.md \u2013 Codex | OpenAI Developers",
+      "url": "https://developers.openai.com/codex/guides/agents-md"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "codex-rs/core/src/agents_md.rs at main \u00b7 openai/codex",
+      "url": "https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Agents-MD Mod | anthropics/claude-code | DeepWiki",
+      "url": "https://deepwiki.com/anthropics/claude-code/4.4-agents-md-mod"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "agents-md, a mod for Claude Code | Claude Code Mods",
+      "url": "https://claudecodemods.com/extensions/agents-md/"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "docs/agent-instruction-discovery.md",
+      "url": "https://github.com/mokronos/instructmd/blob/main/docs/agent-instruction-discovery.md"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "codex-rs/core/src/agents_md.rs at ac4332c05b11e00ae775a24cb762edc05c5b5932 \u00b7 openai/codex",
+      "url": "https://github.com/openai/codex/blob/ac4332c05b11e00ae775a24cb762edc05c5b5932/codex-rs/core/src/agents_md.rs"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "skills/agentic-readiness/references/instruction-files.md",
+      "url": "https://github.com/codealive-ai/ai-driven-development/blob/main/skills/agentic-readiness/references/instruction-files.md"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Claude Code Reads AGENTS.md Now: Setup, the Four Loading Modes, and How to Share One File with Codex, OpenCode, and Cursor \u2013 Kanaries",
+      "url": "https://docs.kanaries.net/topics/AICoding/claude-code-agents-md"
+    },
+    {
+      "date": null,
+      "snippet": "",
+      "title": "Custom instructions with AGENTS.md",
+      "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md.md"
+    },
+    {
+      "date": "2026-09-26T00:00:00.000Z",
+      "snippet": "",
+      "title": "Claude Code Now Reads AGENTS.md: The Four instructionFiles Modes and a CLAUDE.local.md Priority Trap  | Claude Me",
+      "url": "https://claude-me.com/en/practice/claude-code-agents-md-fallback-instructionfiles-modes/"
+    }
+  ],
+  "provisional": false,
+  "raw_file": "/Users/rmanaloto/.codex/research-coverage/01a10bf3-2cb8-7830-81b2-48985f169d25/01a10bf3-3b78-7e32-9de1-c11098181af2/exa.raw",
+  "raw_sha256": "989113d7692ffbe76b7836c44de4d0f98f9d728138d772a3d75f114fabc147e1",
+  "reason": null,
+  "route": null,
+  "skip_reason": null,
+  "source": "exa",
+  "status": "ok"
+}

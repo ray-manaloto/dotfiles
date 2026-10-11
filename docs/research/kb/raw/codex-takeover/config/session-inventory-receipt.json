@@ -1,0 +1,37 @@
+{
+  "command": "claude agents --json --all",
+  "rc": 0,
+  "top_level_type": "list",
+  "row_count": 133,
+  "mapping_rows": 133,
+  "row_keys_union": [
+    "cwd",
+    "id",
+    "kind",
+    "name",
+    "pid",
+    "sessionId",
+    "startedAt",
+    "state",
+    "status",
+    "waitingFor"
+  ],
+  "row_keys_intersection": [
+    "cwd",
+    "id",
+    "kind",
+    "sessionId",
+    "startedAt",
+    "state"
+  ],
+  "observed_state_values": [
+    "blocked",
+    "done",
+    "stopped",
+    "working"
+  ],
+  "observed_kind_values": [
+    "background"
+  ],
+  "required_keys_in_all_rows": false
+}

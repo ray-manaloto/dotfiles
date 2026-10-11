@@ -1,0 +1,3528 @@
+[
+  {
+    "id": "accessibility-compliance@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/accessibility-compliance/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:28.532Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "adspirer-ads-agent@knowledge-work-plugins",
+    "version": "e3067cec8803",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/adspirer-ads-agent/e3067cec8803",
+    "installedAt": "2026-03-25T18:33:56.209Z",
+    "lastUpdated": "2026-08-05T00:19:46.616Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "agent-orchestration@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/agent-orchestration/1.2.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:32.252Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "agent-sdk-dev@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/agent-sdk-dev/d182ca456ca0",
+    "installedAt": "2026-03-30T21:34:01.628Z",
+    "lastUpdated": "2026-10-02T21:58:38.973Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "agent-teams@claude-code-workflows",
+    "version": "1.0.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/agent-teams/1.0.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:33.473Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "aggregated-research@ray-manaloto",
+    "version": "6b5b092efa6b",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/ray-manaloto/aggregated-research/6b5b092efa6b",
+    "installedAt": "2026-08-28T12:41:38.893Z",
+    "lastUpdated": "2026-08-29T22:59:08.571Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "aggregated-research@ray-manaloto",
+    "version": "6b5b092efa6b",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/ray-manaloto/aggregated-research/6b5b092efa6b",
+    "installedAt": "2026-08-28T18:27:30.774Z",
+    "lastUpdated": "2026-08-29T22:59:07.595Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "ai-firstify@knowledge-work-plugins",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/ai-firstify/1.1.0",
+    "installedAt": "2026-03-25T18:33:59.918Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "andrej-karpathy-skills@karpathy-skills",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/karpathy-skills/andrej-karpathy-skills/1.0.0",
+    "installedAt": "2026-04-16T18:45:54.252Z",
+    "lastUpdated": "2026-04-16T18:45:54.252Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "antigravity@antigravity-for-claude-code",
+    "version": "0.28.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/antigravity-for-claude-code/antigravity/0.28.0",
+    "installedAt": "2026-07-23T00:02:19.789Z",
+    "lastUpdated": "2026-09-20T15:56:50.059Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true,
+    "hasUserConfig": true
+  },
+  {
+    "id": "antigravity@antigravity-for-claude-code",
+    "version": "0.27.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/antigravity-for-claude-code/antigravity/0.27.1",
+    "installedAt": "2026-08-14T23:00:10.434Z",
+    "lastUpdated": "2026-09-13T06:45:24.178Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true,
+    "hasUserConfig": true
+  },
+  {
+    "id": "antigravity@antigravity-for-claude-code",
+    "version": "0.28.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/antigravity-for-claude-code/antigravity/0.28.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true,
+    "hasUserConfig": true
+  },
+  {
+    "id": "api-scaffolding@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/api-scaffolding/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:38.350Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "api-testing-observability@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/api-testing-observability/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:38.945Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "apollo@knowledge-work-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/apollo/0.1.0",
+    "installedAt": "2026-03-25T18:33:59.957Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "application-performance@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/application-performance/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:40.102Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "astral@astral-sh",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/astral-sh/astral/0.1.0",
+    "installedAt": "2026-03-22T00:30:58.503Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "astral@astral-sh",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/astral-sh/astral/0.1.0",
+    "installedAt": "2026-04-16T18:15:18.465Z",
+    "lastUpdated": "2026-04-16T18:15:18.465Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "astral@astral-sh",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/astral-sh/astral/0.1.0",
+    "installedAt": "2026-08-14T22:59:35.329Z",
+    "lastUpdated": "2026-08-14T22:59:35.329Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "atlan@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/atlan/1.0.0",
+    "installedAt": "2026-03-25T18:34:00.758Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "atomic-agents@claude-plugins-official",
+    "version": "33d2ec94f42d",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/atomic-agents/33d2ec94f42d",
+    "installedAt": "2026-03-19T01:05:39.450Z",
+    "lastUpdated": "2026-09-22T22:41:45.986Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "auto-memory@claude-community",
+    "version": "0.9.2",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/auto-memory/0.9.2",
+    "installedAt": "2026-03-29T09:29:09.498Z",
+    "lastUpdated": "2026-06-15T00:30:22.094Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "backend-api-security@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/backend-api-security/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:50.974Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "backend-development@claude-code-workflows",
+    "version": "1.3.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/backend-development/1.3.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:51.577Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "basedpyright@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/basedpyright/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.348Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "beta-mcp-skills@docker",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/docker/beta-mcp-skills/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "blockchain-web3@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/blockchain-web3/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:30:56.661Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "brand-voice@knowledge-work-plugins",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/brand-voice/1.1.0",
+    "installedAt": "2026-03-25T18:34:00.790Z",
+    "lastUpdated": "2026-06-02T19:33:00.716Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "bugbash@claude-community",
+    "version": "0.2.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/bugbash/0.2.0",
+    "installedAt": "2026-03-26T06:52:27.988Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "builder-skills@builder-skills",
+    "version": "530d9eee0453",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/builder-skills/builder-skills/530d9eee0453",
+    "installedAt": "2026-07-31T19:45:22.800Z",
+    "lastUpdated": "2026-10-03T19:40:28.762Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "mcpServers": {
+      "agent-native-dispatch": {
+        "type": "http",
+        "url": "https://dispatch.agent-native.com/mcp"
+      }
+    },
+    "projectEnabled": false
+  },
+  {
+    "id": "business-analytics@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/business-analytics/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:00.394Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "c4-architecture@claude-code-workflows",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/c4-architecture/1.0.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:00.974Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "caveman@caveman",
+    "version": "3.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/caveman/caveman/3.1.0",
+    "installedAt": "2026-04-10T23:04:03.978Z",
+    "lastUpdated": "2026-10-03T01:00:47.887Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "caveman@caveman",
+    "version": "c2ed24b3e5d4",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/caveman/caveman/c2ed24b3e5d4",
+    "installedAt": "2026-04-16T18:15:30.848Z",
+    "lastUpdated": "2026-04-16T18:15:30.848Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "chezmoi-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/chezmoi-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/chezmoi-toolkit",
+    "installedAt": "2026-03-25T09:33:53.641Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "chezmoi-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/chezmoi-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/chezmoi-toolkit",
+    "installedAt": "2026-03-26T02:57:57.255Z",
+    "lastUpdated": "2026-03-26T02:57:57.255Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "chrome-devtools-mcp@claude-plugins-official",
+    "version": "1.9.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/chrome-devtools-mcp/1.9.0",
+    "installedAt": "2026-03-19T01:05:40.592Z",
+    "lastUpdated": "2026-09-11T17:30:02.187Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "cicd-automation@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/cicd-automation/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:14.861Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "clangd-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/clangd-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "clangd@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/clangd/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.362Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-api@anthropic-agent-skills",
+    "version": "8a1541c4a3ff",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/anthropic-agent-skills/claude-api/8a1541c4a3ff",
+    "installedAt": "2026-03-21T21:20:21.880Z",
+    "lastUpdated": "2026-09-29T16:46:29.006Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-code-setup@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-code-setup@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0",
+    "installedAt": "2026-08-07T06:53:55.534Z",
+    "lastUpdated": "2026-08-07T06:53:55.534Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-md-management@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-md-management@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0",
+    "installedAt": "2026-08-03T19:07:01.563Z",
+    "lastUpdated": "2026-08-03T19:07:01.563Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-md-management@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0",
+    "installedAt": "2026-08-07T06:53:55.534Z",
+    "lastUpdated": "2026-08-07T06:53:55.534Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "claude-mem@thedotmack",
+    "version": "13.31.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/thedotmack/claude-mem/13.31.0",
+    "installedAt": "2026-03-27T18:05:22.402Z",
+    "lastUpdated": "2026-10-05T09:53:27.674Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "cli-anything@cli-anything",
+    "version": "34f519533bc1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/cli-anything/cli-anything/34f519533bc1",
+    "installedAt": "2026-03-23T05:40:53.377Z",
+    "lastUpdated": "2026-09-22T04:32:05.702Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "cli-anything@cli-anything",
+    "version": "810c18b0d1ab",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/cli-anything/cli-anything/810c18b0d1ab",
+    "installedAt": "2026-05-02T18:13:55.168Z",
+    "lastUpdated": "2026-09-13T06:46:15.800Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "cloud-infrastructure@claude-code-workflows",
+    "version": "1.3.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/cloud-infrastructure/1.3.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:27.888Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "cloudinary@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/cloudinary/1.2.0",
+    "installedAt": "2026-03-25T18:34:02.359Z",
+    "lastUpdated": "2026-08-19T19:51:23.384Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "cockroachdb@knowledge-work-plugins",
+    "version": "0.1.10",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/cockroachdb/0.1.10",
+    "installedAt": "2026-03-25T18:34:03.291Z",
+    "lastUpdated": "2026-07-01T15:31:21.811Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "code-documentation@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/code-documentation/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:34.216Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "code-modernization@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/code-modernization/1.0.0",
+    "installedAt": "2026-08-03T19:07:02.439Z",
+    "lastUpdated": "2026-09-26T01:02:39.651Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "code-refactoring@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/code-refactoring/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:34.761Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "code-review@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/code-review/d182ca456ca0",
+    "installedAt": "2026-03-30T21:18:59.101Z",
+    "lastUpdated": "2026-10-02T21:58:45.674Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "code-simplifier@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/code-simplifier/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "codebase-cleanup@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/codebase-cleanup/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:37.590Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "codebase-quality@claude-community",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/codebase-quality/1.0.0",
+    "installedAt": "2026-03-26T06:52:23.621Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "codex@openai-codex",
+    "version": "1.0.6",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/openai-codex/codex/1.0.6",
+    "installedAt": "2026-03-31T03:10:32.228Z",
+    "lastUpdated": "2026-08-06T03:23:55.630Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "codex@openai-codex",
+    "version": "1.0.6",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/openai-codex/codex/1.0.6",
+    "installedAt": "2026-08-14T22:59:27.257Z",
+    "lastUpdated": "2026-08-14T22:59:27.257Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "codex@openai-codex",
+    "version": "1.0.6",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/openai-codex/codex/1.0.6",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "commit-commands@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/commit-commands/d182ca456ca0",
+    "installedAt": "2026-03-30T21:18:26.724Z",
+    "lastUpdated": "2026-10-02T21:58:46.760Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "commit-commands@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/commit-commands/d182ca456ca0",
+    "installedAt": "2026-08-07T06:53:55.534Z",
+    "lastUpdated": "2026-10-02T21:58:46.255Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "common-room@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/common-room/1.0.0",
+    "installedAt": "2026-03-25T18:34:03.323Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "comprehensive-review@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/comprehensive-review/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:44.156Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "conductor@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/conductor/1.2.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:44.688Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "conductor@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/conductor/1.2.2",
+    "installedAt": "2026-03-19T01:05:40.625Z",
+    "lastUpdated": "2026-05-29T21:31:45.246Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "content-marketing@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/content-marketing/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:45.797Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "context-management@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/context-management/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:46.360Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "context7@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/context7/d182ca456ca0",
+    "installedAt": "2026-03-30T21:34:01.628Z",
+    "lastUpdated": "2026-10-02T21:58:48.127Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "context7@context7-marketplace",
+    "version": "1.0.4",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/context7-marketplace/context7/1.0.4",
+    "installedAt": "2026-07-29T18:42:43.011Z",
+    "lastUpdated": "2026-09-29T16:46:34.107Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "mcpServers": {
+      "context7": {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp?client=claude-code-plugin"
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "context7@context7-marketplace",
+    "version": "1.0.4",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/context7-marketplace/context7/1.0.4",
+    "installedAt": "2026-08-28T12:41:45.698Z",
+    "lastUpdated": "2026-09-29T16:46:34.727Z",
+    "mcpServers": {
+      "context7": {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp?client=claude-code-plugin"
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "context7@context7-marketplace",
+    "version": "1.0.2",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/context7-marketplace/context7/1.0.2",
+    "installedAt": "2026-08-28T18:27:30.774Z",
+    "lastUpdated": "2026-08-28T18:27:30.774Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "mcpServers": {
+      "context7": {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp?client=claude-code-plugin"
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "context7@context7-marketplace",
+    "version": "1.0.4",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/context7-marketplace/context7/1.0.4",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "mcpServers": {
+      "context7": {
+        "type": "http",
+        "url": "https://mcp.context7.com/mcp?client=claude-code-plugin"
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "cowork-plugin-management@knowledge-work-plugins",
+    "version": "0.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/cowork-plugin-management/0.2.2",
+    "installedAt": "2026-03-25T18:34:03.355Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "csharp-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/csharp-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "customer-sales-automation@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/customer-sales-automation/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:50.901Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "customer-support@knowledge-work-plugins",
+    "version": "1.3.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/customer-support/1.3.0",
+    "installedAt": "2026-03-25T18:34:03.382Z",
+    "lastUpdated": "2026-06-02T19:33:52.513Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "daloopa@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/daloopa/1.0.0",
+    "installedAt": "2026-03-25T18:34:04.233Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "data-engineering@claude-code-workflows",
+    "version": "1.3.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/data-engineering/1.3.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:53.456Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "data-validation-suite@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/data-validation-suite/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:54.015Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "data@knowledge-work-plugins",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/data/1.1.0",
+    "installedAt": "2026-03-25T18:34:04.273Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "database-cloud-optimization@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/database-cloud-optimization/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:55.104Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "database-design@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/database-design/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:55.651Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "database-migrations@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/database-migrations/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:56.207Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "debugging-toolkit@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/debugging-toolkit/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:56.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "dependency-management@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/dependency-management/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:57.334Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "deployment-strategies@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/deployment-strategies/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:57.854Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "deployment-validation@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/deployment-validation/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:31:58.382Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "design@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/design/1.2.0",
+    "installedAt": "2026-03-24T19:45:59.203Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "design@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/design/1.2.0",
+    "installedAt": "2026-03-25T18:34:04.309Z",
+    "lastUpdated": "2026-03-25T18:34:04.309Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "devcontainer-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/devcontainer-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/devcontainer-toolkit",
+    "installedAt": "2026-03-26T03:40:00.123Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "developer-essentials@claude-code-workflows",
+    "version": "1.0.4",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/developer-essentials/1.0.4",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:00.640Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "developer-essentials@claude-code-workflows",
+    "version": "1.0.4",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/developer-essentials/1.0.4",
+    "installedAt": "2026-03-19T01:05:40.641Z",
+    "lastUpdated": "2026-05-29T21:32:01.181Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "discord@claude-plugins-official",
+    "version": "0.0.4",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/discord/0.0.4",
+    "installedAt": "2026-03-20T05:35:25.700Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "distributed-debugging@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/distributed-debugging/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:02.873Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "document-skills@anthropic-agent-skills",
+    "version": "8a1541c4a3ff",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/anthropic-agent-skills/document-skills/8a1541c4a3ff",
+    "installedAt": "2026-03-21T21:20:21.974Z",
+    "lastUpdated": "2026-09-29T16:46:35.808Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "documentation-generation@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/documentation-generation/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:06.711Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "dotnet-contribution@claude-code-workflows",
+    "version": "1.0.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/dotnet-contribution/1.0.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:07.293Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "eli5@claude-community",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/eli5/1.0.0",
+    "installedAt": "2026-08-23T15:41:13.207Z",
+    "lastUpdated": "2026-08-23T15:41:13.207Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "eli5@claude-community",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/eli5/1.0.0",
+    "installedAt": "2026-08-27T18:25:07.391Z",
+    "lastUpdated": "2026-08-27T18:25:07.391Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "eli5@claude-community",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/eli5/1.0.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "engineering@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/engineering/1.2.0",
+    "installedAt": "2026-03-24T19:46:24.768Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "engineering@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/engineering/1.2.0",
+    "installedAt": "2026-03-25T18:33:04.093Z",
+    "lastUpdated": "2026-03-25T18:33:04.093Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "error-debugging@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/error-debugging/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:10.183Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "error-diagnostics@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/error-diagnostics/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:10.737Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "exa@claude-plugins-official",
+    "version": "3.4.1",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/exa/3.4.1",
+    "installedAt": "2026-08-03T19:07:03.796Z",
+    "lastUpdated": "2026-08-19T05:35:06.656Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "exa@exa",
+    "version": "3.4.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/exa/exa/3.4.1",
+    "installedAt": "2026-07-30T20:26:48.548Z",
+    "lastUpdated": "2026-08-18T20:18:59.614Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "mcpServers": {
+      "exa": {
+        "type": "http",
+        "url": "https://mcp.exa.ai/mcp?client=claude-code-plugin",
+        "headers": {
+          "x-exa-source": "claude-code-plugin"
+        }
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "exa@exa",
+    "version": "3.4.1",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/exa/exa/3.4.1",
+    "installedAt": "2026-08-28T12:41:38.962Z",
+    "lastUpdated": "2026-08-28T12:41:38.962Z",
+    "mcpServers": {
+      "exa": {
+        "type": "http",
+        "url": "https://mcp.exa.ai/mcp?client=claude-code-plugin",
+        "headers": {
+          "x-exa-source": "claude-code-plugin"
+        }
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "exa@exa",
+    "version": "3.4.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/exa/exa/3.4.1",
+    "installedAt": "2026-08-28T18:27:30.774Z",
+    "lastUpdated": "2026-08-28T18:27:30.774Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "mcpServers": {
+      "exa": {
+        "type": "http",
+        "url": "https://mcp.exa.ai/mcp?client=claude-code-plugin",
+        "headers": {
+          "x-exa-source": "claude-code-plugin"
+        }
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "exa@exa",
+    "version": "3.4.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/exa/exa/3.4.1",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "mcpServers": {
+      "exa": {
+        "type": "http",
+        "url": "https://mcp.exa.ai/mcp?client=claude-code-plugin",
+        "headers": {
+          "x-exa-source": "claude-code-plugin"
+        }
+      }
+    },
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "example-skills@anthropic-agent-skills",
+    "version": "8a1541c4a3ff",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/anthropic-agent-skills/example-skills/8a1541c4a3ff",
+    "installedAt": "2026-03-21T21:20:22.064Z",
+    "lastUpdated": "2026-09-29T16:46:37.203Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "explanatory-output-style@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/explanatory-output-style/1.0.0",
+    "installedAt": "2026-03-29T20:08:45.825Z",
+    "lastUpdated": "2026-07-31T19:45:22.800Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "explanatory-output-style@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/explanatory-output-style/1.0.0",
+    "installedAt": "2026-04-09T08:23:07.773Z",
+    "lastUpdated": "2026-04-09T08:23:07.773Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "fakechat@claude-plugins-official",
+    "version": "0.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/fakechat/0.0.1",
+    "installedAt": "2026-03-19T01:05:40.652Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "fastly-agent-toolkit@knowledge-work-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/fastly-agent-toolkit/0.1.0",
+    "installedAt": "2026-03-25T18:34:05.234Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "feature-dev@claude-code-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-plugins/feature-dev/1.0.0",
+    "installedAt": "2026-04-07T05:58:55.586Z",
+    "lastUpdated": "2026-04-07T05:58:55.586Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "feature-dev@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/feature-dev/d182ca456ca0",
+    "installedAt": "2026-08-03T19:07:01.703Z",
+    "lastUpdated": "2026-10-02T21:58:57.922Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "figma@knowledge-work-plugins",
+    "version": "2.2.118",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/figma/2.2.118",
+    "installedAt": "2026-03-25T18:34:05.861Z",
+    "lastUpdated": "2026-09-22T16:57:41.587Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "finance@knowledge-work-plugins",
+    "version": "1.3.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/finance/1.3.0",
+    "installedAt": "2026-03-25T18:34:05.890Z",
+    "lastUpdated": "2026-06-02T19:34:21.170Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "firecrawl@claude-plugins-official",
+    "version": "1.0.9",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/firecrawl/1.0.9",
+    "installedAt": "2026-08-23T01:28:11.516Z",
+    "lastUpdated": "2026-08-23T01:28:11.516Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "firecrawl@firecrawl",
+    "version": "1.1.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/firecrawl/firecrawl/1.1.0",
+    "installedAt": "2026-08-28T12:41:38.927Z",
+    "lastUpdated": "2026-09-30T15:12:29.546Z",
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "firecrawl@firecrawl",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/firecrawl/firecrawl/1.1.0",
+    "installedAt": "2026-08-28T18:27:30.774Z",
+    "lastUpdated": "2026-09-30T15:12:29.049Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "firecrawl@firecrawl",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/firecrawl/firecrawl/1.1.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads — project settings enable it, which overrides your user setting"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ],
+    "projectEnabled": true
+  },
+  {
+    "id": "framework-migration@claude-code-workflows",
+    "version": "1.3.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/framework-migration/1.3.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:19.683Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "frontend-mobile-development@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/frontend-mobile-development/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:20.255Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "frontend-mobile-security@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/frontend-mobile-security/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:20.861Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "full-stack-orchestration@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/full-stack-orchestration/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:21.439Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "functional-programming@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/functional-programming/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:22.012Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "gemini@google-gemini",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/google-gemini/gemini/1.0.1",
+    "installedAt": "2026-04-17T19:05:13.032Z",
+    "lastUpdated": "2026-04-18T22:53:13.475Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb",
+    "projectEnabled": false
+  },
+  {
+    "id": "git-pr-workflows@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/git-pr-workflows/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:24.293Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "github@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/github/d182ca456ca0",
+    "installedAt": "2026-03-30T21:18:00.433Z",
+    "lastUpdated": "2026-10-02T21:59:02.800Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "gopls-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/gopls-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "gopls@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/gopls/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.371Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "guide@claude-code-guide",
+    "version": "2.18.1",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-guide/guide/2.18.1",
+    "installedAt": "2026-03-29T19:35:41.211Z",
+    "lastUpdated": "2026-06-16T17:45:13.758Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "hk-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/hk-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/hk-toolkit",
+    "installedAt": "2026-03-26T02:57:57.343Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "hookify@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/hookify/d182ca456ca0",
+    "installedAt": "2026-03-30T21:18:37.017Z",
+    "lastUpdated": "2026-10-02T21:59:05.863Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "hookify@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/hookify/d182ca456ca0",
+    "installedAt": "2026-08-07T06:53:55.534Z",
+    "lastUpdated": "2026-10-02T21:59:04.569Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "human-resources@knowledge-work-plugins",
+    "version": "1.3.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/human-resources/1.3.0",
+    "installedAt": "2026-03-25T18:34:05.919Z",
+    "lastUpdated": "2026-06-02T19:34:37.523Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "i-have-adhd@i-have-adhd",
+    "version": "0.3.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/i-have-adhd/i-have-adhd/0.3.0",
+    "installedAt": "2026-08-27T18:26:35.183Z",
+    "lastUpdated": "2026-09-10T00:50:43.022Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "i-have-adhd@i-have-adhd",
+    "version": "0.2.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/i-have-adhd/i-have-adhd/0.2.0",
+    "installedAt": "2026-08-27T05:38:18.813Z",
+    "lastUpdated": "2026-08-27T05:38:18.813Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "i-have-adhd@i-have-adhd",
+    "version": "0.3.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/i-have-adhd/i-have-adhd/0.3.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "incident-response@claude-code-workflows",
+    "version": "1.4.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/incident-response/1.4.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-09-29T16:46:42.540Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "intercom@knowledge-work-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/intercom/0.1.0",
+    "installedAt": "2026-03-25T18:34:06.628Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "javascript-typescript@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/javascript-typescript/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:36.319Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "jdtls-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/jdtls-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "jdtls@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/jdtls/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.381Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "jvm-languages@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/jvm-languages/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:39.797Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "kotlin-lsp@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/kotlin-lsp/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.392Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "kotlin-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/kotlin-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "kubernetes-operations@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/kubernetes-operations/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:42.018Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-08-14T23:00:40.374Z",
+    "lastUpdated": "2026-10-01T15:17:05.932Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.0.5",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.0.5",
+    "installedAt": "2026-04-17T19:52:25.556Z",
+    "lastUpdated": "2026-04-17T19:52:25.556Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-08-28T12:41:45.893Z",
+    "lastUpdated": "2026-10-01T15:17:07.734Z",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.21.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.21.1",
+    "installedAt": "2026-08-28T18:27:30.774Z",
+    "lastUpdated": "2026-08-28T18:27:30.774Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.24.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.24.0",
+    "installedAt": "2026-09-11T19:31:39.380Z",
+    "lastUpdated": "2026-09-11T19:31:39.380Z",
+    "projectPath": "/private/tmp/claude-501/-Users-rmanaloto-dev-github-ray-manaloto-knowledge-base/281f4093-56d5-4aab-82ae-44ec6aa88ad2/scratchpad/verify-worktree",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.24.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.24.0",
+    "installedAt": "2026-09-15T18:03:32.500Z",
+    "lastUpdated": "2026-09-15T18:03:32.500Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/issue-1-cli-delivery-d2",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-24T13:35:01.076Z",
+    "lastUpdated": "2026-09-24T13:35:01.076Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-maintenance-20260922",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-24T21:26:41.409Z",
+    "lastUpdated": "2026-09-24T21:26:41.409Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-maintenance-93c019a5-20260924",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-24T22:46:18.358Z",
+    "lastUpdated": "2026-09-24T22:46:18.358Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-maintenance-51237d45-20260924",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-25T05:02:57.652Z",
+    "lastUpdated": "2026-09-25T05:02:57.652Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-parity-9fa-20260925",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-27T07:18:52.271Z",
+    "lastUpdated": "2026-09-27T07:18:52.271Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-final-main-20260927",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-27T23:30:44.280Z",
+    "lastUpdated": "2026-09-27T23:30:44.280Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-signer-074b024-20260927",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-28T11:47:39.892Z",
+    "lastUpdated": "2026-09-28T11:47:39.892Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/cli-v0971-integration-20260928",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-29T06:36:11.878Z",
+    "lastUpdated": "2026-09-29T06:36:11.878Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/kb-project-sync-v0971-20260928",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.25.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.25.0",
+    "installedAt": "2026-09-30T21:57:01.529Z",
+    "lastUpdated": "2026-09-30T21:57:01.529Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T15:59:57.663Z",
+    "lastUpdated": "2026-10-02T15:59:57.663Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/ewt-probe-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T16:00:18.334Z",
+    "lastUpdated": "2026-10-02T16:00:18.334Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/ewt-outside-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T16:06:41.183Z",
+    "lastUpdated": "2026-10-02T16:06:41.183Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/fanout-fixes-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T17:55:26.005Z",
+    "lastUpdated": "2026-10-02T17:55:26.005Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/cc-repoint-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T18:06:51.724Z",
+    "lastUpdated": "2026-10-02T18:06:51.724Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/s29-00b-finish-20261001",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T18:20:26.021Z",
+    "lastUpdated": "2026-10-02T18:20:26.021Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/session-audit-20261001-s29",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T18:52:47.105Z",
+    "lastUpdated": "2026-10-02T18:52:47.105Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/devcontainer-cap-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T19:41:27.044Z",
+    "lastUpdated": "2026-10-02T19:41:27.044Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base.worktrees/kb-838-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T19:52:42.094Z",
+    "lastUpdated": "2026-10-02T19:52:42.094Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/model-registry-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T20:08:52.939Z",
+    "lastUpdated": "2026-10-02T20:08:52.939Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/worktree-ergonomics-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T21:10:57.882Z",
+    "lastUpdated": "2026-10-02T21:10:57.882Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/host-load-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-02T21:28:21.650Z",
+    "lastUpdated": "2026-10-02T21:28:21.650Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/coordinator-auto-handoff-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T02:54:20.304Z",
+    "lastUpdated": "2026-10-03T02:54:20.304Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/probe-defer-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T15:32:03.743Z",
+    "lastUpdated": "2026-10-03T15:32:03.743Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/session-autostart-20261003",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T16:45:09.860Z",
+    "lastUpdated": "2026-10-03T16:45:09.860Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/review-batch-20261003",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T19:15:24.018Z",
+    "lastUpdated": "2026-10-03T19:15:24.018Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/handoff-automation-research",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T19:34:44.634Z",
+    "lastUpdated": "2026-10-03T19:34:44.634Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/L1-docs-rules",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-03T23:13:59.056Z",
+    "lastUpdated": "2026-10-03T23:13:59.056Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/L0-urgent-code",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-04T19:38:04.393Z",
+    "lastUpdated": "2026-10-04T19:38:04.393Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/mintlify-scrub",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-04T19:38:17.435Z",
+    "lastUpdated": "2026-10-04T19:38:17.435Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/.claude/worktrees/mintlify-scrub",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-04T19:56:11.789Z",
+    "lastUpdated": "2026-10-04T19:56:11.789Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base/.claude/worktrees/doc-extraction-refresh",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-05T01:11:19.242Z",
+    "lastUpdated": "2026-10-05T01:11:19.242Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/ph04-slot-leases",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-05T01:17:14.215Z",
+    "lastUpdated": "2026-10-05T01:17:14.215Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/coord-router",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-05T09:50:18.741Z",
+    "lastUpdated": "2026-10-05T09:50:18.741Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/llvm23-20261002",
+    "projectEnabled": true
+  },
+  {
+    "id": "last30days@last30days-skill",
+    "version": "3.26.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/last30days-skill/last30days/3.26.0",
+    "installedAt": "2026-10-05T10:11:33.812Z",
+    "lastUpdated": "2026-10-05T10:11:33.812Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/process-hardening",
+    "projectEnabled": true
+  },
+  {
+    "id": "learning-output-style@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "local",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/learning-output-style/1.0.0",
+    "installedAt": "2026-03-29T20:08:45.825Z",
+    "lastUpdated": "2026-07-31T19:45:22.800Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "learning-output-style@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/learning-output-style/1.0.0",
+    "installedAt": "2026-08-14T22:59:11.195Z",
+    "lastUpdated": "2026-08-14T22:59:11.195Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "learning-output-style@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/learning-output-style/1.0.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "llm-application-dev@claude-code-workflows",
+    "version": "2.0.6",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/llm-application-dev/2.0.6",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:45.652Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "lua-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/lua-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "machine-learning-ops@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/machine-learning-ops/1.2.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:47.261Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "marketplace-evaluator@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/marketplace-evaluator/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/marketplace-evaluator",
+    "installedAt": "2026-03-26T18:21:19.599Z",
+    "lastUpdated": "2026-03-26T18:21:19.599Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "math-olympiad@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/math-olympiad/d182ca456ca0",
+    "installedAt": "2026-04-17T19:09:48.897Z",
+    "lastUpdated": "2026-10-02T21:59:09.195Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb",
+    "projectEnabled": false
+  },
+  {
+    "id": "mattpocock-skills@mattpocock",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/mattpocock/mattpocock-skills/1.3.1",
+    "installedAt": "2026-07-15T16:38:07.559Z",
+    "lastUpdated": "2026-10-04T17:05:01.213Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "mattpocock-skills@mattpocock",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/mattpocock/mattpocock-skills/1.2.3",
+    "installedAt": "2026-08-14T22:59:43.915Z",
+    "lastUpdated": "2026-08-14T22:59:43.915Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "mattpocock-skills@mattpocock",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/mattpocock/mattpocock-skills/1.2.3",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "mcp-toolkit@docker",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/docker/mcp-toolkit/1.0.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "mcp2cli@claude-community",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/mcp2cli/0.1.0",
+    "installedAt": "2026-03-27T07:11:02.445Z",
+    "lastUpdated": "2026-04-08T23:28:02.215Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "mcp2cli@claude-community",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/mcp2cli/0.1.0",
+    "installedAt": "2026-03-29T19:29:20.960Z",
+    "lastUpdated": "2026-03-29T19:29:20.960Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "mcp2cli@claude-community",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/mcp2cli/0.1.0",
+    "installedAt": "2026-08-21T20:14:56.018Z",
+    "lastUpdated": "2026-08-21T20:14:56.018Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "mdbase-lsp@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/mdbase-lsp/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.407Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "meigen-ai-design@claude-code-workflows",
+    "version": "1.0.9",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/meigen-ai-design/1.0.9",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-06-25T19:54:09.672Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "mintlify@knowledge-work-plugins",
+    "version": "acd6d2e0128c",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/mintlify/acd6d2e0128c",
+    "installedAt": "2026-03-25T18:34:07.396Z",
+    "lastUpdated": "2026-04-30T01:29:17.060Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "mise-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/mise-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/mise-toolkit",
+    "installedAt": "2026-03-25T09:04:19.108Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "mise-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/mise-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/mise-toolkit",
+    "installedAt": "2026-03-26T02:57:57.391Z",
+    "lastUpdated": "2026-03-26T02:57:57.391Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "mise@brentmitchell25",
+    "version": "2.10.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/brentmitchell25/mise/2.10.0",
+    "installedAt": "2026-08-03T19:10:04.834Z",
+    "lastUpdated": "2026-09-21T15:12:20.751Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "multi-platform-apps@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/multi-platform-apps/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:32:59.402Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "nimble@knowledge-work-plugins",
+    "version": "1.7.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/nimble/1.7.0",
+    "installedAt": "2026-03-24T19:48:18.582Z",
+    "lastUpdated": "2026-09-08T17:13:55.571Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "nimble@knowledge-work-plugins",
+    "version": "1.7.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/nimble/1.7.0",
+    "installedAt": "2026-03-25T18:34:08.208Z",
+    "lastUpdated": "2026-09-08T17:13:58.346Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "observability-monitoring@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/observability-monitoring/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:03.141Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "obsidian@obsidian-skills",
+    "version": "1.0.1",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/obsidian-skills/obsidian/1.0.1",
+    "installedAt": "2026-03-21T03:38:01.361Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "octo@nyldn-plugins",
+    "version": "11.10.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/nyldn-plugins/octo/11.10.0",
+    "installedAt": "2026-03-25T23:09:25.003Z",
+    "lastUpdated": "2026-10-03T15:21:27.036Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "oh-my-claudecode@omc",
+    "version": "5.6.1",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/omc/oh-my-claudecode/5.6.1",
+    "installedAt": "2026-04-05T02:56:42.231Z",
+    "lastUpdated": "2026-10-03T15:21:27.295Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "operations@knowledge-work-plugins",
+    "version": "1.3.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/operations/1.3.0",
+    "installedAt": "2026-03-25T18:34:08.248Z",
+    "lastUpdated": "2026-06-02T19:35:19.428Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "payment-processing@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/payment-processing/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:16.463Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "performance-testing-review@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/performance-testing-review/1.2.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:17.003Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "php-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/php-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "planning-with-files@planning-with-files",
+    "version": "3.22.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/planning-with-files/planning-with-files/3.22.0",
+    "installedAt": "2026-08-31T00:27:42.299Z",
+    "lastUpdated": "2026-10-01T20:36:56.685Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "planning-with-files@planning-with-files",
+    "version": "3.21.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/planning-with-files/planning-with-files/3.21.0",
+    "installedAt": "2026-08-31T00:29:09.108Z",
+    "lastUpdated": "2026-09-29T17:57:27.286Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "planning-with-files@planning-with-files",
+    "version": "3.21.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/planning-with-files/planning-with-files/3.21.0",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "plugin-dev@claude-code-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-plugins/plugin-dev/0.1.0",
+    "installedAt": "2026-04-07T06:01:33.642Z",
+    "lastUpdated": "2026-04-07T06:01:33.642Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "plugin-dev@claude-code-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-plugins/plugin-dev/0.1.0",
+    "installedAt": "2026-07-15T06:33:24.133Z",
+    "lastUpdated": "2026-07-15T06:33:24.133Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "plugin-dev@claude-code-plugins",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-plugins/plugin-dev/0.1.0",
+    "installedAt": "2026-08-27T21:15:02.604Z",
+    "lastUpdated": "2026-08-27T21:15:02.604Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "plugin-dev@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/plugin-dev/d182ca456ca0",
+    "installedAt": "2026-03-30T21:14:28.517Z",
+    "lastUpdated": "2026-10-02T21:59:14.414Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "plugin-eval@claude-code-workflows",
+    "version": "0.1.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/plugin-eval/0.1.2",
+    "installedAt": "2026-08-03T21:28:31.962Z",
+    "lastUpdated": "2026-09-27T00:55:48.662Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "postiz@knowledge-work-plugins",
+    "version": "2.0.19",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/postiz/2.0.19",
+    "installedAt": "2026-03-25T18:34:09.646Z",
+    "lastUpdated": "2026-09-22T16:57:54.484Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "pr-review-toolkit@claude-code-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-plugins/pr-review-toolkit/1.0.0",
+    "installedAt": "2026-04-17T19:01:59.003Z",
+    "lastUpdated": "2026-04-17T19:01:59.003Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb",
+    "projectEnabled": false
+  },
+  {
+    "id": "pr-review-toolkit@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/pr-review-toolkit/d182ca456ca0",
+    "installedAt": "2026-03-30T21:16:55.775Z",
+    "lastUpdated": "2026-10-02T21:59:15.385Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": false
+  },
+  {
+    "id": "prisma@knowledge-work-plugins",
+    "version": "815dbc4a045a",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/prisma/815dbc4a045a",
+    "installedAt": "2026-03-25T18:34:10.346Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "product-management@knowledge-work-plugins",
+    "version": "1.2.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/product-management/1.2.0",
+    "installedAt": "2026-03-25T18:34:10.378Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "product-tracking-skills@knowledge-work-plugins",
+    "version": "1.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/product-tracking-skills/1.1.0",
+    "installedAt": "2026-03-25T18:34:11.205Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "productivity@knowledge-work-plugins",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/productivity/1.3.1",
+    "installedAt": "2026-03-25T18:34:11.236Z",
+    "lastUpdated": "2026-08-07T16:33:42.048Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "pskoett-ai-skills@claude-community",
+    "version": "2.3.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/pskoett-ai-skills/2.3.0",
+    "installedAt": "2026-03-29T09:29:05.893Z",
+    "lastUpdated": "2026-06-15T00:33:14.392Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "pyright-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/pyright-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "pyright@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/pyright/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.417Z",
+    "lastUpdated": "2026-08-04T03:53:02.040Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-development@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/python-development/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:50:59.709Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-development@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/python-development/1.2.3",
+    "installedAt": "2026-03-19T01:05:40.664Z",
+    "lastUpdated": "2026-05-29T21:33:40.211Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-development@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/python-development/1.2.3",
+    "installedAt": "2026-04-06T01:03:52.052Z",
+    "lastUpdated": "2026-05-29T21:33:39.657Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-development@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/python-development/1.2.2",
+    "installedAt": "2026-04-07T06:02:45.677Z",
+    "lastUpdated": "2026-04-07T06:02:45.677Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-development@claude-code-workflows",
+    "version": "1.2.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/python-development/1.2.2",
+    "installedAt": "2026-04-16T18:17:10.269Z",
+    "lastUpdated": "2026-04-16T18:17:10.269Z",
+    "projectPath": "/Users/rmanaloto/dev/github/safishamsi/claude/graphify",
+    "projectEnabled": false
+  },
+  {
+    "id": "python-remote-debug-skill@claude-community",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/python-remote-debug-skill/1.0.1",
+    "installedAt": "2026-03-26T06:51:59.118Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "quantitative-trading@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/quantitative-trading/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:43.594Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "remember@rsm-remember",
+    "version": "0.39.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-remember/remember/0.39.0",
+    "installedAt": "2026-03-31T02:22:27.109Z",
+    "lastUpdated": "2026-10-03T15:21:29.327Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "research-review-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/research-review-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/research-review-toolkit",
+    "installedAt": "2026-03-26T06:29:04.678Z",
+    "lastUpdated": "2026-03-26T06:29:04.678Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "reverse-engineering@claude-code-workflows",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/reverse-engineering/1.0.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:46.229Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "ruby-lsp@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/ruby-lsp/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.427Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "ruby-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/ruby-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "rust-analyzer-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/rust-analyzer-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "rust-analyzer@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/rust-analyzer/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.436Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "safety-net@claude-community",
+    "version": "1.0.6",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/safety-net/1.0.6",
+    "installedAt": "2026-03-26T06:52:18.076Z",
+    "lastUpdated": "2026-08-09T19:51:23.915Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "sales@knowledge-work-plugins",
+    "version": "2.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/sales/2.0.1",
+    "installedAt": "2026-03-25T18:34:11.269Z",
+    "lastUpdated": "2026-09-16T17:18:54.309Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "sanity-plugin@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/sanity-plugin/1.0.0",
+    "installedAt": "2026-03-25T18:34:12.043Z",
+    "lastUpdated": "2026-04-30T01:30:06.631Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "searchfit-seo@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/searchfit-seo/1.0.0",
+    "installedAt": "2026-03-25T18:34:12.753Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "security-compliance@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/security-compliance/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:56.372Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "security-guidance@claude-plugins-official",
+    "version": "2.0.9",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/security-guidance/2.0.9",
+    "installedAt": "2026-03-30T21:18:12.683Z",
+    "lastUpdated": "2026-10-02T21:59:21.054Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "security-guidance@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/security-guidance/unknown",
+    "installedAt": "2026-04-17T19:11:18.901Z",
+    "lastUpdated": "2026-04-18T23:57:22.330Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb",
+    "projectEnabled": false
+  },
+  {
+    "id": "security-scanning@claude-code-workflows",
+    "version": "1.3.2",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/security-scanning/1.3.2",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:58.066Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "seo-analysis-monitoring@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/seo-analysis-monitoring/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:58.610Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "seo-content-creation@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/seo-content-creation/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:59.179Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "seo-technical-optimization@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/seo-technical-optimization/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:33:59.734Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "session-report@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/session-report/d182ca456ca0",
+    "installedAt": "2026-04-17T19:02:58.326Z",
+    "lastUpdated": "2026-10-02T21:59:22.302Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "shell-scripting@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/shell-scripting/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:00.858Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "shell-scripting@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/shell-scripting/1.2.3",
+    "installedAt": "2026-03-19T01:05:40.675Z",
+    "lastUpdated": "2026-05-29T21:34:01.420Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/d182ca456ca0",
+    "installedAt": "2026-03-30T21:14:28.517Z",
+    "lastUpdated": "2026-10-02T21:59:22.506Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/knowledge-base",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown",
+    "installedAt": "2026-04-17T19:11:38.526Z",
+    "lastUpdated": "2026-04-18T23:57:22.327Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/modern_cpp_kb",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "user",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/d182ca456ca0",
+    "installedAt": "2026-08-03T19:07:01.123Z",
+    "lastUpdated": "2026-10-02T21:59:23.128Z",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "d182ca456ca0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/d182ca456ca0",
+    "installedAt": "2026-08-07T06:53:55.534Z",
+    "lastUpdated": "2026-10-02T22:13:05.875Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown",
+    "installedAt": "2026-08-13T16:30:10.384Z",
+    "lastUpdated": "2026-08-13T16:30:10.384Z",
+    "projectPath": "/private/var/folders/z4/0p475gq56vvczc3y4qlt60f80000gn/T/tmp.uoBI1R1ekX/repo",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown",
+    "installedAt": "2026-08-13T22:24:07.569Z",
+    "lastUpdated": "2026-08-13T22:24:07.569Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/knowledge-base-graphify-0942",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown",
+    "installedAt": "2026-08-14T09:33:53.961Z",
+    "lastUpdated": "2026-08-14T09:33:53.961Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/knowledge-base-300",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "unknown",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown",
+    "installedAt": "2026-08-14T16:15:12.454Z",
+    "lastUpdated": "2026-08-14T16:15:12.454Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/worktrees/knowledge-base-301",
+    "projectEnabled": true
+  },
+  {
+    "id": "skill-creator@claude-plugins-official",
+    "version": "ab024cdcfa7c",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/skill-creator/ab024cdcfa7c",
+    "installedAt": "2026-09-30T21:58:53.548Z",
+    "lastUpdated": "2026-09-30T21:58:53.548Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agent-shell-env-20260930",
+    "projectEnabled": true
+  },
+  {
+    "id": "srclight@claude-community",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/srclight/1.0.0",
+    "installedAt": "2026-03-27T07:10:28.788Z",
+    "lastUpdated": "2026-03-27T07:10:28.788Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "startup-business-analyst@claude-code-workflows",
+    "version": "1.0.6",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/startup-business-analyst/1.0.6",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:06.414Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "svelte-lsp@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/svelte-lsp/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.448Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "swift-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/swift-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "systems-programming@claude-code-workflows",
+    "version": "1.2.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/systems-programming/1.2.3",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:08.602Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "tdd-workflows@claude-code-workflows",
+    "version": "1.3.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/tdd-workflows/1.3.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:09.131Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "team-collaboration@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/team-collaboration/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:09.725Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "telegram@claude-plugins-official",
+    "version": "0.0.7",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/telegram/0.0.7",
+    "installedAt": "2026-03-20T05:35:25.719Z",
+    "lastUpdated": "2026-08-13T06:46:37.762Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "test-generator@claude-community",
+    "version": "4698df2089ee",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/test-generator/4698df2089ee",
+    "installedAt": "2026-03-26T06:34:54.897Z",
+    "lastUpdated": "2026-03-27T03:18:48.621Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "texlab@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/texlab/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.460Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "token-saver@claude-community",
+    "version": "2.7.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-community/token-saver/2.7.1",
+    "installedAt": "2026-03-26T06:51:48.609Z",
+    "lastUpdated": "2026-08-09T19:51:50.819Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "token-saver@token-saver-marketplace",
+    "version": "3.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/token-saver-marketplace/token-saver/3.0.0",
+    "installedAt": "2026-04-10T00:10:14.800Z",
+    "lastUpdated": "2026-09-20T15:57:43.889Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles",
+    "projectEnabled": false
+  },
+  {
+    "id": "ty@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/ty/0.1.0",
+    "installedAt": "2026-05-12T18:06:54.781Z",
+    "lastUpdated": "2026-05-12T18:06:54.781Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "typescript-lsp@claude-plugins-official",
+    "version": "1.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-plugins-official/typescript-lsp/1.0.0",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-07-15T06:43:46.698Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "ui-design@claude-code-workflows",
+    "version": "1.0.5",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/ui-design/1.0.5",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:19.372Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "ultrapowers-dev@ultrapowers",
+    "version": "1.2.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/ultrapowers/ultrapowers-dev/1.2.0",
+    "installedAt": "2026-03-30T21:20:18.895Z",
+    "lastUpdated": "2026-03-30T21:34:01.628Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "ultrapowers@ultrapowers",
+    "version": "2.0.0",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/ultrapowers/ultrapowers/2.0.0",
+    "installedAt": "2026-03-30T21:20:04.785Z",
+    "lastUpdated": "2026-09-08T17:14:09.216Z",
+    "projectEnabled": false
+  },
+  {
+    "id": "unit-testing@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/unit-testing/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:22.820Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "voltagent-dev-exp@voltagent-subagents",
+    "version": "1.0.3",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/voltagent-subagents/voltagent-dev-exp/1.0.3",
+    "installedAt": "2026-03-25T09:10:02.511Z",
+    "lastUpdated": "2026-05-29T21:34:24.663Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "voltagent-lang@voltagent-subagents",
+    "version": "1.0.4",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/voltagent-subagents/voltagent-lang/1.0.4",
+    "installedAt": "2026-03-25T09:09:01.269Z",
+    "lastUpdated": "2026-04-20T16:04:21.452Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "voltagent-qa-sec@voltagent-subagents",
+    "version": "1.1.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/voltagent-subagents/voltagent-qa-sec/1.1.1",
+    "installedAt": "2026-03-25T09:09:50.900Z",
+    "lastUpdated": "2026-05-29T21:34:25.775Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "vscode-langservers@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/vscode-langservers/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.470Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "vtsls@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/vtsls/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.480Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "vue-volar@claude-code-lsps",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-lsps/vue-volar/0.1.0",
+    "installedAt": "2026-03-24T21:29:02.491Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "web-scripting@claude-code-workflows",
+    "version": "1.2.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/claude-code-workflows/web-scripting/1.2.1",
+    "installedAt": "2026-03-18T23:43:31.282Z",
+    "lastUpdated": "2026-05-29T21:34:29.150Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "workflow-toolkit@rsm-subagents",
+    "version": "0.1.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/rsm-subagents/workflow-toolkit/0.1.0",
+    "readFromFolder": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment/rsm-subagents/plugins/workflow-toolkit",
+    "installedAt": "2026-03-30T00:52:32.594Z",
+    "lastUpdated": "2026-03-30T00:52:32.594Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "zapier@knowledge-work-plugins",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/zapier/1.0.0",
+    "installedAt": "2026-03-25T18:34:16.352Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "zoominfo@knowledge-work-plugins",
+    "version": "1.0.1",
+    "scope": "project",
+    "enabled": false,
+    "installPath": "/Users/rmanaloto/.claude/plugins/cache/knowledge-work-plugins/zoominfo/1.0.1",
+    "installedAt": "2026-03-25T18:34:17.580Z",
+    "lastUpdated": "2026-03-27T05:00:28.791Z",
+    "projectPath": "/Users/rmanaloto/dev/github/ray-manaloto/macos-development-environment",
+    "projectEnabled": false
+  },
+  {
+    "id": "pdf-viewer@synced",
+    "version": "0.2.0",
+    "scope": "synced",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/.claude/plugins/synced/c1029050-a11f-4194-9994-3e4271c1d0f0_770dee3b-2a2d-418c-81b3-d4b860a1f3c3/pdf-viewer~g2"
+  },
+  {
+    "id": "plugin-health@skills-dir",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/.claude/skills/plugin-health"
+  },
+  {
+    "id": "session-start@skills-dir",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/.claude/skills/session-start"
+  },
+  {
+    "id": "coordinator-handoff@skills-dir",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/.claude/skills/coordinator-handoff"
+  },
+  {
+    "id": "install-doctor@skills-dir",
+    "version": "1.0.0",
+    "scope": "project",
+    "enabled": true,
+    "installPath": "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles/.claude/worktrees/codex-takeover/.claude/skills/install-doctor"
+  }
+]
