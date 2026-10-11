@@ -46,7 +46,7 @@ lima = "2.2.1"
 "github:agent-sh/agnix" = "0.57.0"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.149.2"
+"npm:renovate" = "44.149.3"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -90,7 +90,7 @@ aws-cli = { version = "2.37.12", symlink_bins = "true" }
 # pipx first: mise use pipx@latest"). It is installed in setup-mise's FIRST
 # mise-action pass, alongside bun, because mise does not guarantee ordering
 # within one pass -- the same hazard that comment already documents for bun.
-pipx = "1.17.12"
+pipx = "1.17.13"
 # Backend-qualified deliberately. The bare `azure-cli` name resolves only
 # through mise's registry, and the `azure-cli -> pypi:azure-cli` alias is
 # absent in older mise (2026.9.1 answered "not found in mise tool registry",
