@@ -244,11 +244,12 @@ def test_fake_tree_classifies_wait_loop_and_blocks_other(
     )
 
     assert rc == 1
-    assert "WAIT-LOOP unbounded     300" in caplog.text
-    assert "BLOCK OTHER     400" in caplog.text
-    assert "500" not in caplog.text
-    assert " 200 " not in caplog.text
-    assert " 202 " not in caplog.text
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "WAIT-LOOP unbounded     300" in messages
+    assert "BLOCK OTHER     400" in messages
+    assert "500" not in messages
+    assert " 200 " not in messages
+    assert " 202 " not in messages
 
 
 def test_caller_subtree_is_protected_without_hiding_sibling_waits() -> None:

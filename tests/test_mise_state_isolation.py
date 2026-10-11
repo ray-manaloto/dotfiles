@@ -18,6 +18,13 @@ _REPO_ROOT = Path(__file__).parent.parent
 _CHILD_TIMEOUT = 60
 
 
+def _scratch_test_source(name: str) -> Path:
+    """Keep nested pytest source under the repo's ignored agent state."""
+    source = _REPO_ROOT / ".agent" / "state" / f"test_{name}_{os.getpid()}.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    return source
+
+
 def _tracked_config_mapping(state_dir: Path) -> dict[str, str]:
     """Return the exact tracked-config entry-name to resolved-target mapping."""
     tracked_configs = state_dir / "tracked-configs"
@@ -51,7 +58,7 @@ def test_child_pytest_registers_mise_config_only_in_its_isolated_state(
     outer_before = _tracked_config_mapping(outer_state)
 
     marker = tmp_path / "child-tmp-path"
-    scratch_test = tmp_path / "test_child_mise_state.py"
+    scratch_test = _scratch_test_source("child_mise_state")
     scratch_test.write_text(
         f"""from __future__ import annotations
 
@@ -88,26 +95,32 @@ def test_real_mise_registers_the_scratch_config(tmp_path: Path) -> None:
         "MISE_STATE_DIR": str(outer_state),
         "XDG_STATE_HOME": str(xdg_state_home),
     }
-    child = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-o",
-            "addopts=",
-            "-p",
-            "no:cacheprovider",
-            "-p",
-            "conftest",
-            str(scratch_test),
-        ],
-        cwd=_REPO_ROOT / "tests",
-        env=child_env,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=_CHILD_TIMEOUT,
-    )
+    try:
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-c",
+                "python/pyproject.toml",
+                "--rootdir=.",
+                "-o",
+                "addopts=",
+                "-p",
+                "no:cacheprovider",
+                "-p",
+                "tests.conftest",
+                str(scratch_test),
+            ],
+            cwd=_REPO_ROOT,
+            env=child_env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_CHILD_TIMEOUT,
+        )
+    finally:
+        scratch_test.unlink(missing_ok=True)
 
     assert child.returncode == 0, child.stdout + child.stderr
     assert _tracked_config_mapping(outer_state) == outer_before
@@ -167,7 +180,7 @@ def test_child_pytest_keeps_ambient_mise_trust(tmp_path: Path) -> None:
     )
     assert trust.returncode == 0, trust.stderr
 
-    scratch_test = tmp_path / "test_child_mise_trust.py"
+    scratch_test = _scratch_test_source("child_mise_trust")
     scratch_test.write_text(
         f"""from __future__ import annotations
 
@@ -190,25 +203,31 @@ def test_trusted_config_still_loads() -> None:
 """,
         encoding="utf-8",
     )
-    child = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-o",
-            "addopts=",
-            "-p",
-            "no:cacheprovider",
-            "-p",
-            "conftest",
-            str(scratch_test),
-        ],
-        cwd=_REPO_ROOT / "tests",
-        env={**no_trust_root, "MISE_STATE_DIR": str(outer_state)},
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=_CHILD_TIMEOUT,
-    )
+    try:
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-c",
+                "python/pyproject.toml",
+                "--rootdir=.",
+                "-o",
+                "addopts=",
+                "-p",
+                "no:cacheprovider",
+                "-p",
+                "tests.conftest",
+                str(scratch_test),
+            ],
+            cwd=_REPO_ROOT,
+            env={**no_trust_root, "MISE_STATE_DIR": str(outer_state)},
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_CHILD_TIMEOUT,
+        )
+    finally:
+        scratch_test.unlink(missing_ok=True)
 
     assert child.returncode == 0, child.stdout + child.stderr

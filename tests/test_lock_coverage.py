@@ -28,6 +28,7 @@ from dotfiles_setup.lock_refresh import (
     merged_system_config_tools,
     runtime_config_tools,
 )
+from dotfiles_setup.lock_sidecars import NATIVE_LOCK_FORMAT, verify_lock_sidecars
 
 _REPO_ROOT = Path(__file__).parent.parent
 _FEATURE_KEY_RE = re.compile(r'"(ghcr\.io/[^"]+/features/[^"]+)"\s*:')
@@ -36,6 +37,28 @@ _FEATURE_KEY_RE = re.compile(r'"(ghcr\.io/[^"]+/features/[^"]+)"\s*:')
 # to a version mise picks and legitimately drifts between refreshes — asserting
 # those per-PR would false-fail, which is the daily lock-refresh job's domain.
 _EXACT_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+[\w.\-+]*$")
+
+
+def test_host_sidecars_match_locks() -> None:
+    """Both host locks must carry native v3 graphs that match their digests."""
+    for lock, graph_root in (
+        (_REPO_ROOT / "mise.lock", _REPO_ROOT / ".mise/locks"),
+        (
+            _REPO_ROOT / ".config/mise/mise.lock",
+            _REPO_ROOT / ".config/mise/locks",
+        ),
+    ):
+        verify_lock_sidecars(lock, graph_root, require_format=NATIVE_LOCK_FORMAT)
+
+
+def test_image_sidecars_match_locks() -> None:
+    """Image locks and graphs are a single build input, including runtime."""
+    graph_root = _REPO_ROOT / ".devcontainer/.mise/locks"
+    for lock in (
+        _REPO_ROOT / ".devcontainer/mise-system.lock",
+        _REPO_ROOT / ".devcontainer/mise-runtime.lock",
+    ):
+        verify_lock_sidecars(lock, graph_root, require_format=NATIVE_LOCK_FORMAT)
 
 
 def _strip_extras(tool: str) -> str:

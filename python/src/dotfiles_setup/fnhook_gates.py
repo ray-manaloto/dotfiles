@@ -236,17 +236,70 @@ def discover_plugin_dirs(
     fixture_root = (repo_root / FIXTURE_ROOT).resolve()
     root = repo_root.resolve()
     discovered: list[Path] = []
-    for plugin_manifest in repo_root.rglob(".claude-plugin/plugin.json"):
+
+    def inspect_directory(directory: Path) -> None:
+        plugin_dir = _plugin_at(
+            directory, root, fixture_root, include_fixtures=include_fixtures
+        )
+        if plugin_dir is not None:
+            discovered.append(plugin_dir)
+
+    def inspect_unlistable(error: OSError) -> None:
+        # rglob can resolve its literal suffix even if listing the containing
+        # directory fails. Preserve that case instead of silently losing it.
+        if error.filename is not None:
+            inspect_directory(Path(error.filename))
+
+    for directory, subdirs, files in repo_root.walk(on_error=inspect_unlistable):
+        # Prune before descending: filtering rglob's results still walks every
+        # nested checkout and its dependencies, repeatedly across this gate.
+        if (
+            directory != repo_root
+            and _could_have_child(".git", subdirs, files)
+            and (directory / ".git").exists()
+        ):
+            subdirs.clear()
+            continue
+        if not include_fixtures and directory == repo_root / FIXTURE_ROOT:
+            subdirs.clear()
+            continue
+        if _could_have_child(".claude-plugin", subdirs, files):
+            inspect_directory(directory)
+    return sorted(discovered)
+
+
+def _could_have_child(name: str, *entry_groups: Sequence[str]) -> bool:
+    """Avoid remote stats while letting native lookup decide case and aliases."""
+    # walk lists directory symlinks among files. Non-ASCII names deliberately
+    # retain the literal lookup, whose normalization varies by filesystem.
+    return any(
+        not entry.isascii() or entry.casefold() == name
+        for entries in entry_groups
+        for entry in entries
+    )
+
+
+def _plugin_at(
+    directory: Path,
+    repo_root: Path,
+    fixture_root: Path,
+    *,
+    include_fixtures: bool,
+) -> Path | None:
+    """Inspect the literal manifest path without recursively listing its tree."""
+    # Preserve explicit manifest-directory symlinks, native case handling and
+    # malformed manifests, which belong to the validator rather than discovery.
+    for plugin_manifest in directory.glob(".claude-plugin/plugin.json"):
         plugin_dir = plugin_manifest.parent.parent
         if not (plugin_dir / "hooks" / "hooks.json").is_file():
             continue
         resolved = plugin_dir.resolve()
         if not include_fixtures and resolved.is_relative_to(fixture_root):
             continue
-        if _is_in_nested_checkout(resolved, root):
+        if _is_in_nested_checkout(resolved, repo_root):
             continue
-        discovered.append(plugin_dir)
-    return sorted(discovered)
+        return plugin_dir
+    return None
 
 
 def _is_in_nested_checkout(plugin_dir: Path, repo_root: Path) -> bool:

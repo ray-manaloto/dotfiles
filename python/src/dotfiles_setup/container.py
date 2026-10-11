@@ -42,7 +42,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
-from dotfiles_setup import host_lock
+from dotfiles_setup import host_lock, process_stream
 from dotfiles_setup.devcontainer_names import resolve_names
 
 if TYPE_CHECKING:
@@ -276,6 +276,15 @@ def _smoke_output(
     )
 
 
+_SMOKE_DETAIL_LIMIT = 2000
+
+
+def _bounded_smoke_detail(prefix: str, output: str, suffix: str) -> str:
+    """Keep the diagnostic tail and complete artifact path in a bounded check."""
+    room = max(0, _SMOKE_DETAIL_LIMIT - len(prefix) - len(suffix))
+    return prefix + (output[-room:] if room else "") + suffix
+
+
 def _smoke_timeout_detail(
     container_id: str, marker: str, *, lock_fd: int | None
 ) -> str:
@@ -288,7 +297,11 @@ def _smoke_timeout_detail(
 
 
 def _run_smoke(
-    container_id: str, workspace_dest: str, *, lock_fd: int | None = None
+    container_id: str,
+    workspace_dest: str,
+    *,
+    workspace: Path,
+    lock_fd: int | None = None,
 ) -> tuple[bool, str]:
     timeout = _SMOKE_TIMEOUT_S
     try:
@@ -309,8 +322,14 @@ def _run_smoke(
     kill_after = max(1, min(30, 0.1 * timeout))
     grace = max(2, min(60, 0.1 * timeout))
     started = time.monotonic()
+    run_dir = process_stream.new_run_dir(workspace, f"smoke-{container_id[:12]}")
+    log_path = run_dir / "console.log"
+    sys.stderr.write(
+        f"[smoke][start] container={container_id[:12]} console={log_path}\n"
+    )
+    sys.stderr.flush()
     try:
-        res = _run(
+        res = process_stream.run_streamed(
             [
                 "docker",
                 "exec",
@@ -324,19 +343,33 @@ def _run_smoke(
                 f"{timeout:g}s",
                 "scripts/devcontainer-smoke.sh",
             ],
-            timeout=timeout + kill_after + grace,
+            cwd=workspace,
+            log_path=log_path,
+            timeout_s=timeout + kill_after + grace,
             pass_fds=() if lock_fd is None else (lock_fd,),
         )
-    except subprocess.TimeoutExpired as exc:
+    except KeyboardInterrupt, SystemExit:
         cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
-        return False, (
-            f"smoke timed out after {timeout:g} seconds: "
-            f"{_smoke_output(exc.stdout, exc.stderr, timed_out=True)}; {cleanup}"
+        sys.stderr.write(f"[smoke][interrupt] console={log_path}; {cleanup}\n")
+        sys.stderr.flush()
+        raise
+    elapsed = time.monotonic() - started
+    sys.stderr.write(
+        f"[smoke][end] rc={res.returncode} elapsed={elapsed:.2f}s console={log_path}\n"
+    )
+    sys.stderr.flush()
+    stdout = res.stdout_path.read_bytes()
+    stderr = res.stderr_path.read_bytes()
+    if res.timed_out:
+        cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
+        return False, _bounded_smoke_detail(
+            f"smoke timed out after {timeout:g} seconds: ",
+            _smoke_output(stdout, stderr, timed_out=True),
+            f"; {cleanup}; console={log_path}",
         )
     if res.returncode == 0:
-        return True, "tiers 1-3 OK"
+        return True, f"tiers 1-3 OK (console={log_path})"
     if res.returncode in {124, 137}:
-        elapsed = time.monotonic() - started
         cleanup = _smoke_timeout_detail(container_id, marker, lock_fd=lock_fd)
         timed_out = elapsed >= _SMOKE_TIMEOUT_ELAPSED_RATIO * timeout
         status = (
@@ -344,11 +377,14 @@ def _run_smoke(
             if timed_out
             else f"smoke exited with rc {res.returncode}"
         )
-        output = _smoke_output(res.stdout, res.stderr, timed_out=timed_out)
-        return False, f"{status}: {output}; {cleanup}"
-    return False, (
-        f"{_smoke_output(res.stdout, res.stderr, timed_out=False)}"
-        " — stale base? `mise run dev-rebuild`"
+        output = _smoke_output(stdout, stderr, timed_out=timed_out)
+        return False, _bounded_smoke_detail(
+            f"{status}: ", output, f"; {cleanup}; console={log_path}"
+        )
+    return False, _bounded_smoke_detail(
+        "",
+        _smoke_output(stdout, stderr, timed_out=False),
+        f" (console={log_path}) — stale base? `mise run dev-rebuild`",
     )
 
 
@@ -365,8 +401,11 @@ def verify_latest(workspace: Path, *, run_smoke: bool = True) -> list[Check]:
     )
     try:
         with slot as lock_fd:
+            effective_fd = lock_fd
+            if run_smoke and effective_fd is None:
+                effective_fd = host_lock.inherited_heavy_lock_fd()
             return _verify_latest_under_slot(
-                workspace, run_smoke=run_smoke, lock_fd=lock_fd
+                workspace, run_smoke=run_smoke, lock_fd=effective_fd
             )
     except host_lock.HostLockTimeoutError as exc:
         return [
@@ -431,7 +470,9 @@ def _verify_latest_under_slot(
     )
 
     if run_smoke and dest is not None:
-        smoke_ok, smoke_detail = _run_smoke(container_id, dest, lock_fd=lock_fd)
+        smoke_ok, smoke_detail = _run_smoke(
+            container_id, dest, workspace=workspace, lock_fd=lock_fd
+        )
         checks.append(
             Check(
                 "smoke-tiers-1-3",

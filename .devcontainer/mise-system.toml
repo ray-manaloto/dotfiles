@@ -158,7 +158,7 @@ cargo-binstall = "latest"
 # NOT via apt (Ubuntu ships 14.1.2). See the graphviz RUN in
 # .devcontainer/Dockerfile (#222 PR-A / folds #22).
 "apt:pkg-config" = "2.5.1-4"
-"apt:sudo" = "1.9.17p2-1ubuntu3.1"
+"apt:sudo" = "1.9.17p2-1ubuntu3.2"
 "apt:unzip" = "6.0-29ubuntu1"
 "apt:zsh" = "5.9-8ubuntu3"
 "apt:libatomic1" = "16-20260322-1ubuntu1"

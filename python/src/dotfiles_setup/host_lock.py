@@ -59,6 +59,7 @@ __all__ = [
     "held",
     "holder_env_name",
     "host_lock_main",
+    "inherited_heavy_lock_fd",
     "lock_path",
     "read_holder",
 ]
@@ -67,8 +68,10 @@ HEAVY_GATE = "heavy-gate"
 COMMAND_AUDIT = "command-audit"
 
 LOCK_DIR_ENV = "DOTFILES_LOCK_DIR"
+LOCK_FD_ENV = "DOTFILES_HEAVY_GATE_FD"
 WAIT_ENV = "DOTFILES_HEAVY_GATE_WAIT"
 DEFAULT_WAIT_S = 3600.0
+_MIN_CHILD_FD = 3
 _POLL_S = 1.0
 _REMIND_EVERY_S = 60.0
 
@@ -93,6 +96,27 @@ def lock_path(name: str) -> Path:
 def holder_env_name(name: str) -> str:
     """The variable a holder exports so its descendants can re-enter."""
     return "DOTFILES_LOCK_HOLDER_" + name.upper().replace("-", "_")
+
+
+def inherited_heavy_lock_fd() -> int | None:
+    """Validate the live inherited heavy-lock descriptor for a nested child."""
+    raw = os.environ.get(LOCK_FD_ENV)
+    if raw is None:
+        return None
+    if not raw.isdecimal() or int(raw) < _MIN_CHILD_FD:
+        msg = "invalid inherited heavy-gate descriptor"
+        raise RuntimeError(msg)
+    descriptor = int(raw)
+    try:
+        opened = os.fstat(descriptor)
+        expected = lock_path(HEAVY_GATE).stat()
+    except OSError as exc:
+        msg = "inherited heavy-gate descriptor is not live"
+        raise RuntimeError(msg) from exc
+    if (opened.st_dev, opened.st_ino) != (expected.st_dev, expected.st_ino):
+        msg = "inherited heavy-gate descriptor targets another file"
+        raise RuntimeError(msg)
+    return descriptor
 
 
 def default_wait_s() -> float:
@@ -184,7 +208,10 @@ def held(
         handle.write(f"{os.getpid()}\t{label}\t{since}\n")
         handle.flush()
         previous = os.environ.get(env_name)
+        previous_fd = os.environ.get(LOCK_FD_ENV) if name == HEAVY_GATE else None
         os.environ[env_name] = str(os.getpid())
+        if name == HEAVY_GATE:
+            os.environ[LOCK_FD_ENV] = str(fd)
         try:
             yield fd
         finally:
@@ -192,6 +219,11 @@ def held(
                 os.environ.pop(env_name, None)
             else:
                 os.environ[env_name] = previous
+            if name == HEAVY_GATE:
+                if previous_fd is None:
+                    os.environ.pop(LOCK_FD_ENV, None)
+                else:
+                    os.environ[LOCK_FD_ENV] = previous_fd
             fcntl.flock(fd, fcntl.LOCK_UN)
 
 
@@ -257,7 +289,8 @@ def host_lock_main(argv: Sequence[str] | None = None) -> int:
     label = args.label or " ".join(command)[:120]
     try:
         with held(HEAVY_GATE, label, wait_s=args.wait) as fd:
-            fds = () if fd is None else (fd,)
+            effective_fd = fd if fd is not None else inherited_heavy_lock_fd()
+            fds = () if effective_fd is None else (effective_fd,)
             return subprocess.run(command, check=False, pass_fds=fds).returncode
     except HostLockTimeoutError as exc:
         sys.stderr.write(f"FAIL  {exc}\n")

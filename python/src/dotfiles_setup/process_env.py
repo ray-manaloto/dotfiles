@@ -18,6 +18,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from dotfiles_setup.child_env import clean_env
+from dotfiles_setup.host_lock import inherited_heavy_lock_fd
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -56,8 +57,13 @@ def fnox_parent_env(base: Mapping[str, str] | None = None) -> dict[str, str]:
 
 def run_with_fnox(command: Sequence[str], *, cwd: Path | None = None) -> int:
     """Run exactly one command with credentials resolved by fnox."""
+    lock_fd = inherited_heavy_lock_fd()
     completed = subprocess.run(
-        fnox_command(command), check=False, cwd=cwd, env=fnox_parent_env()
+        fnox_command(command),
+        check=False,
+        cwd=cwd,
+        env=fnox_parent_env(),
+        pass_fds=() if lock_fd is None else (lock_fd,),
     )
     return completed.returncode
 
@@ -105,5 +111,12 @@ def git_isolated_env(
 
 def run_git_isolated(command: Sequence[str], *, cwd: Path | None = None) -> int:
     """Run a test command unable to inherit its caller's Git repository."""
-    completed = subprocess.run(command, check=False, cwd=cwd, env=git_isolated_env())
+    lock_fd = inherited_heavy_lock_fd()
+    completed = subprocess.run(
+        command,
+        check=False,
+        cwd=cwd,
+        env=git_isolated_env(),
+        pass_fds=() if lock_fd is None else (lock_fd,),
+    )
     return completed.returncode

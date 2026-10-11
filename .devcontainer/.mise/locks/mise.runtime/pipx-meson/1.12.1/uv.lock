@@ -1,0 +1,23 @@
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "meson"
+version = "1.12.1"
+source = { registry = "https://pypi.org/simple/" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/c9/8c9983f4f3d9c4e22fd76bcf8cd053e4472aefae45fd044669b6daa34b53/meson-1.12.1.tar.gz", hash = "sha256:ab0a6ca09f8ef70c564c8241fb5a23957886a0b53fb58412b5e07eaf07dba743", size = 2524665, upload-time = "2026-09-22T22:58:28.875Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/99/36cd25f9598eef70db97577440a70a360af505f6f01c2338a18d1556079c/meson-1.12.1-py3-none-any.whl", hash = "sha256:930bc7542cbd9f57009e182fd014eba48cf1a0180a7b9006d2d32d8f168d8b02", size = 1108668, upload-time = "2026-09-22T22:58:26.047Z" },
+]
+
+[[package]]
+name = "mise-pypi-tool-environment"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "meson" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "meson", specifier = "==1.12.1" }]

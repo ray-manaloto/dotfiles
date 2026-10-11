@@ -17,7 +17,7 @@ The existing chezmoi bootstrap below describes the container path.
 ```bash
 mise install                                       # Install all tools
 mise run lint                                      # Run lint checks (read-only ≡ CI; `mise run fmt` auto-fixes)
-uv run --project python pytest tests/ -x -q      # Run all 190 tests
+mise run test                                      # Run all tests with live output and reports
 ```
 
 ### Docker Build
@@ -56,7 +56,7 @@ Python dependencies are managed via `uv` with `python/pyproject.toml`.
 ## Local Testing
 
 ```bash
-uv run --project python pytest tests/ -x -q      # All tests
+mise run test                                      # All tests
 uv run --project python dotfiles-setup verify run # Contract verification
 mise run pin-actions                                # Verify GHA SHA-pinning
 mise run lint-docs                                  # Validate agent documentation

@@ -266,6 +266,7 @@ def lock_command(
     platforms: tuple[str, ...],
     *,
     bump: bool = True,
+    upgrade: bool = False,
 ) -> list[str]:
     """The ``mise lock`` argv for one convergence pass.
 
@@ -286,7 +287,15 @@ def lock_command(
     — removed entries are pruned — instead of dragging every `latest` pin
     forward with it. The daily refresh keeps the default, `bump=True`.
     """
-    argv = [str(mise_bin), "lock", *(["--bump"] if bump else [])]
+    if upgrade and bump:
+        msg = "mise lock --upgrade must preserve existing versions (--no-bump)"
+        raise ValueError(msg)
+    argv = [
+        str(mise_bin),
+        "lock",
+        *(["--bump"] if bump else []),
+        *(["--upgrade"] if upgrade else []),
+    ]
     for name in platforms:
         argv += ["--platform", name]
     return [*argv, "-C", str(stage_dir)]
@@ -302,6 +311,7 @@ class LockRun:
 
     passes: int = DEFAULT_PASSES
     bump: bool = True
+    upgrade: bool = False
 
 
 #: The daily-refresh behaviour: every pass bumps `latest` pins.
@@ -332,7 +342,13 @@ def run_lock_passes(
     ``.claude/rules/probes-need-a-control-arm.md`` rule 9 forbids. Read the
     error mise printed. Design discussion: #964.
     """
-    argv = lock_command(mise_bin, stage_dir, platforms, bump=settings.bump)
+    argv = lock_command(
+        mise_bin,
+        stage_dir,
+        platforms,
+        bump=settings.bump,
+        upgrade=settings.upgrade,
+    )
     passes = settings.passes
     child_env = {
         **os.environ,
@@ -440,6 +456,8 @@ def image_lock_main(
         extra = tuple(arg for name in platforms for arg in ("--platform", name))
         if not settings.bump:
             extra = (*extra, "--no-bump")
+        if settings.upgrade:
+            extra = (*extra, "--upgrade")
         result = subprocess.run(container_command(repo_root, extra), check=False)
         return result.returncode
     if not capable:

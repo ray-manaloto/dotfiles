@@ -57,6 +57,10 @@ The **base** hash (`dotfiles-setup base-hash`) covers:
   install --system --locked` consumes it, so conda-forge drift moves the
   lock's checksums and busts the cache. Replaces the retired version-only
   `mise-system-resolved.json` snapshot (epic #160, `SCHEMA_VERSION = 5`)
+- paths and bytes of every native graph referenced by `mise-system.lock`
+  under `.devcontainer/.mise/locks/`. The v3 lock digest covers `uv.lock`
+  but not its companion `pyproject.toml`; both are `COPY` inputs and both
+  must change the base cache key when edited.
 - sha256 of `.devcontainer/mise-system.toml` (the base section `COPY`s it
   verbatim to `/usr/local/share/mise/config.toml`, so its bytes are a build
   input — `[settings]`/`[env]`/`[tasks]` edits that don't move the lock
@@ -74,6 +78,11 @@ The **p2996** hash (`dotfiles-setup p2996-hash`) covers:
   `docker-bake.hcl`) — NOT the base hash (decoupled, #160 T11)
 - sha256 of the `Dockerfile` section between the `P2996_HASH_BEGIN` /
   `P2996_HASH_END` sentinels
+
+The **dev** hash also covers `.devcontainer/mise-runtime.toml`,
+`.devcontainer/mise-runtime.lock`, and the referenced runtime graphs under
+`.devcontainer/.mise/locks/mise.runtime/`. A runtime graph edit changes only
+the dev cache key; neither base nor compiler rebuilds for it.
 
 Only the *sentinel-delimited* Dockerfile sections feed the hashes —
 editing unrelated parts of the `Dockerfile` or `docker-bake.hcl` does NOT

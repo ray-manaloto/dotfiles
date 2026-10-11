@@ -346,7 +346,8 @@ def test_mise_and_pre_push_wiring_use_the_public_boundary() -> None:
     assert (
         "uv run --project python dotfiles-setup heavy-gate run --label pre-push -- "
         "dotfiles-setup process git-isolated -- "
-        "uv run --project python pytest tests/ -x -q"
+        "uv run --project python python -m dotfiles_setup.pytest_runner "
+        "--label pre-push -- tests/ -x"
     ) in mise
     assert (
         'check = "env -u MISE_IGNORED_CONFIG_PATHS mise --cd '

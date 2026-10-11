@@ -2,7 +2,8 @@
 """⭐ The #613 end-to-end arm: real launcher -> real `codex exec` -> real reaper.
 
 **Gated, not silently skipped.** Every test is marked ``codex_exec``, which the
-root ``pytest.ini`` deselects by default, so ``mise run test`` and CI never pay
+native ``python/pyproject.toml`` pytest policy deselects by default, so
+``mise run test`` and CI never pay
 for it. ``mise run codex-lane-e2e`` passes ``-m codex_exec`` to re-select (last
 ``-m`` wins). It costs real credits per run — that is the reason for the gate,
 and the reason it is a handful of tests rather than a matrix.
@@ -53,7 +54,7 @@ from dotfiles_setup import codex_verdict as cv
 from dotfiles_setup import dag_tick
 
 pytestmark = pytest.mark.codex_exec
-# ONE xdist worker for the whole module (pytest.ini runs `-n auto --dist
+# ONE xdist worker for the whole module (native config runs `-n auto --dist
 # loadgroup`): its module-scoped fixtures exist to SHARE expensive real runs,
 # and spread across workers each worker would repeat them.
 pytestmark = [pytestmark, pytest.mark.xdist_group(name="codex_lane_e2e")]

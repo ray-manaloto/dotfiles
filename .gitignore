@@ -26,8 +26,14 @@ __pycache__/
 .idea/
 .vscode/
 
-# mise auto-generated state
-.mise/
+# mise auto-generated state. Native v3 dependency graphs are lockfile inputs,
+# so commit only the graph roots used by the root and image locks. The shared
+# conf.d lock writes to .config/mise/locks/ (outside a .mise directory).
+**/.mise/*
+!/.mise/locks/
+!/.mise/locks/**
+!/.devcontainer/.mise/locks/
+!/.devcontainer/.mise/locks/**
 
 # mise per-clone overrides (see mise.local.toml.example)
 mise.local.toml

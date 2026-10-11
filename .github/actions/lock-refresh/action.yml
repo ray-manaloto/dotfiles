@@ -5,7 +5,8 @@ description: >-
   .devcontainer/mise-runtime.lock (delegated to `mise run lock-image`,
   the single producer shared with the local path and with refresh.yml's
   image-lock-pr job), and .devcontainer/devcontainer-lock.json
-  (devcontainer upgrade). The caller stages/commits the diff (refresh.yml
+  (devcontainer upgrade), plus the native mise dependency sidecars beside
+  each v3 lock. The caller stages/commits the diff (refresh.yml
   PRs it via open-refresh-pr). Hosted Renovate cannot do this: it may not
   run `mise lock` (admin-allowlisted command) and does not know
   mise-system.lock by name. Requires actions/checkout + setup-mise

@@ -50,7 +50,7 @@ HK_FILE=/etc/hk/hk.pkl hk run pre-commit --all
 echo "::endgroup::"
 
 echo "::group::Tier 2 — pytest + mounts + secrets"
-uv run --project python pytest tests/ -x -q
+uv run --project python python -m dotfiles_setup.pytest_runner --label guest-smoke -- tests/ -x
 stat "${HOME}/.ssh"
 stat "${WORKSPACE_FOLDER}"
 

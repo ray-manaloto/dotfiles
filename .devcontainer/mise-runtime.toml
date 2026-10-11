@@ -53,7 +53,10 @@ bats = "latest"
 "pipx:flawfinder" = "latest"
 "pipx:lizard" = "latest"
 "pipx:cmakelang" = "latest"
-"pipx:codechecker" = "latest"
+# CodeChecker 6.29.1 publishes an sdist but no wheel. Native v3 graph locking
+# requires wheels and refuses --no-build; pipx keeps version-only locking and
+# builds this source-only tool at install. pipx itself is pinned in shared.toml.
+"pipx:codechecker" = { version = "latest", uvx = false }
 "pipx:gcovr" = "latest"
 # AI CLIs (depends=node: npm resolution needs node, provided by the base tier)
 # claude, codex and agy are NOT mise tools anywhere (Ray, 2026-10-01): their

@@ -43,15 +43,21 @@ import logging
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotfiles_setup.lock_integrity import committed_text, regressions
+from dotfiles_setup.lock_sidecars import (
+    NATIVE_LOCK_FORMAT,
+    VerifiedGraph,
+    verify_lock_sidecars,
+)
 from dotfiles_setup.platform_target import declared_lock_platforms
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
-    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +71,7 @@ _SYSTEM_TOML = ".devcontainer/mise-system.toml"
 _SYSTEM_LOCK = ".devcontainer/mise-system.lock"
 _RUNTIME_TOML = ".devcontainer/mise-runtime.toml"
 _RUNTIME_LOCK = ".devcontainer/mise-runtime.lock"
+_IMAGE_SIDECARS = ".devcontainer/.mise/locks"
 _SHARED_TOML = ".config/mise/conf.d/shared.toml"
 # The MISE_ENV under which the runtime tier's config/lock resolve (#160 T9):
 # staged as mise.runtime.toml, locked to mise.runtime.lock. `mise lock` must
@@ -263,6 +270,16 @@ def lock_top_level_config_tools(
             config_path,
         )
         return 1
+    lock_path = config_path.with_suffix(".lock")
+    try:
+        old_format = (
+            tomllib.loads(lock_path.read_text()).get("lockfile_version")
+            if lock_path.exists()
+            else None
+        )
+    except OSError, tomllib.TOMLDecodeError, TypeError, ValueError:
+        logger.exception("lock-refresh-root: cannot read the existing lock")
+        return 1
     result = run(
         ["mise", "lock", "--bump", *tools],
         cwd=config_path.parent,
@@ -271,7 +288,14 @@ def lock_top_level_config_tools(
     if result.returncode != 0:
         return result.returncode
     try:
-        _prune_unknown_lock_tools(config_path.with_suffix(".lock"), tools)
+        _prune_unknown_lock_tools(lock_path, tools)
+        verify_lock_sidecars(
+            lock_path,
+            config_path.parent / ".mise/locks",
+            require_format=(
+                NATIVE_LOCK_FORMAT if old_format == NATIVE_LOCK_FORMAT else None
+            ),
+        )
     except OSError, tomllib.TOMLDecodeError, TypeError, ValueError:
         logger.exception("lock-refresh-root: failed to reconcile root lock")
         return 1
@@ -324,7 +348,40 @@ def stage_system_lock_dir(repo_root: Path, stage_dir: Path) -> str:
     runtime_lock = repo_root / _RUNTIME_LOCK
     if runtime_lock.exists():
         shutil.copyfile(runtime_lock, stage_dir / f"mise.{RUNTIME_ENV}.lock")
+    image_sidecars = repo_root / _IMAGE_SIDECARS
+    seeded_graphs = tuple(
+        graph
+        for lock in (repo_root / _SYSTEM_LOCK, repo_root / _RUNTIME_LOCK)
+        if lock.exists()
+        for graph in verify_lock_sidecars(lock, image_sidecars)
+    )
+    _copy_verified_graphs(seeded_graphs, image_sidecars, stage_dir / ".mise/locks")
     return version
+
+
+def _copy_verified_graphs(
+    graphs: Collection[VerifiedGraph], source_root: Path, dest_root: Path
+) -> None:
+    """Copy only validated native graph files, never unreferenced stage data."""
+    source = source_root.resolve()
+    dest = dest_root.resolve()
+    for graph in graphs:
+        relative = graph.directory.relative_to(source)
+        target_dir = dest_root / relative
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if not target_dir.resolve().is_relative_to(dest):
+            msg = f"sidecar destination escapes {dest}: {target_dir}"
+            raise ValueError(msg)
+        for native_file in graph.files:
+            with tempfile.NamedTemporaryFile(
+                dir=target_dir, prefix=f".{native_file.name}.", delete=False
+            ) as temporary:
+                temp_path = Path(temporary.name)
+            try:
+                shutil.copy2(native_file, temp_path)
+                temp_path.replace(target_dir / native_file.name)
+            finally:
+                temp_path.unlink(missing_ok=True)
 
 
 def _merge_shared_tools(system_text: str, shared_text: str) -> str:
@@ -387,20 +444,45 @@ def collect_system_lock(repo_root: Path, stage_dir: Path) -> None:
     # within them, so pruning a platform the image can never satisfy is not
     # read as damage. See `_collect_one`.
     families = {name.split("-", 1)[0] for name in declared_lock_platforms(repo_root)}
-    _collect_one(
-        stage_dir / "mise.lock",
-        repo_root / _SYSTEM_LOCK,
-        merged_system_config_tools(repo_root),
-        coverage_baseline(repo_root, _SYSTEM_LOCK),
-        families=families or None,
+    stage_sidecars = stage_dir / ".mise/locks"
+    candidates = (
+        (
+            stage_dir / "mise.lock",
+            repo_root / _SYSTEM_LOCK,
+            merged_system_config_tools(repo_root),
+            coverage_baseline(repo_root, _SYSTEM_LOCK),
+        ),
+        (
+            stage_dir / f"mise.{RUNTIME_ENV}.lock",
+            repo_root / _RUNTIME_LOCK,
+            runtime_config_tools(repo_root),
+            coverage_baseline(repo_root, _RUNTIME_LOCK),
+        ),
     )
-    _collect_one(
-        stage_dir / f"mise.{RUNTIME_ENV}.lock",
-        repo_root / _RUNTIME_LOCK,
-        runtime_config_tools(repo_root),
-        coverage_baseline(repo_root, _RUNTIME_LOCK),
-        families=families or None,
-    )
+    validated: list[tuple[Path, str]] = []
+    graphs: list[VerifiedGraph] = []
+    for stage_lock, dest, config_tools, baseline in candidates:
+        candidate = _validated_candidate(
+            stage_lock, dest, config_tools, baseline, families=families or None
+        )
+        old_version = (
+            tomllib.loads(baseline).get("lockfile_version")
+            if baseline is not None
+            else None
+        )
+        graphs.extend(
+            verify_lock_sidecars(
+                stage_lock,
+                stage_sidecars,
+                require_format=(
+                    NATIVE_LOCK_FORMAT if old_version == NATIVE_LOCK_FORMAT else None
+                ),
+            )
+        )
+        validated.append((dest, candidate))
+    _copy_verified_graphs(graphs, stage_sidecars, repo_root / _IMAGE_SIDECARS)
+    for dest, candidate in validated:
+        dest.write_text(candidate)
 
 
 def coverage_baseline(repo_root: Path, rel_path: str) -> str | None:
@@ -428,6 +510,21 @@ def _collect_one(
     *,
     families: Collection[str] | None = None,
 ) -> None:
+    dest.write_text(
+        _validated_candidate(
+            stage_lock, dest, config_tools, committed, families=families
+        )
+    )
+
+
+def _validated_candidate(
+    stage_lock: Path,
+    dest: Path,
+    config_tools: set[str],
+    committed: str | None,
+    *,
+    families: Collection[str] | None = None,
+) -> str:
     stage_text = stage_lock.read_text()
     locked_tools = set(tomllib.loads(stage_text).get("tools", {}))
     missing = config_tools - locked_tools
@@ -464,7 +561,7 @@ def _collect_one(
             f"Regenerate on a linux host of the image's architecture."
         )
         raise ValueError(msg)
-    dest.write_text(candidate)
+    return candidate
 
 
 def strip_provenance(lock_text: str) -> str:

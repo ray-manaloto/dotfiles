@@ -3,13 +3,15 @@
 
 from __future__ import annotations
 
+import errno
 import json
+import os
 import re
 import subprocess
 import sys
 import tomllib
 from pathlib import Path, PurePosixPath
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
@@ -18,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import fnhook_gates
 from dotfiles_setup.fnhook_gates import GateResult
 from dotfiles_setup.main import setup_parser
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 REPO_ROOT = Path(__file__).parent.parent.absolute()
 FIXTURE_ROOT = REPO_ROOT / fnhook_gates.FIXTURE_ROOT
@@ -106,14 +111,13 @@ _needs_real_tools = pytest.mark.skipif(
 
 
 def _fixture_plugins() -> dict[str, Path]:
-    """Derive fixture plugin names from the same discovery path as production."""
+    """Discover the real fixture tree; inventory separately checks the repo."""
     return {
         path.name: path
         for path in fnhook_gates.discover_plugin_dirs(
-            REPO_ROOT,
+            FIXTURE_ROOT,
             include_fixtures=True,
         )
-        if path.is_relative_to(FIXTURE_ROOT)
     }
 
 
@@ -147,6 +151,7 @@ def test_fixture_inventory_is_tree_derived_and_excluded_from_production() -> Non
     }
     assert production.isdisjoint(fixtures)
     assert all_plugins == production | fixtures
+    assert set(_fixture_plugins().values()) == fixtures
 
 
 def test_plugin_elsewhere_under_tests_is_discovered(tmp_path: Path) -> None:
@@ -764,7 +769,10 @@ def test_tool_spec_refuses_the_removed_claude_pin() -> None:
     )
 
 
-def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None:
+@pytest.mark.parametrize("git_marker", ["directory", "file"])
+def test_a_plugin_in_a_nested_checkout_is_not_discovered(
+    tmp_path: Path, git_marker: str
+) -> None:
     """Reproduces the CI failure: another repo's plugin must not be gated here.
 
     CI clones the sibling knowledge-base repo into `.rule-sync/` for the
@@ -783,7 +791,11 @@ def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None
     _write_plugin_markers(ours)
 
     nested_root = tmp_path / ".rule-sync" / "knowledge-base"
-    (nested_root / ".git").mkdir(parents=True)
+    nested_root.mkdir(parents=True)
+    if git_marker == "directory":
+        (nested_root / ".git").mkdir()
+    else:
+        (nested_root / ".git").write_text("gitdir: /elsewhere/worktree\n")
     theirs = nested_root / ".claude" / "mods" / "kb-settings-guard"
     _write_plugin_markers(theirs)
 
@@ -796,6 +808,156 @@ def test_a_plugin_in_a_nested_checkout_is_not_discovered(tmp_path: Path) -> None
     assert theirs not in discovered, (
         "a plugin inside a nested git checkout belongs to that repo's gate, "
         "not this one"
+    )
+    marker = nested_root / ".git"
+    if git_marker == "directory":
+        marker.rmdir()
+    else:
+        marker.unlink()
+    assert theirs in fnhook_gates.discover_plugin_dirs(tmp_path)
+
+
+@pytest.mark.parametrize("include_fixtures", [False, True])
+@pytest.mark.parametrize("root_marker", ["directory", "file"])
+def test_discovery_prunes_excluded_trees_before_reading_their_contents(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    root_marker: str,
+    *,
+    include_fixtures: bool,
+) -> None:
+    """Excluded worktrees must not incur their dependency-tree scan cost."""
+    if root_marker == "directory":
+        (tmp_path / ".git").mkdir()
+    else:
+        (tmp_path / ".git").write_text("gitdir: /elsewhere/root-worktree\n")
+    ours = tmp_path / "plugins" / "ours"
+    _write_plugin_markers(ours)
+    nested = tmp_path / "worktrees" / "other"
+    _write_plugin_markers(nested / "dependencies" / "foreign-plugin")
+    (nested / ".git").write_text("gitdir: /elsewhere/worktree\n")
+    fixture = tmp_path / fnhook_gates.FIXTURE_ROOT / "fixture"
+    _write_plugin_markers(fixture)
+    scanned: list[Path] = []
+    native_scandir = os.scandir
+
+    def record_scan(path: str | os.PathLike[str]) -> Iterator[os.DirEntry[str]]:
+        scanned.append(Path(path))
+        return native_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", record_scan)
+    discovered = fnhook_gates.discover_plugin_dirs(
+        tmp_path, include_fixtures=include_fixtures
+    )
+
+    assert ours in discovered
+    assert (fixture in discovered) is include_fixtures
+    assert not any(path.is_relative_to(nested / "dependencies") for path in scanned)
+    assert any(path.is_relative_to(fixture) for path in scanned) is include_fixtures
+
+
+def test_discovery_preserves_a_symlinked_manifest_directory(tmp_path: Path) -> None:
+    """The literal .claude-plugin component may be a symlink, as with rglob."""
+    plugin = tmp_path / "plugins" / "ours"
+    _write_plugin_markers(plugin)
+    manifest = plugin / ".claude-plugin"
+    relocated = tmp_path / "manifest-data"
+    manifest.rename(relocated)
+    manifest.symlink_to(relocated, target_is_directory=True)
+
+    assert fnhook_gates.discover_plugin_dirs(tmp_path) == [plugin]
+
+
+@pytest.mark.parametrize("target_exists", [False, True])
+def test_discovery_git_marker_symlinks_keep_native_existence_rules(
+    tmp_path: Path, *, target_exists: bool
+) -> None:
+    """An existing marker excludes a checkout; a dangling link does not."""
+    root = tmp_path / "repo"
+    plugin = root / "plugins" / "ours"
+    _write_plugin_markers(plugin)
+    target = tmp_path / "git-data"
+    if target_exists:
+        target.mkdir()
+    (plugin / ".git").symlink_to(target, target_is_directory=True)
+
+    assert fnhook_gates.discover_plugin_dirs(root) == (
+        [] if target_exists else [plugin]
+    )
+
+
+@pytest.mark.parametrize("manifest_directory", [".claude-plugin", ".CLAUDE-PLUGIN"])
+def test_discovery_preserves_native_manifest_path_case_handling(
+    tmp_path: Path, manifest_directory: str
+) -> None:
+    """Literal lookup follows the filesystem, including case-insensitive Macs."""
+    plugin = tmp_path / "plugins" / "ours"
+    _write_plugin_markers(plugin)
+    if manifest_directory != ".claude-plugin":
+        (plugin / ".claude-plugin").rename(plugin / manifest_directory)
+    expected = [plugin] if (plugin / ".claude-plugin" / "plugin.json").exists() else []
+
+    assert fnhook_gates.discover_plugin_dirs(tmp_path) == expected
+
+
+@pytest.mark.parametrize("shape", ["invalid-json", "directory"])
+def test_discovery_leaves_malformed_manifests_for_the_validator(
+    tmp_path: Path, shape: str
+) -> None:
+    plugin = tmp_path / "plugins" / "ours"
+    _write_plugin_markers(plugin)
+    manifest = plugin / ".claude-plugin" / "plugin.json"
+    if shape == "directory":
+        manifest.unlink()
+        manifest.mkdir()
+    else:
+        manifest.write_text("{broken json")
+
+    assert fnhook_gates.discover_plugin_dirs(tmp_path) == [plugin]
+
+
+def test_discovery_does_not_recurse_into_a_symlinked_plugin(tmp_path: Path) -> None:
+    scan_root = tmp_path / "repo"
+    scan_root.mkdir()
+    external = tmp_path / "outside"
+    _write_plugin_markers(external)
+    (scan_root / "linked-plugin").symlink_to(external, target_is_directory=True)
+
+    assert fnhook_gates.discover_plugin_dirs(scan_root) == []
+
+
+@pytest.mark.parametrize("scope", ["own", "nested-checkout", "fixture"])
+@pytest.mark.parametrize("include_fixtures", [False, True])
+def test_discovery_checks_literal_paths_when_directory_listing_is_denied(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    scope: str,
+    *,
+    include_fixtures: bool,
+) -> None:
+    """Searchable directories may allow manifest reads but deny enumeration."""
+    parent = fnhook_gates.FIXTURE_ROOT if scope == "fixture" else Path("plugins")
+    plugin = tmp_path / parent / "ours"
+    _write_plugin_markers(plugin)
+    if scope == "nested-checkout":
+        (plugin / ".git").write_text("gitdir: /elsewhere/worktree\n")
+    native_scandir = os.scandir
+
+    def deny_plugin_listing(
+        path: str | os.PathLike[str],
+    ) -> Iterator[os.DirEntry[str]]:
+        if Path(path) == plugin:
+            raise PermissionError(errno.EACCES, "cannot list directory", str(path))
+        return native_scandir(path)
+
+    monkeypatch.setattr(os, "scandir", deny_plugin_listing)
+
+    expected = (
+        [plugin] if scope == "own" or (scope == "fixture" and include_fixtures) else []
+    )
+    assert (
+        fnhook_gates.discover_plugin_dirs(tmp_path, include_fixtures=include_fixtures)
+        == expected
     )
 
 

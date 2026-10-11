@@ -22,7 +22,7 @@ Case history: `docs/rules-evidence/verify-before-advancing.md`.
 
 - `mise run lint` — must print `rc=0` / exit 0 (hk under the timeout
   wrapper; never raw `hk` — see `long-running-command-hangs.md`).
-- `uv run --project python pytest tests/ -x -q` — all tests pass.
+- `mise run test` — all tests pass with live output and saved reports.
 - `dotfiles-setup verify run` — `0 failed`.
 - Run each as `mise run gate -- run <lint|pytest|verify|lint-docs|pin-actions>`: its rc IS the gate's (0 pass,
   1 fail, 124 timeout, 127 tool missing, 2 unknown name) and the typed result lands in `.agent/gate-results/`.

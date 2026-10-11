@@ -19,7 +19,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Sequence
 
 import pytest
 
@@ -28,6 +28,54 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import container, host_lock, sync
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
+
+
+@pytest.fixture(autouse=True)
+def fake_workspace_stream(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Route only the synthetic workspace through the existing fake Docker."""
+    original_dir = container.process_stream.new_run_dir
+    original_stream = container.process_stream.run_streamed
+
+    def run_dir(workspace: Path, label: str) -> Path:
+        if workspace != _WORKSPACE:
+            return original_dir(workspace, label)
+        result = tmp_path / f"{label}-{uuid.uuid4().hex}"
+        result.mkdir(mode=0o700)
+        return result
+
+    def streamed(
+        command: Sequence[str],
+        *,
+        cwd: Path,
+        log_path: Path,
+        timeout_s: float | None = None,
+        pass_fds: tuple[int, ...] = (),
+    ) -> container.process_stream.StreamResult:
+        if cwd != _WORKSPACE:
+            return original_stream(
+                command,
+                cwd=cwd,
+                log_path=log_path,
+                timeout_s=timeout_s,
+                pass_fds=pass_fds,
+            )
+        completed = vars(container)["_run"](list(command))
+        log_path.write_text(completed.stdout or "")
+        stdout_path = log_path.with_name("stdout.log")
+        stderr_path = log_path.with_name("stderr.log")
+        stdout_path.write_text(completed.stdout or "")
+        stderr_path.write_text(completed.stderr or "")
+        return container.process_stream.StreamResult(
+            returncode=completed.returncode,
+            timed_out=False,
+            duration_s=0.0,
+            log_path=log_path,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+        )
+
+    monkeypatch.setattr(container.process_stream, "new_run_dir", run_dir)
+    monkeypatch.setattr(container.process_stream, "run_streamed", streamed)
 
 
 def _cp(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
@@ -360,6 +408,9 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
             os.environ["DOTFILES_SMOKE_RUN_ID"] = marker
             mode = os.environ.get("SMOKE_MODE", "success")
             if mode in {"timeout", "inner124", "inner137", "inner_group"}:
+                # GNU timeout counts command startup within its budget.
+                # Do not add a second full budget after the child handshake.
+                inner_deadline = time.monotonic() + float(args[-2][:-1])
                 child_ready = root / "child-ready"
                 grand_path = root / "grand-pid"
                 setup = ""
@@ -395,7 +446,9 @@ def smoke_system(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Pa
                 os.write(2, b"old stderr warning\xff\n")
                 if mode == "timeout":
                     time.sleep(60)
-                time.sleep(float(os.environ.get("SMOKE_INNER_DELAY", args[-2][:-1])))
+                inner_delay = os.environ.get("SMOKE_INNER_DELAY")
+                time.sleep(float(inner_delay) if inner_delay is not None else
+                           max(0, inner_deadline - time.monotonic()))
                 if mode == "inner_group" and "timeout" in args:
                     os.killpg(child.pid, signal.SIGKILL)
                     child.wait(timeout=20)
@@ -537,12 +590,16 @@ def test_smoke_invalid_timeout_uses_bounded_default(
     def recording[**P, R](run: Callable[P, R]) -> Callable[P, R]:
         def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
             if args and isinstance(args[0], list) and "timeout" in args[0]:
-                observed.append(kwargs.get("timeout"))
+                observed.append(kwargs.get("timeout_s"))
             return run(*args, **kwargs)
 
         return wrapped
 
-    monkeypatch.setattr(subprocess, "run", recording(subprocess.run))
+    monkeypatch.setattr(
+        container.process_stream,
+        "run_streamed",
+        recording(container.process_stream.run_streamed),
+    )
     monkeypatch.setenv("DOTFILES_SMOKE_TIMEOUT_S", configured)
     assert container.verify_latest_main(smoke_system) == 0
     assert observed == [1890.0]
@@ -833,7 +890,14 @@ def test_completed_smoke_failure_preserves_stderr(
     monkeypatch.setenv("SMOKE_STDERR", stderr)
     check = _names(container.verify_latest(smoke_system))["smoke-tiers-1-3"]
     assert check.ok is False
-    assert check.detail == f"{expected} — stale base? `mise run dev-rebuild`"
+    suffix = " — stale base? `mise run dev-rebuild`"
+    assert check.detail.endswith(suffix)
+    output, separator, artifact = check.detail.removesuffix(suffix).partition(
+        " (console="
+    )
+    assert output == expected
+    assert separator == " (console="
+    assert Path(artifact.removesuffix(")")).is_file()
 
 
 def test_smoke_marker_changes_between_runs(smoke_system: Path) -> None:

@@ -136,6 +136,7 @@ BASE_INPUT_PATTERNS: tuple[str, ...] = (
     ".devcontainer/Dockerfile",
     ".devcontainer/mise-system.toml",
     ".devcontainer/mise-system.lock",
+    ".devcontainer/.mise/locks/**",
     ".devcontainer/mise-runtime.toml",
     ".devcontainer/mise-runtime.lock",
     ".config/mise/conf.d/shared.toml",
@@ -257,8 +258,13 @@ def _run(
 
 def _stream(cmd: list[str], *, cwd: Path | None = None) -> int:
     """Run a long operation streaming to the terminal (never wait blind)."""
+    lock_fd = host_lock.inherited_heavy_lock_fd()
     return subprocess.run(
-        cmd, check=False, cwd=cwd, env=child_env.without_git_context()
+        cmd,
+        check=False,
+        cwd=cwd,
+        env=child_env.without_git_context(),
+        pass_fds=() if lock_fd is None else (lock_fd,),
     ).returncode
 
 
@@ -399,7 +405,20 @@ def gate_matrix(paths: list[str], *, suite_at_push: bool = False) -> list[Gate]:
         gates.append(
             Gate(
                 "pytest",
-                ("uv", "run", "--project", "python", "pytest", "tests/", "-x", "-q"),
+                (
+                    "uv",
+                    "run",
+                    "--project",
+                    "python",
+                    "python",
+                    "-m",
+                    "dotfiles_setup.pytest_runner",
+                    "--label",
+                    "ship-pytest",
+                    "--",
+                    "tests/",
+                    "-x",
+                ),
             )
         )
     gates += [

@@ -23,7 +23,7 @@ mise run lint                                # Run lint checks (hk under a hard 
 mise run up / down                           # Bring up / tear down devcontainer (.devcontainer/AGENTS.md)
 mise run sync / ship / automerge / land -- <PR#>  # Gated PR loop; automerge = bot PRs (pr-workflow)
 mise run verify-container-latest             # Gate: container on latest + base
-uv run --project python pytest tests/ -x -q  # Run tests (see python/AGENTS.md)
+mise run test                                # Run tests with saved reports
 mise run verify                              # Structured verification contracts
 mise run pin-actions                         # Verify GHA actions are SHA-pinned
 mise run lint-docs                           # Validate agent documentation (agnix)
@@ -86,7 +86,7 @@ manual cache clearing.
 ## Testing
 
 Commands are in **Quick Start** above; append a path for a single file
-(`uv run --project python pytest tests/test_audit.py -x -q`).
+(`uv run --project python python -m dotfiles_setup.pytest_runner --label audit -- tests/test_audit.py -x`).
 
 Structured verification via `python/verification/suites.toml` runs as CI
 `contract-preflight`. The `mise run verify` gate is **distinct
@@ -136,7 +136,7 @@ locally before pushing Dockerfile changes.
 
 ```bash
 mise run lint                                 # Lint gate (hk under a hard timeout) — then proceed
-uv run --project python pytest tests/ -x -q   # All tests pass — then proceed
+mise run test                                 # All tests pass
 mise run verify                     # Verification contracts pass — then proceed
 ```
 

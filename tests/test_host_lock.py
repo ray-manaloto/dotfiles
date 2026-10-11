@@ -120,18 +120,58 @@ _CHILD_RUN = (
 
 
 def test_a_descendant_of_the_holder_re_enters() -> None:
-    with host_lock.held(host_lock.HEAVY_GATE, "ship"):
-        child = subprocess.run([sys.executable, "-c", _CHILD_RUN], check=False)
+    with host_lock.held(host_lock.HEAVY_GATE, "ship") as fd:
+        assert fd is not None
+        child = subprocess.run(
+            [sys.executable, "-c", _CHILD_RUN], check=False, pass_fds=(fd,)
+        )
     assert child.returncode == 0
 
 
 def test_the_same_child_without_the_holder_export_waits_and_times_out() -> None:
     """Control arm for re-entry: only the export lets the child in."""
     name = host_lock.holder_env_name(host_lock.HEAVY_GATE)
-    with host_lock.held(host_lock.HEAVY_GATE, "ship"):
+    with host_lock.held(host_lock.HEAVY_GATE, "ship") as fd:
+        assert fd is not None
         env = {k: v for k, v in os.environ.items() if k != name}
-        child = subprocess.run([sys.executable, "-c", _CHILD_RUN], check=False, env=env)
+        child = subprocess.run(
+            [sys.executable, "-c", _CHILD_RUN], check=False, env=env, pass_fds=(fd,)
+        )
     assert child.returncode == 124
+
+
+def test_reentrant_cli_preserves_the_ancestor_descriptor() -> None:
+    """A nested gate passes the original lease through without unlocking it."""
+    child = (
+        "from dotfiles_setup.host_lock import inherited_heavy_lock_fd; "
+        "raise SystemExit(0 if inherited_heavy_lock_fd() is not None else 9)"
+    )
+    with host_lock.held(host_lock.HEAVY_GATE, "ship"):
+        assert (
+            host_lock.host_lock_main(
+                ["run", "--wait", "1", "--", sys.executable, "-c", child]
+            )
+            == 0
+        )
+        assert host_lock.read_holder(host_lock.HEAVY_GATE).startswith(
+            f"{os.getpid()}\tship"
+        )
+
+
+def test_inherited_descriptor_rejects_a_closed_or_wrong_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An environment number alone cannot authorize lock re-entry."""
+    monkeypatch.setenv(host_lock.LOCK_FD_ENV, "99999")
+    with pytest.raises(RuntimeError, match="not live"):
+        host_lock.inherited_heavy_lock_fd()
+    with (
+        host_lock.held(host_lock.HEAVY_GATE, "right-file"),
+        (tmp_path / "wrong").open("w") as wrong,
+    ):
+        monkeypatch.setenv(host_lock.LOCK_FD_ENV, str(wrong.fileno()))
+        with pytest.raises(RuntimeError, match="another file"):
+            host_lock.inherited_heavy_lock_fd()
 
 
 def test_a_stale_export_cannot_unlock_a_lock_someone_else_holds(

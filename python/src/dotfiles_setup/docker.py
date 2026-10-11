@@ -411,7 +411,8 @@ class DevContainerManager:
             f"export DOTFILES_SSH_PORT={ssh_port} && "
             "cd /workspaces/dotfiles/python && uv run dotfiles-setup audit --all && "
             "cd /workspaces/dotfiles && "
-            "uv run --with pytest pytest tests/test_bootstrap.py && "
+            "uv run --project python python -m dotfiles_setup.pytest_runner "
+            "--label docker-legacy -- tests/test_bootstrap.py && "
             "bats tests/infra/*.bats'"
         )
 

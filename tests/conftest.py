@@ -7,7 +7,7 @@ chezmoi-applied `~/.zshenv` under zsh. No amount of `mise install` on a
 runner makes them pass, so they are skipped there and ONLY there; on the
 Mac host (and under `mise run ship`) they run normally.
 
-Why a hook and not `-m "not host_only"` in the CI step: `pytest.ini`'s
+Why a hook and not `-m "not host_only"` in the CI step: the native pytest config's
 `addopts` already carries `-m "not image_exec and not codex_exec"`, and a
 command-line `-m` REPLACES it rather than anding with it (last one wins).
 A CI `-m` would therefore have to restate the whole expression, and would
@@ -15,13 +15,47 @@ silently re-enable the credit-spending `codex_exec` tests the day someone
 adds a marker and forgets. This cannot drift.
 """
 
+import logging
 import os
+import re
 from pathlib import Path
 
 import pytest
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config: pytest.Config) -> None:
+    """Require the native policy and choose a worker log before handler setup."""
+    expected_config = _REPO_ROOT / "python" / "pyproject.toml"
+    if config.inipath != expected_config or config.rootpath != _REPO_ROOT:
+        msg = (
+            "pytest must select -c python/pyproject.toml --rootdir=. "
+            "from the repository root; use the managed pytest runner"
+        )
+        raise pytest.UsageError(msg)
+    run_dir = os.environ.get("DOTFILES_PYTEST_RUN_DIR")
+    worker_input = getattr(config, "workerinput", None)
+    if not run_dir or not isinstance(worker_input, dict):
+        return
+    worker_id = worker_input.get("workerid")
+    if not isinstance(worker_id, str) or re.fullmatch(r"gw[0-9]+", worker_id) is None:
+        msg = f"invalid pytest worker ID: {worker_id!r}"
+        raise pytest.UsageError(msg)
+    config.option.log_file = str(Path(run_dir) / "workers" / f"{worker_id}.log")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Leave a controller/worker identity in each private logging artifact."""
+    worker_input = getattr(session.config, "workerinput", None)
+    worker_id = worker_input.get("workerid") if isinstance(worker_input, dict) else None
+    logging.getLogger(__name__).info(
+        "pytest session start role=%s pid=%d",
+        worker_id if isinstance(worker_id, str) else "controller",
+        os.getpid(),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -93,6 +127,7 @@ def isolated_host_locks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     for name in list(os.environ):
         if name.startswith("DOTFILES_LOCK_HOLDER_"):
             monkeypatch.delenv(name)
+    monkeypatch.delenv("DOTFILES_HEAVY_GATE_FD", raising=False)
     return lock_dir
 
 

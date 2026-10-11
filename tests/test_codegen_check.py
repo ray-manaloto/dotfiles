@@ -6,10 +6,12 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import msgspec
 import pytest
+import tomli_w
 from dotfiles_setup import codec, codegen_check, main
 from dotfiles_setup.codegen_check import (
     FORMATTER_FAILURE,
@@ -267,9 +269,23 @@ def _real_check(root: Path) -> int:
     return _uv_codegen(["--all-jobs", "--check"], root / "python").returncode
 
 
+def _copy_pilot_codegen_inputs(dest: Path) -> Path:
+    """Keep the real pilot and shared settings, removing unrelated job outputs."""
+    root = _copy_codegen_inputs(dest)
+    pyproject = root / "python/pyproject.toml"
+    project = tomllib.loads(pyproject.read_text())
+    jobs = project["tool"]["datamodel-codegen"]["jobs"]
+    for name in list(jobs):
+        if name != "drift-verdict":
+            (root / "python" / jobs.pop(name)["output"]).unlink()
+    pyproject.write_text(tomli_w.dumps(project))
+    return root
+
+
 def test_the_real_generator_passes_the_committed_tree_and_fails_a_hand_edit(
     tmp_path: Path,
 ) -> None:
+    # Keep the full batch: an early DIFF must survive later jobs returning OK.
     root = _copy_codegen_inputs(tmp_path)
     assert _real_check(root) == DriftVerdict.IN_SYNC
     module = root / _GENERATED / "drift_verdict.py"
@@ -281,7 +297,8 @@ def test_the_real_generator_passes_the_committed_tree_and_fails_a_hand_edit(
 def test_the_real_generator_fails_a_schema_changed_without_regenerating(
     tmp_path: Path,
 ) -> None:
-    root = _copy_codegen_inputs(tmp_path)
+    root = _copy_pilot_codegen_inputs(tmp_path)
+    assert _real_check(root) == DriftVerdict.IN_SYNC
     schema = root / "schemas/drift-verdict.schema.json"
     schema.write_text(
         schema.read_text()
@@ -300,7 +317,7 @@ def test_a_real_formatter_failure_is_an_error_not_drift(
     Rule 9 of probes-need-a-control-arm: an upstream rewording of the warning
     the gate matches on then fails this test instead of reading as drift.
     """
-    root = _copy_codegen_inputs(tmp_path)
+    root = _copy_pilot_codegen_inputs(tmp_path)
     assert check(root, binary=real_generator) is DriftVerdict.IN_SYNC
     # A ruff.toml beside the output wins discovery; an invalid value breaks it.
     (root / _GENERATED / "ruff.toml").write_text('line-length = "not-a-number"\n')
@@ -361,8 +378,12 @@ def _import_probe(module_path: Path) -> type[msgspec.Struct]:
     return module.Probe
 
 
-def test_generated_structs_reject_unknown_fields(tmp_path: Path) -> None:
-    probe = _import_probe(_generate_probe(tmp_path))
+def test_generated_structs_reject_unknown_fields_and_pass_repo_ruff_gate(
+    tmp_path: Path,
+) -> None:
+    path = _generate_probe(tmp_path)
+    assert _repo_ruff(path).returncode == 0
+    probe = _import_probe(path)
     assert codec.decode(b'{"name": "x"}', probe)
     with pytest.raises(msgspec.ValidationError):
         codec.decode(b'{"name": "x", "bogus": 1}', probe)
@@ -378,13 +399,17 @@ def test_without_the_generic_base_class_unknown_fields_decode_silently(
 
 def _repo_ruff(path: Path) -> subprocess.CompletedProcess[str]:
     """The repo's own ruff (hk's binary), discovering the copied config."""
-    argv = ["uv", "run", "--project", str(_REPO / "python"), "ruff", "check", str(path)]
+    argv = [
+        "uv",
+        "run",
+        "--project",
+        str(_REPO / "python"),
+        "--locked",
+        "ruff",
+        "check",
+        str(path),
+    ]
     return subprocess.run(argv, check=False, capture_output=True, text=True)
-
-
-def test_a_generated_struct_passes_the_repo_ruff_gate(tmp_path: Path) -> None:
-    """The generic base class has no schema; the template docstrings it."""
-    assert _repo_ruff(_generate_probe(tmp_path)).returncode == 0
 
 
 def test_without_the_template_the_base_class_fails_d101(tmp_path: Path) -> None:
