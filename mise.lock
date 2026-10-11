@@ -6642,9 +6642,9 @@ backend = "npm:portless"
 specifiers = ["0.15.7"]
 
 [[tools."npm:renovate"]]
-version = "44.150.1"
+version = "44.151.0"
 backend = "npm:renovate"
-specifiers = ["44.150.1"]
+specifiers = ["44.151.0"]
 
 [[tools."npm:skills"]]
 version = "1.7.2"
