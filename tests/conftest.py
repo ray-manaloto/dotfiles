@@ -18,12 +18,43 @@ adds a marker and forgets. This cannot drift.
 import logging
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(scope="session")
+def direct_git_binary() -> Path:
+    """Use Git without a mise shim in short subprocess timeout controls."""
+    if base_git := shutil.which("git", path=os.defpath):
+        return Path(base_git)
+    try:
+        result = subprocess.run(
+            ["mise", "which", "git"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        pytest.fail(f"could not resolve mise-managed Git: {exc}", pytrace=False)
+    candidate = Path(result.stdout.strip())
+    if (
+        result.returncode != 0
+        or not candidate.is_file()
+        or not os.access(candidate, os.X_OK)
+    ):
+        pytest.fail(
+            f"no direct Git executable from mise: {result.stderr.strip()}",
+            pytrace=False,
+        )
+    return candidate
 
 
 @pytest.hookimpl(tryfirst=True)
