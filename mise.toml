@@ -116,7 +116,7 @@ opencode = "1.19.0"
 # Mac-only and inactive until explicitly configured and logged in; the native
 # executor-lane CLI ownership above is unchanged. The provider pilot and
 # single-writer activation procedure live in docs/specs/agentsview-recall-providers.md.
-"github:router-for-me/CLIProxyAPI" = { version = "8.0.23", os = ["macos"] }
+"github:router-for-me/CLIProxyAPI" = { version = "v8.0.24", os = ["macos"] }
 
 # Firecrawl CLI — the `firecrawl` binary the firecrawl@firecrawl plugin's skills
 # name in their own `allowed-tools` (`Bash(firecrawl *)`), so without this pin
