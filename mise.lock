@@ -6632,9 +6632,9 @@ backend = "npm:markdownlint-cli2"
 specifiers = ["0.23.3"]
 
 [[tools."npm:oh-my-claude-sisyphus"]]
-version = "5.6.2"
+version = "5.7.0"
 backend = "npm:oh-my-claude-sisyphus"
-specifiers = ["5.6.2"]
+specifiers = ["5.7.0"]
 
 [[tools."npm:portless"]]
 version = "0.15.7"
@@ -6642,9 +6642,9 @@ backend = "npm:portless"
 specifiers = ["0.15.7"]
 
 [[tools."npm:renovate"]]
-version = "44.151.0"
+version = "44.151.2"
 backend = "npm:renovate"
-specifiers = ["44.151.0"]
+specifiers = ["44.151.2"]
 
 [[tools."npm:skills"]]
 version = "1.7.2"

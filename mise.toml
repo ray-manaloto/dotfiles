@@ -46,7 +46,7 @@ lima = "2.2.1"
 "github:agent-sh/agnix" = "0.57.0"
 "npm:agents-lint" = "0.7.0"
 "pipx:mcp2cli" = "3.7.0"
-"npm:renovate" = "44.151.0"
+"npm:renovate" = "44.151.2"
 biome = "2.5.11"
 # Markdown + Claude-docs linters. Installed now; hk.pkl integration is
 # scheduled for post-devcontainer-work review (see GH issue tracking
@@ -60,7 +60,7 @@ rumdl = "0.2.79"
 # zizmor: GHA security scanner — backs the hk zizmor builtin (#160 T12);
 # host-only lint tool, so it lives here (not shared.toml).
 zizmor = "1.30.1"
-"npm:oh-my-claude-sisyphus" = "5.6.2"
+"npm:oh-my-claude-sisyphus" = "5.7.0"
 "github:ast-grep/ast-grep" = "0.50.0"
 lefthook = "2.2.1"
 "npm:ctx7" = "0.6.0"
