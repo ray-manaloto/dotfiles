@@ -6720,13 +6720,13 @@ url_api = "https://api.github.com/repos/anomalyco/opencode/releases/assets/62945
 version = "0.3.0"
 backend = "pipx:deepagents-cli"
 specifiers = ["0.3.0"]
-uv = { path = ".mise/locks/pipx-deepagents-cli/0.3.0", digest = "sha256:69c6a6abc12202d65545e08fe95e6d0d1d9012a19c95441e251ea571a1a74d5e" }
+uv = { path = ".mise/locks/pipx-deepagents-cli/0.3.0", digest = "sha256:f7e181894bef87bf8be03ecff7b1794970d8e1978fce8573c955e8ee2eee9f86" }
 
 [[tools."pipx:mcp2cli"]]
 version = "3.7.0"
 backend = "pipx:mcp2cli"
 specifiers = ["3.7.0"]
-uv = { path = ".mise/locks/pipx-mcp2cli/3.7.0", digest = "sha256:971434551be01f6d71ea8ce6f007d34501b45beac4f3b41fa5f895b07150e628" }
+uv = { path = ".mise/locks/pipx-mcp2cli/3.7.0", digest = "sha256:da9db056d59797dc3272c16421a005bc1fe7a40f8dea6c7f5c451768e51f225b" }
 
 [[tools."pypi:azure-cli"]]
 version = "2.91.0"
