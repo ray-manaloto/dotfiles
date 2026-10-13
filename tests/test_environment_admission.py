@@ -89,6 +89,50 @@ def test_interpreter_prose_and_nonstdout_code_remain_allowed(command: str) -> No
     assert environment_admission.decide(command) is None
 
 
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("bash -lc 'printenv'", True),
+        ("sh -ec 'env'", True),
+        ("/bin/zsh -fc 'env'", True),
+        ("dash -c 'printenv'", True),
+        ("bash --noprofile --norc -lc 'env'", True),
+        ("bash -o posix -lc 'env'", True),
+        ("bash ./script.sh -lc printenv", False),
+        ("bash -lc 'printenv SYNTHETIC >/dev/null'", False),
+        ("bash -lc 'printf \"Do not run printenv\"'", False),
+        ("bash -l", False),
+        ("bash -c", False),
+    ],
+)
+def test_shell_option_clusters_preserve_command_and_script_argument_roles(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("node -p 'process.env'", True),
+        ("node --print 'process.env'", True),
+        ("node --print=process.env", True),
+        ("node -p 'JSON.stringify(process.env)'", True),
+        ("node -p '(process.env)'", True),
+        ("node --eval='console.log(process.env)'", True),
+        ("node -e 'console.log(process.env)'", True),
+        ("node -e 'process.env'", False),
+        ("node -p '\"process.env\"'", False),
+        ("node -p 'Boolean(process.env.SYNTHETIC)'", False),
+        ('node -p \'process.env.SYNTHETIC ? "SET" : "ABSENT"\'', False),
+    ],
+)
+def test_node_print_mode_distinguishes_collections_from_presence_and_prose(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
 def test_standalone_hook_denies_synthetic_shell_payload_without_echoing_input() -> None:
     root = Path(__file__).resolve().parent.parent
     sentinel = "SYNTHETIC_NONSECRET_SENTINEL_1847"
@@ -165,6 +209,28 @@ def test_quoted_and_escaped_substitution_prohibition_remains_allowed(
         ({"tool_name": "Bash", "tool_input": {}}, True),
         ({"tool_name": "Bash", "tool_input": []}, True),
         ({"tool_name": [], "tool_input": {"command": "env"}}, True),
+        ({"tool_name": "Bash", "tool_input": {"command": "bash -lc 'env'"}}, True),
+        (
+            {
+                "tool_name": "exec_command",
+                "tool_input": {"cmd": "node -p 'process.env'"},
+            },
+            True,
+        ),
+        (
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "bash -lc 'printenv SYNTHETIC >/dev/null'"},
+            },
+            False,
+        ),
+        (
+            {
+                "tool_name": "Bash",
+                "tool_input": {"command": "node -p 'Boolean(process.env.SYNTHETIC)'"},
+            },
+            False,
+        ),
     ],
 )
 def test_native_hook_protocol_has_deny_and_silent_allow_controls(

@@ -109,16 +109,61 @@ def _env_broad(args: list[str]) -> bool:
     return not args or _broad(args)
 
 
+def _shell_code(args: list[str]) -> str | None:
+    """Find a command in native short-option clusters before a script path."""
+    skip_value = False
+    for index, option in enumerate(args):
+        if skip_value:
+            skip_value = False
+            continue
+        if option == "--" or not option.startswith(("-", "+")):
+            break
+        if option in {"-o", "+o", "--rcfile", "--init-file"}:
+            skip_value = True
+        elif re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", option):
+            return args[index + 1] if index + 1 < len(args) else None
+    return None
+
+
+def _node_print_collection(code: str) -> bool:
+    """Recognize literal collection expressions that Node print mode emits."""
+    expression = code.strip().removesuffix(";").strip()
+    while expression.startswith("(") and expression.endswith(")"):
+        expression = expression[1:-1].strip()
+    return (
+        re.fullmatch(r"process\.env|JSON\.stringify\(\s*process\.env\s*\)", expression)
+        is not None
+    )
+
+
+def _node_broad(args: list[str]) -> bool:
+    for index, option in enumerate(args):
+        flag, separator, attached = option.partition("=")
+        if flag not in {"-e", "--eval", "-p", "--print"}:
+            continue
+        if separator:
+            code = attached
+        elif index + 1 < len(args):
+            code = args[index + 1]
+        else:
+            continue
+        if _NODE_STDOUT.search(code) or (
+            flag in {"-p", "--print"} and _node_print_collection(code)
+        ):
+            return True
+    return False
+
+
 def _interpreter_broad(name: str, args: list[str]) -> bool:
-    if name in {"sh", "bash", "zsh", "dash"} and "-c" in args:
-        index = args.index("-c") + 1
-        return index < len(args) and decide(args[index]) is not None
+    if name in {"sh", "bash", "zsh", "dash"}:
+        code = _shell_code(args)
+        return code is not None and decide(code) is not None
     if re.fullmatch(r"python[\d.]*", name) and "-c" in args:
         index = args.index("-c") + 1
         if index < len(args):
             return _python_stdout(args[index])
-    if name == "node" and any(arg in {"-e", "--eval", "-p", "--print"} for arg in args):
-        return any(_NODE_STDOUT.search(arg) for arg in args)
+    if name == "node":
+        return _node_broad(args)
     if name == "cat":
         return any(_PROC_ENVIRON.fullmatch(arg) for arg in args)
     return False
