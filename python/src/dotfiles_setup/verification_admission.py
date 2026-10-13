@@ -24,13 +24,121 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
 MAX_TIMEOUT_S = 3600
 
 
 class AdmissionError(ValueError):
-    """Refuse a required verifier before executing any of its code."""
+    """Refuse admission or report incomplete execution of a saved verifier."""
+
+
+class _ExecutionError(AdmissionError):
+    """Carry only fixed failure labels and any available binary captures."""
+
+    def __init__(self, stage: str, error: BaseException) -> None:
+        self.stage = stage
+        self.kind = (
+            "timeout"
+            if isinstance(error, subprocess.TimeoutExpired)
+            else "os-error"
+            if isinstance(error, OSError)
+            else "interrupted"
+            if isinstance(error, (KeyboardInterrupt, SystemExit))
+            else "error"
+        )
+        self.stdout = (
+            error.output if isinstance(error, subprocess.TimeoutExpired) else None
+        )
+        self.stderr = (
+            error.stderr if isinstance(error, subprocess.TimeoutExpired) else None
+        )
+        super().__init__(f"saved verifier execution incomplete: {stage}/{self.kind}")
+
+
+def _observed_call[T](stage: str, operation: Callable[[], T]) -> T:
+    try:
+        return operation()
+    except BaseException as error:
+        raise _ExecutionError(stage, error) from error
+
+
+def _close_captures(process: subprocess.Popen[bytes]) -> list[dict[str, str]]:
+    failures = []
+    for name, stream in (
+        ("stdout-close", process.stdout),
+        ("stderr-close", process.stderr),
+    ):
+        if stream is not None:
+            try:
+                _observed_call(name, stream.close)
+            except _ExecutionError as error:
+                failures.append({"stage": error.stage, "type": error.kind})
+    return failures
+
+
+def _run_admitted(
+    command: list[str],
+    record: Path,
+    raw: bytes,
+    timeout_s: float,
+    terminate: Callable[[subprocess.Popen[bytes]], None],
+) -> subprocess.CompletedProcess[bytes]:
+    """Retain terminal observations without Popen's unbounded context exit."""
+    process = subprocess.Popen(
+        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+    )
+    stdout, stderr = b"", b""
+    timed_out = False
+    capture_complete = True
+    failures: list[dict[str, str]] = []
+    try:
+        stdout, stderr = _observed_call(
+            "communicate", lambda: process.communicate(timeout=timeout_s)
+        )
+    except _ExecutionError as error:
+        timed_out = error.kind == "timeout"
+        if not timed_out:
+            capture_complete = False
+            failures.append({"stage": error.stage, "type": error.kind})
+        stdout = error.stdout if error.stdout is not None else stdout
+        stderr = error.stderr if error.stderr is not None else stderr
+        try:
+            _observed_call("cleanup", lambda: terminate(process))
+        except _ExecutionError as cleanup_error:
+            failures.append({"stage": cleanup_error.stage, "type": cleanup_error.kind})
+        try:
+            stdout, stderr = _observed_call(
+                "drain", lambda: process.communicate(timeout=10)
+            )
+        except _ExecutionError as drain_error:
+            capture_complete = False
+            failures.append({"stage": drain_error.stage, "type": drain_error.kind})
+            stdout = drain_error.stdout if drain_error.stdout is not None else stdout
+            stderr = drain_error.stderr if drain_error.stderr is not None else stderr
+    failures.extend(_close_captures(process))
+    if process.returncode is None and not failures:
+        failures.append({"stage": "returncode", "type": "unavailable"})
+    for name, payload in (("stdout.bin", stdout), ("stderr.bin", stderr)):
+        with (record.parent / name).open("xb") as output:
+            output.write(payload)
+    evidence: dict[str, object] = {
+        "command": command,
+        "returncode": process.returncode,
+        "timed_out": timed_out,
+        "start_sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    if failures:
+        evidence.update(capture_complete=capture_complete, failures=failures)
+    with (record.parent / "execution.json").open("x", encoding="utf-8") as output:
+        output.write(json.dumps(evidence, indent=2) + "\n")
+    if failures or process.returncode is None:
+        msg = (
+            "saved verifier execution incomplete; "
+            "see fixed failure labels in execution.json"
+        )
+        raise AdmissionError(msg)
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def _saved_file(path: Path) -> tuple[Path, bytes]:
@@ -115,37 +223,9 @@ def execute(
     # from substituting for the bound source. -B prevents any new bytecode writes.
     with tempfile.TemporaryDirectory(prefix="verifier-pycache-") as cache:
         command = [sys.executable, "-B", "-X", f"pycache_prefix={cache}", str(verifier)]
-        timed_out = False
-        with subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
-        ) as process:
-            try:
-                stdout, stderr = process.communicate(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                process_stream.terminate_group(process)
-                stdout, stderr = process.communicate(timeout=10)
-            except BaseException:
-                process_stream.terminate_group(process)
-                raise
-            result = subprocess.CompletedProcess(
-                command, process.returncode, stdout, stderr
-            )
-    for name, payload in (("stdout.bin", stdout), ("stderr.bin", stderr)):
-        with (record.parent / name).open("xb") as output:
-            output.write(payload)
-    evidence = {
-        "command": command,
-        "returncode": result.returncode,
-        "timed_out": timed_out,
-        "start_sha256": hashlib.sha256(raw).hexdigest(),
-    }
-    with (record.parent / "execution.json").open("x", encoding="utf-8") as output:
-        output.write(json.dumps(evidence, indent=2) + "\n")
-    return result
+        return _run_admitted(
+            command, record, raw, timeout_s, process_stream.terminate_group
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

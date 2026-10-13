@@ -375,10 +375,14 @@ def read_commands(
 
     The normative input contains ``commands`` (control_id/argv/cwd/actual_rc/
     expected_rc), explicit command_count/root_count/fixture_git_roots, the four
-    native ``actor`` keys, ``bindings`` (source/capture/spec/START hashes), and an
-    execution window issued_at/outer_deadline_utc. Every receipt is read from its
-    own control directory. Historical failures may have distinct actual_rc and
-    expected_rc only when the independent command plan explicitly records them.
+    native ``actor`` keys, ``bindings``, and an execution window
+    issued_at/outer_deadline_utc. The generic bindings require equal, nonempty
+    before/after source mappings; capture/spec/START hashes are also checked
+    when the caller's normative input requires them. C1's stronger contract is
+    separate. Every receipt is read from its own control directory. Both fresh
+    and historical observations must match the plan's actual_rc and expected_rc
+    independently; those two values may differ. ALLOW reports matching evidence,
+    not a successful command or completed proof.
     The caller must independently enumerate the complete command plan; an output
     count, glob, or receipt-derived list is never a normative input.
     """
@@ -536,9 +540,11 @@ def read_references(observed: object, expected: BoundInput) -> ReadResult:
     Normative ``references`` rows contain path/sha256/required. Native manifest
     rows identify originals with ``absolute_path`` (or an absolute ``path``).
     Descriptive provenance labels are never traversed. An optional future path
-    absent from both manifest and disk yields PENDING; a required absent reference
+    absent from the manifest OR disk yields PENDING; a required absent reference
     or artifact yields DENY. All present originals must match the independent
     binding as well as the observed hash. Unknown/duplicate references deny.
+    An independently authorized empty reference domain allows count0, proving
+    only that explicit empty scope.
     """
     try:
         required = [_object(row) for row in _list(_authority(expected)["references"])]
@@ -578,6 +584,8 @@ def read_issue_plan(observed: object, expected: BoundInput) -> ReadResult:
     The expected ``intentions`` define stable_key/member_session_ids/source_refs
     and any additional normative fields. Native descriptive body/title text is
     accepted without promoting it to command execution or a filesystem path.
+    An independently authorized empty intention domain allows count0; this does
+    not establish completeness beyond that explicit empty scope.
     """
     try:
         plans = [_object(row) for row in _list(_authority(expected)["intentions"])]

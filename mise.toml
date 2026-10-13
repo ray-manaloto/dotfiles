@@ -1040,13 +1040,18 @@ description = "Report Mend-hosted Renovate install + privileges + open update PR
 # Pass --json for machine-readable output.
 run = 'uv run --project python dotfiles-setup renovate-status'
 
+[tasks.proof-verification-admission]
+description = "Preflight, bind START, or execute a saved proof verifier"
+run = 'uv run --project python python scripts/proof-verification-admission.py'
+
 [tasks.ship]
-description = "Gate matrix → push → open/update PR → arm native auto-merge and return (body = --fill; edit with gh pr edit --body-file)"
+description = "Gate matrix → push → open/update PR → arm native auto-merge; --draft publishes without auto-merge (body = --fill; edit with gh pr edit --body-file)"
 # Thin caller per zero-bash-logic; orchestration in
 # python/src/dotfiles_setup/pr.py. Requires committed work on a feature
 # branch (refuses main / dirty tree). Devcontainer-surface diffs trigger
 # the hard `sync --full` gate — no override. Flags pass through:
 #   mise run ship -- --title "feat: ..."
+#   mise run ship -- --draft --title "feat: ..."
 run = 'uv run --project python dotfiles-setup pr ship'
 
 [tasks.land]

@@ -253,3 +253,148 @@ def test_native_hook_protocol_has_deny_and_silent_allow_controls(
         assert decision == "deny"
     else:
         assert result.stdout == ""
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("bash -c 'printenv' --help", True),
+        ("env python -c 'import os; print(os.environ)' --version", True),
+        ("node -e 'console.log(process.env)' --help", True),
+        ("bash --help", False),
+        ("python --version", False),
+        ("node --help", False),
+        ("bash -c 'echo safe' --help", False),
+        ("python -c 'print(1)' --version", False),
+        ("node -e 'console.log(1)' --help", False),
+        ("env --help", False),
+    ],
+)
+def test_help_exemption_respects_executed_program_arguments(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("env -v", True),
+        ("env -iv0", True),
+        ("env -", True),
+        ("env -uSYNTHETIC printenv", True),
+        ("env -C/tmp printenv", True),
+        ("env -P/bin printenv", True),
+        ("env -P /bin printenv", True),
+        ("env --unset=SYNTHETIC printenv", True),
+        ("env --chdir=/tmp printenv", True),
+        ("env -v echo safe", False),
+        ("env -iv0 echo safe", False),
+        ("env - echo safe", False),
+        ("env -uSYNTHETIC printenv SYNTHETIC", False),
+        ("env -C/tmp echo safe", False),
+        ("env -P/bin echo safe", False),
+        ("env -P /bin echo safe", False),
+        ("env --unset=SYNTHETIC echo safe", False),
+        ("env --chdir=/tmp echo safe", False),
+        ("env SYNTHETIC=value -v", False),
+        ("env -- -v", False),
+        ("env echo -v", False),
+        ("env -v --help", False),
+        ("env -u --help printenv", True),
+    ],
+)
+def test_env_options_keep_values_assignments_and_utility_roles(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "outcome"),
+    [
+        ("env -S printenv", "broad"),
+        ("env -Sprintenv", "broad"),
+        ("env -S '-u SYNTHETIC printenv'", "broad"),
+        ("env -S-P/bin printenv", "broad"),
+        ("env -S 'echo safe'", "allow"),
+        ("env -S 'echo \"safe words\"'", "allow"),
+        ("env -S 'echo\tsafe'", "allow"),
+        ("env -v -S echo", "allow"),
+        ("env -S-P/bin echo safe", "allow"),
+        (r"env -S 'echo\_safe'", "split"),
+        ("env -S 'echo $SYNTHETIC'", "split"),
+        ("env -S 'echo #safe'", "split"),
+        ("env -S 'echo\nsafe'", "split"),
+        ("env -S 'echo\vsafe'", "split"),
+        ("env -S 'echo\u00a0safe'", "split"),
+        ("env -S 'echo \"broken'", "split"),
+        ("env -vSprintenv", "option"),
+        ("env --unsupported", "option"),
+        ("bash -c 'env -S \"echo #safe\"'", "split"),
+        ("env -v sh -c 'env -S \"echo #safe\"'", "split"),
+        ("echo \"$(env -S 'echo #safe')\"", "split"),
+    ],
+)
+def test_env_split_subset_and_nested_inspectability_reasons(
+    command: str, outcome: str
+) -> None:
+    expected = {
+        "allow": None,
+        "broad": environment_admission.DENY_REASON,
+        "split": (
+            "Cannot inspect unsupported env -S syntax; use literal words with "
+            "balanced quotes and ASCII space/tab separators."
+        ),
+        "option": "Cannot inspect unsupported env option syntax.",
+    }
+    assert environment_admission.decide(command) == expected[outcome]
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("sh -c 'env > /dev/stdout'", True),
+        ("node -e '(() => console.log(process.env))()'", True),
+        ("sh -c 'echo safe > /dev/stdout'", False),
+        ("node -e '(() => console.log(1))()'", False),
+    ],
+)
+def test_quoted_redirects_and_arrow_programs_retain_executable_text(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("echo $(sh -c 'printenv')", True),
+        ("echo `sh -c 'printenv'`", True),
+        ("echo $(sh -c 'echo safe')", False),
+        ("echo `sh -c 'echo safe'`", False),
+        ("echo '$(sh -c printenv)'", False),
+        ("cat <<'EOF'\n`sh -c 'printenv'`\nEOF", False),
+    ],
+)
+def test_substitution_literal_programs_are_inspected_as_source(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("bash --noprofile --help -c 'env'", False),
+        ("python -I --help -c 'import os; print(os.environ)'", False),
+        ("node --trace-warnings --help -e 'console.log(process.env)'", False),
+        ("bash --noprofile -c 'env' --help", True),
+        ("python -I -c 'import os; print(os.environ)' --help", True),
+        ("node --trace-warnings -e 'console.log(process.env)' --help", True),
+    ],
+)
+def test_help_in_option_position_precedes_program_execution(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied

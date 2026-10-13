@@ -9,12 +9,29 @@ import py_compile
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import verification_admission
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def communicate_after_output_is_available(
+    operation: Callable[[], tuple[bytes, bytes]],
+) -> tuple[bytes, bytes]:
+    """Bound fixture readiness to 30 short reads before injecting a failure."""
+    for _ in range(30):
+        try:
+            return operation()
+        except subprocess.TimeoutExpired as error:
+            if error.output:
+                raise
+    pytest.fail("fixture child did not publish output within the bounded reads")
 
 
 def test_malformed_verifier_refused_without_start_or_import(tmp_path: Path) -> None:
@@ -242,3 +259,194 @@ def test_preflight_imports_no_product_modules_in_fresh_process(tmp_path: Path) -
     )
     assert result.returncode == 0, result.stderr.decode()
     assert (tmp_path / "attempt" / "START.json").is_file()
+
+
+def test_cleanup_failure_retains_partial_capture_and_unavailable_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """OS cleanup refusal cannot erase a started attempt or invent its exit."""
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("import time\nprint('started', flush=True)\ntime.sleep(10)\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    processes: list[subprocess.Popen[bytes]] = []
+    real_killpg = os.killpg
+
+    class BriefCommunicate(subprocess.Popen[bytes]):
+        def communicate(
+            self, *_args: object, timeout: float | None = None, **_kwargs: object
+        ) -> tuple[bytes, bytes]:
+            if not processes:
+                processes.append(self)
+                communicate = super().communicate
+                return communicate_after_output_is_available(
+                    lambda: communicate(timeout=0.1)
+                )
+            return super().communicate(
+                timeout=0.1 if timeout is None else min(timeout, 0.1)
+            )
+
+    def refuse_group(pid: int, signum: int) -> None:
+        if any(process.pid == pid for process in processes):
+            message = "SYNTHETIC_CLEANUP_ERROR"
+            raise PermissionError(message)
+        real_killpg(pid, signum)
+
+    monkeypatch.setattr(subprocess, "Popen", BriefCommunicate)
+    monkeypatch.setattr(os, "killpg", refuse_group)
+    try:
+        assert verification_admission.main(["execute", "--start", str(record)]) == 2
+        evidence = json.loads((record.parent / "execution.json").read_bytes())
+        assert evidence["returncode"] is None
+        assert evidence["timed_out"] is True
+        assert evidence["capture_complete"] is False
+        assert evidence["failures"] == [
+            {"stage": "cleanup", "type": "os-error"},
+            {"stage": "drain", "type": "timeout"},
+        ]
+        assert (record.parent / "stdout.bin").read_bytes() == b"started\n"
+        assert (record.parent / "stderr.bin").read_bytes() == b""
+        assert "SYNTHETIC_CLEANUP_ERROR" not in (
+            json.dumps(evidence) + capsys.readouterr().err
+        )
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "os-error"])
+def test_second_drain_failure_refuses_completion_with_known_zero_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
+) -> None:
+    """A literal leader exit0 is retained even when capture settlement fails."""
+    verifier = tmp_path / "verify.py"
+    verifier.write_text(
+        "import sys\nprint('available')\nprint('stderr', file=sys.stderr)\n"
+    )
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+
+    class FailedDrain(subprocess.Popen[bytes]):
+        calls = 0
+
+        def communicate(
+            self, *_args: object, timeout: float | None = None, **_kwargs: object
+        ) -> tuple[bytes, bytes]:
+            self.calls += 1
+            if self.calls == 1:
+                stdout, stderr = super().communicate(
+                    timeout=3 if timeout is None else min(timeout, 3)
+                )
+                raise subprocess.TimeoutExpired(
+                    self.args, 3, output=stdout, stderr=stderr
+                )
+            if failure == "os-error":
+                message = "SYNTHETIC_DRAIN_ERROR"
+                raise OSError(message)
+            raise subprocess.TimeoutExpired(self.args, 10)
+
+    monkeypatch.setattr(subprocess, "Popen", FailedDrain)
+    assert verification_admission.main(["execute", "--start", str(record)]) == 2
+    evidence = json.loads((record.parent / "execution.json").read_bytes())
+    assert evidence["returncode"] == 0
+    assert evidence["capture_complete"] is False
+    assert evidence["failures"] == [{"stage": "drain", "type": failure}]
+    assert (record.parent / "stdout.bin").read_bytes() == b"available\n"
+    assert (record.parent / "stderr.bin").read_bytes() == b"stderr\n"
+    assert "SYNTHETIC_DRAIN_ERROR" not in json.dumps(evidence) + capsys.readouterr().err
+
+
+@pytest.mark.parametrize("failure", [OSError, KeyboardInterrupt])
+def test_initial_capture_error_publishes_after_bounded_cleanup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: type[BaseException],
+) -> None:
+    """Unexpected capture failure and interruption retain drained bytes and rc."""
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("import time\nprint('available', flush=True)\ntime.sleep(10)\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    processes: list[subprocess.Popen[bytes]] = []
+
+    class FailedCapture(subprocess.Popen[bytes]):
+        calls = 0
+
+        def communicate(
+            self, *_args: object, timeout: float | None = None, **_kwargs: object
+        ) -> tuple[bytes, bytes]:
+            self.calls += 1
+            if self.calls == 1:
+                processes.append(self)
+                try:
+                    communicate = super().communicate
+                    return communicate_after_output_is_available(
+                        lambda: communicate(timeout=0.1)
+                    )
+                except subprocess.TimeoutExpired:
+                    message = "SYNTHETIC_CAPTURE_ERROR"
+                    raise failure(message) from None
+            return super().communicate(timeout=timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", FailedCapture)
+    try:
+        with pytest.raises(verification_admission.AdmissionError, match="incomplete"):
+            verification_admission.execute(record)
+        evidence = json.loads((record.parent / "execution.json").read_bytes())
+        assert evidence["returncode"] < 0
+        assert evidence["capture_complete"] is False
+        assert evidence["failures"] == [
+            {
+                "stage": "communicate",
+                "type": "os-error" if failure is OSError else "interrupted",
+            }
+        ]
+        assert (record.parent / "stdout.bin").read_bytes() == b"available\n"
+        assert "SYNTHETIC_CAPTURE_ERROR" not in json.dumps(evidence)
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+
+
+def test_cleanup_refusal_does_not_mislabel_a_completed_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Capture completeness and cleanup failure remain separate observations."""
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("print('complete capture')\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    processes: list[subprocess.Popen[bytes]] = []
+    real_killpg = os.killpg
+
+    class TimedOutCapture(subprocess.Popen[bytes]):
+        calls = 0
+
+        def communicate(
+            self, *_args: object, timeout: float | None = None, **_kwargs: object
+        ) -> tuple[bytes, bytes]:
+            self.calls += 1
+            captures = super().communicate(timeout=timeout)
+            if self.calls == 1:
+                processes.append(self)
+                raise subprocess.TimeoutExpired(self.args, 1, output=captures[0])
+            return captures
+
+    def refuse_group(pid: int, signum: int) -> None:
+        if any(process.pid == pid for process in processes):
+            message = "SYNTHETIC_CLEANUP_ERROR"
+            raise OSError(message)
+        real_killpg(pid, signum)
+
+    monkeypatch.setattr(subprocess, "Popen", TimedOutCapture)
+    monkeypatch.setattr(os, "killpg", refuse_group)
+    with pytest.raises(verification_admission.AdmissionError, match="incomplete"):
+        verification_admission.execute(record)
+    evidence = json.loads((record.parent / "execution.json").read_bytes())
+    assert evidence["returncode"] == 0
+    assert evidence["capture_complete"] is True
+    assert evidence["failures"] == [{"stage": "cleanup", "type": "os-error"}]
+    assert (record.parent / "stdout.bin").read_bytes() == b"complete capture\n"

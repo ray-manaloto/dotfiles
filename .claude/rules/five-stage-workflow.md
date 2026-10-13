@@ -28,3 +28,5 @@ budget exhaustion or unsupported material authority requires escalation.
 
 Prefer existing compact status/read-result interfaces. Close with actual gate
 and delivery evidence plus linked retrospective dispositions and residual limits.
+
+Evidence and scope: [five-stage-workflow](../../docs/rules-evidence/five-stage-workflow.md).

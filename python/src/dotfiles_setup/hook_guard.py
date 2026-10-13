@@ -995,12 +995,13 @@ def _quoted_blind_masked(command: str) -> str:
 
 
 def rules() -> tuple[Rule, ...]:
-    """Every deny rule, in match order — the guard's introspection surface.
+    """The redirect rule table in match order, for table introspection.
 
     The rule table is a contract, not an implementation detail: `since` and
     `name` are read outside this module (the audit dates bypasses by the first
     and groups denials by the second), and the invariants that keep those
     honest — every rule dated, every name unique — are asserted against this.
+    The separately composed environment admission policy is outside this table.
     """
     return _RULES
 
@@ -1008,17 +1009,27 @@ def rules() -> tuple[Rule, ...]:
 def command_views(command: str) -> tuple[str, str]:
     """Quotation-aware command views for admission policies sharing this guard.
 
-    The first retains argument content with inert separators masked. The second
-    masks quoted data completely. Neither interprets dynamic shell programs.
+    The first retains argument content with inert separators and redirect
+    punctuation masked. The second masks quoted data completely. Neither
+    interprets dynamic shell programs. The rule table retains its own view.
     """
-    return _inert_masked(command), _quoted_blind_masked(command)
+    target = _QUOTED_SPAN.sub(
+        lambda match: (
+            match.group(0).replace(">", _FILLER)
+            if match.group(0).startswith(("'", '"'))
+            else match.group(0)
+        ),
+        _inert_masked(command),
+    )
+    return target, _quoted_blind_masked(command)
 
 
 def literal_command_substitutions(command: str) -> tuple[str, ...]:
     """Simple executable substitutions outside single-quoted data.
 
     This shares the existing quotation/heredoc mask and deliberately does not
-    parse nested shell expansions or arbitrary interpreter programs.
+    parse nested shell expansions or arbitrary interpreter programs. Masks find
+    executable spans; returned text comes from the original literal source.
     """
     target = _QUOTED_SPAN.sub(
         lambda match: (
@@ -1029,19 +1040,22 @@ def literal_command_substitutions(command: str) -> tuple[str, ...]:
         HEREDOC_PATTERN.sub(blank_heredoc, command),
     )
     pattern = r"(?<!\\)\$\(([^()]*)\)|(?<!\\)`([^`]*)`"
-    return tuple(first or second for first, second in re.findall(pattern, target))
+    spans = (
+        match.span(1 if match.group(1) is not None else 2)
+        for match in re.finditer(pattern, target)
+    )
+    return tuple(command[start:stop] for start, stop in spans)
 
 
 def match(command: str) -> Rule | None:
-    """The first :class:`Rule` matching ``command``, else None.
+    """The first table :class:`Rule` matching ``command``, else None.
 
     Rules run against :func:`_inert_masked`, never the raw string, so a
     separator that is quoted or inside a heredoc body cannot fake a command
-    position (#265). Masking here — the one chokepoint :func:`decide` and
-    :mod:`dotfiles_setup.command_audit` both go through — is what lets the audit
-    MEASURE the fix: the same call that denies a command is the one that
-    classifies it, so the report's `blocked` bucket moves without any change
-    there.
+    position (#265). :func:`decide` and :mod:`dotfiles_setup.command_audit`
+    share this table lookup, so the audit measures table-mask corrections.
+    The environment policy composed separately by :func:`decide` is not
+    classified or dated by this table or by command_audit.
 
     Split out of :func:`decide` for :mod:`dotfiles_setup.command_audit`, which
     needs the matched rule's ``since`` date (and ``name``) — not just its

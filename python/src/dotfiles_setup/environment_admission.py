@@ -23,6 +23,11 @@ DENY_REASON = (
     "`printenv NAME >/dev/null` and read its exit status. Environment prefixes "
     "such as `env -u NAME command` remain allowed."
 )
+SPLIT_REASON = (
+    "Cannot inspect unsupported env -S syntax; use literal words with "
+    "balanced quotes and ASCII space/tab separators."
+)
+OPTION_REASON = "Cannot inspect unsupported env option syntax."
 
 _HEAD = re.compile(
     r"(?:^|[;&|\n]\s*)\s*"
@@ -90,23 +95,61 @@ def _python_collection(node: ast.expr) -> bool:
     return False
 
 
-def _env_broad(args: list[str]) -> bool:
+def _env_split(args: list[str]) -> list[str] | None:
+    option, *remaining = args
+    if option == "-S":
+        if not remaining:
+            return None
+        split, *remaining = remaining
+    else:
+        split = option[2:]
+    if any(char in split for char in "\\$#") or any(
+        char.isspace() and char not in " \t" for char in split
+    ):
+        return None
+    try:
+        return shlex.split(split) + remaining
+    except ValueError:
+        return None
+
+
+def _env_reason(args: list[str]) -> str | None:
     option_and_value = 2
     while args:
         option = args[0]
-        if option in {"-u", "--unset", "-C", "--chdir"}:
+        if option == "--":
+            args = args[1:]
+            break
+        if option in {"--help", "--version"}:
+            return None
+        if option.startswith("-S"):
+            expanded = _env_split(args)
+            if expanded is None:
+                return SPLIT_REASON
+            args = expanded
+            continue
+        if option in {"-u", "--unset", "-C", "--chdir", "-P"}:
             if len(args) < option_and_value:
-                return False
+                return None
             args = args[option_and_value:]
         elif (
-            option in {"-i", "--ignore-environment", "-0", "--null", "--"}
-            or option.startswith("--unset=")
-            or re.match(r"^[A-Za-z_]\w*=", option)
+            option in {"-", "--ignore-environment", "--null"}
+            or re.fullmatch(r"-[0iv]+", option)
+            or option.startswith(("--unset=", "--chdir="))
+            or re.fullmatch(r"-[uCP].+", option)
         ):
             args = args[1:]
+        elif option.startswith("-"):
+            return OPTION_REASON
         else:
             break
-    return not args or _broad(args)
+    return _env_utility_reason(args)
+
+
+def _env_utility_reason(args: list[str]) -> str | None:
+    while args and re.match(r"^[A-Za-z_]\w*=", args[0]):
+        args = args[1:]
+    return _reason(args) if args else DENY_REASON
 
 
 def _shell_code(args: list[str]) -> str | None:
@@ -116,7 +159,7 @@ def _shell_code(args: list[str]) -> str | None:
         if skip_value:
             skip_value = False
             continue
-        if option == "--" or not option.startswith(("-", "+")):
+        if option in {"--", "--help", "--version"} or not option.startswith(("-", "+")):
             break
         if option in {"-o", "+o", "--rcfile", "--init-file"}:
             skip_value = True
@@ -138,6 +181,8 @@ def _node_print_collection(code: str) -> bool:
 
 def _node_broad(args: list[str]) -> bool:
     for index, option in enumerate(args):
+        if option in {"--help", "--version"}:
+            return False
         flag, separator, attached = option.partition("=")
         if flag not in {"-e", "--eval", "-p", "--print"}:
             continue
@@ -155,12 +200,11 @@ def _node_broad(args: list[str]) -> bool:
 
 
 def _interpreter_broad(name: str, args: list[str]) -> bool:
-    if name in {"sh", "bash", "zsh", "dash"}:
-        code = _shell_code(args)
-        return code is not None and decide(code) is not None
     if re.fullmatch(r"python[\d.]*", name) and "-c" in args:
         index = args.index("-c") + 1
-        if index < len(args):
+        if index < len(args) and not any(
+            arg in {"--help", "--version"} for arg in args[: index - 1]
+        ):
             return _python_stdout(args[index])
     if name == "node":
         return _node_broad(args)
@@ -169,28 +213,34 @@ def _interpreter_broad(name: str, args: list[str]) -> bool:
     return False
 
 
-def _broad(argv: list[str]) -> bool:
+def _reason(argv: list[str]) -> str | None:
     if not argv:
-        return False
+        return None
     name, *args = argv
     name = name.rsplit("/", 1)[-1]
-    if any(arg in {"--help", "--version"} for arg in args):
-        return False
+    if args and args[0] in {"--help", "--version"}:
+        return None
     if name == "env":
-        return _env_broad(args)
+        return _env_reason(args)
+    if name in {"sh", "bash", "zsh", "dash"}:
+        code = _shell_code(args)
+        return decide(code) if code is not None else None
     if name in {"printenv", "set"}:
-        return not [
+        broad = not [
             arg for arg in args if name == "set" or arg not in {"-0", "--null", "--"}
         ]
-    if name in {"export", "declare", "typeset"}:
-        return all(re.fullmatch(r"-[px]+", arg) for arg in args)
-    return _interpreter_broad(name, args)
+    elif name in {"export", "declare", "typeset"}:
+        broad = all(re.fullmatch(r"-[px]+", arg) for arg in args)
+    else:
+        broad = _interpreter_broad(name, args)
+    return DENY_REASON if broad else None
 
 
 def decide(command: str) -> str | None:
     """Return a value-free denial reason for a literal broad environment dump."""
-    if any(decide(body) for body in hook_guard.literal_command_substitutions(command)):
-        return DENY_REASON
+    for body in hook_guard.literal_command_substitutions(command):
+        if reason := decide(body):
+            return reason
     target, _ = hook_guard.command_views(command)
     for match in _HEAD.finditer(target):
         end = re.search(r"[;&|\n>]", target[match.start("command") :])
@@ -199,8 +249,8 @@ def decide(command: str) -> str | None:
             argv = shlex.split(command[match.start("command") : stop], comments=True)
         except ValueError:
             continue
-        if _broad(argv):
-            return DENY_REASON
+        if reason := _reason(argv):
+            return reason
     return None
 
 

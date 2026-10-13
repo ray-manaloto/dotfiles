@@ -137,3 +137,27 @@ fresh qualification rather than infer native acceptance from a missing log.
   `.agent/logs/p9-existing-writer-issues-20261012.json` and
   `.agent/logs/p9-existing-hk-followup-1830-20261012.json`;
   each command exited 0.
+
+## Portable summary of the accepted observation
+
+This nonsecret structured excerpt carries the facts and hashes already recorded
+above. It is a summary of that historical observation, not a fresh execution or
+a replacement for the original receipts.
+
+```json
+{
+  "attempt_id": "0d128298-ee71-459d-9c50-039f88fc13c7",
+  "started_at": "2026-10-13T00:52:49.410474+00:00",
+  "command": ["git", "commit", "-m", "feat: add gated draft shipping (#1845)"],
+  "actual_rc": 0,
+  "commit": "2fe94741f430774fe64681a6d9c07edaa07c3d06",
+  "command_cleanup_seconds": 18.642408750,
+  "source_baseline": "182f6f499a1254a536bccb80f55f5db35cf0ff49",
+  "observer_sha256": "d29841b2c2fda4cfe422b8e92f5f58e8498d7ef30d6fb4a84c5af6c7fe7f1945",
+  "cleanup_helper_sha256": "8966b071b24b911dfd48408c89bba2a9d5d742a8a788739c4f56087e756223a9",
+  "start_sha256": "f5dbd29ab39347ce36873fbf4b7fe4433bc25fd5e889ed6f4f791c8e460d11d4",
+  "receipt_sha256": "cd75981dd52ef8770bb4e703370b7d1f53a350c328cd8783d7ae0745707f8469",
+  "writer_control": "cooperating holds",
+  "limits": ["no universal writer exclusion", "stash sharing unmeasured", "race not replayed"]
+}
+```

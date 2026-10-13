@@ -7,6 +7,7 @@ import copy
 import hashlib
 import sys
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -590,4 +591,97 @@ def test_rebuild_refuses_changed_stable_source_binding(
     assert (
         proof_reader.read_cache_transition(observed, baseline, mode="rebuild").status
         == "DENY"
+    )
+
+
+def test_listed_missing_references_preserve_optional_pending(tmp_path: Path) -> None:
+    """A manifest row does not make an absent optional artifact required."""
+    missing = tmp_path / "missing-proof.txt"
+    row = {"path": str(missing), "sha256": hashlib.sha256(b"proof").hexdigest()}
+    optional = bound(
+        tmp_path, "optional.json", {"references": [{**row, "required": False}]}
+    )
+    required = bound(
+        tmp_path, "required.json", {"references": [{**row, "required": True}]}
+    )
+    assert proof_reader.read_references([row], optional).status == "PENDING"
+    assert proof_reader.read_references([row], required).status == "DENY"
+    missing.write_bytes(b"proof")
+    assert proof_reader.read_references([row], required).status == "ALLOW"
+
+
+def test_empty_domains_allow_only_independently_declared_empty_scope(
+    tmp_path: Path,
+) -> None:
+    """Empty outputs cannot erase a nonempty reference or issue authority."""
+    empty_refs = bound(tmp_path, "empty-refs.json", {"references": []})
+    empty_issues = bound(tmp_path, "empty-issues.json", {"intentions": []})
+    reference = {
+        "path": str(tmp_path / "proof.txt"),
+        "sha256": "a" * 64,
+        "required": True,
+    }
+    refs = bound(tmp_path, "refs.json", {"references": [reference]})
+    intention = {"stable_key": "required", "member_session_ids": [], "source_refs": []}
+    issues = bound(tmp_path, "issues.json", {"intentions": [intention]})
+    result = proof_reader.read_references([], empty_refs)
+    assert (result.status, result.count) == ("ALLOW", 0)
+    result = proof_reader.read_issue_plan({"intentions": []}, empty_issues)
+    assert (result.status, result.count) == ("ALLOW", 0)
+    assert proof_reader.read_references([], refs).status == "DENY"
+    assert proof_reader.read_issue_plan({"intentions": []}, issues).status == "DENY"
+
+
+@pytest.mark.parametrize("malformed", [b"{", b"\xff"])
+def test_exactly_bound_malformed_serialization_denies_at_public_readers(
+    tmp_path: Path, malformed: bytes
+) -> None:
+    """Malformed bytes reach decoding with their own hash and become DENY."""
+    authority, receipt = command_packet(tmp_path)
+    assert (
+        proof_reader.read_commands([receipt], authority, execution="fresh").status
+        == "ALLOW"
+    )
+    valid_refs = bound(tmp_path, "refs.json", {"references": []})
+    assert proof_reader.read_references([], valid_refs).status == "ALLOW"
+    path = tmp_path / "malformed.json"
+    path.write_bytes(malformed)
+    malformed_authority = proof_reader.bind_input(
+        path, hashlib.sha256(malformed).hexdigest(), role="normative"
+    )
+    assert malformed_authority.content == malformed
+    assert (
+        proof_reader.read_commands(
+            [receipt], malformed_authority, execution="fresh"
+        ).status
+        == "DENY"
+    )
+    assert proof_reader.read_references([], malformed_authority).status == "DENY"
+    receipt.write_bytes(malformed)
+    assert (
+        proof_reader.read_commands([receipt], authority, execution="fresh").status
+        == "DENY"
+    )
+
+
+@pytest.mark.parametrize("execution", ["fresh", "historical"])
+def test_command_matching_does_not_promote_actual_failure_to_success(
+    tmp_path: Path, execution: Literal["fresh", "historical"]
+) -> None:
+    """The independent plan binds both rc fields; ALLOW reports matching evidence."""
+    authority, receipt = command_packet(tmp_path)
+    recipe = codec.decode(authority.content, dict)
+    recipe["commands"][0]["actual_rc"] = 1
+    recipe["execution"] = execution
+    expected = bound(tmp_path, "failed-command-plan.json", recipe)
+    assert (
+        proof_reader.read_commands([receipt], expected, execution=execution).status
+        == "DENY"
+    )
+    observation = codec.decode(receipt.read_bytes(), dict)
+    observation["actual_rc"] = 1
+    receipt.write_bytes(codec.encode(observation))
+    assert (
+        proof_reader.read_commands([receipt], expected, execution=execution).status
+        == "ALLOW"
     )

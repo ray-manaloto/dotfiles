@@ -25,6 +25,12 @@ the [durable protocol](agent-workflows/five-stage-workflow.md). Wayfinding/triag
 can supply inputs; they do not replace the selected stages. Trivial edits use
 its explicit small/spec-saturated path.
 
+Five-stage implementation tickets use their approved graph's task labels;
+`wayfinder:*` labels describe wayfinding work and are not a universal task label
+set. Hosted OPEN blockers and prerequisites accepted into an integration tip
+are separate states. The coordinator owns that acceptance record and worker
+dispatch; hosted dependency queries alone do not describe draft integration.
+
 Inventory installed instructions and actual tool capabilities rather than
 relying on the old 2026-08-02 skill list. `disable-model-invocation: true` still
 prevents native model invocation. When the runtime lacks a Skill tool or cannot

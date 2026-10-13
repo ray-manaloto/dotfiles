@@ -470,6 +470,7 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
     context = specific["additionalContext"]
     assert isinstance(context, str)
     assert len(context) <= 1000
+    assert f"mise -C {root} run research-fanout" in context
     assert "PROVISIONAL" in context
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
     assert json.loads(marker.read_text())["policy"] == "strict-five-v2"
@@ -768,3 +769,89 @@ def test_projection_stop_exa_token_boundary(
         },
     )
     assert (result.get("decision") == "block") is blocked
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ("missing", "Research submission marker missing."),
+        ("non-object", "Research submission marker malformed."),
+        ("malformed", "Research submission marker malformed."),
+        ("invalid-utf8", "Research submission marker malformed."),
+        ("unreadable", "Research submission marker unreadable."),
+        ("binding", "Caller research scope binding invalid."),
+    ],
+)
+def test_invalid_submission_requires_first_refusal_then_honest_incomplete_stop(
+    tmp_path: Path, change: str, reason: str
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+    )
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    marker.unlink()
+    payloads = {
+        "non-object": b"[]",
+        "malformed": b"{SYNTHETIC_NONSECRET",
+        "invalid-utf8": b"\xff",
+        "binding": b'{"caller_scope":{"scope":"local-only"}}',
+    }
+    if change == "unreadable":
+        marker.mkdir()
+    elif change in payloads:
+        marker.write_bytes(payloads[change])
+    for active, message in (
+        (False, "RESEARCH INCOMPLETE: unavailable evidence"),
+        (True, "Research complete"),
+        (True, "Summary: RESEARCH INCOMPLETE: unavailable evidence"),
+    ):
+        blocked = _invoke(
+            tmp_path,
+            {
+                **base,
+                "hook_event_name": "Stop",
+                "stop_hook_active": active,
+                "last_assistant_message": message,
+            },
+        )
+        assert blocked == {"decision": "block", "reason": reason}
+    completed = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "stop_hook_active": True,
+            "last_assistant_message": " \nRESEARCH INCOMPLETE: unavailable evidence",
+        },
+    )
+    assert completed == {
+        "systemMessage": f"Research coverage remains incomplete: {reason}"
+    }
+    if change in payloads:
+        assert marker.read_bytes() == payloads[change]
+    elif change == "unreadable":
+        assert marker.is_dir()
+    else:
+        assert not marker.exists()
+
+
+@pytest.mark.parametrize("raw", ["", "[]", "null", '{"hook_event_name":"Stop"'])
+def test_unparsable_or_nonobject_input_cannot_earn_incomplete_escape(
+    tmp_path: Path, raw: str
+) -> None:
+    result = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=raw,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "HOME": str(tmp_path)},
+        timeout=15,
+        check=True,
+    )
+    assert json.loads(result.stdout)["decision"] == "block"
