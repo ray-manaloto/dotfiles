@@ -24,6 +24,7 @@ derive instead.
 | File | Framework | Purpose |
 |------|-----------|---------|
 | `test_environment_admission.py` | pytest | Literal broad-environment stdout admission: shell and interpreter forms, command substitutions, native shell-tool payloads, malformed-input refusal, and safe named-variable checks. Source tests establish the narrow command policy; installed-client hook enforcement and routing require separate native qualification. |
+| `test_verification_admission.py` | pytest | Saved verifier admission: compiler-only preflight without product imports, exact verifier/helper byte binding, changed/missing/symlink refusal before execution, fresh-cache source execution, single-use START, public CLI exit/output retention, and bounded timeout with literal child signal status. |
 | `test_audit.py` | pytest | `dotfiles-setup audit` command output structure and exit codes |
 | `test_research_scope.py` | pytest | Caller scope binding at prompt submission: exact first-line authorization, full-request digest, session/turn identity, and refusal of quoted, misplaced, absent or changed declarations. Integrity checks do not claim protection against same-user hook-state writes; native client qualification is separate. |
 | `test_process_stream.py` | pytest | Live chunk forwarding, bounded child-group cleanup after timeout and SIGTERM, and a leader-exited descendant control |
