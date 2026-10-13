@@ -5,7 +5,8 @@ Issues and PRDs for this repo live as GitHub issues on
 operations — it infers the repo from `git remote -v` when run inside a clone.
 
 Adapted from the `setup-matt-pocock-skills` seed template. Consumed by
-`/mattpocock-skills:wayfinder`, `to-spec`, `to-tickets`, `triage`, and `code-review`.
+`/mattpocock-skills:wayfinder`, `to-spec`, `to-tickets`, `implement-spec`, `retro`,
+`triage`, and `code-review`.
 
 > **Why this file is not at `docs/agents/issue-tracker.md`** (the path those skills' `setup` step
 > writes): `agnix` treats any `**/agents/*.md` as an agent definition needing YAML frontmatter, so
@@ -16,31 +17,28 @@ Adapted from the `setup-matt-pocock-skills` seed template. Consumed by
 > `/setup-matt-pocock-skills`** — it also edits the root `CLAUDE.md`, which the
 > `claude_md_import_stub` hk step rejects (that file must be byte-exactly `@AGENTS.md\n`).
 
-## ⚠️ The protocol's own verbs are USER-INVOKED ONLY — name the command, never hand-roll it
+## Five-stage routing and actual invocation
 
-The chain is **`/wayfinder` → `/to-spec` → `/to-tickets` → `/triage` / `/implement`**. Every verb in
-it carries `disable-model-invocation: true`, so **an agent cannot invoke any of them.** Measured
-2026-08-02 across all 17 `skills/engineering/*` — the **9** with that flag are *exactly* the 9 absent
-from the agent's invocable skill list, against **8** present with it off:
+Substantial work follows **grill-with-docs → to-spec → to-tickets →
+implement-spec → retro**, with the standing user authorization and reviews in
+the [durable protocol](agent-workflows/five-stage-workflow.md). Wayfinding/triage
+can supply inputs; they do not replace the selected stages. Trivial edits use
+its explicit small/spec-saturated path.
 
-| User-invoked only (agent CANNOT call) | Agent-invocable |
-|---|---|
-| `wayfinder` · `to-spec` · `to-tickets` · `triage` · `implement` · `ask-matt` · `grill-with-docs` · `improve-codebase-architecture` · `setup-matt-pocock-skills` | `research` · `prototype` · `grilling`¹ · `domain-modeling` · `tdd` · `code-review` · `codebase-design` · `diagnosing-bugs` · `resolving-merge-conflicts` |
+Inventory installed instructions and actual tool capabilities rather than
+relying on the old 2026-08-02 skill list. `disable-model-invocation: true` still
+prevents native model invocation. When the runtime lacks a Skill tool or cannot
+invoke a selected verb, the user's recorded authorization permits applying its
+exact installed instructions directly as a **file-guided fallback**. Record
+package/version, source/hash, actual mode and outputs; never report a file read
+as native invocation. Preserve required spec/seam and ticket-graph reviews, and
+report a missing required instruction as a blocker. Do not edit plugin caches
+or invent a substitute.
 
-¹ `grilling` lives under `skills/productivity/`, not `skills/engineering/`.
-
-**When the next step in the protocol is one of the left column: STOP, tell the human which command
-to type, and do not produce its output by hand.** Hand-rolling a protocol verb is a
-[`use-tool-builtins.md`](../.claude/rules/use-tool-builtins.md) violation, and it silently drops
-whatever that skill's process adds — `to-spec` alone contributes a **seam sketch checked with the
-user**, **User Stories**, **Testing Decisions**, and a standing *"do NOT include specific file paths
-or code snippets — they go stale fast"*.
-
-**Why this is written down:** on 2026-08-02 a session reached the edge of #431's map, felt the pull
-to *"just write the spec"* — which `wayfinder`'s own **Plan, don't do** section names as the signal
-to **hand off** — and hand-wrote `docs/specs/secrets-takeover.md` instead of saying "run
-`/to-spec`". The unreachable verb is the mechanism: the correct next action was invisible from the
-agent's side, so it substituted its own. See `.claude/rules/use-tool-builtins.md`.
+Carry existing authorization across stages; do not stop merely to request the
+same command again. Unresolved design choices and actions outside the authorized
+scope still require a decision. This corrects the old unconditional STOP rule
+without bypassing native restrictions.
 
 ## ⚠️ Repo-specific: PR creation is guard-denied
 
@@ -52,12 +50,19 @@ Any skill step that reaches for it will be blocked — and a deny cancels the wh
 | `gh pr create` | **`mise run ship`** — runs the path-aware gate matrix *before* the PR opens, then watches checks to bucket-verified green |
 | `gh pr merge` | **`mise run land -- <PR#>`** |
 
+`implement-spec`'s first-merge draft requirement uses the canonical gated draft
+route only after P1 [#1845][draft-ship] is accepted and integrated. Confirm its
+actual public controls; do not invent a flag or use direct `gh pr create`.
+Draft publication does not arm auto-merge or close the spec. Whole-spec review
+and applicable gates precede native readiness and final-head canonical delivery.
+
 `gh issue *` commands are **not** guarded — everything below is safe to run as written.
 See `.claude/rules/mise-tasks-only.md`.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
+- **Create an issue**: `gh issue create --title "..." --body "..."`. Save exact
+  multi-line text to a file and use `--body-file`.
 - **Read an issue**: `gh issue view <number> --comments`.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with `--label` / `--state` filters.
 - **Comment**: `gh issue comment <number> --body "..."`
@@ -97,7 +102,9 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
   (`gh api repos/ray-manaloto/dotfiles/issues/<n> --jq .id` — **not** the `#number` or `node_id`).
   GitHub reports `issue_dependencies_summary.blocked_by` (open blockers only). Where dependencies
   aren't available, fall back to a `Blocked by: #<n>, #<n>` line at the top of the child body. A
-  ticket is unblocked when every blocker is closed.
+  hosted ticket is unblocked when every blocker is closed. During draft
+  integration, separately record prerequisites accepted and integrated into the
+  spec's integration tip before dispatch.
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the
   map's sub-issues / task list), drop any with an open blocker
   (`issue_dependencies_summary.blocked_by > 0`) or an assignee; first in map order wins.
@@ -162,3 +169,5 @@ yet specified" section). Different axis; they can coexist. Nothing here retires 
 - `docs/triage-labels.md` — the label vocabulary `/triage` reads.
 - `.claude/rules/mise-tasks-only.md` — why `gh pr create`/`merge` are denied.
 - `.claude/skills/pr-workflow/SKILL.md` — `mise run ship` / `land`.
+
+[draft-ship]: https://github.com/ray-manaloto/dotfiles/issues/1845
