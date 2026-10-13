@@ -998,39 +998,39 @@ url = "https://github.com/mozilla/sccache/releases/download/v0.18.0/sccache-v0.1
 url_api = "https://api.github.com/repos/mozilla/sccache/releases/assets/563130201"
 
 [[tools."github:tursodatabase/turso"]]
-version = "0.8.2"
+version = "0.8.3"
 backend = "github:tursodatabase/turso"
 specifiers = ["latest"]
 
 [tools."github:tursodatabase/turso"."platforms.linux-arm64"]
-checksum = "sha256:9c88e352173d913a8202637f22030d1521d0f6085e34c39961b2bc2745837d9f"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824889"
+checksum = "sha256:4a832c5125ea9137b020843c61731644666db90c450b027f5d5cffe455c4c3fb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108890"
 
 [tools."github:tursodatabase/turso"."platforms.linux-arm64-musl"]
-checksum = "sha256:9c88e352173d913a8202637f22030d1521d0f6085e34c39961b2bc2745837d9f"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824889"
+checksum = "sha256:4a832c5125ea9137b020843c61731644666db90c450b027f5d5cffe455c4c3fb"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-aarch64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108890"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64"]
-checksum = "sha256:1a12393fdb1fc36ef4c0339609b2652d6a0f7bb4a5f6c08da4afe1d364422d18"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824939"
+checksum = "sha256:4475c4df29f744fb3b2fdeef622d9297bbb80698039eec57d1b3ba7e048b5e31"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108982"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-baseline"]
-checksum = "sha256:1a12393fdb1fc36ef4c0339609b2652d6a0f7bb4a5f6c08da4afe1d364422d18"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824939"
+checksum = "sha256:4475c4df29f744fb3b2fdeef622d9297bbb80698039eec57d1b3ba7e048b5e31"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108982"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-musl"]
-checksum = "sha256:1a12393fdb1fc36ef4c0339609b2652d6a0f7bb4a5f6c08da4afe1d364422d18"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824939"
+checksum = "sha256:4475c4df29f744fb3b2fdeef622d9297bbb80698039eec57d1b3ba7e048b5e31"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108982"
 
 [tools."github:tursodatabase/turso"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:1a12393fdb1fc36ef4c0339609b2652d6a0f7bb4a5f6c08da4afe1d364422d18"
-url = "https://github.com/tursodatabase/turso/releases/download/v0.8.2/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
-url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/614824939"
+checksum = "sha256:4475c4df29f744fb3b2fdeef622d9297bbb80698039eec57d1b3ba7e048b5e31"
+url = "https://github.com/tursodatabase/turso/releases/download/v0.8.3/turso_cli-x86_64-unknown-linux-gnu.tar.xz"
+url_api = "https://api.github.com/repos/tursodatabase/turso/releases/assets/634108982"
 
 [[tools.libsql-server]]
 version = "0.24.32"
@@ -1108,7 +1108,7 @@ uvx = "false"
 version = "2.33.0"
 backend = "pipx:conan"
 specifiers = ["latest"]
-uv = { path = ".mise/locks/mise.runtime/pipx-conan/2.33.0", digest = "sha256:b8425d6f8d74e95ff0dbd98c08c415fbba584d93e230aab087d33ff7fdec9e47" }
+uv = { path = ".mise/locks/mise.runtime/pipx-conan/2.33.0", digest = "sha256:a6c6b578c54ee32de5c86cd99e314148d28248a609787cd10559840d755af228" }
 
 [[tools."pipx:cpplint"]]
 version = "2.0.2"
