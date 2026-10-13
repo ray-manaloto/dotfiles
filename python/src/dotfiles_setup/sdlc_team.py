@@ -1069,7 +1069,9 @@ def _supervise(payload: _SupervisorPayload) -> int:
     )
     errors.extend(reconciliation.errors)
     errors.extend(receipt_errors)
-    if status is SdlcSettledStatus.COMPLETED and not reconciliation.consistent:
+    if status is SdlcSettledStatus.COMPLETED and (
+        receipt_errors or not reconciliation.consistent
+    ):
         status = SdlcSettledStatus.FAILED
     settlement = SdlcTeamSettlement(
         run_id=payload.run_id,
