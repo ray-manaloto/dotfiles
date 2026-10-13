@@ -34,6 +34,10 @@ matcher is ``Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWo
 and :mod:`dotfiles_setup.hook_dispatch` routes EnterWorktree to its dedicated guard.
 This module dispatches on ``tool_name``: the three file-modifying tools route to
 :mod:`dotfiles_setup.branch_guard` (the write-time default-branch gate, #400).
+
+Broad environment stdout is an additional transcript admission policy delegated
+to :mod:`dotfiles_setup.environment_admission` before workflow redirects. Native
+Codex activation requires separately trusted hook definitions and client probes.
 """
 
 from __future__ import annotations
@@ -48,6 +52,7 @@ from dotfiles_setup import (
     ask_quality,
     branch_guard,
     coordinator_write_guard,
+    environment_admission,
     script_guard,
 )
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
@@ -1000,6 +1005,33 @@ def rules() -> tuple[Rule, ...]:
     return _RULES
 
 
+def command_views(command: str) -> tuple[str, str]:
+    """Quotation-aware command views for admission policies sharing this guard.
+
+    The first retains argument content with inert separators masked. The second
+    masks quoted data completely. Neither interprets dynamic shell programs.
+    """
+    return _inert_masked(command), _quoted_blind_masked(command)
+
+
+def literal_command_substitutions(command: str) -> tuple[str, ...]:
+    """Simple executable substitutions outside single-quoted data.
+
+    This shares the existing quotation/heredoc mask and deliberately does not
+    parse nested shell expansions or arbitrary interpreter programs.
+    """
+    target = _QUOTED_SPAN.sub(
+        lambda match: (
+            _FILLER * len(match.group(0))
+            if match.group(0).startswith("'")
+            else match.group(0)
+        ),
+        HEREDOC_PATTERN.sub(blank_heredoc, command),
+    )
+    pattern = r"(?<!\\)\$\(([^()]*)\)|(?<!\\)`([^`]*)`"
+    return tuple(first or second for first, second in re.findall(pattern, target))
+
+
 def match(command: str) -> Rule | None:
     """The first :class:`Rule` matching ``command``, else None.
 
@@ -1025,6 +1057,8 @@ def match(command: str) -> Rule | None:
 
 def decide(command: str) -> str | None:
     """Redirect reason when ``command`` should be denied, else None."""
+    if reason := environment_admission.decide(command):
+        return reason
     rule = match(command)
     return rule.reason if rule is not None else None
 
