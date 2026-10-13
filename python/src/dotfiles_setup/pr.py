@@ -91,6 +91,7 @@ from dotfiles_setup.doctor import is_linked_worktree
 from dotfiles_setup.sync import SyncOptions, sync_main
 
 _PROBE_TIMEOUT_S = 120.0
+_SHA1_HEX_LENGTH = 40
 
 # The devcontainer/image/validation surface: a diff touching any of these
 # makes full local verification (sync --full == verify-local chain)
@@ -649,20 +650,68 @@ def _ship_preflight(workspace: Path) -> tuple[str, list[str]] | int:
     return branch, paths
 
 
-def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
+def _pr_info(payload: str) -> dict[str, object] | None:
+    """Read an object from GitHub output; malformed/non-object output fails closed."""
+    try:
+        info = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def _pr_number(info: dict[str, object] | None) -> int | None:
+    """Require a positive native PR number, without accepting booleans."""
+    number = info.get("number") if info is not None else None
+    return number if type(number) is int and number > 0 else None
+
+
+def _existing_pr_number(info: dict[str, object], *, draft: bool) -> int | None:
+    """Reuse an open PR only when the requested route preserves its readiness."""
+    number = _pr_number(info)
+    if number is None:
+        sys.stdout.write("FAIL  ship: could not resolve existing PR number\n")
+        return None
+    if draft and info.get("isDraft") is not True:
+        sys.stdout.write(
+            f"FAIL  ship: PR #{number} is already ready or draft state is "
+            "unverified; --draft cannot change its readiness\n"
+        )
+        return None
+    if not draft and info.get("isDraft") is True:
+        sys.stdout.write(
+            f"FAIL  ship: PR #{number} is a draft; mark it ready after review, "
+            "then rerun ship to gate and enable auto-merge\n"
+        )
+        return None
+    return number
+
+
+def _open_or_update_pr(
+    workspace: Path, title: str | None, *, draft: bool = False
+) -> int | None:
     """Open (or reuse) the branch PR; returns its number or None on failure."""
     # Review finding [8]: branch-implicit gh calls must run in the
     # workspace repo, not the caller's cwd.
     existing = _run(
-        ["gh", "pr", "view", "--json", "number,state"],
+        ["gh", "pr", "view", "--json", "number,state,isDraft"],
         timeout=_PROBE_TIMEOUT_S,
         cwd=workspace,
     )
-    if existing.returncode == 0 and json.loads(existing.stdout).get("state") == "OPEN":
-        number = int(json.loads(existing.stdout)["number"])
-        sys.stdout.write(f"==> PR #{number} already open — pushed update\n")
+    if existing.returncode == 0:
+        info = _pr_info(existing.stdout)
+        if info is None:
+            sys.stdout.write("FAIL  ship: could not read existing PR state\n")
+            return None
+    else:
+        info = {}
+    if info.get("state") == "OPEN":
+        number = _existing_pr_number(info, draft=draft)
+        if number is not None:
+            sys.stdout.write(f"==> PR #{number} already open — pushed update\n")
         return number
     create = ["gh", "pr", "create", "--fill"]
+    if draft:
+        create.append("--draft")
     if title:
         create += ["--title", title]
     create_rc = _stream(create, cwd=workspace)
@@ -686,10 +735,16 @@ def _open_or_update_pr(workspace: Path, title: str | None) -> int | None:
             f"(gh pr view rc={view.returncode})\n"
         )
         return None
-    return int(json.loads(view.stdout)["number"])
+    number = _pr_number(_pr_info(view.stdout))
+    if number is None:
+        sys.stdout.write("FAIL  ship: created PR returned no valid number\n")
+        return None
+    return number
 
 
-def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+def _gate_and_push(
+    workspace: Path, branch: str, paths: list[str], *, candidate: str | None = None
+) -> bool:
     """Run ship's gate matrix, then push — one heavy-gate lock around both.
 
     One heavy run at a time host-wide: the gates AND the push hold the lock,
@@ -701,13 +756,53 @@ def _gate_and_push(workspace: Path, branch: str, paths: list[str]) -> bool:
     """
     try:
         with host_lock.held(host_lock.HEAVY_GATE, f"ship {branch} ({workspace})"):
-            return _gates_then_push(workspace, branch, paths)
+            return _gates_then_push(workspace, branch, paths, candidate=candidate)
     except host_lock.HostLockTimeoutError as exc:
         sys.stdout.write(f"FAIL  ship: {exc}\n")
         return False
 
 
-def _gates_then_push(workspace: Path, branch: str, paths: list[str]) -> bool:
+def _draft_push_allowed(workspace: Path, branch: str) -> bool:
+    """Refuse publication into a ready or unverified PR before draft-mode push."""
+    listed = _run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            branch,
+            "--state",
+            "open",
+            "--json",
+            "number,state,isDraft",
+        ],
+        timeout=_PROBE_TIMEOUT_S,
+        cwd=workspace,
+    )
+    try:
+        matches = json.loads(listed.stdout) if listed.returncode == 0 else None
+    except json.JSONDecodeError:
+        matches = None
+    if not isinstance(matches, list) or len(matches) > 1:
+        sys.stdout.write(
+            "FAIL  ship: cannot resolve one draft PR before push "
+            f"(gh pr list rc={listed.returncode}); draft push refused\n"
+        )
+        return False
+    if not matches:
+        return True
+    info = matches[0]
+    if not isinstance(info, dict) or info.get("state") != "OPEN":
+        sys.stdout.write(
+            "FAIL  ship: existing PR state unverified; draft push refused\n"
+        )
+        return False
+    return _existing_pr_number(info, draft=True) is not None
+
+
+def _gates_then_push(
+    workspace: Path, branch: str, paths: list[str], *, candidate: str | None = None
+) -> bool:
     """The body :func:`_gate_and_push` runs while holding the heavy-gate lock."""
     # Decided AFTER the (possibly long) lock wait, so it describes the hook
     # state at push time.
@@ -719,6 +814,11 @@ def _gates_then_push(workspace: Path, branch: str, paths: list[str]) -> bool:
         )
     if not run_gates(workspace, gate_matrix(paths, suite_at_push=suite_at_push)):
         return False
+    if candidate is not None and _candidate_head(workspace) != candidate:
+        sys.stdout.write("FAIL  ship: HEAD changed during gates; draft push refused\n")
+        return False
+    if candidate is not None and not _draft_push_allowed(workspace, branch):
+        return False
     push_rc = process_env.run_with_fnox(push_command(workspace, branch), cwd=workspace)
     if push_rc != 0:
         why = f" ({_PUSH_RC_MEANING[push_rc]})" if push_rc in _PUSH_RC_MEANING else ""
@@ -728,8 +828,67 @@ def _gates_then_push(workspace: Path, branch: str, paths: list[str]) -> bool:
     return True
 
 
-def ship_main(workspace: Path, *, title: str | None = None) -> int:
-    """Gates → push → open PR → enable native auto-merge → return.
+def _candidate_head(workspace: Path) -> str | None:
+    """Read a complete candidate OID, failing closed on a failed Git probe."""
+    result = _run(
+        ["git", "-C", str(workspace), "rev-parse", "HEAD"], timeout=_PROBE_TIMEOUT_S
+    )
+    head = result.stdout.strip()
+    if (
+        result.returncode != 0
+        or len(head) != _SHA1_HEX_LENGTH
+        or any(c not in "0123456789abcdef" for c in head)
+    ):
+        sys.stdout.write(
+            f"FAIL  ship: cannot bind candidate HEAD (git rc={result.returncode})\n"
+        )
+        return None
+    return head
+
+
+def _verified_draft(workspace: Path, number: int, head: str) -> bool:
+    """Confirm GitHub returned the open draft at the gated candidate head."""
+    view = _run(
+        ["gh", "pr", "view", str(number), "--json", "number,state,isDraft,headRefOid"],
+        timeout=_PROBE_TIMEOUT_S,
+        cwd=workspace,
+    )
+    info = _pr_info(view.stdout) if view.returncode == 0 else None
+    if (
+        not isinstance(info, dict)
+        or _pr_number(info) != number
+        or info.get("state") != "OPEN"
+        or info.get("isDraft") is not True
+        or info.get("headRefOid") != head
+    ):
+        sys.stdout.write(
+            f"FAIL  ship: PR #{number} is not a verified OPEN draft at gated "
+            f"head {head} (gh pr view rc={view.returncode}); "
+            "readiness was not changed and auto-merge was not enabled\n"
+        )
+        return False
+    return True
+
+
+def _publish_verified_draft(workspace: Path, title: str | None, candidate: str) -> int:
+    """Resolve a gated draft and return before the ordinary auto-merge stage."""
+    if _candidate_head(workspace) != candidate:
+        sys.stdout.write(
+            "FAIL  ship: HEAD changed during push; draft publication refused\n"
+        )
+        return 1
+    number = _open_or_update_pr(workspace, title, draft=True)
+    if number is None or not _verified_draft(workspace, number, candidate):
+        return 1
+    sys.stdout.write(
+        f"\nship: OK — PR #{number} draft at {candidate}, local gates green. "
+        "Auto-merge was not enabled.\n"
+    )
+    return 0
+
+
+def ship_main(workspace: Path, *, title: str | None = None, draft: bool = False) -> int:
+    """Gates → push → open PR → enable native auto-merge or verify draft → return.
 
     Requires committed work on a branch. Commit creation stays with the
     operator/agent (messages need human judgment); ship refuses a dirty tree
@@ -738,6 +897,11 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
     GitHub merges when the required ``ci-gate`` check goes green (no client
     poll, no timeout — a base build can take hours). land is the post-merge
     Mac-validation step. See :func:`enable_auto_merge`.
+
+    ``draft=True`` binds HEAD before gates, verifies the returned OPEN draft
+    at that same head, and returns without waiting for checks or arming merge.
+    Reusing a ready PR as a draft is refused. Ordinary shipping refuses an
+    existing draft until the operator explicitly marks it ready after review.
     """
     preflight = _ship_preflight(workspace)
     if isinstance(preflight, int):
@@ -759,9 +923,13 @@ def ship_main(workspace: Path, *, title: str | None = None) -> int:
             "base-build + smoke gate the PR (watched below). "
             "See verify-before-advancing.md.\n"
         )
-    if not _gate_and_push(workspace, branch, paths):
+    candidate = _candidate_head(workspace) if draft else None
+    if (draft and candidate is None) or not _gate_and_push(
+        workspace, branch, paths, candidate=candidate
+    ):
         return 1
-
+    if candidate is not None:
+        return _publish_verified_draft(workspace, title, candidate)
     number = _open_or_update_pr(workspace, title)
     if number is None:
         return 1
