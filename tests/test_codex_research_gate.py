@@ -14,7 +14,194 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
+
+from dotfiles_setup import codec, sdlc_team
+
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
+
+
+@pytest.mark.parametrize("scope", ["local-only", "strict-five"])
+def test_rendered_sdlc_request_reaches_real_hook_submission_boundary(
+    tmp_path: Path, scope: str
+) -> None:
+    request = codec.decode(
+        json.dumps(
+            {
+                "spec_file": str(tmp_path / "spec.md"),
+                "research_scope": scope,
+                "task": "Investigate the retained Codex research receipt.",
+            }
+        ).encode(),
+        sdlc_team.SdlcTeamRequest,
+    )
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    prompt = sdlc_team.build_prompt(request, tmp_path)
+    started = _invoke(
+        tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": prompt}
+    )
+    stopped = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "RESEARCH INCOMPLETE: retained quota blocker.",
+        },
+    )
+    if scope == "local-only":
+        assert "--strict-five" not in json.dumps(started)
+        assert stopped.get("decision") != "block"
+        assert "incomplete" in str(stopped["systemMessage"]).lower()
+    else:
+        assert "--strict-five" in json.dumps(started)
+        assert stopped["decision"] == "block"
+
+
+def test_caller_local_scope_finishes_on_first_stop_with_retained_incomplete(
+    tmp_path: Path,
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    started = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": (
+                "[research-scope: local-only]\n"
+                "Investigate the saved Codex research receipt locally. "
+                "Do not launch providers."
+            ),
+        },
+    )
+    assert "research-fanout" not in json.dumps(started)
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    manifest = directory / "manifest.json"
+    retained = b'{"strict_five":true,"request_id":"turn-1","sources":[]}'
+    manifest.write_bytes(retained)
+    result = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "RESEARCH INCOMPLETE: Context7 monthly quota.",
+        },
+    )
+    assert result.get("decision") != "block"
+    assert "incomplete" in str(result.get("systemMessage", "")).lower()
+    assert manifest.read_bytes() == retained
+
+
+def test_same_turn_cannot_be_redeclared_local_after_research_submission(
+    tmp_path: Path,
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "Research Codex hooks",
+        },
+    )
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    original = marker.read_bytes()
+    replay = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: local-only]\nResearch Codex hooks",
+        },
+    )
+    assert replay["decision"] == "block"
+    assert marker.read_bytes() == original
+    assert _invoke(tmp_path, {**base, "hook_event_name": "Stop"})["decision"] == "block"
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research Codex hooks",
+        "> [research-scope: local-only]\nResearch Codex hooks",
+        "Quoted directive:\n[research-scope: local-only]\nResearch Codex hooks",
+        "```\n[research-scope: local-only]\n```\nResearch Codex hooks",
+    ],
+)
+def test_ordinary_research_ignores_misplaced_and_stop_declarations(
+    tmp_path: Path,
+    prompt: str,
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": prompt,
+            "research_scope": "local-only",
+        },
+    )
+    assert "--strict-five" in json.dumps(submit)
+    stop = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "research_scope": "local-only",
+            "prompt": "[research-scope: local-only]\nResearch Codex hooks",
+            "last_assistant_message": "[research-scope: local-only]",
+        },
+    )
+    assert stop["decision"] == "block"
+    assert "strict-five research command" in str(stop["reason"])
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "stale-turn",
+        "wrong-session",
+        "changed-digest",
+        "missing-marker",
+        "malformed-marker",
+    ],
+)
+def test_local_scope_requires_retained_matching_submission_evidence(
+    tmp_path: Path,
+    change: str,
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: local-only]\nInvestigate local Codex research",
+        },
+    )
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    data = json.loads(marker.read_text())
+    if change == "missing-marker":
+        marker.unlink()
+    elif change == "malformed-marker":
+        marker.write_text("[]")
+    else:
+        field, value = {
+            "stale-turn": ("turn_id", "turn-previous"),
+            "wrong-session": ("session_id", "session-other"),
+            "changed-digest": ("prompt_sha256", "0" * 64),
+        }[change]
+        data["caller_scope"][field] = value
+        marker.write_text(json.dumps(data))
+    result = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "RESEARCH INCOMPLETE: local scope",
+        },
+    )
+    assert result["decision"] == "block"
 
 
 def _invoke(

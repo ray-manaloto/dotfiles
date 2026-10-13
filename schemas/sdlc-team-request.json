@@ -47,6 +47,13 @@
           "type": "string",
           "default": ""
         },
+        "research_scope": {
+          "enum": [
+            "local-only",
+            "strict-five"
+          ],
+          "default": "strict-five"
+        },
         "prompt_file": {
           "type": "string",
           "default": ""

@@ -24,6 +24,7 @@ derive instead.
 | File | Framework | Purpose |
 |------|-----------|---------|
 | `test_audit.py` | pytest | `dotfiles-setup audit` command output structure and exit codes |
+| `test_research_scope.py` | pytest | Caller scope binding at prompt submission: exact first-line authorization, full-request digest, session/turn identity, and refusal of quoted, misplaced, absent or changed declarations. Integrity checks do not claim protection against same-user hook-state writes; native client qualification is separate. |
 | `test_process_stream.py` | pytest | Live chunk forwarding, bounded child-group cleanup after timeout and SIGTERM, and a leader-exited descendant control |
 | `test_pytest_runner.py` | pytest | Managed runner's real failure/JUnit/report exit code and SIGTERM child-group cleanup with an interruption receipt |
 | `test_bootstrap.py` | pytest | Bootstrap tool availability (`mise`, `chezmoi`, `uv`, `pixi`, python) |

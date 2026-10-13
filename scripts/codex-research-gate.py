@@ -17,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
 strict_five_verdict = import_module(
     "dotfiles_setup.research_fanout"
 ).strict_five_verdict
+research_scope = import_module("dotfiles_setup.research_scope")
 
 _EXPLICIT_RESEARCH = re.compile(
     r"\b(research|look up|investigate|best practices|latest|upstream|"
@@ -62,9 +63,42 @@ def _on_submit(event: dict[str, object], marker: Path) -> dict[str, object]:
     if (
         not isinstance(prompt, str)
         or prompt.lstrip().startswith("<heartbeat>")
-        or not _needs_research(prompt)
         or event.get("subagent") is not None
     ):
+        return {}
+    binding = research_scope.bind_submission(
+        prompt, str(event["session_id"]), str(event["turn_id"])
+    )
+    if marker.exists():
+        recorded = json.loads(marker.read_text(encoding="utf-8"))
+        prior_digest = (
+            recorded.get("caller_scope", {}).get("prompt_sha256")
+            if isinstance(recorded, dict)
+            and isinstance(recorded.get("caller_scope"), dict)
+            else recorded.get("prompt_sha256")
+            if isinstance(recorded, dict)
+            else None
+        )
+        if prior_digest != hashlib.sha256(prompt.encode()).hexdigest():
+            return {
+                "decision": "block",
+                "reason": "Research scope already bound to a different submission.",
+            }
+        return {}
+    if binding is not None:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({"caller_scope": binding}), encoding="utf-8")
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "Caller authorized local-only research scope for this turn. "
+                    "Do not launch providers. Retain existing research evidence "
+                    "and report INCOMPLETE honestly when coverage is incomplete."
+                ),
+            }
+        }
+    if not _needs_research(prompt):
         return {}
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(
@@ -151,6 +185,36 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
     }
 
 
+def _stop_from_submission(
+    event: dict[str, object], marker: Path, manifest: Path
+) -> dict[str, object]:
+    """Use only retained submission authority, never scope from Stop/model text."""
+    if not marker.is_file():
+        return {"decision": "block", "reason": "Research submission marker missing."}
+    recorded = json.loads(marker.read_text(encoding="utf-8"))
+    if not isinstance(recorded, dict):
+        return {"decision": "block", "reason": "Research submission marker malformed."}
+    if "caller_scope" in recorded:
+        if not research_scope.validates_binding(
+            recorded["caller_scope"], str(event["session_id"]), str(event["turn_id"])
+        ):
+            return {
+                "decision": "block",
+                "reason": "Caller research scope binding invalid.",
+            }
+        verdict = strict_five_verdict(manifest, str(event["turn_id"]))
+        if not verdict.passed:
+            return {
+                "systemMessage": (
+                    "Local-only task may complete. Research coverage remains "
+                    f"incomplete: {verdict.reason}. Retain and report INCOMPLETE; "
+                    "caller scope forbids provider execution."
+                )
+            }
+        return {}
+    return _on_stop(event, manifest)
+
+
 def handle(event: dict[str, object], state_root: Path) -> dict[str, object]:
     """Return a Codex hook response without reading transcript_path."""
     paths = _paths(event, state_root)
@@ -159,8 +223,8 @@ def handle(event: dict[str, object], state_root: Path) -> dict[str, object]:
     marker, manifest = paths
     if event.get("hook_event_name") == "UserPromptSubmit":
         return _on_submit(event, marker)
-    if event.get("hook_event_name") == "Stop" and marker.is_file():
-        return _on_stop(event, manifest)
+    if event.get("hook_event_name") == "Stop" and marker.parent.exists():
+        return _stop_from_submission(event, marker, manifest)
     return {}
 
 

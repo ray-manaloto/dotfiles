@@ -20,11 +20,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 from urllib.parse import quote
 
 from dotfiles_setup import codec, lane_result, sdlc_final_report
 from dotfiles_setup.codex_lane_mirror import SOL_MODEL
+from dotfiles_setup.research_scope import LOCAL_ONLY_DIRECTIVE
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -73,6 +74,7 @@ class SdlcTeamRequest(codec.Struct, frozen=True):
     allowlist: tuple[str, ...] = ()
     run_id: str = ""
     task: str = ""
+    research_scope: Literal["strict-five", "local-only"] = "strict-five"
     prompt_file: str = ""
     output_file: str = ""
     log_file: str = ""
@@ -267,7 +269,8 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
         )
     task = request.task.strip() or "Execute the authoritative specification."
     return (
-        f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Spawn ALL FIVE "
+        (f"{LOCAL_ONLY_DIRECTIVE}\n" if request.research_scope == "local-only" else "")
+        + f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Spawn ALL FIVE "
         "specialists directly: sdlc-python-specialist, sdlc-config-specialist, "
         "sdlc-documentation-specialist, sdlc-image-specialist and "
         "sdlc-workflows-specialist. Spawn them in parallel, wait for all, and "
