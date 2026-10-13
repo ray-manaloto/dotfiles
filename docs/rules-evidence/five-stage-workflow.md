@@ -28,13 +28,24 @@ location; it is not a new generated skill loader path.
   universal writer exclusion, shared hk stash state or a replayed race.
 - The public [saved-verifier controls](../../tests/test_verification_admission.py)
   exercise compile-only admission, exact byte binding, single-use START and
-  terminal evidence. Capture/cleanup failure remains incomplete even when the
-  recorded leader exit is zero. Storage failure can prevent publication.
+  terminal evidence. Any observed timeout refuses completion, including a real
+  ready child whose SIGTERM handler exits zero. Capture/cleanup failure also
+  remains incomplete with a known zero exit. Post-claim setup/launch failures
+  retain fixed labels and an unavailable exit when storage permits; absence of a
+  process handle is unknown state. Required-write failure stays nonzero and can
+  prevent publication. None of these observations establishes quiescence.
 - The public [reader controls](../../tests/test_proof_reader.py) check independent
   authority, command/root enumeration, representation and required references.
   ALLOW means those bounded reader checks matched. A fresh observation can match
   an explicitly planned failure; empty reference/issue domains prove only their
   independently declared empty scope. Historical attempts remain historical.
+  Collection identity requires the closed project/tests/direct-module/function
+  hierarchy with canonical indentation, rather than projecting nested basenames.
+  Malformed byte-bound command-plan shapes retain the public ValueError contract.
+- The public [hook controls](../../tests/test_codex_research_gate.py) retain
+  malformed submission evidence with fixed failure classes. Local-only Stop
+  wording describes caller authorization without a new provider run; it does
+  not certify existing research or invent a missing research requirement.
 - The [tracker convention](../issue-tracker.md) distinguishes hosted OPEN blockers
   from prerequisites accepted into the integration tip. Draft publication,
   scoped controls and historical native evidence do not establish final-candidate

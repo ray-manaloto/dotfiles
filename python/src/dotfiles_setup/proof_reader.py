@@ -128,29 +128,56 @@ def _deny(error: ValueError | UnicodeError | KeyError | TypeError) -> ReadResult
 
 
 def _collection_nodes(raw: bytes) -> list[str]:
-    module = None
+    module_depth = 3
+    contexts: list[str] = []
+    project_seen, tests_seen = False, False
     observed: list[str] = []
     for line in raw.decode("utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("<Module "):
-            match = re.fullmatch(r"<Module (test_[A-Za-z0-9_]+\.py)>", stripped)
-            if match is None:
-                _reject("invalid module context")
-            module = "tests/" + match[1]
-        elif stripped.startswith("<Function "):
-            match = re.fullmatch(r"<Function (.+)>", stripped)
-            if module is None or match is None:
-                _reject("function has no valid module context")
-            observed.append(module + "::" + match[1])
-        elif stripped.startswith("<") and not stripped.startswith(
-            ("<Dir ", "<Package ")
+        token = re.fullmatch(r"( *)(?:<(Dir|Package|Module|Function) (.+)>)", line)
+        if token is None:
+            if line.strip().startswith("<"):
+                _reject("invalid or unknown collection token")
+            if line.strip():
+                contexts = []
+            continue
+        indent, family, name = token.groups()
+        contexts = contexts[: len(indent) // 2]
+        if indent == "" and family == "Dir" and not project_seen:
+            contexts = ["project"]
+            project_seen = True
+        elif (
+            indent == "  "
+            and family in {"Dir", "Package"}
+            and name == "tests"
+            and contexts == ["project"]
+            and not tests_seen
         ):
-            _reject("unknown collection family")
+            contexts.append("tests")
+            tests_seen = True
+        elif (
+            indent == "    " and family == "Module" and contexts == ["project", "tests"]
+        ):
+            if re.fullmatch(r"test_[A-Za-z0-9_]+\.py", name) is None:
+                _reject("invalid module context")
+            contexts.append("tests/" + name)
+        elif (
+            indent == "      "
+            and family == "Function"
+            and len(contexts) == module_depth
+        ):
+            observed.append(contexts[-1] + "::" + name)
+        else:
+            _reject("unsupported collection hierarchy")
     return observed
 
 
 def read_collection(raw: bytes, expected: BoundInput) -> ReadResult:
-    """Reconcile actual pytest Module/Function collections with normative nodes."""
+    """Reconcile flat Module/Function nodes under one project/tests hierarchy.
+
+    Canonical two-space nesting preserves identity; deeper containers, classes,
+    path-bearing modules and functions outside their module are unsupported.
+    The bound normative input independently determines membership and counts.
+    """
     try:
         oracle = _authority(expected)
         nodes = _strings(oracle["nodes"])
@@ -340,18 +367,22 @@ def load_command_plan(
     A compiled plan retains its authoritative bytes. ``read_commands`` rechecks
     that binding rather than trusting mutable projections or receipt counts.
     """
-    planned, _ids, roots, _bindings, start, deadline = _command_plan(
-        expected, execution
-    )
-    actor = _object(_authority(expected)["actor"])
-    return CommandPlan(
-        expected,
-        execution,
-        tuple(_command_expectation(row) for row in planned),
-        tuple(_absolute(root) for root in roots),
-        tuple((key, str(value)) for key, value in actor.items()),
-        (start, deadline),
-    )
+    try:
+        planned, _ids, roots, _bindings, start, deadline = _command_plan(
+            expected, execution
+        )
+        actor = _object(_authority(expected)["actor"])
+        return CommandPlan(
+            expected,
+            execution,
+            tuple(_command_expectation(row) for row in planned),
+            tuple(_absolute(root) for root in roots),
+            tuple((key, str(value)) for key, value in actor.items()),
+            (start, deadline),
+        )
+    except (KeyError, TypeError) as error:
+        message = "malformed normative command plan"
+        raise ValueError(message) from error
 
 
 def _plan_input(

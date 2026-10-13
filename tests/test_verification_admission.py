@@ -8,6 +8,7 @@ import os
 import py_compile
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,7 @@ from dotfiles_setup import verification_admission
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from typing import IO
 
 
 def communicate_after_output_is_available(
@@ -150,15 +152,15 @@ def test_timeout_retains_literal_child_exit_and_partial_output(tmp_path: Path) -
     verifier = tmp_path / "verify.py"
     verifier.write_text("import time\nprint('started', flush=True)\ntime.sleep(10)\n")
     record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
-    result = verification_admission.execute(record, timeout_s=0.3)
+    with pytest.raises(verification_admission.AdmissionError, match="incomplete"):
+        verification_admission.execute(record, timeout_s=0.3)
     evidence = json.loads((record.parent / "execution.json").read_bytes())
-    assert result.returncode < 0
-    assert evidence["returncode"] == result.returncode
+    assert evidence["returncode"] < 0
     assert evidence["timed_out"] is True
-    assert result.stdout == b"started\n"
+    assert (record.parent / "stdout.bin").read_bytes() == b"started\n"
 
 
-@pytest.mark.parametrize("exitcode", [0, 7])
+@pytest.mark.parametrize("exitcode", [0, 2, 7])
 def test_public_cli_positive_saved_file_preserves_exit(
     tmp_path: Path, exitcode: int
 ) -> None:
@@ -302,6 +304,7 @@ def test_cleanup_failure_retains_partial_capture_and_unavailable_exit(
         assert evidence["failures"] == [
             {"stage": "cleanup", "type": "os-error"},
             {"stage": "drain", "type": "timeout"},
+            {"stage": "returncode", "type": "unavailable"},
         ]
         assert (record.parent / "stdout.bin").read_bytes() == b"started\n"
         assert (record.parent / "stderr.bin").read_bytes() == b""
@@ -450,3 +453,161 @@ def test_cleanup_refusal_does_not_mislabel_a_completed_capture(
     assert evidence["capture_complete"] is True
     assert evidence["failures"] == [{"stage": "cleanup", "type": "os-error"}]
     assert (record.parent / "stdout.bin").read_bytes() == b"complete capture\n"
+
+
+@pytest.mark.parametrize("timed_out", [True, False])
+def test_timeout_refuses_even_when_ready_child_handles_term_with_zero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, timed_out: bool
+) -> None:
+    verifier = tmp_path / "verify.py"
+    verifier.write_text(
+        "import signal, sys, time\n"
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\n"
+        "print('handler ready', flush=True)\n"
+        + ("time.sleep(10)\n" if timed_out else "")
+    )
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    processes: list[subprocess.Popen[bytes]] = []
+
+    class ReadyCommunicate(subprocess.Popen[bytes]):
+        def communicate(
+            self, *_args: object, timeout: float | None = None, **_kwargs: object
+        ) -> tuple[bytes, bytes]:
+            if not processes:
+                processes.append(self)
+                communicate = super().communicate
+                return communicate_after_output_is_available(
+                    lambda: communicate(timeout=0.1)
+                )
+            return super().communicate(timeout=timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", ReadyCommunicate)
+    try:
+        if timed_out:
+            with pytest.raises(
+                verification_admission.AdmissionError, match="incomplete"
+            ):
+                verification_admission.execute(record)
+        else:
+            assert verification_admission.execute(record).returncode == 0
+        evidence = json.loads((record.parent / "execution.json").read_bytes())
+        assert evidence["returncode"] == 0
+        assert evidence["timed_out"] is timed_out
+        assert (record.parent / "stdout.bin").read_bytes() == b"handler ready\n"
+        assert evidence.get("failures", []) == []
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=3)
+
+
+@pytest.mark.parametrize("stage", ["launch", "pycache-setup"])
+def test_post_claim_setup_failure_retains_unknown_terminal_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    stage: str,
+) -> None:
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("print('must not execute')\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    original = record.read_bytes()
+
+    def unavailable(*_args: object, **_kwargs: object) -> None:
+        message = "SYNTHETIC_PRIVATE_SETUP_MESSAGE"
+        raise OSError(message)
+
+    if stage == "launch":
+        monkeypatch.setattr(subprocess, "Popen", unavailable)
+    else:
+        monkeypatch.setattr(tempfile, "mkdtemp", unavailable)
+    assert verification_admission.main(["execute", "--start", str(record)]) == 2
+    diagnostic = capsys.readouterr().err
+    assert "SYNTHETIC_PRIVATE_SETUP_MESSAGE" not in diagnostic
+    assert "admission refused" not in diagnostic
+    evidence = json.loads((record.parent / "execution.json").read_bytes())
+    assert evidence["returncode"] is None
+    assert evidence["process_handle_available"] is False
+    assert evidence["capture_complete"] is False
+    assert evidence["timed_out"] is False
+    assert evidence["failures"] == [
+        {"stage": stage, "type": "os-error"},
+        {"stage": "returncode", "type": "unavailable"},
+    ]
+    assert (record.parent / "stdout.bin").read_bytes() == b""
+    assert (record.parent / "stderr.bin").read_bytes() == b""
+    assert record.read_bytes() == original
+    with pytest.raises(verification_admission.AdmissionError, match="used"):
+        verification_admission.execute(record)
+
+
+@pytest.mark.parametrize("name", ["stdout.bin", "stderr.bin", "execution.json"])
+def test_required_terminal_write_failure_returns_fixed_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    name: str,
+) -> None:
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("print('available capture')\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    real_open = Path.open
+
+    def refuse_write(
+        path: Path,
+        mode: str = "r",
+        *,
+        buffering: int = -1,
+        encoding: str | None = None,
+        errors: str | None = None,
+    ) -> IO[bytes] | IO[str]:
+        if path == record.parent / name and "x" in mode:
+            message = "SYNTHETIC_PRIVATE_WRITE_MESSAGE"
+            raise PermissionError(message)
+        return real_open(
+            path, mode, buffering=buffering, encoding=encoding, errors=errors
+        )
+
+    monkeypatch.setattr(Path, "open", refuse_write)
+    assert verification_admission.main(["execute", "--start", str(record)]) == 2
+    diagnostic = capsys.readouterr().err
+    assert "SYNTHETIC_PRIVATE_WRITE_MESSAGE" not in diagnostic
+    assert "admission refused" not in diagnostic
+    if name == "execution.json":
+        assert "execution-write/os-error" in diagnostic
+        assert not (record.parent / name).exists()
+        assert (record.parent / "stdout.bin").read_bytes() == b"available capture\n"
+    else:
+        evidence = json.loads((record.parent / "execution.json").read_bytes())
+        assert evidence["returncode"] == 0
+        assert evidence["capture_complete"] is False
+        assert evidence["failures"] == [{"stage": name + "-write", "type": "os-error"}]
+
+
+def test_pycache_cleanup_failure_keeps_successful_child_observations(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = tmp_path / "verify.py"
+    verifier.write_text("print('available capture')\n")
+    record = verification_admission.start(verifier, attempt_dir=tmp_path / "attempt")
+    real_cleanup = tempfile.TemporaryDirectory.cleanup
+
+    def unavailable(cache: tempfile.TemporaryDirectory[str]) -> None:
+        real_cleanup(cache)
+        message = "SYNTHETIC_PRIVATE_CLEANUP_MESSAGE"
+        raise OSError(message)
+
+    monkeypatch.setattr(tempfile.TemporaryDirectory, "cleanup", unavailable)
+    assert verification_admission.main(["execute", "--start", str(record)]) == 2
+    evidence = json.loads((record.parent / "execution.json").read_bytes())
+    assert evidence["returncode"] == 0
+    assert evidence["capture_complete"] is True
+    assert evidence["failures"] == [{"stage": "pycache-cleanup", "type": "os-error"}]
+    assert (record.parent / "stdout.bin").read_bytes() == b"available capture\n"
+    assert (
+        "SYNTHETIC_PRIVATE_CLEANUP_MESSAGE"
+        not in json.dumps(evidence) + capsys.readouterr().err
+    )

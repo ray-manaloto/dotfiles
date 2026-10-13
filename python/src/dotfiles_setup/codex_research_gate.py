@@ -51,6 +51,29 @@ def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | No
     return root / "required.json", root / "manifest.json"
 
 
+def _repeat_submission(marker: Path, prompt: str) -> dict[str, object]:
+    recorded = _read_submission(marker)
+    if isinstance(recorded, str):
+        return {"decision": "block", "reason": recorded}
+    caller_scope = recorded.get("caller_scope")
+    prior_digest = (
+        caller_scope.get("prompt_sha256")
+        if isinstance(caller_scope, dict)
+        else recorded.get("prompt_sha256")
+    )
+    if (
+        not isinstance(prior_digest, str)
+        or re.fullmatch(r"[a-f0-9]{64}", prior_digest) is None
+    ):
+        return {"decision": "block", "reason": "Research submission digest invalid."}
+    if prior_digest != hashlib.sha256(prompt.encode()).hexdigest():
+        return {
+            "decision": "block",
+            "reason": "Research scope already bound to a different submission.",
+        }
+    return {}
+
+
 def _on_submit(
     event: dict[str, object], marker: Path, repo_root: Path
 ) -> dict[str, object]:
@@ -65,21 +88,7 @@ def _on_submit(
         prompt, str(event["session_id"]), str(event["turn_id"])
     )
     if marker.exists():
-        recorded = json.loads(marker.read_text(encoding="utf-8"))
-        prior_digest = (
-            recorded.get("caller_scope", {}).get("prompt_sha256")
-            if isinstance(recorded, dict)
-            and isinstance(recorded.get("caller_scope"), dict)
-            else recorded.get("prompt_sha256")
-            if isinstance(recorded, dict)
-            else None
-        )
-        if prior_digest != hashlib.sha256(prompt.encode()).hexdigest():
-            return {
-                "decision": "block",
-                "reason": "Research scope already bound to a different submission.",
-            }
-        return {}
+        return _repeat_submission(marker, prompt)
     if binding is not None:
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps({"caller_scope": binding}), encoding="utf-8")
@@ -223,9 +232,10 @@ def _stop_from_submission(
         if not verdict.passed:
             return {
                 "systemMessage": (
-                    "Local-only task may complete. Research coverage remains "
-                    f"incomplete: {verdict.reason}. Retain and report INCOMPLETE; "
-                    "caller scope forbids provider execution."
+                    "Caller authorized local work without a new provider run. "
+                    "This does not certify existing research. Retain any existing "
+                    "INCOMPLETE status. Provider calls remain outside that "
+                    "authorization."
                 )
             }
         return {}

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,209 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 import pytest
 from dotfiles_setup import environment_admission
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("env 2>/dev/null", True),
+        ("printenv 2>/dev/null", True),
+        ("env -0 12>>/dev/null", True),
+        ("printenv -0 2>&1", True),
+        ("env</dev/null", True),
+        ("printenv</dev/null", True),
+        ("env -u SYNTHETIC 0</dev/null", True),
+        ("printenv -0 </dev/null", True),
+        ("env /bin/true 2>/dev/null", False),
+        ("printenv SYNTHETIC 2>/dev/null", False),
+        ("printenv 2 >/dev/null", False),
+        ("env 2 >/dev/null", False),
+        ("python -c 'import os; print(os.environ if 1 < 2 else {})'", True),
+        ("python -c 'print(1 < 2)'", False),
+        ("node -e 'console.log(1 < 2)'", False),
+        ("env -u SYNTHETIC python -c 'print(1 > 0)' 2>/dev/null", False),
+    ],
+)
+def test_redirect_syntax_preserves_command_argument_roles(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("python script.py -c 'print(os.environ)'", False),
+        ("python -m module -c 'print(os.environ)'", False),
+        ("python - -c 'print(os.environ)'", False),
+        ("python -- -c 'print(os.environ)'", False),
+        ("node script.js -e 'console.log(process.env)'", False),
+        ("node - -p process.env", False),
+        ("node -- -p process.env", False),
+        ("python -W -c script.py 'print(os.environ)'", False),
+        ("python -X -c script.py 'print(os.environ)'", False),
+        ("python --check-hash-based-pycs -c script.py 'print(os.environ)'", False),
+        ("node -r -p script.js process.env", False),
+        ("node --require=-p script.js process.env", False),
+        ("node -r=synthetic -p process.env", True),
+        ("node --require synthetic -e 'console.log(process.env)'", True),
+        ("node --trace-warnings -e 'console.log(process.env)'", True),
+        ("node --trace-warnings -e 'console.log(1)'", False),
+        ("python -B -Wignore -Xdev -c 'print(os.environ)' --help", True),
+        (
+            "python -I -W ignore -X dev --check-hash-based-pycs always -c 'print(1)'",
+            False,
+        ),
+        ("python -c 'print(1)' -c 'print(os.environ)'", False),
+        ("node -e 'console.log(1)' -e 'console.log(process.env)'", False),
+        ("node -e 'console.log(process.env)' --help", True),
+        ("python script.py --unknown -c 'print(os.environ)'", False),
+        ("node script.js --unknown -p process.env", False),
+        ("python -c 'print(1)' --unknown", False),
+        ("node -p '1' --unknown", False),
+        ("python -c", False),
+        ("python -W", False),
+        ("node -p", False),
+        ("node --require", False),
+    ],
+)
+def test_interpreter_arguments_are_selected_only_in_option_position(
+    command: str, *, denied: bool
+) -> None:
+    assert (environment_admission.decide(command) is not None) is denied
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        "-b",
+        "-bb",
+        "-B",
+        "-d",
+        "-E",
+        "-i",
+        "-I",
+        "-O",
+        "-OO",
+        "-P",
+        "-q",
+        "-s",
+        "-S",
+        "-u",
+        "-v",
+        "-vv",
+        "-x",
+    ],
+)
+def test_supported_python_option_preserves_inline_program_inspection(
+    option: str,
+) -> None:
+    assert environment_admission.decide(f"python {option} -c 'print(os.environ)'")
+    assert environment_admission.decide(f"python {option} -c 'print(1)'") is None
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        "python -h",
+        "python -?",
+        "python --help",
+        "python --help-env",
+        "python --help-xoptions",
+        "python --help-all",
+        "python -V",
+        "python -VV",
+        "python --version",
+        "node -h",
+        "node --help",
+        "node -v",
+        "node --version",
+    ],
+)
+def test_genuine_interpreter_help_does_not_select_later_code(invocation: str) -> None:
+    assert (
+        environment_admission.decide(
+            f"{invocation} -c 'print(os.environ)' -p process.env"
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "python --unknown -c 'print(1)'",
+        "python -BO -c 'print(1)'",
+        "node --unknown -p 1",
+        "node -vp 1",
+        "env -u SYNTHETIC python --unknown -c 'print(1)'",
+        "sh -c 'node --unknown -p 1'",
+        'echo "$(node --unknown -p 1)"',
+    ],
+)
+def test_unsupported_interpreter_option_has_fixed_inspectability_reason(
+    command: str,
+) -> None:
+    assert environment_admission.decide(command) == (
+        "Cannot inspect unsupported interpreter option syntax."
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "denied"),
+    [
+        ('console.log("Do not console.log(process.env)")', False),
+        ('console.log("Do not stdout.write(JSON.stringify(process.env))")', False),
+        (
+            'console.log("Do not console.log(process.env)");console.log(process.env)',
+            True,
+        ),
+        ("console.log(process.env)", True),
+        ('console.log("1 <<EOF console.log(process.env)")', False),
+        ('console.log("console.log(process.env) /")', True),
+        ('console.log("console.log(process.env) `")', True),
+        ('console.log("console.log(process.env)");\nconsole.log(1)', True),
+        ('console.log("console.log(process.env)', True),
+    ],
+)
+def test_node_balanced_prose_is_masked_only_in_the_supported_subset(
+    code: str, *, denied: bool
+) -> None:
+    assert (
+        environment_admission.decide("node -e " + shlex.quote(code)) is not None
+    ) is denied
+
+
+@pytest.mark.parametrize(
+    ("command", "denied"),
+    [
+        ("en\\\nv", True),
+        ("print\\\nenv -0", True),
+        ('"en\\\nv"', True),
+        ('"en' + "\\" * 2 + '\nv"', False),
+        ('"en' + "\\" * 3 + '\nv"', False),
+        ("env -u SYNTHETIC \\\n/bin/true", False),
+        ("print\\\nenv SYNTHETIC >/dev/null", False),
+        ("echo 'en\\\nv'", False),
+        ("'en\\\nv'", False),
+        ('python -c "import os; print(\\\nos.environ)"', True),
+        ('python -c "print(\\\n1)"', False),
+        ('echo "$(en\\\nv)"', True),
+        ("cat <<'EOF'\nen\\\nv\nEOF\nprintenv", True),
+        ("cat <<'EOF'\nen\\\nv\nEOF", False),
+        ("# excluded mixed syntax\nen\\\nv", False),
+        ("en\\\r\nv", False),
+    ],
+)
+def test_ordinary_continuations_share_the_analysis_copy_without_changing_data(
+    command: str, *, denied: bool
+) -> None:
+    payload: dict[str, object] = {
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+    }
+    assert (environment_admission.decide_payload(payload) is not None) is denied
+    assert payload["tool_input"] == {"command": command}
 
 
 @pytest.mark.parametrize(

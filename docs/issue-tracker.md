@@ -53,7 +53,7 @@ Any skill step that reaches for it will be blocked — and a deny cancels the wh
 
 | Instead of | Use |
 |---|---|
-| `gh pr create` | **`mise run ship`** — runs the path-aware gate matrix *before* the PR opens, then watches checks to bucket-verified green |
+| `gh pr create` | **`mise run ship`** — runs the path-aware gate matrix, pushes, opens/updates the PR, arms native auto-merge and returns; explicit `--draft` verifies the gated draft and returns without arming merge |
 | `gh pr merge` | **`mise run land -- <PR#>`** |
 
 `implement-spec`'s first-merge draft requirement uses the canonical gated draft
@@ -69,7 +69,7 @@ See `.claude/rules/mise-tasks-only.md`.
 
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Save exact
   multi-line text to a file and use `--body-file`.
-- **Read an issue**: `gh issue view <number> --comments`.
+- **Read an issue**: `gh issue view <number> --json number,title,body,state,labels,comments`.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with `--label` / `--state` filters.
 - **Comment**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
@@ -90,7 +90,7 @@ Create a GitHub issue.
 
 ## When a skill says "fetch the relevant ticket"
 
-Run `gh issue view <number> --comments`.
+Run `gh issue view <number> --json number,title,body,state,labels,comments`.
 
 ## Wayfinding operations
 

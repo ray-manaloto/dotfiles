@@ -21,6 +21,109 @@ from dotfiles_setup import codec, sdlc_team
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
 
 
+@pytest.mark.parametrize(
+    ("raw", "reason"),
+    [
+        (b"{", "Research submission marker malformed."),
+        (b"[]", "Research submission marker malformed."),
+        (b"\xff", "Research submission marker malformed."),
+        (b"{}", "Research submission digest invalid."),
+        (b'{"prompt_sha256":null}', "Research submission digest invalid."),
+        (
+            b'{"prompt_sha256":"SYNTHETIC_BAD_DIGEST"}',
+            "Research submission digest invalid.",
+        ),
+        (b'{"caller_scope":{}}', "Research submission digest invalid."),
+        (None, "Research submission marker unreadable."),
+    ],
+)
+def test_repeated_submit_reports_retained_evidence_failure_without_rewriting(
+    tmp_path: Path,
+    raw: bytes | None,
+    reason: str,
+) -> None:
+    event: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Research Codex hooks",
+    }
+    _invoke(tmp_path, event)
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    if raw is None:
+        marker.unlink()
+        marker.mkdir()
+    else:
+        marker.write_bytes(raw)
+    assert _invoke(tmp_path, event) == {"decision": "block", "reason": reason}
+    if raw is None:
+        assert marker.is_dir()
+    else:
+        assert marker.read_bytes() == raw
+
+
+@pytest.mark.parametrize("local", [False, True])
+def test_valid_repeated_submit_distinguishes_same_and_different_prompts(
+    tmp_path: Path,
+    *,
+    local: bool,
+) -> None:
+    prompt = (
+        "[research-scope: local-only]\n" if local else ""
+    ) + "Research Codex hooks"
+    event: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": prompt,
+    }
+    _invoke(tmp_path, event)
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    original = marker.read_bytes()
+    assert _invoke(tmp_path, event) == {}
+    assert _invoke(tmp_path, {**event, "prompt": prompt + " again"}) == {
+        "decision": "block",
+        "reason": "Research scope already bound to a different submission.",
+    }
+    assert marker.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "manifest_raw", [None, b'{"SYNTHETIC_PRIVATE_REASON":"unfinished"}']
+)
+@pytest.mark.parametrize(
+    "message", ["Local edit completed.", "RESEARCH INCOMPLETE: prior coverage."]
+)
+def test_local_stop_states_authorization_without_inventing_research_requirement(
+    tmp_path: Path,
+    manifest_raw: bytes | None,
+    message: str,
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: local-only]\nUpdate a local document.",
+        },
+    )
+    manifest = tmp_path / ".codex/research-coverage/session-1/turn-1/manifest.json"
+    if manifest_raw is not None:
+        manifest.write_bytes(manifest_raw)
+    assert _invoke(
+        tmp_path, {**base, "hook_event_name": "Stop", "last_assistant_message": message}
+    ) == {
+        "systemMessage": (
+            "Caller authorized local work without a new provider run. "
+            "This does not certify existing research. Retain any existing "
+            "INCOMPLETE status. Provider calls remain outside that authorization."
+        )
+    }
+    if manifest_raw is not None:
+        assert manifest.read_bytes() == manifest_raw
+
+
 @pytest.mark.parametrize("scope", ["local-only", "strict-five"])
 def test_rendered_sdlc_request_reaches_real_hook_submission_boundary(
     tmp_path: Path, scope: str

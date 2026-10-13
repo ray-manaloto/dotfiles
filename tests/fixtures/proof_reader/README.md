@@ -6,6 +6,11 @@ pytest temporary directory before each independently bound plan is created.
 
 - `collection-oracle.json` is an independent normative node/family manifest.
 - `collection.txt` is the separate native Module/Function-shaped observation.
+  Its closed shape is one project Dir, one tests Dir/Package, direct Module
+  children and their direct Functions, indented by two spaces per level. The
+  unchanged Unicode parametrized positive and independent flat oracle are paired
+  with synthetic nested, orphaned and malformed hierarchy controls. Deeper
+  containers, classes and absolute/path-bearing modules are unsupported.
 - `coverage-recipe.json` is a normative recipe with 37 root labels, based on the
   five CLI, thirty public and two failed-registry root roles in the retained
   caller's source. Its synthetic command recipe expands to 305 commands. The

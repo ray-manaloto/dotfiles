@@ -77,17 +77,11 @@ def _close_captures(process: subprocess.Popen[bytes]) -> list[dict[str, str]]:
     return failures
 
 
-def _run_admitted(
-    command: list[str],
-    record: Path,
-    raw: bytes,
+def _capture_admitted(
+    process: subprocess.Popen[bytes],
     timeout_s: float,
     terminate: Callable[[subprocess.Popen[bytes]], None],
-) -> subprocess.CompletedProcess[bytes]:
-    """Retain terminal observations without Popen's unbounded context exit."""
-    process = subprocess.Popen(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
-    )
+) -> tuple[bytes, bytes, bool, bool, list[dict[str, str]]]:
     stdout, stderr = b"", b""
     timed_out = False
     capture_complete = True
@@ -116,29 +110,101 @@ def _run_admitted(
             failures.append({"stage": drain_error.stage, "type": drain_error.kind})
             stdout = drain_error.stdout if drain_error.stdout is not None else stdout
             stderr = drain_error.stderr if drain_error.stderr is not None else stderr
-    failures.extend(_close_captures(process))
-    if process.returncode is None and not failures:
+    return stdout, stderr, timed_out, capture_complete, failures
+
+
+def _write_new(path: Path, payload: bytes) -> None:
+    with path.open("xb") as output:
+        output.write(payload)
+
+
+def _run_admitted(
+    verifier: Path,
+    record: Path,
+    raw: bytes,
+    timeout_s: float,
+    terminate: Callable[[subprocess.Popen[bytes]], None],
+) -> subprocess.CompletedProcess[bytes]:
+    """Publish post-claim observations without inferring launch or cleanup success."""
+    process = None
+    cache = None
+    command: list[str] = []
+    stdout, stderr = b"", b""
+    timed_out, capture_complete = False, False
+    failures: list[dict[str, str]] = []
+    try:
+        cache = _observed_call(
+            "pycache-setup",
+            lambda: tempfile.TemporaryDirectory(prefix="verifier-pycache-"),
+        )
+        command = [
+            sys.executable,
+            "-B",
+            "-X",
+            f"pycache_prefix={cache.name}",
+            str(verifier),
+        ]
+        process = _observed_call(
+            "launch",
+            lambda: subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,
+            ),
+        )
+        stdout, stderr, timed_out, capture_complete, failures = _capture_admitted(
+            process, timeout_s, terminate
+        )
+    except _ExecutionError as error:
+        failures.append({"stage": error.stage, "type": error.kind})
+    if process is not None:
+        failures.extend(_close_captures(process))
+    if cache is not None:
+        try:
+            _observed_call("pycache-cleanup", cache.cleanup)
+        except _ExecutionError as error:
+            failures.append({"stage": error.stage, "type": error.kind})
+    returncode = process.returncode if process is not None else None
+    if returncode is None:
         failures.append({"stage": "returncode", "type": "unavailable"})
     for name, payload in (("stdout.bin", stdout), ("stderr.bin", stderr)):
-        with (record.parent / name).open("xb") as output:
-            output.write(payload)
+        try:
+            _observed_call(
+                name + "-write",
+                lambda name=name, payload=payload: _write_new(
+                    record.parent / name, payload
+                ),
+            )
+        except _ExecutionError as error:
+            capture_complete = False
+            failures.append({"stage": error.stage, "type": error.kind})
     evidence: dict[str, object] = {
         "command": command,
-        "returncode": process.returncode,
+        "returncode": returncode,
         "timed_out": timed_out,
         "start_sha256": hashlib.sha256(raw).hexdigest(),
     }
-    if failures:
-        evidence.update(capture_complete=capture_complete, failures=failures)
-    with (record.parent / "execution.json").open("x", encoding="utf-8") as output:
-        output.write(json.dumps(evidence, indent=2) + "\n")
-    if failures or process.returncode is None:
+    if failures or timed_out:
+        evidence.update(
+            capture_complete=capture_complete,
+            failures=failures,
+            process_handle_available=process is not None,
+        )
+    _observed_call(
+        "execution-write",
+        lambda: _write_new(
+            record.parent / "execution.json",
+            (json.dumps(evidence, indent=2) + "\n").encode(),
+        ),
+    )
+    if timed_out or failures or returncode is None:
         msg = (
             "saved verifier execution incomplete; "
             "see fixed failure labels in execution.json"
         )
         raise AdmissionError(msg)
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
 
 def _saved_file(path: Path) -> tuple[Path, bytes]:
@@ -221,11 +287,9 @@ def execute(
         raise AdmissionError(msg) from error
     # A fresh cache prefix prevents timestamp-valid historical helper bytecode
     # from substituting for the bound source. -B prevents any new bytecode writes.
-    with tempfile.TemporaryDirectory(prefix="verifier-pycache-") as cache:
-        command = [sys.executable, "-B", "-X", f"pycache_prefix={cache}", str(verifier)]
-        return _run_admitted(
-            command, record, raw, timeout_s, process_stream.terminate_group
-        )
+    return _run_admitted(
+        verifier, record, raw, timeout_s, process_stream.terminate_group
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -261,6 +325,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result.returncode if result.returncode >= 0 else 128 - result.returncode
             )
     except (AdmissionError, OSError, ValueError, KeyError, TypeError) as error:
-        sys.stderr.write(f"verifier admission refused: {error}\n")
+        sys.stderr.write(f"verifier operation refused: {error}\n")
         return 2
     return 0

@@ -1006,16 +1006,45 @@ def rules() -> tuple[Rule, ...]:
     return _RULES
 
 
+def _join_continuations(match: re.Match[str]) -> str:
+    span = match.group(0)
+    if span == "\\\n":
+        return ""
+    if span.startswith('"'):
+        return re.sub(
+            r"\\.",
+            lambda escaped: "" if escaped.group(0) == "\\\n" else escaped.group(0),
+            span,
+            flags=re.DOTALL,
+        )
+    return span
+
+
+def normalize_shell_continuations(command: str) -> str:
+    """Join ordinary escaped LF pairs in a private command-analysis copy.
+
+    Single-quoted data and paired escapes remain literal. Heredocs, hashes,
+    backticks and dollar substitutions retain the old analysis unchanged;
+    consumers may separately analyze an extracted simple substitution body.
+    This neither converts CRLF nor interprets general shell syntax.
+    """
+    if any(marker in command for marker in ("<<", "#", "`", "$(")):
+        return command
+    return _QUOTED_SPAN.sub(_join_continuations, command)
+
+
 def command_views(command: str) -> tuple[str, str]:
     """Quotation-aware command views for admission policies sharing this guard.
 
     The first retains argument content with inert separators and redirect
-    punctuation masked. The second masks quoted data completely. Neither
-    interprets dynamic shell programs. The rule table retains its own view.
+    punctuation masked. The second masks quoted data completely. Both mask
+    every heredoc body, including interpreter input and substitutions inside
+    those bodies. Neither interprets dynamic shell programs or normalizes
+    continuations. The rule table retains its own view.
     """
     target = _QUOTED_SPAN.sub(
         lambda match: (
-            match.group(0).replace(">", _FILLER)
+            match.group(0).replace(">", _FILLER).replace("<", _FILLER)
             if match.group(0).startswith(("'", '"'))
             else match.group(0)
         ),
@@ -1028,8 +1057,9 @@ def literal_command_substitutions(command: str) -> tuple[str, ...]:
     """Simple executable substitutions outside single-quoted data.
 
     This shares the existing quotation/heredoc mask and deliberately does not
-    parse nested shell expansions or arbitrary interpreter programs. Masks find
-    executable spans; returned text comes from the original literal source.
+    parse nested shell expansions or arbitrary interpreter programs. Every
+    heredoc body is masked, including executable substitutions within it.
+    Masks find executable spans; returned text comes from the input source.
     """
     target = _QUOTED_SPAN.sub(
         lambda match: (

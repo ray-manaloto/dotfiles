@@ -28,13 +28,48 @@ SPLIT_REASON = (
     "balanced quotes and ASCII space/tab separators."
 )
 OPTION_REASON = "Cannot inspect unsupported env option syntax."
+INTERPRETER_OPTION_REASON = "Cannot inspect unsupported interpreter option syntax."
+_PYTHON_FLAGS = frozenset(
+    {
+        "-b",
+        "-bb",
+        "-B",
+        "-d",
+        "-E",
+        "-i",
+        "-I",
+        "-O",
+        "-OO",
+        "-P",
+        "-q",
+        "-s",
+        "-S",
+        "-u",
+        "-v",
+        "-vv",
+        "-x",
+    }
+)
+_PYTHON_HELP = frozenset(
+    {
+        "-h",
+        "-?",
+        "--help",
+        "--help-env",
+        "--help-xoptions",
+        "--help-all",
+        "-V",
+        "-VV",
+        "--version",
+    }
+)
 
 _HEAD = re.compile(
     r"(?:^|[;&|\n]\s*)\s*"
     r"(?:(?:command|builtin|exec|nohup|time)\s+|\w+=\S+\s+)*"
     r"(?P<command>['\"]?(?:[^\s;&|]*/)?"
     r"(?:env|printenv|set|export|declare|typeset|bash|sh|zsh|dash|"
-    r"python[\d.]*|node|cat))['\"]?(?=$|[\s;&|>])"
+    r"python[\d.]*|node|cat))['\"]?(?=$|[\s;&|<>])"
 )
 _NODE_STDOUT = re.compile(
     r"(?:console\.(?:log|dir)|(?:process\.)?stdout\.write)\s*\("
@@ -179,38 +214,80 @@ def _node_print_collection(code: str) -> bool:
     )
 
 
-def _node_broad(args: list[str]) -> bool:
-    for index, option in enumerate(args):
-        if option in {"--help", "--version"}:
-            return False
-        flag, separator, attached = option.partition("=")
-        if flag not in {"-e", "--eval", "-p", "--print"}:
+def _node_stdout(code: str) -> bool:
+    target = code
+    if not any(char in code for char in "\\`/") and code.splitlines() == [code]:
+        try:
+            shlex.split(code, posix=True, comments=False)
+        except ValueError:
+            pass
+        else:
+            target = hook_guard.command_views(code)[1]
+    return _NODE_STDOUT.search(target) is not None
+
+
+def _node_reason(args: list[str]) -> str | None:
+    while args:
+        option, *remaining = args
+        if option in {
+            "--",
+            "-",
+            "-h",
+            "--help",
+            "-v",
+            "--version",
+        } or not option.startswith("-"):
+            return None
+        if option == "--trace-warnings":
+            args = remaining
             continue
+        flag, separator, attached = option.partition("=")
+        if flag not in {"-e", "--eval", "-p", "--print", "-r", "--require"}:
+            return INTERPRETER_OPTION_REASON
         if separator:
             code = attached
-        elif index + 1 < len(args):
-            code = args[index + 1]
+        elif remaining:
+            code, *remaining = remaining
         else:
+            return None
+        if flag in {"-r", "--require"}:
+            args = remaining
             continue
-        if _NODE_STDOUT.search(code) or (
+        broad = _node_stdout(code) or (
             flag in {"-p", "--print"} and _node_print_collection(code)
-        ):
-            return True
-    return False
+        )
+        return DENY_REASON if broad else None
+    return None
 
 
-def _interpreter_broad(name: str, args: list[str]) -> bool:
-    if re.fullmatch(r"python[\d.]*", name) and "-c" in args:
-        index = args.index("-c") + 1
-        if index < len(args) and not any(
-            arg in {"--help", "--version"} for arg in args[: index - 1]
+def _python_reason(args: list[str]) -> str | None:
+    while args:
+        option, *remaining = args
+        if (
+            option in {"--", "-", "-m"}
+            or option in _PYTHON_HELP
+            or not option.startswith("-")
         ):
-            return _python_stdout(args[index])
+            return None
+        if option == "-c":
+            return DENY_REASON if remaining and _python_stdout(remaining[0]) else None
+        if option in {"-W", "-X", "--check-hash-based-pycs"}:
+            args = remaining[1:]
+        elif option in _PYTHON_FLAGS or option.startswith(("-W", "-X")):
+            args = remaining
+        else:
+            return INTERPRETER_OPTION_REASON
+    return None
+
+
+def _interpreter_reason(name: str, args: list[str]) -> str | None:
+    if re.fullmatch(r"python[\d.]*", name):
+        return _python_reason(args)
     if name == "node":
-        return _node_broad(args)
-    if name == "cat":
-        return any(_PROC_ENVIRON.fullmatch(arg) for arg in args)
-    return False
+        return _node_reason(args)
+    if name == "cat" and any(_PROC_ENVIRON.fullmatch(arg) for arg in args):
+        return DENY_REASON
+    return None
 
 
 def _reason(argv: list[str]) -> str | None:
@@ -232,18 +309,21 @@ def _reason(argv: list[str]) -> str | None:
     elif name in {"export", "declare", "typeset"}:
         broad = all(re.fullmatch(r"-[px]+", arg) for arg in args)
     else:
-        broad = _interpreter_broad(name, args)
+        return _interpreter_reason(name, args)
     return DENY_REASON if broad else None
 
 
 def decide(command: str) -> str | None:
     """Return a value-free denial reason for a literal broad environment dump."""
+    command = hook_guard.normalize_shell_continuations(command)
     for body in hook_guard.literal_command_substitutions(command):
         if reason := decide(body):
             return reason
     target, _ = hook_guard.command_views(command)
     for match in _HEAD.finditer(target):
-        end = re.search(r"[;&|\n>]", target[match.start("command") :])
+        end = re.search(
+            r"[;&|\n]|(?<!\S)\d*[<>]|[<>]", target[match.start("command") :]
+        )
         stop = match.start("command") + end.start() if end else len(command)
         try:
             argv = shlex.split(command[match.start("command") : stop], comments=True)

@@ -18,6 +18,76 @@ from dotfiles_setup import codec, proof_reader
 FIXTURES = Path(__file__).parent / "fixtures/proof_reader"
 
 
+@pytest.mark.parametrize(
+    "collection",
+    [
+        (
+            "<Dir example>\n  <Dir tests>\n    <Dir nested>\n"
+            "      <Module test_example.py>\n        <Function test_literal[café]>\n"
+            "        <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Package nested>\n"
+            "      <Module test_example.py>\n        <Function test_literal[café]>\n"
+            "        <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir other>\n    <Module test_example.py>\n"
+            "      <Function test_literal[café]>\n      <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "  <Function test_literal[café]>\n  <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "      <Function test_literal[café]>\n<Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "      <Function test_literal[café]>\n===== end =====\n"
+            "      <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "      <Function test_literal[café]>\n    <Dir outside>\n"
+            "      <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module nested/test_example.py>\n"
+            "      <Function test_literal[café]>\n      <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "      <Function test_literal[café]> junk\n      <Function test_other>\n"
+        ),
+        (
+            "<Dir example>\n  <Dir tests>\n    <Module test_example.py>\n"
+            "      <Class TestOther>\n      <Function test_literal[café]>\n"
+            "      <Function test_other>\n"
+        ),
+        (
+            "    <Module test_example.py>\n      <Function test_literal[café]>\n"
+            "      <Function test_other>\n"
+        ),
+    ],
+)
+def test_collection_hierarchy_cannot_acquire_a_flat_modules_identity(
+    collection: str,
+) -> None:
+    authority = FIXTURES / "collection-oracle.json"
+    expected = proof_reader.bind_input(
+        authority, hashlib.sha256(authority.read_bytes()).hexdigest(), role="normative"
+    )
+    assert proof_reader.read_collection(collection.encode(), expected).status == "DENY"
+    assert (
+        proof_reader.read_collection(
+            (FIXTURES / "collection.txt").read_bytes(), expected
+        ).status
+        == "ALLOW"
+    )
+
+
 def test_collection_accepts_native_module_function_shape() -> None:
     """An authoritative node manifest independently admits native collections."""
     authority = FIXTURES / "collection-oracle.json"
@@ -29,6 +99,29 @@ def test_collection_accepts_native_module_function_shape() -> None:
     )
     assert result.status == "ALLOW"
     assert result.count == 2
+
+
+@pytest.mark.parametrize(
+    ("container", "status"),
+    [
+        ("  <Package tests>", "ALLOW"),
+        ("  <Package other>", "DENY"),
+        (" <Dir tests>", "DENY"),
+        ("\t<Dir tests>", "DENY"),
+    ],
+)
+def test_collection_tests_container_requires_its_canonical_scope(
+    container: str,
+    status: str,
+) -> None:
+    authority = FIXTURES / "collection-oracle.json"
+    expected = proof_reader.bind_input(
+        authority, hashlib.sha256(authority.read_bytes()).hexdigest(), role="normative"
+    )
+    raw = (FIXTURES / "collection.txt").read_bytes()
+    observed = raw.replace(b"  <Dir tests>", container.encode())
+    assert observed != raw
+    assert proof_reader.read_collection(observed, expected).status == status
 
 
 def test_global_groups_preserve_complete_objects(tmp_path: Path) -> None:
@@ -181,7 +274,6 @@ def test_cache_rebuild_and_reuse_have_distinct_contracts(tmp_path: Path) -> None
         "cache": {"sources": {"root": source}},
     }
     baseline = bound(tmp_path, "cache-before.json", baseline_value, role="baseline")
-    rebuilt = copy.deepcopy(baseline_value)
     replacement = copy.deepcopy(source)
     replacement["pointer_sha256"] = "new"
     rebuilt = {"counts": {"attempted": 1}, "cache": {"sources": {"root": replacement}}}
@@ -537,6 +629,30 @@ def test_caller_can_compile_a_typed_independent_command_plan(tmp_path: Path) -> 
     assert plan.commands[0].argv == ("git", "-C", str(tmp_path / "fixture"), "init")
     assert dict(plan.actor)["agent_id"] == "worker-1"
     assert proof_reader.read_commands([path], plan, execution="fresh").status == "ALLOW"
+
+
+@pytest.mark.parametrize("shape", [{}, {"commands": [{}]}, {"commands": None}, []])
+def test_malformed_bound_command_plan_keeps_public_value_error_contract(
+    tmp_path: Path,
+    shape: object,
+) -> None:
+    path = tmp_path / "malformed-plan.json"
+    raw = codec.encode(shape)
+    path.write_bytes(raw)
+    expected = proof_reader.bind_input(
+        path, hashlib.sha256(raw).hexdigest(), role="normative"
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"malformed normative command plan|expected a list|Expected `object`",
+    ):
+        proof_reader.load_command_plan(expected, execution="fresh")
+    authority, receipt = command_packet(tmp_path)
+    compiled = proof_reader.load_command_plan(authority, execution="fresh")
+    assert (
+        proof_reader.read_commands([receipt], compiled, execution="fresh").status
+        == "ALLOW"
+    )
 
 
 @pytest.mark.parametrize("kind", ["text", "output_text"])
