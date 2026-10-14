@@ -1081,7 +1081,7 @@ url = "https://github.com/tursodatabase/libsql/releases/download/libsql-server-v
 url_api = "https://api.github.com/repos/tursodatabase/libsql/releases/assets/229138342"
 
 [[tools."npm:@google/gemini-cli"]]
-version = "0.63.0"
+version = "0.64.0"
 backend = "npm:@google/gemini-cli"
 specifiers = ["latest"]
 
