@@ -616,7 +616,7 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
     context = specific["additionalContext"]
     assert isinstance(context, str)
     assert len(context) <= 1000
-    assert f"mise -C ~/{root.relative_to(tmp_path)} run research-fanout" in context
+    assert f"mise -C ~/{root.relative_to(tmp_path)} run research-gate" in context
     assert "PROVISIONAL" in context
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
     assert json.loads(marker.read_text())["policy"] == "strict-five-v2"
@@ -2200,7 +2200,7 @@ def test_failed_stop_repeats_the_exact_submit_recovery_command(
     context = str(output["additionalContext"])
     commands = [part for part in context.split("`")[1::2] if "--strict-five" in part]
     assert len(commands) == 1
-    assert "--profile codex_research" in commands[0]
+    assert "run research-gate --" in commands[0]
     assert "--request-id turn-1" in commands[0]
     assert stopped["decision"] == "block"
     assert commands[0] in str(stopped["reason"])

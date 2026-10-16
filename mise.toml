@@ -929,6 +929,11 @@ description = "Fetch raw research evidence concurrently from configured sources"
 # Thin caller; python/src/dotfiles_setup/research_fanout.py.
 run = 'uv run --project python python -m dotfiles_setup.research_fanout'
 
+[tasks.research-gate]
+description = "Run research with the pinned noninteractive fnox research profile"
+# Thin caller; python/src/dotfiles_setup/research_gate_runner.py.
+run = 'uv run --project python python -m dotfiles_setup.research_gate_runner'
+
 [tasks.research-saved-search]
 description = "Record, rerun and report freshness of saved GitHub searches"
 # Thin caller; python/src/dotfiles_setup/saved_searches.py (#1502).

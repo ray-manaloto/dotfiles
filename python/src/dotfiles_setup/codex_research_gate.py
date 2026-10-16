@@ -73,9 +73,7 @@ def _research_command(event: dict[str, object], repo_root: Path) -> str:
         f"~/.codex/research-coverage/{event['session_id']}/{event['turn_id']}"
     )
     return (
-        "fnox --config ~/.config/fnox/config.toml --profile codex_research "
-        "--no-defaults --no-daemon --non-interactive "
-        f"exec -- mise -C {_display(repo_root)} run research-fanout -- QUERY "
+        f"mise -C {_display(repo_root)} run research-gate -- QUERY "
         "--repo OWNER/REPO --strict-five "
         f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
         f"--out {relative_out}"

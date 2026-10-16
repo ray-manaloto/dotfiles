@@ -24,7 +24,11 @@ Serper or SerpApi; then its failed row passes **provisional**. So the receipt
 passes provisional even with every metered provider skipped; report it as
 provisional, not complete.
 
-Run `fnox --config ~/.config/fnox/config.toml --profile codex_research --no-defaults --no-daemon --non-interactive exec -- mise -C <dotfiles-checkout> run research-fanout -- QUERY --repo OWNER/REPO --strict-five --request-id TURN_ID --last30days-plan PLAN.json --out OUT_DIR`.
+Run `mise -C <dotfiles-checkout> run research-gate -- QUERY --repo OWNER/REPO --strict-five --request-id TURN_ID --last30days-plan PLAN.json --out OUT_DIR`.
+The wrapper pins native `fnox --config ~/.config/fnox/config.toml --profile
+codex_research --no-defaults --no-daemon --non-interactive exec --` before
+`research-fanout`, propagates `FNOX_PROFILE=codex_research`, and suppresses
+child diagnostics so credential-provider output cannot escape.
 The native `fnox exec` process receives the Exa, Firecrawl, Serper
 (`SERPER_API_KEY`) and SerpApi (`SERP_API_KEY`) keys from that profile.
 Fnox resolves its Doppler token internally with `env = false`.
