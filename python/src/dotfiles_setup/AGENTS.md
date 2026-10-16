@@ -18,9 +18,11 @@ transport envelope (HTTP status, rc, redacted body) or an error-class envelope
 text. `strict_five_verdict` re-derives every code from that evidence, so a
 relabelled or bare row blocks. Firecrawl search is substituted through
 Serper/SerpApi and the mirror probe's scrape through webclaw. GitHub issues,
-discussions and releases and Last30Days carry strict evidence and are never
-skipped, so the receipt passes **provisional** even with every metered
-provider skipped. Report that; never present it as complete.
+discussions and releases carry strict evidence and are never skipped.
+Last30Days needs strict evidence too, unless firecrawl-search succeeded via
+Serper or SerpApi; then its failed row passes **provisional**. So the receipt
+passes provisional even with every metered provider skipped; report it as
+provisional, not complete.
 
 Run `fnox --config ~/.config/fnox/config.toml --profile codex_research --no-defaults --no-daemon --non-interactive exec -- mise -C <dotfiles-checkout> run research-fanout -- QUERY --repo OWNER/REPO --strict-five --request-id TURN_ID --last30days-plan PLAN.json --out OUT_DIR`.
 The native `fnox exec` process receives the Exa, Firecrawl, Serper
@@ -41,21 +43,26 @@ provisional source and `via <route>` for each substituted source, and say
 answer is null. It allows an already continued Stop (`stop_hook_active`),
 including a provisional pass after an earlier INCOMPLETE block; that accepted
 limitation can leave a provisional answer unnamed.
-Codex hook scope (opt-in): only a caller's exact first line
-`[research-scope: research]` (a CRLF ending is accepted) binds a turn as
-research, and only a valid record of that binding can block Stop. Quoted,
-indented, fenced or later-line directives bind nothing; a mistyped first-line
-directive gets a non-blocking notice naming the accepted forms. Research verbs
-without it add a short hint that names the directive and never a provider
-command. `implementation`, `text-edit` and `local-only` write no hook state.
-A legacy, non-research or malformed record passes Stop; a turn directory
-without a valid record passes with a notice that enforcement did not apply.
-SDLC dispatches start with `[research-scope: implementation]` unless the
-request sets `research_scope` to `research` (or `local-only`). Subagent turns
-(`agent_id`, `agent_type`) never block. Last30Days may be missing when
-firecrawl-search succeeded via Serper or SerpApi; the pass is PROVISIONAL.
-Two live hooks run this code: `~/.codex/config.toml` runs the source observer
-from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and
-`~/.codex/hooks.json` runs `scripts/codex-research-gate.py` from the installed
-clone `~/.codex/tools/dotfiles-research-gate`. Changes take effect only after
-the coordinator updates both (O1 gate pull).
+Codex hook scope: an exact caller first line `[research-scope: <scope>]`
+(CRLF accepted) decides. `research` binds the turn; `implementation`,
+`text-edit` and `local-only` write no hook state and are the opt-out. Without a
+directive, `research_scope.intent` binds a plain request in the caller's own
+prose: an imperative at a clause start (research X, search the web or GitHub,
+find or check the latest X, look up X online, compare A and B, what is the
+current version of X, what's new in X), never a mention, a repository object
+(path, identifier, this repo, test, commit) or text in fences, inline code,
+quotes, blockquotes, JSON, `title:`-style data lines, logs or after a bare
+`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:` or `---` line. Its record
+carries `"binding": "intent"`, and its context and Stop block name the opt-out.
+A mistyped first-line directive gets a notice naming the accepted forms and
+binds nothing; other research words get a hint that names the directive
+instead of a provider command. Only a valid research record blocks Stop; a legacy, non-research or
+malformed record passes, with a notice when broken. SDLC dispatches start with
+`[research-scope: implementation]` unless `research_scope` is `research` (or
+`local-only`). Subagent turns (`agent_id`, `agent_type`) and heartbeats never
+bind.
+After D246 activation removes the `~/.codex/hooks.json` research entries, one
+registration runs this code: `~/.codex/config.toml` runs the source observer
+from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and the
+installed clone `~/.codex/tools/dotfiles-research-gate` serves SessionStart
+only. Changes take effect when the coordinator moves the stable checkout.

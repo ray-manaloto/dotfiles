@@ -80,13 +80,17 @@ def _research_context(event: dict[str, object], repo_root: Path) -> str:
     )
 
 
-def _write_record(marker: Path, event: dict[str, object], prompt: str) -> None:
+def _write_record(
+    marker: Path, event: dict[str, object], prompt: str, *, by_intent: bool
+) -> None:
     marker.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "turn_id": event["turn_id"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "scope": "research",
         "policy": _POLICY,
+        # cg36b: no `binding` field means a directive record.
+        **({"binding": "intent"} if by_intent else {}),
     }
     marker.write_text(json.dumps(record), encoding="utf-8")
 
@@ -106,6 +110,15 @@ _ADVISORY = (
     "research evidence by putting `[research-scope: research]` as line 1. "
     "Do not run paid or metered research providers unless the request asks "
     "for research."
+)
+# cg36b (D246 item 3): a plain research request binds without a directive.
+_OPT_OUT = (
+    " Not a research request? Resubmit with `[research-scope: implementation]` "
+    "as line 1."
+)
+_INTENT = (
+    "Research enforced: the request reads as research, so this turn is "
+    "research-enforced." + _OPT_OUT + " "
 )
 _LOCAL_ONLY = (
     "Caller authorized local-only research scope for this turn. Do not launch "
@@ -150,11 +163,17 @@ def _retained(
 
 
 def _bind_research(
-    event: dict[str, object], marker: Path, prompt: str, repo_root: Path
+    event: dict[str, object],
+    marker: Path,
+    prompt: str,
+    repo_root: Path,
+    *,
+    by_intent: bool = False,
 ) -> dict[str, object]:
-    result = _context(_research_context(event, repo_root))
+    lead = _INTENT if by_intent else ""
+    result = _context(lead + _research_context(event, repo_root))
     try:
-        _write_record(marker, event, prompt)
+        _write_record(marker, event, prompt, by_intent=by_intent)
     except OSError as exc:
         # D236 fail-open: state that cannot be written never blocks the turn.
         result["systemMessage"] = (
@@ -180,10 +199,18 @@ def _on_submit(
         return retained
     if scope == "research":
         return _bind_research(event, marker, prompt, repo_root)
+    if (
+        scope is None
+        and not research_scope.near_miss(prompt)
+        and research_scope.intent(prompt)
+    ):
+        return _bind_research(event, marker, prompt, repo_root, by_intent=True)
     return _unbound(prompt, scope)
 
 
-def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
+def _on_stop(
+    event: dict[str, object], manifest: Path, opt_out: str = ""
+) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
         if not verdict.provisional_entries:
@@ -211,7 +238,7 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
             "decision": "block",
             "reason": "Research receipt PROVISIONAL "
             "(skipped or substituted provider). Name PROVISIONAL and each of "
-            f"these in the answer: {listed}.",
+            f"these in the answer: {listed}.{opt_out}",
         }
     reason = verdict.reason
     message = event.get("last_assistant_message")
@@ -229,6 +256,7 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
             "If a provider cannot run, start the final answer with "
             "`RESEARCH INCOMPLETE:` "
             "and report its exact blocker; do not claim the research is complete."
+            + opt_out
         ),
     }
 
@@ -269,6 +297,7 @@ def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | No
         scope != "research"
         or recorded.get("turn_id") != turn_id
         or recorded.get("policy") != _POLICY
+        or recorded.get("binding") not in (None, "intent")
         or not isinstance(digest, str)
         or _DIGEST.fullmatch(digest) is None
     ):
@@ -282,7 +311,8 @@ def _on_bound_stop(
     """Block only a turn whose retained record is a valid research binding."""
     record = _research_record(marker, str(event["turn_id"]))
     if isinstance(record, dict):
-        return _on_stop(event, manifest)
+        by_intent = record.get("binding") == "intent"
+        return _on_stop(event, manifest, _OPT_OUT if by_intent else "")
     if record is None:
         return {}
     return {"systemMessage": f"{_NOTICE}research submission record {record}."}
