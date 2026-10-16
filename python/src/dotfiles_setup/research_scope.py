@@ -132,11 +132,8 @@ _ADVERBS = _vocab(
     "sometimes"
 )
 # A lowercase `-s` word then one of these reads as a verb: `Research writes the`.
-_DETERMINERS = _vocab("the a an this that these those our your its their my it them")
-# `Research: done` and other status values are never a request.
-_STATUS = _vocab(
-    "done n/a none todo tbd pending complete completed skipped true false yes no ok -"
-)
+# `that` and `those` are left out: `Research tools that generate SBOMs`.
+_DETERMINERS = _vocab("the a an this these our your its their my it them")
 # The one closed list left: this repository's own research-* components. No
 # grammar tells `research gate tests fail` from `research uv releases`.
 _COMPONENTS = _vocab(
@@ -266,14 +263,15 @@ def _do_research(v: list[str]) -> bool:
 def _research(v: list[str], raws: list[str]) -> bool:
     """`research X`, never a heading, a status, a subject or a named component."""
     if not v[2]:
-        return False  # `Research done.`, `Research notes`, a `research:` key
+        return False  # `Research done.`, `Research: N/A`, a `research:` key
+    if raws[0].endswith(":"):  # `Research: X` reads X as free text
+        return not (raws[1].endswith(",") or v[1] in _COMPONENTS)
     at = 2 if v[1] in _ADVERBS else 1  # `Research also uses ...`
     verb, after = v[at], v[at + 1]
     return not (
         raws[1].endswith(",")  # `Research done, now fix it.`
         or verb in _AUX
         or verb in _SUBJECT_VERBS
-        or v[1] in _STATUS
         or (
             raws[at][:1].islower()
             and verb.endswith("s")
@@ -340,14 +338,13 @@ def _feed(body: str, pending: list[str]) -> bool:
         end = raw.rstrip(_EDGE)[-1:]
         if not end or end not in _ENDS:
             continue
-        if end == ":" and pending == ["Research:"]:
-            pending[0] = "Research"  # `Research: X` reads as `Research X`
-            continue
+        key = _norm(raw)
+        if end == ":" and pending == [raw] and raw[:1] == "R" and key == "research":
+            continue  # `Research:` or `RESEARCH:` labels the rest of the clause
         if _request(pending):
             return True
         first, label = pending[0], _norm(pending[0])
         pending.clear()
-        key = _norm(raw)
         if end == ":" and (
             key in _KEYS
             or label in _LABELS

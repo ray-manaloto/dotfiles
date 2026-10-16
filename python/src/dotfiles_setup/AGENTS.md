@@ -70,8 +70,10 @@ paths such as `docs/agents` (read as `owner/repo`); `research` as a subject
 with an unlisted verb (`Research costs too much`, `Research calls Exa`); and a
 local noun after `research`, `do research` or a subordinate lead (`If needed,
 research the error message.`). Known misses fail open: `find out`, `survey`,
-`gather`, `dig into`, `what are people saying`, and chatty lead-ins such as
-`Hey, quick question -`.
+`gather`, `dig into`, `what are people saying`, `find documentation`,
+benchmarks or blog posts, `is there a newer release`, `what does X's changelog
+say`, `tell me the latest X`, `check the web`, a lowercase `research:` label
+(read as a YAML key) and chatty lead-ins such as `Hey, quick question -`.
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
 instead of a provider command. Only a valid research record blocks Stop; a

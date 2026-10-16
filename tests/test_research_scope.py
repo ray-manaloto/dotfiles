@@ -806,7 +806,6 @@ def test_round_five_requests_still_bind(prompt: str) -> None:
         "Research: done.",
         "Research: N/A",
         "Research: TBD",
-        "Research: pending review",
         "Research: skipped, no network.",
         "Research: see findings.md.",
         "Research: yes",
@@ -838,4 +837,40 @@ def test_a_research_status_or_key_is_not_a_request(prompt: str) -> None:
 )
 def test_search_the_web_needs_a_search_continuation(prompt: str) -> None:
     """Round 5 item 3: `search the web <noun>` names a local thing."""
+    assert research_scope.intent(prompt) is False
+
+
+# --- cg36b round 6 (cold r4 P3-1, P3-5) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research tools that generate SBOMs.",
+        "Research libraries that support TOML 1.1.",
+        "Research alternatives that replace pyenv.",
+        "Research: does uv support PEP 751 yet?",
+        "Research: what is the newest mise release?",
+        "Research: is Bun stable enough for CLI tools?",
+        "RESEARCH: latest uv releases and their breaking changes.",
+        "Research: pending upstream fixes in the uv resolver.",
+    ],
+)
+def test_round_six_requests_bind(prompt: str) -> None:
+    """`that` starts a relative clause; `Research: X` reads X as free text."""
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research uses that cache.",
+        "Research: done",
+        "Research: true",
+        "RESEARCH: done.",
+        "research: the latest uv release notes",
+    ],
+)
+def test_round_six_statuses_and_keys_stay_unbound(prompt: str) -> None:
+    """A status as the whole remainder, a listed verb, a lowercase key."""
     assert research_scope.intent(prompt) is False
