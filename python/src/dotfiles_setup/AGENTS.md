@@ -74,6 +74,9 @@ research the error message.`). Known misses fail open: `find out`, `survey`,
 benchmarks or blog posts, `is there a newer release`, `what does X's changelog
 say`, `tell me the latest X`, `check the web`, a lowercase `research:` label
 (read as a YAML key) and chatty lead-ins such as `Hey, quick question -`.
+A `Research:` label whose first word is a status (`not`, `no`, `none`, `n/a`,
+`done`, `skipped`, `tbd`, `already` and the like) or a `#N` ticket binds
+nothing; `Research: pending review` still binds.
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
 instead of a provider command. Only a valid research record blocks Stop; a

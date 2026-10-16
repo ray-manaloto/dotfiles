@@ -134,6 +134,13 @@ _ADVERBS = _vocab(
 # A lowercase `-s` word then one of these reads as a verb: `Research writes the`.
 # `that` and `those` are left out: `Research tools that generate SBOMs`.
 _DETERMINERS = _vocab("the a an this these our your its their my it them")
+# A `Research:` label whose first word is one of these is a status, not a
+# request: `Research: not needed`, `Research: N/A`. `pending` is not on it.
+# A leading `#N` ticket (`Research: #12 covers it.`) is a status too.
+_LABEL_STATUS = _vocab(
+    "not no none n/a na done skipped complete completed tbd todo already "
+    "unnecessary finished"
+)
 # The one closed list left: this repository's own research-* components. No
 # grammar tells `research gate tests fail` from `research uv releases`.
 _COMPONENTS = _vocab(
@@ -265,7 +272,12 @@ def _research(v: list[str], raws: list[str]) -> bool:
     if not v[2]:
         return False  # `Research done.`, `Research: N/A`, a `research:` key
     if raws[0].endswith(":"):  # `Research: X` reads X as free text
-        return not (raws[1].endswith(",") or v[1] in _COMPONENTS)
+        return not (
+            raws[1].endswith(",")
+            or v[1] in _COMPONENTS
+            or v[1] in _LABEL_STATUS  # `Research: not needed.`
+            or (v[1][:1] == "#" and _TICKET.fullmatch(v[1]) is not None)
+        )
     at = 2 if v[1] in _ADVERBS else 1  # `Research also uses ...`
     verb, after = v[at], v[at + 1]
     return not (

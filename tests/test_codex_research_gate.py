@@ -2167,3 +2167,21 @@ def test_an_intent_bound_repeat_names_the_directive_that_lifts_it(
     reason = str(refused["reason"])
     assert reason.startswith("Research scope already bound to a different submission.")
     assert "`[research-scope: implementation]` as line 1" in reason
+
+
+# --- cg36b round 7 (cold r5 P2-1) -------------------------------------------
+
+
+def test_a_research_not_needed_note_never_blocks_stop(tmp_path: Path) -> None:
+    """End to end: a note that research is not needed binds nothing."""
+    prompt = "Research: not needed for this change.\nFix the off-by-one in the parser."
+    submit: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": prompt,
+    }
+    submitted = _invoke(tmp_path, submit)
+    assert "This turn is research-enforced" not in json.dumps(submitted)
+    assert not (tmp_path / _COVERAGE / "required.json").exists()
+    assert _stop_once(tmp_path) == {}

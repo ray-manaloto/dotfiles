@@ -874,3 +874,41 @@ def test_round_six_requests_bind(prompt: str) -> None:
 def test_round_six_statuses_and_keys_stay_unbound(prompt: str) -> None:
     """A status as the whole remainder, a listed verb, a lowercase key."""
     assert research_scope.intent(prompt) is False
+
+
+# --- cg36b round 7 (cold r5 P2-1) -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research: not needed for this change.",
+        "Research: none needed.",
+        "Research: done in the previous turn.",
+        "Research: N/A for this PR.",
+        "Research: skipped because the API is internal.",
+        "Research: TBD by the lead.",
+        "Status update. Research: done earlier. Fix the lint now.",
+        "Research: already covered in #12.",
+        "Research: #12 covers it.",
+    ],
+)
+def test_a_research_label_with_a_negative_status_is_not_a_request(
+    prompt: str,
+) -> None:
+    """Round 7: `Research: not needed ...` says research is not wanted."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research: pending review",
+        "Research: does uv support PEP 751 yet?",
+        "RESEARCH: vector databases for embeddings",
+        "Research: PEP-751 support in uv",
+    ],
+)
+def test_a_research_label_outside_the_status_set_still_binds(prompt: str) -> None:
+    """`pending` is the boundary: it is not in the status set."""
+    assert research_scope.intent(prompt) is True
