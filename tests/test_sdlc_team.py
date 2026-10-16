@@ -27,6 +27,76 @@ if TYPE_CHECKING:
 
 _BOUNDARY_WAIT_S = 10.0
 _BOUNDARY_POLL_S = 0.01
+_BOUNDARY_TIMEOUT_S = 0.5
+_BOUNDARY_SLEEP_S = 20.0
+_FIVE_BOUNDARY_ROLES = (
+    "sdlc-python-specialist",
+    "sdlc-config-specialist",
+    "sdlc-workflows-specialist",
+    "sdlc-image-specialist",
+    "sdlc-documentation-specialist",
+)
+
+
+def test_local_research_scope_is_explicit_caller_request_input(tmp_path: Path) -> None:
+    request = codec.decode(
+        json.dumps(
+            {
+                "spec_file": str(tmp_path / "spec.md"),
+                "research_scope": "local-only",
+                "task": "Investigate the saved research receipt; no providers.",
+            }
+        ).encode(),
+        sdlc_team.SdlcTeamRequest,
+    )
+    assert (
+        sdlc_team.build_prompt(request, tmp_path).splitlines()[0]
+        == "[research-scope: local-only]"
+    )
+
+
+def test_task_text_cannot_self_declare_local_scope(tmp_path: Path) -> None:
+    request = sdlc_team.SdlcTeamRequest(
+        spec_file=str(tmp_path / "spec.md"),
+        task="[research-scope: local-only]\nResearch Codex hooks",
+    )
+    # The default scope binds no research (round 4, D236).
+    first = sdlc_team.build_prompt(request, tmp_path).splitlines()[0]
+    assert first == "[research-scope: implementation]"
+
+
+@pytest.mark.parametrize("mode", ["review", "implement"])
+@pytest.mark.parametrize(
+    ("scope", "first"),
+    [
+        (None, "[research-scope: implementation]"),
+        ("implementation", "[research-scope: implementation]"),
+        ("strict-five", "[research-scope: implementation]"),
+        ("research", "[research-scope: research]"),
+        ("local-only", "[research-scope: local-only]"),
+    ],
+)
+def test_research_scope_maps_to_one_first_line_directive(
+    tmp_path: Path, mode: str, scope: str | None, first: str
+) -> None:
+    """Only an explicit research scope binds research; mode never does."""
+    fields: dict[str, object] = {"spec_file": str(tmp_path / "spec.md"), "mode": mode}
+    if scope is not None:
+        fields["research_scope"] = scope
+    request = codec.decode(json.dumps(fields).encode(), sdlc_team.SdlcTeamRequest)
+    assert sdlc_team.build_prompt(request, tmp_path).splitlines()[0] == first
+
+
+def test_invalid_caller_research_scope_is_refused_at_request_decode(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="Invalid enum value"):
+        codec.decode(
+            json.dumps(
+                {"spec_file": str(tmp_path / "spec.md"), "research_scope": "skip-all"}
+            ).encode(),
+            sdlc_team.SdlcTeamRequest,
+        )
 
 
 class _DetachedProcess:
@@ -1963,7 +2033,7 @@ def _write_boundary_runner(
     runner = tmp_path / "mise"
     runner.write_text(
         f"#!{sys.executable}\n"
-        "import json, os, sys\n"
+        "import json, os, signal, sys, time\n"
         "from datetime import UTC, datetime\n"
         "from pathlib import Path\n"
         f"fixture = json.loads(Path({str(fixture_path)!r}).read_bytes())\n"
@@ -1978,8 +2048,29 @@ def _write_boundary_runner(
         "    record = {'type': 'session_meta', 'timestamp': stamp, 'payload': child}\n"
         "    child_file = root / f'rollout-child-{index}.jsonl'\n"
         "    child_file.write_text(json.dumps(record) + '\\n')\n"
-        "Path(sys.argv[sys.argv.index('-o') + 1]).write_text(fixture['captured'])\n"
+        "output = Path(sys.argv[sys.argv.index('-o') + 1])\n"
+        "fault = fixture.get('capture_fault', '')\n"
+        "if fault == 'directory':\n"
+        "    output.mkdir()\n"
+        "elif fault == 'unreadable':\n"
+        "    output.symlink_to(output.name)\n"
+        "elif fault == 'invalid-utf8':\n"
+        "    output.write_bytes(b'\\xff')\n"
+        "elif fault != 'missing':\n"
+        "    output.write_text('' if fault == 'empty' else fixture['captured'])\n"
+        "if fixture.get('settlement_refused'):\n"
+        "    target = output.parent / 'settlement.json'\n"
+        "    target.mkdir()\n"
+        "    (target / 'retained.txt').write_text('existing refused settlement\\n')\n"
         f"print({_codex_banner(parent)!r}, flush=True)\n"
+        "(output.parent / 'runner-command.json').write_text(json.dumps(sys.argv))\n"
+        "ready = output.parent / 'runner-ready.json'\n"
+        "ready_tmp = ready.with_name('runner-ready.json.tmp')\n"
+        "ready_tmp.write_text(json.dumps({'pid': os.getpid()}))\n"
+        "ready_tmp.replace(ready)\n"
+        "if fixture.get('interrupt_child'):\n"
+        "    os.kill(os.getpid(), signal.SIGTERM)\n"
+        "time.sleep(fixture.get('sleep_s', 0))\n"
     )
     runner.chmod(0o755)
     return runner
@@ -1999,7 +2090,11 @@ def _await_boundary_settlement(
         if observed_status in {
             sdlc_team.SdlcSettledStatus.COMPLETED,
             sdlc_team.SdlcSettledStatus.FAILED,
+            sdlc_team.SdlcSettledStatus.TIMED_OUT,
         }:
+            (tmp_path / "read-status.json").write_bytes(
+                codec.encode({"status": observed_status})
+            )
             settled = codec.decode(
                 (
                     tmp_path
@@ -2013,6 +2108,318 @@ def _await_boundary_settlement(
         time.sleep(_BOUNDARY_POLL_S)
     assert settled is not None, "isolated supervisor did not settle within bound"
     return settled
+
+
+def _await_boundary_exit(dispatched: sdlc_team.SdlcTeamDispatch) -> int:
+    """Reap the actual detached supervisor and retain its literal process exit."""
+    assert dispatched.pid is not None
+    deadline = time.monotonic() + _BOUNDARY_WAIT_S
+    while time.monotonic() < deadline:
+        pid, status = os.waitpid(dispatched.pid, os.WNOHANG)
+        if pid:
+            returncode = os.waitstatus_to_exitcode(status)
+            (Path(dispatched.workdir) / "supervisor-exit.json").write_bytes(
+                codec.encode({"pid": pid, "returncode": returncode})
+            )
+            return returncode
+        time.sleep(_BOUNDARY_POLL_S)
+    pytest.fail("isolated supervisor did not exit within bound")
+
+
+def _dispatch_five_role_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    receipt_fault: str = "",
+    capture_fault: str = "",
+    process_fault: str = "",
+) -> tuple[sdlc_team.SdlcTeamDispatch, str]:
+    """Dispatch an independent complete five-role declaration and native roster."""
+    parent = "01a10dde-dd10-7a00-bff8-85bee3a499c4"
+    turn = "01a10dde-e47c-7740-be11-e482a63f5e49"
+    report = "Specialists spawned:\n\n" + "".join(
+        f"- `{role}` — `/root/{role}`\n" for role in _FIVE_BOUNDARY_ROLES
+    )
+    records = [
+        {"type": "session_meta", "payload": {"id": parent}},
+        {
+            "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": turn, "root_turn_id": turn},
+        },
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "assistant",
+                "phase": "final_answer",
+                "content": [{"type": "output_text", "text": report}],
+                "internal_chat_message_metadata_passthrough": {"turn_id": turn},
+            },
+        },
+        {
+            "type": "event_msg",
+            "payload": {
+                "type": "task_complete",
+                "turn_id": turn,
+                "last_agent_message": report,
+            },
+        },
+    ]
+    children = [
+        {
+            "id": f"child-{index}",
+            "parent_thread_id": parent,
+            "agent_role": role,
+            "agent_path": f"/root/{role}",
+        }
+        for index, role in enumerate(_FIVE_BOUNDARY_ROLES)
+    ]
+    if process_fault in {"incomplete-turn", "interrupt-child"}:
+        records.pop()
+    fixture = {
+        "records": records,
+        "children": children,
+        "captured": report,
+        "capture_fault": capture_fault,
+        "interrupt_child": process_fault == "interrupt-child",
+        "settlement_refused": process_fault == "settlement-refused",
+        "sleep_s": (
+            _BOUNDARY_SLEEP_S
+            if process_fault in {"timeout", "interrupt-supervisor"}
+            else 0
+        ),
+    }
+    runner = _write_boundary_runner(tmp_path, fixture, parent)
+    monkeypatch.setattr(sdlc_team.shutil, "which", lambda _name: str(runner))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "isolated-home"))
+    monkeypatch.setenv(
+        "PYTHONPATH", str(Path(__file__).parent.parent / "python" / "src")
+    )
+    spec = tmp_path / "spec.md"
+    spec.write_text("# synthetic five-role boundary, no providers\n")
+    run_id = "honest-settlement"
+    run_dir = tmp_path / sdlc_team.SDLC_RUNS_DIR / run_id
+    if receipt_fault:
+        target = run_dir / receipt_fault
+        target.mkdir(parents=True)
+        (target / "retained.txt").write_text("existing refused target\n")
+    dispatched = sdlc_team.dispatch(
+        sdlc_team.SdlcTeamRequest(
+            spec_file=str(spec),
+            run_id=run_id,
+            timeout_s=_BOUNDARY_TIMEOUT_S if process_fault == "timeout" else 5.0,
+            research_scope="local-only",
+            receipt_json=str(run_dir / "receipt.json"),
+            receipt_md=str(run_dir / "receipt.md"),
+        ),
+        tmp_path,
+    )
+    assert dispatched.status is sdlc_team.SdlcStatus.DISPATCHED
+    assert dispatched.pid is not None
+    (tmp_path / "dispatch.json").write_bytes(codec.encode(dispatched))
+    return dispatched, report
+
+
+@pytest.mark.parametrize(
+    ("target_name", "label"),
+    [
+        ("receipt.json", "JSON"),
+        ("receipt.md", "Markdown"),
+        ("roster-provenance.md", "roster provenance"),
+    ],
+)
+def test_public_dispatch_receipt_refusal_fails_with_child_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, target_name: str, label: str
+) -> None:
+    """Required publication refusal cannot be reported as completion."""
+    dispatched, report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, receipt_fault=target_name
+    )
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    supervisor_exit = _await_boundary_exit(dispatched)
+    assert settled.codex_returncode == 0
+    assert len(settled.specialists_claimed) == 5
+    assert settled.specialists_observed == (
+        "sdlc-config-specialist",
+        "sdlc-documentation-specialist",
+        "sdlc-image-specialist",
+        "sdlc-python-specialist",
+        "sdlc-workflows-specialist",
+    )
+    assert Path(dispatched.output_file).read_text() == report
+    assert len(settled.errors) == 1
+    assert settled.errors[0].startswith(f"could not write lane receipt {label}:")
+    assert not any("spawn reconciliation:" in error for error in settled.errors)
+    target = Path(dispatched.output_file).parent / target_name
+    assert target.is_dir()
+    assert (target / "retained.txt").read_text() == "existing refused target\n"
+    assert target.with_name(f"{target_name}.tmp").is_file()
+    assert settled.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert supervisor_exit == 1
+
+
+def test_public_dispatch_complete_five_roles_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Complete captured/current native declarations publish every required artifact."""
+    dispatched, report = _dispatch_five_role_boundary(tmp_path, monkeypatch)
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    assert _await_boundary_exit(dispatched) == 0
+    assert settled.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert settled.codex_returncode == 0
+    assert settled.errors == ()
+    assert settled.specialists_claimed == _FIVE_BOUNDARY_ROLES
+    assert settled.specialists_observed == tuple(sorted(_FIVE_BOUNDARY_ROLES))
+    assert Path(dispatched.output_file).read_text() == report
+    receipt = codec.decode(
+        Path(dispatched.receipt_json).read_bytes(), lane_result.LaneResult
+    )
+    assert receipt.run_id == dispatched.run_id
+    assert Path(dispatched.receipt_md).is_file()
+    provenance = (
+        Path(dispatched.output_file).parent / "roster-provenance.md"
+    ).read_text()
+    assert "participation outcome: consistent" in provenance
+    assert "Specialists spawned:" not in provenance
+
+
+@pytest.mark.parametrize(
+    "capture_fault", ["missing", "empty", "unreadable", "directory", "invalid-utf8"]
+)
+def test_public_dispatch_unavailable_capture_refuses_observed_five_roles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capture_fault: str
+) -> None:
+    """Observed children cannot replace absent or unreadable terminal capture."""
+    dispatched, _report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, capture_fault=capture_fault
+    )
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    assert _await_boundary_exit(dispatched) == 1
+    assert settled.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settled.codex_returncode == 0
+    assert settled.specialists_claimed == ()
+    assert settled.specialists_observed == tuple(sorted(_FIVE_BOUNDARY_ROLES))
+    assert settled.errors
+    output = Path(dispatched.output_file)
+    if capture_fault == "empty":
+        assert output.read_bytes() == b""
+    else:
+        assert any(
+            "dispatcher output could not be read:" in error for error in settled.errors
+        )
+        if capture_fault == "missing":
+            assert not output.exists()
+        elif capture_fault == "directory":
+            assert output.is_dir()
+        elif capture_fault == "unreadable":
+            assert output.is_symlink()
+        else:
+            assert output.read_bytes() == b"\xff"
+    assert Path(dispatched.receipt_json).is_file()
+
+
+@pytest.mark.parametrize("process_fault", ["interrupt-child", "incomplete-turn"])
+def test_public_dispatch_interrupted_native_turn_retains_actual_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, process_fault: str
+) -> None:
+    """An interrupted native child or incomplete turn cannot become completion."""
+    dispatched, report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, process_fault=process_fault
+    )
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    assert _await_boundary_exit(dispatched) == 1
+    assert settled.status is sdlc_team.SdlcSettledStatus.FAILED
+    assert settled.codex_returncode == (
+        -signal.SIGTERM if process_fault == "interrupt-child" else 0
+    )
+    assert settled.specialists_claimed == ()
+    assert settled.specialists_observed == tuple(sorted(_FIVE_BOUNDARY_ROLES))
+    assert settled.errors
+    assert Path(dispatched.output_file).read_text() == report
+
+
+@pytest.mark.parametrize("receipt_fault", ["", "receipt.json"])
+def test_public_dispatch_real_timeout_preserves_signal_and_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, receipt_fault: str
+) -> None:
+    """Receipt refusal never relabels a literal timeout or its actual child signal."""
+    dispatched, report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, process_fault="timeout", receipt_fault=receipt_fault
+    )
+    settled = _await_boundary_settlement(tmp_path, dispatched)
+    assert _await_boundary_exit(dispatched) == 1
+    assert settled.status is sdlc_team.SdlcSettledStatus.TIMED_OUT
+    assert settled.codex_returncode == -signal.SIGTERM
+    assert settled.specialists_claimed == _FIVE_BOUNDARY_ROLES
+    assert settled.specialists_observed == tuple(sorted(_FIVE_BOUNDARY_ROLES))
+    assert f"codex exceeded timeout of {_BOUNDARY_TIMEOUT_S:g}s" in settled.errors
+    assert Path(dispatched.output_file).read_text() == report
+    if receipt_fault:
+        assert any(
+            "could not write lane receipt JSON:" in error for error in settled.errors
+        )
+
+
+def test_public_dispatch_refused_settlement_derives_abandoned_after_death(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unavailable settlement transport cannot manufacture a persisted FAILED."""
+    dispatched, report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, process_fault="settlement-refused"
+    )
+    assert _await_boundary_exit(dispatched) == 1
+    observed_status = sdlc_team.read_status(
+        tmp_path, dispatched.run_id, pid=dispatched.pid
+    )
+    (tmp_path / "read-status.json").write_bytes(
+        codec.encode({"status": observed_status})
+    )
+    assert observed_status is sdlc_team.SdlcSettledStatus.ABANDONED
+    target = Path(dispatched.output_file).parent / "settlement.json"
+    assert target.is_dir()
+    assert (target / "retained.txt").read_text() == "existing refused settlement\n"
+    pending = codec.decode(
+        target.with_name("settlement.json.tmp").read_bytes(),
+        sdlc_team.SdlcTeamSettlement,
+    )
+    assert pending.codex_returncode == 0
+    assert pending.status is sdlc_team.SdlcSettledStatus.COMPLETED
+    assert "settlement write failed:" in Path(dispatched.log_file).read_text()
+    assert Path(dispatched.output_file).read_text() == report
+
+
+def test_public_dispatch_interrupted_supervisor_derives_abandoned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Actual supervisor death leaves retained capture but no invented settlement."""
+    dispatched, report = _dispatch_five_role_boundary(
+        tmp_path, monkeypatch, process_fault="interrupt-supervisor"
+    )
+    ready = Path(dispatched.output_file).parent / "runner-ready.json"
+    deadline = time.monotonic() + _BOUNDARY_WAIT_S
+    while not ready.is_file() and time.monotonic() < deadline:
+        time.sleep(_BOUNDARY_POLL_S)
+    assert ready.is_file(), "isolated native runner did not start within bound"
+    child = codec.decode(ready.read_bytes(), dict[str, int])["pid"]
+    assert dispatched.pid is not None
+    try:
+        assert (
+            sdlc_team.read_status(tmp_path, dispatched.run_id, pid=dispatched.pid)
+            is None
+        )
+        os.kill(dispatched.pid, signal.SIGTERM)
+        assert _await_boundary_exit(dispatched) == -signal.SIGTERM
+    finally:
+        os.killpg(child, signal.SIGTERM)
+    observed_status = sdlc_team.read_status(
+        tmp_path, dispatched.run_id, pid=dispatched.pid
+    )
+    (tmp_path / "read-status.json").write_bytes(
+        codec.encode({"status": observed_status})
+    )
+    assert observed_status is sdlc_team.SdlcSettledStatus.ABANDONED
+    assert not (ready.parent / "settlement.json").exists()
+    assert Path(dispatched.output_file).read_text() == report
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import hashlib
 import http.client as http_client
 import json
@@ -42,6 +43,9 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Never, Protocol
 
 from dotfiles_setup import child_env
+from dotfiles_setup.generated.research_failure_code import FailureCode
+from dotfiles_setup.generated.research_skip_reason import SkipReason
+from dotfiles_setup.research_evidence import MANIFEST_LIMIT, read_regular_bounded
 
 if TYPE_CHECKING:
     from email.message import Message
@@ -103,36 +107,6 @@ class Status(Enum):
     SKIPPED = "skipped"
 
 
-class SkipReason(Enum):
-    """Why a source was deliberately skipped."""
-
-    PREREQUISITE = "prerequisite"
-    CREDITS_EXHAUSTED = "credits-exhausted"
-
-
-class FailureCode(Enum):
-    """Closed set of model-visible codes, independent of provider text."""
-
-    CREDITS_EXHAUSTED = "credits-exhausted"
-    PREREQUISITE = "prerequisite"
-    HTTP_ERROR = "http-error"
-    INVALID_JSON = "invalid-json"
-    SHAPE_ERROR = "shape-error"
-    PROVIDER_FAILURE = "provider-failure"
-    PROCESS_FAILED = "process-failed"
-    TIMEOUT = "timeout"
-    REQUEST_FAILED = "request-failed"
-    CREDENTIAL_INVALID = "credential-invalid"
-    CANARY_FAILED = "canary-failed"
-    CANARY_EMPTY = "canary-empty"
-    NO_CANARY = "no-canary"
-    NOT_FOUND = "not-found"
-    REDIRECTED = "redirected"
-    EMPTY_OUTPUT = "empty-output"
-    IO_ERROR = "io-error"
-    OTHER = "other"
-
-
 _PREREQUISITE_TEXTS = frozenset(
     {
         "needs --repo",
@@ -153,9 +127,9 @@ def failure_code(
     """Project producer literals to finite codes; never return diagnostic text."""
     if status in (Status.OK.value, Status.EMPTY_VERIFIED.value):
         return None
-    if skip_reason == SkipReason.CREDITS_EXHAUSTED.value:
-        return FailureCode.CREDITS_EXHAUSTED
-    if skip_reason == SkipReason.PREREQUISITE.value or (
+    if isinstance(skip_reason, str) and skip_reason in _SKIP_VALUES:
+        return FailureCode(skip_reason)
+    if (
         status == Status.SKIPPED.value
         and isinstance(reason, str)
         and reason in _PREREQUISITE_TEXTS
@@ -204,12 +178,55 @@ _FALLBACK_CREDIT_TEXT = re.compile(
     r"not enough credits|your account has run out of searches",
     re.IGNORECASE,
 )
+# Bounded blank runs keep the scan linear (security P3-4): adjacent unbounded
+# \s* and \s+ backtracked quadratically on long whitespace.
 _CREDIT_STATUS = re.compile(
-    r'(?:(?:"status"|"statusCode")\s*:\s*|'
-    r"\bstatus(?:\s+code)?\s*[:=]?\s+|\bHTTP(?:/\d(?:\.\d)?)?\s+)(\d{3})\b",
+    r'(?:(?:"status"|"statusCode")\s{0,4}:\s{0,4}|'
+    r"\bstatus(?:\s{1,4}code)?\s{0,4}[:=]?\s{1,4}|"
+    r"\bHTTP(?:/\d(?:\.\d)?)?\s{1,4})(\d{3})\b",
     re.IGNORECASE,
 )
+# Provider error text and stored evidence are scanned only up to this prefix,
+# and a bound evidence file larger than the cap is refused, not read.
+_SCAN_LIMIT = 65_536
+_EVIDENCE_LIMIT = 8 * 1024 * 1024
+_MANIFEST_LIMIT = MANIFEST_LIMIT
 _FALLBACK_ROUTES = MappingProxyType({"firecrawl-search": ("serper", "serpapi")})
+_SKIP_VALUES = frozenset(reason.value for reason in SkipReason)
+# D236: codes a metered row may carry while the receipt still passes PROVISIONAL.
+# Each re-derives from hashed transport evidence, except credential-missing,
+# whose only evidence is the fixed producer text for that source.
+_EVIDENCED_SKIPS = frozenset(
+    reason.value
+    for reason in SkipReason
+    if reason not in {SkipReason.PREREQUISITE, SkipReason.CREDENTIAL_MISSING}
+)
+_MISSING_CLI_TEXTS = frozenset({"needs ctx7", "needs firecrawl"})
+_CREDENTIAL_TEXTS = MappingProxyType(
+    {"exa": "EXA_API_KEY not inherited; run through fnox exec"}
+)
+_HTTP_SKIPS = MappingProxyType(
+    {401: SkipReason.AUTH_FAILED, 403: SkipReason.AUTH_FAILED, 429: SkipReason.QUOTA}
+)
+_UNAVAILABLE_ERRORS = frozenset(
+    {
+        "TimeoutError",
+        "TimeoutExpired",
+        "ConnectionError",
+        "ConnectionRefusedError",
+        "ConnectionResetError",
+        "ConnectionAbortedError",
+        "BrokenPipeError",
+        "gaierror",
+        "herror",
+        "FileNotFoundError",
+        "SSLError",
+        "SSLCertVerificationError",
+        "SSLEOFError",
+    }
+)
+# A CLI with a non-zero exit names a rate limit in prose, not a status line.
+_RATE_LIMIT_TEXT = re.compile(r"rate[ -]limit|too many requests", re.IGNORECASE)
 _FALLBACK_KEYS = MappingProxyType(
     {"serper": "SERPER_API_KEY", "serpapi": "SERP_API_KEY"}
 )
@@ -217,6 +234,7 @@ _FALLBACK_KEYS = MappingProxyType(
 
 def is_credit_exhaustion(http_status: int | None, text: str) -> bool:
     """Distinguish exhausted quota from auth, transient limits and server errors."""
+    text = text[:_SCAN_LIMIT]
     if http_status is None and (match := _CREDIT_STATUS.search(text)):
         http_status = int(match[1])
     if http_status == _HTTP_PAYMENT_REQUIRED:
@@ -1427,7 +1445,11 @@ def _empty_control(
 
 
 def _attempt_credit(attempt: _Attempt) -> bool:
-    text = attempt.stderr_redacted + "\n" + attempt.raw.decode(errors="replace")
+    text = (
+        attempt.stderr_redacted[:_SCAN_LIMIT]
+        + "\n"
+        + attempt.raw[:_SCAN_LIMIT].decode(errors="replace")
+    )
     status = attempt.http_status
     if status is None and attempt.rc == 0:
         try:
@@ -1438,6 +1460,52 @@ def _attempt_credit(attempt: _Attempt) -> bool:
             claimed = payload.get("status")
             status = claimed if isinstance(claimed, int) else None
     return is_credit_exhaustion(status, text)
+
+
+def _attempt_skip(attempt: _Attempt) -> SkipReason | None:
+    """Derive a metered skip code from transport status, never from free prose."""
+    if _attempt_credit(attempt):
+        return SkipReason.CREDITS_EXHAUSTED
+    status = attempt.http_status
+    if status is None and attempt.rc == 0:
+        with contextlib.suppress(ValueError):
+            payload = _decode_json(attempt.raw)
+            if isinstance(payload, dict) and payload.get("success") is False:
+                status = payload.get("status")
+    elif status is None and attempt.rc:
+        stderr = attempt.stderr_redacted[:_SCAN_LIMIT]
+        if match := _CREDIT_STATUS.search(stderr):
+            status = int(match[1])
+        elif _RATE_LIMIT_TEXT.search(stderr):
+            return SkipReason.QUOTA
+    return _HTTP_SKIPS.get(status) if type(status) is int else None
+
+
+def _error_skip(error_class: object) -> SkipReason | None:
+    """Map an exception class to a skip code (producer and verifier).
+
+    Python raises EPERM and EACCES as PermissionError; an errno alone (an
+    SSLError carries errno 1) is never a sandbox denial.
+    """
+    if error_class == "PermissionError":
+        return SkipReason.SANDBOX_DENIED
+    if error_class in _UNAVAILABLE_ERRORS:
+        return SkipReason.UNAVAILABLE
+    return None
+
+
+def _error_envelope(exc: BaseException) -> bytes:
+    """Record only the error class and errno: no message, URL or credential."""
+    inner = getattr(exc, "reason", None)
+    cause = inner if isinstance(inner, BaseException) else exc
+    number = getattr(cause, "errno", None)
+    return json.dumps(
+        {
+            "error_class": type(cause).__name__,
+            "errno": number if type(number) is int else None,
+        },
+        sort_keys=True,
+    ).encode()
 
 
 def _transport_envelope(attempt: _Attempt) -> bytes:
@@ -1488,15 +1556,23 @@ def _fallback_attempt(route: str, request: FanoutRequest, run: _CreditRun) -> _A
 
 
 def _credit_result(
-    source: str, request: FanoutRequest, primary: _Attempt, run: _CreditRun
+    source: str,
+    request: FanoutRequest,
+    primary: _Attempt,
+    run: _CreditRun,
+    skip: tuple[SkipReason, bytes] | None = None,
 ) -> _Fetch:
+    """Skip a metered source for a coded reason, trying its fallback routes."""
     boundaries, deadline, started = run.boundaries, run.deadline, run.started
-    envelope = _transport_envelope(primary)
+    code, envelope = skip or (
+        SkipReason.CREDITS_EXHAUSTED,
+        _transport_envelope(primary),
+    )
     reason = _redact_request_text(
         primary.stderr_redacted.strip()
         or primary.raw.decode(errors="replace").strip()
         or primary.error
-        or "credits-exhausted",
+        or code.value,
         dict(os.environ),
     ).replace("\n", " | ")[-300:]
     attempts = [
@@ -1577,7 +1653,7 @@ def _credit_result(
         reason,
         control if route else None,
         None,
-        skip_reason=SkipReason.CREDITS_EXHAUSTED if status is Status.SKIPPED else None,
+        skip_reason=None if status is Status.ERROR else code,
         route=route,
         provisional=status is Status.SKIPPED or route is not None,
         attempts=tuple(attempts),
@@ -1587,6 +1663,36 @@ def _credit_result(
         final.raw if route else genuine_raw if status is Status.ERROR else envelope,
         tuple(evidence),
     )
+
+
+def _prerequisite_result(
+    source: str, request: FanoutRequest, prerequisite: str, run: _CreditRun
+) -> _Fetch:
+    if prerequisite in _MISSING_CLI_TEXTS:
+        # A missing metered CLI is coded unavailable and still tries fallbacks.
+        missing = FileNotFoundError(errno.ENOENT, prerequisite)
+        return _credit_result(
+            source,
+            request,
+            _Attempt((), b"", prerequisite),
+            run,
+            (SkipReason.UNAVAILABLE, _error_envelope(missing)),
+        )
+    credential = _CREDENTIAL_TEXTS.get(source) == prerequisite
+    result = SourceResult(
+        source,
+        Status.SKIPPED,
+        (),
+        time.monotonic() - run.started,
+        prerequisite,
+        None,
+        None,
+        skip_reason=SkipReason.CREDENTIAL_MISSING
+        if credential
+        else SkipReason.PREREQUISITE,
+        provisional=credential,
+    )
+    return _Fetch(result, None)
 
 
 def _source_result(
@@ -1599,19 +1705,10 @@ def _source_result(
     started = time.monotonic()
     boundaries = _Boundaries(runner, http)
     prerequisite = _prerequisite_reason(source, request)
-    if prerequisite:
-        result = SourceResult(
-            source,
-            Status.SKIPPED,
-            (),
-            time.monotonic() - started,
-            prerequisite,
-            None,
-            None,
-            skip_reason=SkipReason.PREREQUISITE,
-        )
-        return _Fetch(result, None)
     deadline = _Deadline.after(_timeout_for(source, request.timeout))
+    if prerequisite:
+        run = _CreditRun(boundaries, deadline, started)
+        return _prerequisite_result(source, request, prerequisite, run)
     raw: bytes | None = None
     try:
         attempt = _primary_attempt(
@@ -1622,13 +1719,14 @@ def _source_result(
             deadline=deadline,
         )
         raw = attempt.raw
-        if (
-            source in CREDIT_METERED_SOURCES
-            and attempt.error
-            and _attempt_credit(attempt)
-        ):
+        code = _attempt_skip(attempt) if attempt.error else None
+        if source in CREDIT_METERED_SOURCES and code is not None:
             return _credit_result(
-                source, request, attempt, _CreditRun(boundaries, deadline, started)
+                source,
+                request,
+                attempt,
+                _CreditRun(boundaries, deadline, started),
+                (code, _transport_envelope(attempt)),
             )
         if attempt.error:
             status = Status.ERROR
@@ -1668,16 +1766,27 @@ def _source_result(
         reason = exc.reason
         control = None
         items = ()
-    except TimeoutError, subprocess.TimeoutExpired:
-        status = Status.ERROR
-        reason = "timed out"
-        control = None
-        items = ()
-    except (http_client.HTTPException, ValueError, OSError) as exc:
+    except (
+        subprocess.TimeoutExpired,
+        http_client.HTTPException,
+        ValueError,
+        OSError,
+    ) as exc:
         status = Status.ERROR
         reason = "timed out" if _is_timeout_failure(exc) else "request failed"
         control = None
         items = ()
+        envelope = _error_envelope(exc)
+        decoded = json.loads(envelope)
+        code = _error_skip(decoded["error_class"])
+        if source in CREDIT_METERED_SOURCES and code is not None:
+            return _credit_result(
+                source,
+                request,
+                _Attempt((), b"", reason),
+                _CreditRun(boundaries, deadline, started),
+                (code, envelope),
+            )
     result = SourceResult(
         source,
         status,
@@ -1854,8 +1963,10 @@ def _validate_args(args: argparse.Namespace) -> None:
             message = "--strict-five requires every named source"
             raise _UsageError(message)
         try:
-            plan = json.loads(args.last30days_plan.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
+            plan = json.loads(
+                read_regular_bounded(args.last30days_plan, _MANIFEST_LIMIT)
+            )
+        except (OSError, ValueError, RecursionError) as exc:
             message = "--last30days-plan must be readable JSON"
             raise _UsageError(message) from exc
         if not isinstance(plan, dict) or not plan.get("subqueries"):
@@ -2050,7 +2161,7 @@ def _validate_strict_row(row: dict[str, object], manifest_path: Path) -> str | N
         manifest_path.parent / f"{source}.raw"
     ):
         return f"{source} has no bound raw evidence"
-    raw = Path(raw_file).read_bytes()
+    raw = read_regular_bounded(Path(raw_file), _EVIDENCE_LIMIT)
     if not raw:
         return f"{source} raw evidence is empty"
     if row.get("raw_sha256") != hashlib.sha256(raw).hexdigest():
@@ -2096,16 +2207,17 @@ def _provisional_line(row: dict[str, object]) -> str:
             else:
                 code = failure_code(attempt.get("reason"), status=attempt.get("status"))
             errors.append(f"{attempt.get('route')}: {code.value if code else ''}")
-    line = (
-        f"{source} via {row['route']} (credits-exhausted)"
-        if row.get("route")
-        else f"{source} skipped: credits-exhausted; "
-        + (
+    code = row.get("skip_reason") or SkipReason.CREDITS_EXHAUSTED.value
+    if row.get("route"):
+        line = f"{source} via {row['route']} ({code})"
+    elif code == SkipReason.CREDENTIAL_MISSING.value:
+        line = f"{source} skipped: {code}; {row.get('reason')}"
+    else:
+        line = f"{source} skipped: {code}; " + (
             "no fallback succeeded"
             if _FALLBACK_ROUTES.get(source)
             else "no fallback route"
         )
-    )
     return line + ("; " + "; ".join(errors) if errors else "")
 
 
@@ -2117,7 +2229,7 @@ def _bound_raw(file: object, digest: object, expected: Path) -> bytes:
     if not isinstance(file, str) or Path(file) != expected:
         message = "unbound raw evidence"
         raise _ReceiptError(message)
-    raw = Path(file).read_bytes()
+    raw = read_regular_bounded(Path(file), _EVIDENCE_LIMIT)
     if digest != hashlib.sha256(raw).hexdigest():
         message = "raw evidence hash is missing or changed"
         raise _ReceiptError(message)
@@ -2138,9 +2250,12 @@ def _validate_credit_status(row: dict[str, object]) -> None:
             raise _ReceiptError(reason.removeprefix(source + " "))
     elif (
         row.get("status") != Status.SKIPPED.value
-        or row.get("skip_reason") != SkipReason.CREDITS_EXHAUSTED.value
+        or row.get("skip_reason") not in _EVIDENCED_SKIPS
     ):
         message = "invalid credit skip"
+        raise _ReceiptError(message)
+    elif row.get("items") != [] or row.get("control") is not None:
+        message = "skip row carries results"
         raise _ReceiptError(message)
 
 
@@ -2241,12 +2356,49 @@ def _decode_transport_envelope(raw: bytes) -> _Attempt:
     )
 
 
-def _credit_envelope(raw: bytes) -> _Attempt:
-    attempt = _decode_transport_envelope(raw)
-    if not _attempt_credit(attempt):
-        message = "credit-exhaustion evidence does not re-derive"
+def _evidence_skip(raw: bytes) -> SkipReason | None:
+    envelope = _decode_json(raw)
+    if isinstance(envelope, dict) and set(envelope) == {"error_class", "errno"}:
+        number = envelope["errno"]
+        if not isinstance(envelope["error_class"], str) or not (
+            number is None or type(number) is int
+        ):
+            message = "malformed primary transport"
+            raise _ReceiptError(message)
+        return _error_skip(envelope["error_class"])
+    return _attempt_skip(_decode_transport_envelope(raw))
+
+
+def _credit_envelope(raw: bytes, claimed: object) -> None:
+    """Re-derive the row's skip code (or, when substituted, any code) from raw."""
+    derived = _evidence_skip(raw)
+    if derived is None or (claimed is not None and derived.value != claimed):
+        message = (
+            "credit-exhaustion evidence does not re-derive"
+            if claimed in {None, SkipReason.CREDITS_EXHAUSTED.value}
+            else f"{claimed} evidence does not re-derive"
+        )
         raise _ReceiptError(message)
-    return attempt
+
+
+def _validate_credential_skip(row: dict[str, object]) -> str | None:
+    """A missing key has no transport; only the fixed producer text binds it."""
+    source = str(row["source"])
+    expected = _CREDENTIAL_TEXTS.get(source)
+    if (
+        expected is None
+        or row.get("status") != Status.SKIPPED.value
+        or row.get("reason") != expected
+        or row.get("provisional") is not True
+        or row.get("route")
+        or row.get("raw_file") is not None
+        or row.get("raw_sha256") is not None
+        or row.get("attempts") != []
+        or row.get("items") != []
+        or row.get("control") is not None
+    ):
+        return f"{source} invalid credential-missing skip"
+    return None
 
 
 def _validate_credit_output(
@@ -2286,7 +2438,7 @@ def _validate_provisional_row(
     try:
         _validate_credit_status(row)
         attempts, primary_raw = _credit_attempts(row, manifest_path.parent)
-        _credit_envelope(primary_raw)
+        _credit_envelope(primary_raw, row.get("skip_reason"))
         raw = _bound_raw(
             row.get("raw_file"),
             row.get("raw_sha256"),
@@ -2298,61 +2450,99 @@ def _validate_provisional_row(
     return None
 
 
+def _manifest_rows(manifest: object, request_id: str) -> list[dict[str, object]] | str:
+    """Return the manifest's source rows, or the identity failure."""
+    if not isinstance(manifest, dict):
+        return "malformed research manifest"
+    if (
+        not manifest.get("strict_five")
+        or manifest.get("policy_version") != "strict-five-v2"
+        or manifest.get("request_id") != request_id
+        or not manifest.get("query")
+        or not manifest.get("repo")
+    ):
+        return "request identity or policy mismatch"
+    rows = manifest["sources"]
+    if (
+        not isinstance(rows, list)
+        or len(rows) != len(_SOURCE_NAMES)
+        or any(not isinstance(row, dict) for row in rows)
+        or {row["source"] for row in rows} != set(_SOURCE_NAMES)
+    ):
+        return "required source missing or duplicated"
+    return rows
+
+
+def _row_reason(row: dict[str, object], manifest_path: Path) -> str | None:
+    if row.get("skip_reason") == SkipReason.CREDENTIAL_MISSING.value:
+        return _validate_credential_skip(row)
+    if (
+        row.get("provisional")
+        or row.get("route")
+        or row.get("skip_reason") in _EVIDENCED_SKIPS
+    ):
+        return _validate_provisional_row(row, manifest_path)
+    return _validate_strict_row(row, manifest_path)
+
+
+def _web_route(rows: list[dict[str, object]]) -> str | None:
+    """Name a validated firecrawl-search row that succeeded via a web route."""
+    for row in rows:
+        route = row.get("route")
+        if (
+            row.get("source") == "firecrawl-search"
+            and route in _FALLBACK_ROUTES["firecrawl-search"]
+            and row.get("status") == Status.OK.value
+        ):
+            return f"firecrawl-search via {route}"
+    return None
+
+
 def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
-    """Validate same-turn hashed evidence and re-derive every credit exception."""
+    """Validate same-turn hashed evidence and re-derive every skip exception.
+
+    D236 fallback rule: every skipped metered provider must re-derive its code,
+    and the GitHub rows must carry strict evidence. Last30Days must too, unless
+    firecrawl-search succeeded through a Serper or SerpApi route, which then
+    covers it PROVISIONAL (r3 P3-1). A receipt with every metered provider
+    skipped still passes PROVISIONAL.
+    """
     provisional = []
     provisional_entries = []
+    last30days_gap = None
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict):
-            return StrictVerdict(
-                passed=False, provisional=(), reason="malformed research manifest"
-            )
-        if (
-            not manifest.get("strict_five")
-            or manifest.get("policy_version") != "strict-five-v2"
-            or manifest.get("request_id") != request_id
-            or not manifest.get("query")
-            or not manifest.get("repo")
-        ):
-            return StrictVerdict(
-                passed=False,
-                provisional=(),
-                reason="request identity or policy mismatch",
-            )
-        rows = manifest["sources"]
-        if (
-            not isinstance(rows, list)
-            or len(rows) != len(_SOURCE_NAMES)
-            or any(not isinstance(row, dict) for row in rows)
-            or {row["source"] for row in rows} != set(_SOURCE_NAMES)
-        ):
-            return StrictVerdict(
-                passed=False,
-                provisional=(),
-                reason="required source missing or duplicated",
-            )
+        rows = _manifest_rows(
+            json.loads(read_regular_bounded(manifest_path, _MANIFEST_LIMIT)),
+            request_id,
+        )
+        if isinstance(rows, str):
+            return StrictVerdict(passed=False, provisional=(), reason=rows)
         for row in rows:
-            reason = (
-                _validate_provisional_row(row, manifest_path)
-                if row.get("provisional")
-                or row.get("route")
-                or row.get("skip_reason") == SkipReason.CREDITS_EXHAUSTED.value
-                else _validate_strict_row(row, manifest_path)
-            )
-            if reason:
+            reason = _row_reason(row, manifest_path)
+            route = row.get("route")
+            if reason and row["source"] == "last30days":
+                last30days_gap = reason
+            elif reason:
                 return StrictVerdict(passed=False, provisional=(), reason=reason)
-            if row.get("provisional"):
+            elif row.get("provisional"):
                 provisional.append(_provisional_line(row))
                 provisional_entries.append(
-                    ProvisionalEntry(row["source"], row.get("route"))
+                    ProvisionalEntry(
+                        str(row["source"]), route if isinstance(route, str) else None
+                    )
                 )
-    except OSError, ValueError, KeyError, TypeError, AttributeError:
+    except OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError:
         return StrictVerdict(
             passed=False,
             provisional=(),
             reason="malformed or unreadable research evidence",
         )
+    if last30days_gap is not None:
+        web = _web_route(rows)
+        if web is None:
+            return StrictVerdict(passed=False, provisional=(), reason=last30days_gap)
+        provisional.append(f"last30days skipped: {last30days_gap}; covered by {web}")
+        provisional_entries.append(ProvisionalEntry("last30days", None))
     reason = (
         "provisional: " + "; ".join(provisional)
         if provisional
@@ -2622,7 +2812,7 @@ def _fanout_manifest_probe(
         "provisional_invalid": False,
     }
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest = json.loads(read_regular_bounded(path, _MANIFEST_LIMIT))
         rows = manifest["sources"]
         statuses = {
             r["source"]: (r["status"], r.get("reason"), r.get("skip_reason"))
@@ -2631,7 +2821,14 @@ def _fanout_manifest_probe(
             and isinstance(r.get("source"), str)
             and r["source"] in _SOURCE_NAMES
         }
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        RecursionError,
+    ) as exc:
         reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
         row["required_failed"] = [f"{name}: {reason}" for name in required]
         return row
@@ -2640,12 +2837,15 @@ def _fanout_manifest_probe(
         if not isinstance(candidate, dict) or candidate.get("provisional") is not True:
             continue
         source, route = candidate.get("source"), candidate.get("route")
+        code = candidate.get("skip_reason") or SkipReason.CREDITS_EXHAUSTED.value
         if (
             isinstance(source, str)
             and source in CREDIT_METERED_SOURCES
             and (route is None or route in _FALLBACK_ROUTES.get(source, ()))
+            and isinstance(code, str)
+            and code in _SKIP_VALUES
         ):
-            provisional.append({"source": source, "route": route})
+            provisional.append({"source": source, "route": route, "code": code})
         else:
             row["provisional_invalid"] = True
     row["provisional"] = provisional[: len(_SOURCE_NAMES)]
@@ -2902,7 +3102,9 @@ def _mirror_index_probe(
     missing = 0
     for n in range(1, count + 1):
         try:
-            data = json.loads((directory / f"{n}.probe.json").read_text("utf-8"))
+            data = json.loads(
+                read_regular_bounded(directory / f"{n}.probe.json", _MANIFEST_LIMIT)
+            )
             mirror = next(p for p in data["probes"] if p["kind"] == "mirror")
             code = _mirror_code(mirror)
             age = _manifest_age(data, clock)
@@ -2931,7 +3133,7 @@ def _mirror_index_probe(
                     mirror.get("route", ""),
                 )
             )
-        except OSError, ValueError, KeyError, TypeError, StopIteration:
+        except OSError, ValueError, KeyError, TypeError, StopIteration, RecursionError:
             missing += 1
             rows.append(
                 (

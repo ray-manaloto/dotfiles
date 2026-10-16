@@ -71,12 +71,49 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
 7. **⚠️ A probe's OWN STDOUT is an uncovered surface — print presence, never a
    value.** Every gate above guards a *file write* or a *spawn*; none guards the
    output of a command an agent runs, and that output lands in the session
-   transcript. Measured 2026-08-02: a `${(P)k}` expansion meant as a presence flag
+   transcript. Literal pre-command admission detects selected broad dumps; it
+   does not inspect or redact the resulting stdout. Measured 2026-08-02: a `${(P)k}`
+   expansion meant as a presence flag
    printed four live credential values, and all four had to be rotated. They were
    the four `env = true` opt-ins. Use `${VAR:+SET}`, `[ -n "$VAR" ]` or
    `printenv VAR >/dev/null` and read the rc; never interpolate the value into a
-   format string "just to check". Gap tracked in #474, still OPEN: one shape is
-   now gated (below), every other shape is carried by this rule alone.
+   format string "just to check". The stdout gap is tracked in #474.
+
+   `environment_admission` inspects literal commands before execution: selected
+   env/printenv and shell builtins, literal shell/Python/Node programs, and simple
+   command substitutions. Its supported `env -S` subset uses ASCII space/tab
+   separators and balanced quotes; backslash, dollar, hash, other whitespace or
+   malformed quotes receive an inspectability refusal, not a broad-dump finding.
+   Unsupported leading-dash env options receive a separate fixed refusal. Safe
+   utility prefixes, named-variable checks and genuine help remain allowed.
+   Input/output redirects and attached numeric file descriptors do not become
+   utility names or variable arguments; quoted comparison/arrow text stays data.
+
+   Python/Node inline operands are selected only in interpreter option position.
+   A script, stdin `-`, `--` or Python `-m` ends inspection of interpreter options;
+   arguments after the selected program cannot supply new code or help options.
+   The finite Python set covers the declared standalone flags, `-W`/`-X` values
+   (including chosen attached forms), hash-policy values, `-c` and genuine help.
+   Node supports eval/print/require operands, help/version and the one no-value
+   compatibility flag `--trace-warnings`. Other leading interpreter options get
+   a fixed inspectability refusal; arbitrary option arity/clusters are not parsed.
+   Missing operands do not establish an executable broad dump.
+
+   Node stdout signatures mask balanced quoted strings only for single-line code
+   without backslash, backtick or slash. Other code retains raw matching, with
+   possible prose false positives; this is not a JavaScript lexer. Print-mode
+   collection expressions still use the original operand. Ordinary backslash-LF
+   continuations outside single quotes, including inside double quotes, are
+   normalized only in an analysis copy with paired-escape parity preserved.
+   Inputs containing `<<`, hash, backtick or `$(` keep the prior analysis; a
+   separately extracted simple substitution body may be normalized. CRLF and
+   execution/payload/capture bytes remain literal.
+
+   Additional wrappers/groups/keywords, aliases, indirect/encoded programs,
+   nested shell expansions and Python starred/aliased collection patterns remain
+   outside this policy. Every heredoc body is masked, including interpreter-fed
+   programs and substitutions inside those bodies. Source controls do not qualify
+   an installed client's hook; changed bytes require fresh native qualification.
 
    ⚠️ **The safe form is only safe ALONE.**
    `${VAR:+SET}${VAR:-ABSENT}` opens with the form this rule recommends and is a
@@ -87,7 +124,9 @@ attempts auto-rolled-back and the declaration was wrongly blamed.
    echo ABSENT`. **Now machine-enforced** — `hook_guard`'s
    `secret_value_substitution` denies any `echo`/`printf`/`print` of a
    credential-named variable (broader than just `:-`/`:=`, `\$\{?` optional) —
-   still allows `${(P)k}` indirect expansion; this rule carries every other shape.
+   still allows `${(P)k}` indirect expansion. The literal broad-environment policy
+   is composed separately from the dated `hook_guard.rules()` table; the table's
+   audit does not classify that additional policy.
 
    ⚠️ **There is no blast-radius cap.** Every credential is printable by any
    probe, wrapped or not; `DOPPLER_TOKEN` is itself in the sanctioned shell

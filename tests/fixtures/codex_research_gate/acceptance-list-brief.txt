@@ -1,0 +1,6 @@
+Implement ticket CG-20 test-first.
+
+Acceptance criteria:
+- Investigate why the release check reports the wrong version.
+- The latest versions table lists every tool.
+- Research notes under docs/ stay unchanged.

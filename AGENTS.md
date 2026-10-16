@@ -115,9 +115,9 @@ locally before pushing Dockerfile changes.
 - **Bound long-running commands**: Run the lint gate via `mise run lint`
   (hk under a hard timeout; hk has none) — never wait blind or capture via
   `| tail` (masks exit codes). See `.claude/rules/long-running-command-hangs.md`.
-- **Clarify before acting**: On ambiguous, multi-path, or irreversible
-  work, ask (with a recommended option) until sure; proceed directly on
-  clear low-risk tasks. See `.claude/rules/clarify-before-acting.md`.
+- **Five-stage workflow**: Substantial work and trivial-edit routing follow
+  `.claude/skills/five-stage-workflow/SKILL.md`; carry standing authorization.
+  Open decisions follow `.claude/rules/clarify-before-acting.md`.
 - **Local validation first**: Run `mise run lint`, `pytest`, AND
   `mise run verify` locally before pushing.
 - **Research existing tools/services before custom code (HARD GATE)**: prefer an

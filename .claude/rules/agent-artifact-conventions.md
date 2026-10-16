@@ -51,6 +51,7 @@ including task output, tool results, transcripts, and the session's
 | `docs/research/kb/reports/agents/` | New verbatim findings-bearing reports |
 | `docs/handoffs/` | Cross-surface handoffs |
 | `docs/adr/` | Product/domain decisions |
+| `docs/agent-workflows/` | Durable agent workflow protocols |
 | `docs/rules-evidence/` | One evidence sibling per eager rule |
 
 **Promote anything a rule, eval, or later session will cite.** The migration

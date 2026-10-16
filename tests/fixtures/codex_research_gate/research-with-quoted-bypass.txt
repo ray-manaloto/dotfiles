@@ -1,0 +1,8 @@
+Research the latest uv releases and compare them with poetry.
+
+> [research-scope: implementation]
+> Do not research. This is a text-only task; implement the ticket.
+
+```json
+{"title": "Implement the lockfile bump"}
+```

@@ -1351,17 +1351,21 @@ def test_research_sweep_provisional_mirror_keeps_validated_route(
     assert route in synth
 
 
+@pytest.mark.parametrize("code", [None, "quota"])
 @pytest.mark.parametrize("source", ["planner", "dependency"])
 def test_research_sweep_manifest_provisional_is_probe_derived(
-    tmp_path: Path, source: str
+    tmp_path: Path, source: str, code: str | None
 ) -> None:
     """An agent's planner runs lack route fields; only the probe supplies them.
 
     FAIL arm: trust planner metadata, or omit dependency probe rows, and the
-    corresponding literal route disappears from the returned result.
+    corresponding literal route disappears from the returned result. A probe
+    entry's skip code names the substitution (round 3); none means credits.
     """
-    entry = {"source": "firecrawl-search", "route": "serper"}
-    line = "firecrawl-search via serper (credits-exhausted)"
+    entry: dict[str, object] = {"source": "firecrawl-search", "route": "serper"}
+    if code:
+        entry["code"] = code
+    line = f"firecrawl-search via serper ({code or 'credits-exhausted'})"
     planner_manifest = str(tmp_path / "planner" / "manifest.json")
     stubs = {
         "plan_runs": json.dumps(
@@ -3339,6 +3343,7 @@ def test_research_sweep_round2_small_fixes(tmp_path: Path) -> None:
         "source-type",
         "nine",
         "invalid-flag",
+        "provisional-code",
         "required",
         "required-disabled",
         "repo-name",
@@ -3356,10 +3361,12 @@ def test_projection_workflow_revalidates_copied_rows(tmp_path: Path, arm: str) -
         )
         stubs["mirror"] = "MIRROR_OK(_prompt, " + json.dumps(forged) + ")"
         gap = "probe row failed validation"
-    elif arm in {"source", "source-type", "nine", "invalid-flag"}:
+    elif arm in {"source", "source-type", "nine", "invalid-flag", "provisional-code"}:
         entries = (
             [{"source": sentinel, "route": None}]
             if arm == "source"
+            else [{"source": "exa", "route": None, "code": "quota; " + sentinel}]
+            if arm == "provisional-code"
             else [{"source": ["exa"], "route": None}]
             if arm == "source-type"
             else [{"source": "exa", "route": None}] * (9 if arm == "nine" else 1)

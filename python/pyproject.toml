@@ -316,6 +316,18 @@ output = "src/dotfiles_setup/generated/drift_verdict.py"
 custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
 """Generated drift-verdict enum; edit the schema and rerun `mise run codegen`."""'''
 
+[tool.datamodel-codegen.jobs.research-skip-reason]
+input = "../schemas/research-skip-reason.schema.json"
+output = "src/dotfiles_setup/generated/research_skip_reason.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated research skip-reason enum; edit the schema and rerun codegen."""'''
+
+[tool.datamodel-codegen.jobs.research-failure-code]
+input = "../schemas/research-failure-code.schema.json"
+output = "src/dotfiles_setup/generated/research_failure_code.py"
+custom-file-header = '''# Copyright (c) 2026 Raymond Manaloto
+"""Generated research failure-code enum; edit the schema and rerun codegen."""'''
+
 [tool.datamodel-codegen.jobs.saved-search-file]
 input = "../schemas/saved-search-file.schema.json"
 output = "src/dotfiles_setup/generated/saved_search_file.py"

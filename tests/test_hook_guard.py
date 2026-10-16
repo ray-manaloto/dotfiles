@@ -1300,3 +1300,26 @@ def test_lint_tool_without_pager_is_allowed(command: str) -> None:
         command,
         rule,
     )
+
+
+def test_broad_environment_stdout_is_denied_before_bash_execution() -> None:
+    """Replay #1847 at the existing public PreToolUse admission seam."""
+    reason = hook_guard.decide_payload("Bash", {"command": "env"})
+    assert reason is not None
+    assert "broad environment" in reason.lower()
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("echo $(sh -c 'printenv')", ("sh -c 'printenv'",)),
+        ("echo `sh -c 'printenv'`", ("sh -c 'printenv'",)),
+        ("echo '$(sh -c printenv)'", ()),
+        ("echo '`sh -c printenv`'", ()),
+        ("cat <<'EOF'\n$(sh -c 'printenv')\nEOF", ()),
+    ],
+)
+def test_substitution_spans_preserve_original_literal_arguments(
+    command: str, expected: tuple[str, ...]
+) -> None:
+    assert hook_guard.literal_command_substitutions(command) == expected

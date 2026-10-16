@@ -8,7 +8,9 @@ import http.client
 import json
 import os
 import signal
+import socket
 import socketserver
+import ssl
 import subprocess
 import sys
 import threading
@@ -28,9 +30,11 @@ if TYPE_CHECKING:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup.generated.research_skip_reason import SkipReason
 from dotfiles_setup.research_fanout import (
     Endpoint,
     FanoutRequest,
+    Http,
     Status,
     default_http,
     default_runner,
@@ -38,6 +42,7 @@ from dotfiles_setup.research_fanout import (
     fan_out,
     is_credit_exhaustion,
     main,
+    strict_five_verdict,
     validate_strict_five,
 )
 
@@ -404,7 +409,8 @@ def test_exa_failures_are_errors(
     assert result.control is None
 
 
-def test_http_timeout_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_http_timeout_is_unavailable_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D236: a metered provider that times out is skipped `unavailable`."""
     monkeypatch.setenv("EXA_API_KEY", "test-key")
 
     def timeout_http(
@@ -424,7 +430,7 @@ def test_http_timeout_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
         http=timeout_http,
     )
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
 
 
@@ -451,7 +457,7 @@ def test_wrapped_socket_timeout_reports_timed_out(
         http=timeout_http,
     )
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
 
 
@@ -561,7 +567,7 @@ def test_default_http_deadline_covers_real_streaming_body(
         )
         elapsed = time.monotonic() - started
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
     assert elapsed <= 1.15
 
@@ -2503,10 +2509,6 @@ def test_credit_http_reason_redacts_request_urls_and_keys(
 @pytest.mark.parametrize(
     "response",
     [
-        (401, b"Insufficient credits"),
-        (401, b"Not enough credits"),
-        (403, b"Insufficient credits"),
-        (429, b"rate limit"),
         (500, b"payment required"),
         (200, b"invalid JSON Insufficient credits"),
     ],
@@ -3336,7 +3338,7 @@ def test_projection_cli_preserves_diagnostics_only_in_evidence(
         "credit": "credits-exhausted",
         "process": "[process-failed]",
         "http": "[http-error]",
-        "prerequisite": "[prerequisite: EXA_API_KEY not inherited; "
+        "prerequisite": "[skipped: credential-missing; EXA_API_KEY not inherited; "
         "run through fnox exec]",
     }
     assert expected[arm] in output
@@ -3491,3 +3493,512 @@ def test_projection_strict_cli_line_contains_no_diagnostics(
     manifest = (tmp_path / "manifest.json").read_text()
     assert sentinel in manifest
     assert sentinel in (tmp_path / "firecrawl-search.json").read_text()
+
+
+def _raising_http(error: BaseException) -> Http:
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del endpoint, params, body, headers, timeout
+        raise error
+
+    return http
+
+
+def _relabel(manifest: Path, source: str, code: str) -> None:
+    data = json.loads(manifest.read_text())
+    next(r for r in data["sources"] if r["source"] == source)["skip_reason"] = code
+    manifest.write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ((401, b"Insufficient credits"), "auth-failed", "quota"),
+        ((403, b""), "auth-failed", "credits-exhausted"),
+        ((429, b"rate limit"), "quota", "auth-failed"),
+    ],
+)
+def test_metered_http_skip_code_rederives_from_hashed_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    case: tuple[tuple[int, bytes], str, str],
+) -> None:
+    """D236: 401/403 auth-failed and 429 quota skip with their HTTP evidence."""
+    del credit_env
+    response, code, forged = case
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    http = FakeHttp({"topic": response})
+    main(["topic", "--sources", "exa", "--out", str(tmp_path)], tmp_path, http=http)
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        code,
+        True,
+    )
+    assert len(http.calls) == 1
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert f"exa skipped: {code}" in reason
+    _relabel(manifest, "exa", forged)
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (TimeoutError(), "unavailable", "timed out"),
+        (urllib.error.URLError(TimeoutError()), "unavailable", "timed out"),
+        (ConnectionRefusedError(61, "refused"), "unavailable", "request failed"),
+        (
+            urllib.error.URLError(socket.gaierror(8, "dns")),
+            "unavailable",
+            "request failed",
+        ),
+        (PermissionError(1, "denied"), "sandbox-denied", "request failed"),
+        (
+            urllib.error.URLError(OSError(1, "denied")),
+            "sandbox-denied",
+            "request failed",
+        ),
+    ],
+)
+def test_metered_transport_failure_skips_with_error_class_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    case: tuple[BaseException, str, str],
+) -> None:
+    """D236: connection, DNS and timeout are unavailable; EPERM is sandbox-denied."""
+    del credit_env
+    error, code, reason = case
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=_raising_http(error),
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["reason"]) == (
+        "skipped",
+        code,
+        reason,
+    )
+    evidence = json.loads(Path(row["raw_file"]).read_bytes())
+    assert set(evidence) == {"error_class", "errno"}
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "exa", "quota" if code == "unavailable" else "unavailable")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+def test_metered_cli_permission_error_is_sandbox_denied(
+    tmp_path: Path, credit_env: None
+) -> None:
+    del credit_env
+
+    def denied(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del argv, timeout, env
+        raise PermissionError(1, "denied")
+
+    main(
+        ["topic", "--sources", "context7", "--out", str(tmp_path)],
+        tmp_path,
+        runner=denied,
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"]) == ("skipped", "sandbox-denied")
+    assert validate_strict_five(_merge_credit_manifest(tmp_path, row), "turn-1")[0]
+
+
+def test_missing_exa_key_is_a_credential_missing_skip(
+    tmp_path: Path, credit_env: None
+) -> None:
+    """Cold review P2-2: the producer writes the code, not prerequisite."""
+    del credit_env
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({}),
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "credential-missing",
+        True,
+    )
+    assert row["reason"] == "EXA_API_KEY not inherited; run through fnox exec"
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert "exa skipped: credential-missing" in reason
+
+
+def test_non_metered_transport_failure_stays_error(credit_env: None) -> None:
+    """GitHub and Last30Days are the fallback chain itself, never skipped."""
+    del credit_env
+
+    def denied(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del argv, timeout, env
+        raise PermissionError(1, "denied")
+
+    [result] = fan_out(
+        FanoutRequest("topic", "openai/codex", ("github-issues",), 10, 5.0),
+        runner=denied,
+        http=FakeHttp({}),
+    )
+    assert (result.status, result.skip_reason) == (Status.ERROR, None)
+
+
+def test_every_skip_reason_projects_to_its_own_failure_code() -> None:
+    """Cold review P3: no skip code collapses to `other`."""
+    for reason in SkipReason:
+        code = failure_code("diagnostic", status="skipped", skip_reason=reason.value)
+        assert code is not None
+        assert code.value == reason.value
+
+
+def _only_row(directory: Path) -> dict[str, Any]:
+    return json.loads((directory / "manifest.json").read_text())["sources"][0]
+
+
+_SERPER_OK = (
+    200,
+    json.dumps(
+        {"organic": [{"title": "R", "link": "https://primary.test/doc"}]}
+    ).encode(),
+)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ssl.SSLError(1, "tls alert"),
+        ssl.SSLCertVerificationError(1, "certificate verify failed"),
+        urllib.error.URLError(ssl.SSLEOFError(8, "eof")),
+    ],
+    ids=["ssl-errno-1", "cert-verify", "ssl-eof"],
+)
+def test_tls_failure_is_unavailable_not_sandbox_denied(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    error: BaseException,
+) -> None:
+    """Round 3 (b): errno 1 on a TLS error is not EPERM; only PermissionError is."""
+    del credit_env
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=_raising_http(error),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["skip_reason"]) == ("skipped", "unavailable")
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "exa", "sandbox-denied")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize(
+    ("source", "cli"), [("context7", "ctx7"), ("firecrawl-search", "firecrawl")]
+)
+def test_missing_metered_cli_is_an_unavailable_skip(
+    tmp_path: Path, credit_env: None, source: str, cli: str
+) -> None:
+    """Round 3 (d): a missing ctx7 or firecrawl CLI is coded, not a blocker."""
+    del credit_env
+    (tmp_path / "bin" / cli).unlink()
+    main(["topic", "--sources", source, "--out", str(tmp_path)], tmp_path)
+    row = _only_row(tmp_path)
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "unavailable",
+        True,
+    )
+    assert row["reason"] == f"needs {cli}"
+    passed, reason = validate_strict_five(
+        _merge_credit_manifest(tmp_path, row), "turn-1"
+    )
+    assert passed
+    assert f"{source} skipped: unavailable" in reason
+
+
+def test_missing_firecrawl_cli_still_routes_to_serper_with_its_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    (tmp_path / "bin" / "firecrawl").unlink()
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["route"], row["skip_reason"]) == (
+        "ok",
+        "serper",
+        "unavailable",
+    )
+    passed, reason = validate_strict_five(
+        _merge_credit_manifest(tmp_path, row), "turn-1"
+    )
+    assert passed
+    assert reason.startswith("provisional: firecrawl-search via serper (unavailable)")
+
+
+@pytest.mark.parametrize(
+    ("stderr", "code"),
+    [
+        (b"Error: HTTP 429 Too Many Requests", "quota"),
+        (b"rate limited; retry later", "quota"),
+        (b"Error: too many requests", "quota"),
+        (b"Request failed with status code 401", "auth-failed"),
+        (b"Error: HTTP 500", None),
+        (b"Error: exited after 429 lines", None),
+    ],
+)
+def test_cli_status_or_rate_limit_with_nonzero_exit_is_coded(
+    tmp_path: Path, credit_env: None, stderr: bytes, code: str | None
+) -> None:
+    """Round 3 (e): a CLI rate limit with a non-zero exit is a quota skip."""
+    del credit_env
+    main(
+        ["topic", "--sources", "context7", "--out", str(tmp_path)],
+        tmp_path,
+        runner=ScriptedRunner([_completed([], 1, b"", stderr)]),
+    )
+    row = _only_row(tmp_path)
+    if code is None:
+        assert (row["status"], row.get("skip_reason")) == ("error", None)
+        return
+    assert (row["status"], row["skip_reason"]) == ("skipped", code)
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "context7", "unavailable")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+def test_substituted_route_carries_its_real_skip_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    """Round 3 (a): a quota-limited primary routed to serper names quota."""
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        runner=ScriptedRunner([_completed([], 1, b"", b"Error: HTTP 429")]),
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["route"], row["skip_reason"]) == (
+        "ok",
+        "serper",
+        "quota",
+    )
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert reason.startswith("provisional: firecrawl-search via serper (quota)")
+    _relabel(manifest, "firecrawl-search", "auth-failed")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize("skip_reason", [["quota"], {"quota": 1}, 7])
+def test_non_string_skip_reason_projects_to_other(skip_reason: object) -> None:
+    """Round 3 (c): an unhashable or non-string skip_reason never crashes."""
+    code = failure_code(None, status="skipped", skip_reason=skip_reason)
+    assert code is not None
+    assert code.value == "other"
+
+
+def _break_last30days(manifest: Path) -> None:
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "last30days")
+    row.update(status="error", items=[], reason="needs last30days script")
+    manifest.write_text(json.dumps(data))
+
+
+def test_web_route_covers_a_missing_last30days_as_provisional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    """Round 4 (r3 P3-1): GitHub plus a Serper route passes without Last30Days."""
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    (tmp_path / "bin" / "firecrawl").unlink()
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    manifest = _merge_credit_manifest(tmp_path, _only_row(tmp_path))
+    _break_last30days(manifest)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed
+    assert any(line.startswith("last30days skipped") for line in verdict.provisional)
+    assert ("last30days", None) in {
+        (entry.source, entry.route) for entry in verdict.provisional_entries
+    }
+
+
+def test_missing_last30days_without_a_web_route_still_fails(tmp_path: Path) -> None:
+    manifest = _strict_manifest(tmp_path)
+    _break_last30days(manifest)
+    assert validate_strict_five(manifest, "turn-1") == (
+        False,
+        "last30days did not complete",
+    )
+
+
+@pytest.mark.parametrize("prefix", ["status", "status code", "Status:", "HTTP"])
+def test_credit_status_scan_is_linear_on_blank_runs(prefix: str) -> None:
+    """Security P3-4: long blank runs after a status word stay linear."""
+    text = (prefix + " " * 20_000 + "x ") * 3
+    started = time.perf_counter()
+    assert is_credit_exhaustion(None, text) is False
+    assert time.perf_counter() - started < 0.2
+
+
+def test_credit_scan_reads_a_bounded_prefix() -> None:
+    assert is_credit_exhaustion(None, "Error: HTTP 402") is True
+    assert is_credit_exhaustion(None, "a" * 200_000 + " HTTP 402") is False
+
+
+_MANIFEST_CAP = 1024 * 1024
+_RAW_CAP = 8 * 1024 * 1024
+
+
+def _bounded_receipt(directory: Path, lane: str) -> tuple[Path, Path, int]:
+    directory.mkdir(exist_ok=True)
+    manifest = _strict_manifest(directory)
+    target = manifest if lane == "manifest" else directory / "context7.raw"
+    if lane in {"provisional", "attempt"}:
+        data = json.loads(manifest.read_text())
+        raw = json.dumps(
+            {"http_status": 402, "rc": None, "body": "", "stderr_redacted": ""}
+        ).encode()
+        primary = directory / "firecrawl-developer.primary.raw"
+        primary.write_bytes(raw)
+        top = directory / "firecrawl-developer.raw"
+        top.write_bytes(raw)
+        row = next(r for r in data["sources"] if r["source"] == "firecrawl-developer")
+        row.update(
+            status="skipped",
+            items=[],
+            provisional=True,
+            skip_reason="credits-exhausted",
+            raw_sha256=hashlib.sha256(raw).hexdigest(),
+            attempts=[
+                {
+                    "route": "firecrawl-developer",
+                    "status": "skipped",
+                    "http_status": 402,
+                    "reason": "HTTP 402",
+                    "raw_file": str(primary),
+                    "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            ],
+        )
+        manifest.write_text(json.dumps(data))
+        target = primary if lane == "attempt" else top
+    assert strict_five_verdict(manifest, "turn-1").passed
+    return manifest, target, _MANIFEST_CAP if lane == "manifest" else _RAW_CAP
+
+
+def _pad_bound_evidence(manifest: Path, target: Path, size: int) -> None:
+    raw = target.read_bytes()
+    target.write_bytes(raw + b" " * (size - len(raw)))
+    if target == manifest:
+        return
+    data = json.loads(manifest.read_text())
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    for row in data["sources"]:
+        evidence_rows = (row, *row.get("attempts", []))
+        paired_envelope = row.get("provisional") and any(
+            evidence.get("raw_file") == str(target) for evidence in evidence_rows
+        )
+        for evidence in evidence_rows:
+            if paired_envelope:
+                Path(evidence["raw_file"]).write_bytes(target.read_bytes())
+            if paired_envelope or evidence.get("raw_file") == str(target):
+                evidence["raw_sha256"] = digest
+    manifest.write_text(json.dumps(data))
+
+
+def _verdict_process(manifest: Path) -> subprocess.CompletedProcess[str]:
+    program = (
+        "import sys;from pathlib import Path;"
+        "from dotfiles_setup.research_fanout import strict_five_verdict;"
+        "print(strict_five_verdict(Path(sys.argv[1]),'turn-1').passed)"
+    )
+    return subprocess.run(
+        [sys.executable, "-c", program, str(manifest)],
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).parent.parent / "python/src"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=3,
+    )
+
+
+@pytest.mark.parametrize("lane", ["manifest", "strict", "provisional", "attempt"])
+@pytest.mark.parametrize(
+    "kind", ["regular", "exact-cap", "oversize", "symlink", "directory", "fifo"]
+)
+def test_receipt_reads_are_bounded_regular_and_never_follow_leaf_links(
+    tmp_path: Path, lane: str, kind: str
+) -> None:
+    """CG-36c F4: every receipt lane has a passing control and a bounded failure."""
+    manifest, target, cap = _bounded_receipt(tmp_path / "evidence", lane)
+    if kind in {"exact-cap", "oversize"}:
+        _pad_bound_evidence(manifest, target, cap + (kind == "oversize"))
+    elif kind == "symlink":
+        saved = target.with_suffix(".saved")
+        target.rename(saved)
+        target.symlink_to(saved)
+    elif kind in {"directory", "fifo"}:
+        target.unlink()
+        target.mkdir() if kind == "directory" else os.mkfifo(target)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(kind in {"regular", "exact-cap"})
+
+
+def test_receipt_rejects_a_symlink_in_any_parent(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "linked"
+    link.symlink_to(real, target_is_directory=True)
+    manifest = _strict_manifest(link)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0
+    assert result.stdout.strip() == "False"
+
+
+@pytest.mark.parametrize("lane", ["manifest", "provisional", "attempt"])
+def test_deeply_nested_evidence_is_refused_without_crashing(
+    tmp_path: Path, lane: str
+) -> None:
+    manifest, target, _ = _bounded_receipt(tmp_path / "evidence", lane)
+    target.write_bytes(b"[" * 1100 + b"]" * 1100)
+    _pad_bound_evidence(manifest, target, target.stat().st_size)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"

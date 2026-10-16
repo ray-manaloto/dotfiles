@@ -1,0 +1,1 @@
+{"nodes":["tests/test_example.py::test_literal[café]","tests/test_example.py::test_other"],"family_counts":{"tests/test_example.py::test_literal":1,"tests/test_example.py::test_other":1}}
