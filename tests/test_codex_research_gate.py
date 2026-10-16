@@ -2150,3 +2150,20 @@ def test_state_tightening_skips_other_owners_and_links(
     link.symlink_to(target)
     _turn(link, "Research the latest uv releases.", last_assistant_message="x")
     assert stat.S_IMODE(target.stat().st_mode) == 0o755
+
+
+# --- cg36b round 5 (lead item 4) --------------------------------------------
+
+
+def test_an_intent_bound_repeat_names_the_directive_that_lifts_it(
+    tmp_path: Path,
+) -> None:
+    """Cold r3 P3-4: the refusal says how to lift an intent binding in-turn."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
+    refused = _invoke(tmp_path, {**submit, "prompt": "Just fix the lint error."})
+    assert refused["decision"] == "block"
+    reason = str(refused["reason"])
+    assert reason.startswith("Research scope already bound to a different submission.")
+    assert "`[research-scope: implementation]` as line 1" in reason

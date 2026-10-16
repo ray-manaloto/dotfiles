@@ -51,9 +51,10 @@ def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | No
 def _repeat_submission(record: dict[str, object], prompt: str) -> dict[str, object]:
     """A bound research turn refuses a different submission in the same turn."""
     if record["prompt_sha256"] != hashlib.sha256(prompt.encode()).hexdigest():
+        lift = _LIFT_HINT if record.get("binding") == "intent" else ""
         return {
             "decision": "block",
-            "reason": "Research scope already bound to a different submission.",
+            "reason": "Research scope already bound to a different submission." + lift,
         }
     return {}
 
@@ -170,6 +171,10 @@ _INTENT = "This turn is research-enforced: the request reads as research." + _OP
 _LIFTED = (
     "Research binding lifted: a same-turn `[research-scope: ...]` directive "
     "replaced the research intent; Stop does not enforce research."
+)
+_LIFT_HINT = (
+    " To lift this research intent, put `[research-scope: implementation]` as "
+    "line 1 of the next submission."
 )
 _LIFT_FAILED = (
     "Research binding not lifted (gate state unwritable: {error}): the research "

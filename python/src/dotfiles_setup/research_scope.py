@@ -126,6 +126,17 @@ _SUBJECT_VERBS = _vocab(
     "returns fails passes works depends gets lives belongs happens helps means "
     "matters seems starts stops goes stays remains involves"
 )
+# One adverb may sit between a subject `research` and its verb.
+_ADVERBS = _vocab(
+    "also still now just only already never always often usually then currently "
+    "sometimes"
+)
+# A lowercase `-s` word then one of these reads as a verb: `Research writes the`.
+_DETERMINERS = _vocab("the a an this that these those our your its their my it them")
+# `Research: done` and other status values are never a request.
+_STATUS = _vocab(
+    "done n/a none todo tbd pending complete completed skipped true false yes no ok -"
+)
 # The one closed list left: this repository's own research-* components. No
 # grammar tells `research gate tests fail` from `research uv releases`.
 _COMPONENTS = _vocab(
@@ -252,15 +263,23 @@ def _do_research(v: list[str]) -> bool:
     return rest[0] == "research" and rest[1] in {"on", "into", "about", "for", ""}
 
 
-def _research(v: list[str], raws: list[str], *, colon: bool) -> bool:
-    """`research X`, never a heading, a status line or a named component."""
-    if not v[1]:
-        return colon  # `Research:` with text after it on the line
+def _research(v: list[str], raws: list[str]) -> bool:
+    """`research X`, never a heading, a status, a subject or a named component."""
+    if not v[2]:
+        return False  # `Research done.`, `Research notes`, a `research:` key
+    at = 2 if v[1] in _ADVERBS else 1  # `Research also uses ...`
+    verb, after = v[at], v[at + 1]
     return not (
-        not v[2]  # `Research done.`, `Research notes`
-        or raws[1].endswith(",")  # `Research done, now fix it.`
-        or v[1] in _AUX
-        or v[1] in _SUBJECT_VERBS
+        raws[1].endswith(",")  # `Research done, now fix it.`
+        or verb in _AUX
+        or verb in _SUBJECT_VERBS
+        or v[1] in _STATUS
+        or (
+            raws[at][:1].islower()
+            and verb.endswith("s")
+            and not verb.endswith("ss")
+            and (after in _DETERMINERS or not after)
+        )
         or v[1].endswith(("n't", "ed"))
         or (v[2] in _AUX and v[1] not in _WH)  # `Research notes are ...`
         or v[1] in _COMPONENTS
@@ -290,18 +309,19 @@ def _lookup(v: list[str], raws: list[str]) -> bool:
     return False
 
 
-def _request(raws: list[str], *, colon: bool) -> bool:
+def _request(raws: list[str]) -> bool:
     """Whether one clause opens with an imperative research request."""
     words = [_norm(raw) for raw in raws]
     start = _lead_end(words)
     raws, words = raws[start:], words[start:]
     v = [*words, "", "", "", "", "", "", ""]
     if v[0] == "research":
-        found = _research(v, raws, colon=colon)
+        found = _research(v, raws)
     elif v[0] == "do":
         found = _do_research(v)
     elif v[0] == "search":
-        found = (v[2] if v[1] == "the" else v[1]) in _WEB
+        at = 2 if v[1] == "the" else 1  # not `search the web module`
+        found = v[at] in _WEB and v[at + 1] in {"for", "about", "on", "to", "and", ""}
     else:
         return _lookup(v, raws) and not _local(raws, words, nouns=True)
     return found and not _local(raws, words, nouns=False)
@@ -320,14 +340,18 @@ def _feed(body: str, pending: list[str]) -> bool:
         end = raw.rstrip(_EDGE)[-1:]
         if not end or end not in _ENDS:
             continue
-        if _request(pending, colon=end == ":"):
+        if end == ":" and pending == ["Research:"]:
+            pending[0] = "Research"  # `Research: X` reads as `Research X`
+            continue
+        if _request(pending):
             return True
-        label = _norm(pending[0])
+        first, label = pending[0], _norm(pending[0])
         pending.clear()
         key = _norm(raw)
         if end == ":" and (
             key in _KEYS
             or label in _LABELS
+            or first == "research:"  # a YAML-style key quotes its value
             or key.endswith(("error", "exception"))
             or _TICKET.fullmatch(key) is not None
         ):
@@ -370,9 +394,9 @@ def intent(prompt: str) -> bool:
         skip = bool(fence) or _quoted_line(line, body)
         # A lowercase line continues a wrapped clause; anything else starts one.
         if skip or not body[0].islower():
-            if _request(pending, colon=False):
+            if _request(pending):
                 return True
             pending.clear()
         if not skip and _feed(body, pending):
             return True
-    return _request(pending, colon=False)
+    return _request(pending)

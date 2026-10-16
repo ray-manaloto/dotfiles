@@ -62,11 +62,16 @@ carries `"binding": "intent"`; its context and Stop block tell the user to opt
 out on the next prompt, and a same-turn non-research directive lifts an intent
 binding by renaming a `"scope": "lifted"` record over it, so Stop and later
 submissions stay unbound (a directive binding stays; a failed lift says the
-requirement stays in force). Known residuals: pasted bullets, speaker labels
-and unlabelled commit messages, a parenthesised commit subject, ops look-ups
-(`check the latest X`) and single-slash local paths such as `docs/agents`
-(read as `owner/repo`) can bind; each gets the opt-out line, and the turn
-ends with `RESEARCH INCOMPLETE:`.
+requirement stays in force). Known residuals that bind (each gets the opt-out
+line and can end with `RESEARCH INCOMPLETE:`): pasted bullets, speaker labels
+and unlabelled commit messages; a parenthesised commit subject; ops look-ups
+(`check the latest X`, `What's new in the CHANGELOG`); single-slash local
+paths such as `docs/agents` (read as `owner/repo`); `research` as a subject
+with an unlisted verb (`Research costs too much`, `Research calls Exa`); and a
+local noun after `research`, `do research` or a subordinate lead (`If needed,
+research the error message.`). Known misses fail open: `find out`, `survey`,
+`gather`, `dig into`, `what are people saying`, and chatty lead-ins such as
+`Hey, quick question -`.
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
 instead of a provider command. Only a valid research record blocks Stop; a

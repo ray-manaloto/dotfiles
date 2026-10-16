@@ -754,3 +754,88 @@ def test_a_single_long_line_is_scanned_up_to_32_kib() -> None:
     tail = "and more filler words " * 3_000
     assert research_scope.intent(_BODY + " " + tail) is True
     assert research_scope.intent("Fix the typo " + tail + _BODY) is False
+
+
+# --- cg36b round 5 (lead items 1-3) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research also uses the cache; document it.",
+        "Research now runs five providers; update the doc.",
+        "Research currently needs a receipt; say so in AGENTS.md.",
+        "Research always fails on Firecrawl; investigate.",
+        "Research sometimes takes ten minutes; add a timeout.",
+        "Research consumes the Exa budget too fast; cap it.",
+        "Research writes its receipt late; fix the ordering.",
+        "Research writes the manifest.",
+        "Research blocks the Stop hook; make it async.",
+        "Research hits the rate limit on Context7; add a backoff.",
+        "Research loads the config twice.",
+        "Research reads the plan file first; keep that.",
+        "Research creates the receipt directory; chmod it.",
+    ],
+)
+def test_research_as_a_subject_after_an_adverb_or_before_a_determiner(
+    prompt: str,
+) -> None:
+    """Round 5 item 1 (cold r3 P2-1): an adverb skip and `-s` + determiner."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research only the latest uv releases.",
+        "Research tools for SBOM generation.",
+        "Research: uv vs poetry for monorepos.",
+        "Research: latest mise releases and their breaking changes.",
+        "Search the web for the latest uv release notes.",
+        "Search online about Exa pricing.",
+        "Search the internet and summarize the uv changelog.",
+    ],
+)
+def test_round_five_requests_still_bind(prompt: str) -> None:
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research: done.",
+        "Research: N/A",
+        "Research: TBD",
+        "Research: pending review",
+        "Research: skipped, no network.",
+        "Research: see findings.md.",
+        "Research: yes",
+        "Research: -",
+        "Status update. Research: complete; tests: green.",
+        "Research: done. Now fix the parser in the gate module.",
+        "research: false",
+        "research: find the latest release",
+        "Set this in the config:\n  research: false",
+        "Fix the indentation in this block.\nhooks:\n  research: true\n  x: false",
+        (
+            "Add this to the config:\nrules:\n  - research: find the latest release\n"
+            "    enforce: true"
+        ),
+    ],
+)
+def test_a_research_status_or_key_is_not_a_request(prompt: str) -> None:
+    """Round 5 item 2 (cold r3 P2-2): `Research: done` and a `research:` key."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Search the web module for dead code.",
+        "Search the web module for unused imports.",
+        "Search GitHub workflows for the old pin.",
+    ],
+)
+def test_search_the_web_needs_a_search_continuation(prompt: str) -> None:
+    """Round 5 item 3: `search the web <noun>` names a local thing."""
+    assert research_scope.intent(prompt) is False
