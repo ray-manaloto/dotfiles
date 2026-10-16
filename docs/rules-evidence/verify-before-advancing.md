@@ -64,3 +64,36 @@ eager file restating what `md-size-budgets.md` and this rule already carry.
 - _None._ — this is internal repo archaeology; the Windsurf figure is cited from
   <https://docs.windsurf.com/windsurf/cascade/memories>, a vendor docs site
   rather than a GitHub repo.
+
+
+## From the rule: Why this rule exists
+
+The expensive failure mode is declaring a step complete on an *assumption*
+("that's a trivial edit", "lint should be fine"); the gap then surfaces a task
+later, when unwinding it is costly. Verification is a hard gate between units of
+work, not a courtesy — the operational teeth behind [[zero-skip-policy]].
+Case history: `docs/rules-evidence/verify-before-advancing.md`.
+
+
+## From the rule: Validate against latest branch code — slow-link worked scenario
+
+**A slow base pull is acceptable — wait for it; never fall back to a stale
+base to save time.** The registry `:dev` is the base built from the
+current `mise-system.toml`, so refreshing to it is the *only* way to test
+the latest code — there is no valid local shortcut. On a slow link the
+multi-GB buildkit pull can take hours; that is expected and fine. Background
+it (`mise run dev-rebuild`, or a `docker buildx build --pull --output
+type=docker` of `:dev` — buildkit, never classic `docker pull` which
+wedges on the large blob) and **wait for it to finish**, then rebuild the
+overlay and re-run the gate. Correctness (testing the latest code) beats
+speed: a green result on a stale base is worse than a slow-but-honest one.
+
+
+## From the rule: Validate against latest branch code — stale-environment worked scenario
+
+When you validate *through the devcontainer*, that container must be
+running the **latest code of the working branch** — the PR branch during
+a PR, `main` on main — on a **current base image**. A container that
+mounts a stale tree, or was built on a base that predates the current
+`.devcontainer/mise-system.toml`, is not a valid validation environment,
+and a green result against it is a false positive.

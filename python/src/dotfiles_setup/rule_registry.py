@@ -119,7 +119,7 @@ KNOWN_UNDETECTED_EAGER_REASONS: frozenset[str] = frozenset(
         # prose, no heading. Re-read the cited line when you move it:
         # the test only asserts "eager" appears, so a stale quote here
         # survives a line-number bump (cold review of 6126a4c).
-        ".claude/rules/clarify-before-acting.md:100",
+        ".claude/rules/clarify-before-acting.md:85",
     }
 )
 

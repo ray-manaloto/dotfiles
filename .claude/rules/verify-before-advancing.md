@@ -10,10 +10,6 @@ passed, and you read the real result.
 
 ## Why this rule exists
 
-The expensive failure mode is declaring a step complete on an *assumption*
-("that's a trivial edit", "lint should be fine"); the gap then surfaces a task
-later, when unwinding it is costly. Verification is a hard gate between units of
-work, not a courtesy — the operational teeth behind [[zero-skip-policy]].
 Case history: `docs/rules-evidence/verify-before-advancing.md`.
 
 ## The check matrix — run what applies to the change
@@ -45,13 +41,6 @@ row, not `verify-local`; a Dockerfile change needs the image row.
 
 ## Validate against the latest branch code (in a current container)
 
-When you validate *through the devcontainer*, that container must be
-running the **latest code of the working branch** — the PR branch during
-a PR, `main` on main — on a **current base image**. A container that
-mounts a stale tree, or was built on a base that predates the current
-`.devcontainer/mise-system.toml`, is not a valid validation environment,
-and a green result against it is a false positive.
-
 `mise run verify-container-latest` enforces this (hard):
 
 - **source is live** — the container bind-mounts THIS workspace, so the
@@ -73,15 +62,9 @@ Base-currency is a hard block by design: do not advance validating against
 a base that predates the branch's `mise-system.toml`.
 
 **A slow base pull is acceptable — wait for it; never fall back to a stale
-base to save time.** The registry `:dev` is the base built from the
-current `mise-system.toml`, so refreshing to it is the *only* way to test
-the latest code — there is no valid local shortcut. On a slow link the
-multi-GB buildkit pull can take hours; that is expected and fine. Background
-it (`mise run dev-rebuild`, or a `docker buildx build --pull --output
-type=docker` of `:dev` — buildkit, never classic `docker pull` which
-wedges on the large blob) and **wait for it to finish**, then rebuild the
-overlay and re-run the gate. Correctness (testing the latest code) beats
-speed: a green result on a stale base is worse than a slow-but-honest one.
+base to save time.** Background
+it (`mise run dev-rebuild`) and **wait for it to finish**, then rebuild the
+overlay and re-run the gate.
 
 ## Evidence discipline (trust the artifact, not the notification)
 

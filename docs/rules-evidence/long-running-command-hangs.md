@@ -120,3 +120,27 @@ the cache has been content-hashed since hk 1.47 (formerly `ci-local-parity.md` r
 _Named in the extracted text but **not** resolved during this extraction: the hk
 upstream project (version claims about 1.46/1.47/1.48/1.50/1.51 are carried over
 from the rule, not re-probed)._
+
+
+## From the rule: Why this rule exists
+
+Session 2026-06-29: a `hk run pre-commit --all` invocation hung at **0%
+CPU with no child processes for ~7 hours** — hk has no native timeout,
+so nothing aborted it. It had been launched as `hk ... 2>&1 | tail -40`,
+so when it was finally killed **the pipeline reported exit 0** (tail's),
+masking the fact that the gate never passed. Two traps in one incident;
+both are now operative rules below, and both are guard-enforced.
+
+
+## From the rule: Rules — bounded polling worked example
+
+   ```bash
+   deadline=$((SECONDS+540))
+   while [ $SECONDS -lt $deadline ]; do grep -q RC "$LOG" && break; sleep 15; done
+   ```
+
+
+## From the rule: Why this rule exists — prior case-history pointer
+
+Case history — the backgrounding reversal, log selection, and the ruff wedge's
+red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.

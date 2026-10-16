@@ -9,8 +9,7 @@ each CLI's help before copying flags. For codex `mise exec` resolves the host's 
 `mise.toml` disables the npm pin), not a stale PATH entry.
 Wrong flags are version-sensitive and may waste a lane before anyone notices.
 Team work goes through `mise run sdlc-team`; single-role lanes use the `codex-{sol,astra}-*`
-wrappers; `mise run codex-lane` is only the DAG review-node producer. The class fix that
-replaces all three with one launcher is a Phase 11 item. Use the direct forms below only
+wrappers; `mise run codex-lane` is only the DAG review-node producer. Use the direct forms below only
 when a task genuinely needs a raw CLI call.
 
 ## Canonical invocation block
@@ -30,13 +29,11 @@ printf '%s\n' "prompt" | mise exec -- codex exec \
 printf '%s\n' "prompt" | mise exec -- opencode run --format json
 ```
 
-⚠️ **Never `--ephemeral`, on ANY lane** (Ray: knowledge-base 2026-09-01, dotfiles 2026-09-15;
-re-applied 2026-09-23 — history in `docs/research/kb/reports/agents/codex-flag-decisions-history-2026-09-23.md`).
+⚠️ **Never `--ephemeral`, on ANY lane**.
 It means "Run without persisting session files to disk": every spawn dies with `collab spawn failed:
-no thread with id` (measured 2026-09-16: 3 failures / 0 session files with it, 0 / 2 without), and
+no thread with id`, and
 the run leaves no rollout, so agentsview and any audit of its model, effort or sandbox see nothing.
-A per-lane "keep it where the lane does not delegate" exception was rejected on 2026-09-01 as a
-policy that drifts. Still in code, tracked by the Phase 11 codex class fix: `codex_lane.py` passes it.
+Still in code, tracked by the Phase 11 codex class fix: `codex_lane.py` passes it.
 Sandbox: `sdlc-team` passes no `-s` (the machine's `danger-full-access` is the approved posture, and
 `workspace-write` also cuts the network, #1039/#1142); the implementer/operator wrappers pin the same
 `danger-full-access` explicitly; advisory wrappers keep `--sandbox read-only` — the only thing that stops them writing.
@@ -57,10 +54,9 @@ This is the canonical argv block. Until the class fix, the 12 codex wrappers sti
   stdin is appended as a `<stdin>` block. Prefer stdin for large prompts and
   unambiguous composition, not because positional prompts fail.
 - `--full-context` does not exist.
-- A call that pins no `-m`/`model_reasoning_effort` inherits the GLOBAL `~/.codex/config.toml` (2026-10-01: an
-  unpinned review lens ran at effort `low` and had to be re-run): pin both per call and read the run's model/effort
+- A call that pins no `-m`/`model_reasoning_effort` inherits the GLOBAL `~/.codex/config.toml`: pin both per call and read the run's model/effort
   banner or its rollout before citing a result. The project `.codex/config.toml` IS read and validated
-  (`--ignore-user-config` suppresses it) — an older "project config is inert" note is wrong — but it is gitignored and
+  (`--ignore-user-config` suppresses it) — but it is gitignored and
   untracked, so `git clean -xdf` deletes it. Evidence: `docs/research/kb/reports/agents/memory-curation-review-2026-10-03.md` (C7a).
 
 The operator-specific control plane and error history remain in
@@ -72,10 +68,8 @@ contract.
 Invoke agy by its NATIVE path, `"$HOME/.local/bin/agy"` (Ray, 2026-10-01: native installer only,
 self-updating via `agy update` (codex: `codex update`, claude: `claude update`); every mise name for it
 is in `disable_tools`). A leftover mise copy can sit AHEAD of it on PATH, so never rely on bare `agy`
-or `mise exec -- agy`.
-
-`agy --print --output-format …` fails rc=2 (`--print took "--output-format" as its prompt`); a stdin-only
-prompt is rejected (`flag needs an argument: -print`), and `--print -` takes `-` as the prompt (re-probed 2026-09-25, agy 1.2.11).
+or `mise exec -- agy`. ⚠️ `agy --print --output-format …` exits 2, a stdin-only
+prompt is rejected, and `--print -` silently takes `-` as the prompt.
 
 `which -a agy` shows which copy PATH order selects on this machine; keep the
 explicit form regardless. For raw Gemini, `gemini "prompt"` remains

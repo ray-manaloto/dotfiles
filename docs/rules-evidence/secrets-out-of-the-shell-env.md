@@ -727,3 +727,47 @@ Verbatim text removed from `.claude/rules/secrets-out-of-the-shell-env.md` by th
 >    false under `fnox exec`, and the reversal widened it to everything.) The
 >    correction runs in the **worse** direction: assume every credential is reachable
 >    from any shell. `docs/rules-evidence/secrets-out-of-the-shell-env.md`.
+
+
+## From the rule: Rules — scanner measurement
+
+ — measured
+   gitleaks 2 → 0, betterleaks 1 → 0 on the same content in two forms.
+
+
+## From the rule: Rules — stdout incident
+
+ Measured 2026-08-02: a `${(P)k}` expansion meant as a presence flag
+   printed four live credential values, and all four had to be rotated. They were
+   the four `env = true` opt-ins.
+
+
+## From the rule: Rules — credential-file incident
+
+ Rule 7
+   guards a *variable*; on 2026-09-13 the leak came through a **file**, so nothing
+   could have fired. `~/.agentsview/config.toml` was described as holding feature
+   flags, and a `cat` of it put an `auth_token` and a `cursor_secret` in the
+   transcript. **The description was the whole error** —
+
+
+## From the rule: Rules — credential-file live probes
+
+   Both arms were verified live, on an **absent** covered path so a failed rule
+   could not leak: `cat ~/.netrc` → *denied* (not "No such file"), `Read` of
+   `~/.aws/credentials` → *denied*, while a normal `cat` of a repo file still
+   worked.
+
+
+## From the rule: Introduction — Doppler declaration incident
+
+ That is why
+`AGE_PRIVATE_KEY` would not declare until the `doppler-cli` entry was gone — two
+attempts auto-rolled-back and the declaration was wrongly blamed.
+
+
+## From the rule: Introduction — dated keychain measurement
+
+ (recreated
+after a 2026-08-02 deletion; `security find-generic-password -s` rc=0, bogus
+name rc=44, re-measured 2026-09-24)

@@ -53,9 +53,7 @@ including task output, tool results, transcripts, and the session's
 | `docs/adr/` | Product/domain decisions |
 | `docs/rules-evidence/` | One evidence sibling per eager rule |
 
-**Promote anything a rule, eval, or later session will cite.** The migration
-found eager rules citing machine-local research, leaving every other clone with
-a dead link. A citation that only one machine can open is not durable evidence.
+**Promote anything a rule, eval, or later session will cite.**
 
 ## Worktrees and agent isolation
 
@@ -93,14 +91,6 @@ that worktree cleanup promoted a report—it only removed the isolated worktree.
    writing-for-agents workflows rather than copying a stale template.
 8. **Do not normalize records.** Verbatim reports and ingested source corpora
    preserve what was observed. Fix authored pointers, not archived evidence.
-
-Native anchors re-read 2026-09-09: plan defaults at
-`$CC/settings-reference.md:2709-2721`; skill locations and discovery at
-`$CC/skills.md:111-175`, listing composition at `$CC/skills.md:337-338`, and
-listing pressure at `$CC/skills.md:1050-1058`; memory scopes at
-`$CC/sub-agents.md:563-598`; worktrees at `$CC/sub-agents.md:269-305` and
-`$CC/worktrees.md:179-189`; native state at
-`$CC/claude-directory.md:1493-1527`.
 
 ## Why this rule cannot be `paths:`-scoped
 

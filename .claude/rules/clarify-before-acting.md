@@ -16,11 +16,7 @@ conversation's tool pool, so it is the one subagent shape that can still ask.
 
 ## Why this rule exists
 
-Session 2026-06-29: the user requested hk-hang prevention and asked to be
-questioned until the approach was certain. The selected idea—per-step hk
-timeouts—proved impossible because hk has no timeout support. Surfacing that
-before implementation and confirming the outer-timeout pivot prevented the
-wrong system from being built.
+Case history: `docs/rules-evidence/clarify-before-acting.md`.
 
 ## Rules
 
@@ -68,13 +64,6 @@ questions missing the recommendation, `PRO:`/`CON:`, or citation. The deny
 prevents the call and returns its reason to the model; selfcheck exercises both
 allow and deny arms through the registered wrapper.
 
-Current native anchors (re-read 2026-09-09): ordinary subagents lose
-`AskUserQuestion` even when explicitly allowed, while forks retain the parent
-pool (`$CC/sub-agents.md:379-384`); project settings reload without restart
-(`$CC/settings.md:646`); and a hook `deny` prevents the tool call
-(`$CC/hooks.md:1744-1745`). Timeout scope and behavior are documented at
-`$CC/settings-reference.md:2759-2774` and `$CC/tools-reference.md:125-137`.
-
 ⚠️ **The nine-tool matcher above is an exact-string list, not a regular
 expression.** Matcher evaluation depends on the characters in the value
 (`$CC/hooks.md:285-297`): `*`/empty matches all; a value of only letters,
@@ -92,14 +81,8 @@ For an ordinary subagent, the prose fallback preserves the decision boundary:
 the delegate returns its recommendation and waits for the coordinator or user
 to provide the missing choice.
 
-The prose path has no enforcement callback. Its protection is the explicit
-stop, which prevents work from racing ahead of the answer.
-
-The hook cannot detect a question that was never attempted, cannot grade prose
-fallbacks, and cannot make a stripped tool reappear. Judgment therefore stays
+Judgment therefore stays
 in this eager rule; automation only protects the call surface it can observe.
-The standard has drifted repeatedly, so the ask-quality implementation remains
-the mechanical layer for tool-based asks.
 
 ## Applies to
 

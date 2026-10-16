@@ -257,3 +257,112 @@ cross-check examples. Its upstream repo is deliberately **not** enumerated here:
 the owner/repo was not re-verified while writing this file, and a URL asserted
 from memory is the same defect the rule warns about. Resolve it from the
 installed package metadata before adding the row.
+
+
+## From the rule: Why this rule exists
+
+Session 2026-07-15 produced **five false negatives in one session**, every one
+from a probe that could not have succeeded. The canonical one:
+`find … -name 'agent-*.jsonl'` reported "AGENT DEAD, no transcript" — teammate
+transcripts are `<uuid>.jsonl`, so the glob **can never match**. The agent was
+alive and had delivered a 34 KB report.
+
+The **inverse** bites too. `cmd | grep -q PAT` under `set -o pipefail` returns
+**141**, so the check fails *because the match succeeded* — a probe that can
+only fail. That broke the #289 base build; see `no_grep_q_under_pipefail` in
+`hk.pkl`.
+
+
+## From the rule: Rules — positive-control worked example
+
+   (Doing this caught a broken test harness in this very session — `pkl eval -x`
+   returned empty, so `bash -c ""` "passed".)
+
+
+## From the rule: Rules — bounded parser and token-spelling incidents
+
+ — a `^: ts;(.*)$` read of `~/.zsh_history`
+   hid the very command a 4-hour investigation was hunting, and the absence was
+   published as a finding), and — most common of all — **a TOKEN SPELLING**. A
+   session once grepped `lmstudio`/`lm_studio`, got 0, and reported the feature
+   unsupported; it is spelled `LM Studio`, with a space.
+
+
+## From the rule: Rules — reused absent-control incident
+
+ Measured 2026-08-01: `zzqqxx`, the arm three prior receipts
+   all used, returned **5 files** — three of them those receipts.
+
+
+## From the rule: Rules — fixture-control incident
+
+ — and a fully-armed probe on
+   a rigged fixture yields a confident wrong finding (a #441 fixture named two
+   secrets no single profile could hold, forcing all six arms to one outcome).
+
+
+## From the rule: Rules — Renovate validator incident
+
+   Worked case (#644): `renovate-config-validator` warns *"RE2 not usable"* and
+   **still exits 0**, so every regex went unchecked while the gate stayed green.
+   The fix validates a canary config whose only flaw is a lookahead and demands
+   a non-zero exit. **A canary tests the binary that RUNS; a version tests the
+   one you believe you installed** — `mise which` reported the fixed version
+   while `PATH` still resolved the stale one.
+
+
+## From the rule: Cross-check — worked MISSING/PRESENT example
+
+The cheapest bug detector available is a **second probe of the same fact by a
+different route**. No fixture, no reasoning: if two probes of one fact disagree
+you have found a defect for free — and it is in a probe far more often than in
+the world. Reach for it the moment a result surprises you, *before* you write up
+the surprise.
+
+It names *which* answer to distrust. A lone probe returning "MISSING" is
+indistinguishable from a probe that cannot see; a second route returning
+"PRESENT" proves the first one is blind.
+
+
+## From the rule: Rules — inherited-figure provenance walkthrough
+
+ A
+   figure that arrives from a handoff, a prior session's table, or your own
+   earlier message has *no control arm attached*. Repeating it converts someone
+   else's unverified note into your finding, and the provenance is gone the
+   moment you restate it.
+
+
+## From the rule: Introduction — extension of the test-evidence rule
+
+`tests/AGENTS.md` already states this for **tests**. This rule generalises it to
+**every ad-hoc probe**: a `find`, a `curl`, a liveness check, a `grep`, a shell
+one-liner in a Bash tool call. Those are where it actually bites, because
+nothing reviews them.
+
+
+## From the rule: Cross-check — secondary-source aging example
+
+The
+recurring shape is a *secondary* artifact (an unclosed issue, a dependency's
+README) read as the current state of a *primary* one (the shipped source, the
+platform's API). Issues stay open after the fix lands; vendored docs freeze at
+their commit date.
+
+
+## From the rule: Rules — display-bound worked examples
+
+ (`| head`,
+   `| tail`, a bare `ls` of a large dir)
+
+
+## From the rule: Rules — parser-bound worked example
+
+ (a single-line regex over a multi-line
+   record silently drops the tail)
+
+
+## From the rule: Rules — fixture/probe explanatory distinction
+
+   Rules 1–7 verify the *probe* discriminates. They say nothing about whether
+   the *world you built for it* admits both answers.

@@ -124,3 +124,43 @@ one command.
 | `--print -` with stdin | 0 | no answer: `-` taken as the literal prompt (session-audit-dismissed-errors-2026-09-25b.md F5) |
 
 Bare `agy` (no `--model`) runs Gemini 3.8 Flash (High): `~/.gemini/antigravity-cli/cli.log` "Propagating selected model override … Gemini 3.8 Flash (High)".
+
+
+## From the rule: Canonical invocation — historical ephemeral measurements
+
+ (measured 2026-09-16: 3 failures / 0 session files with it, 0 / 2 without)
+
+
+## From the rule: Canonical invocation — rejected exception history
+
+A per-lane "keep it where the lane does not delegate" exception was rejected on 2026-09-01 as a
+policy that drifts.
+
+
+## From the rule: Codex facts — unpinned review incident
+
+ (2026-10-01: an
+  unpinned review lens ran at effort `low` and had to be re-run)
+
+
+## From the rule: Codex facts — superseded config note
+
+ — an older "project config is inert" note is wrong
+
+
+## From the rule: Introduction — Phase 11 roadmap archaeology
+
+The class fix that
+replaces all three with one launcher is a Phase 11 item.
+
+
+## From the rule: Canonical invocation — ephemeral policy decision history
+
+ (Ray: knowledge-base 2026-09-01, dotfiles 2026-09-15;
+re-applied 2026-09-23 — history in `docs/research/kb/reports/agents/codex-flag-decisions-history-2026-09-23.md`).
+
+
+## From the rule: Gemini and OpenCode traps — rejected-argv measurements
+
+`agy --print --output-format …` fails rc=2 (`--print took "--output-format" as its prompt`); a stdin-only
+prompt is rejected (`flag needs an argument: -print`), and `--print -` takes `-` as the prompt (re-probed 2026-09-25, agy 1.2.11).

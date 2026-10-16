@@ -115,3 +115,21 @@ Verbatim text removed from `.claude/rules/agent-artifact-conventions.md` by the 
 >    corpus does not say that: `$CC/env-vars.md:466` scopes it to "skill metadata
 >    shown to the Skill tool", and `$CC/skills.md:1050-1058` describes a
 >    skill-listing budget throughout. Corrected rather than re-anchored.
+
+
+## From the rule: Tracked, durable — migration
+
+ The migration
+found eager rules citing machine-local research, leaving every other clone with
+a dead link. A citation that only one machine can open is not durable evidence.
+
+
+## From the rule: Native anchors
+
+Native anchors re-read 2026-09-09: plan defaults at
+`$CC/settings-reference.md:2709-2721`; skill locations and discovery at
+`$CC/skills.md:111-175`, listing composition at `$CC/skills.md:337-338`, and
+listing pressure at `$CC/skills.md:1050-1058`; memory scopes at
+`$CC/sub-agents.md:563-598`; worktrees at `$CC/sub-agents.md:269-305` and
+`$CC/worktrees.md:179-189`; native state at
+`$CC/claude-directory.md:1493-1527`.

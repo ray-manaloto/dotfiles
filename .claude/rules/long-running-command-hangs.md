@@ -6,15 +6,7 @@ potentially-slow command and then wait on it indefinitely.
 
 ## Why this rule exists
 
-Session 2026-06-29: a `hk run pre-commit --all` invocation hung at **0%
-CPU with no child processes for ~7 hours** — hk has no native timeout,
-so nothing aborted it. It had been launched as `hk ... 2>&1 | tail -40`,
-so when it was finally killed **the pipeline reported exit 0** (tail's),
-masking the fact that the gate never passed. Two traps in one incident;
-both are now operative rules below, and both are guard-enforced.
-
-Case history — the backgrounding reversal, log selection, and the ruff wedge's
-red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
+Case history: `docs/rules-evidence/long-running-command-hangs.md`.
 
 ## Rules
 
@@ -39,11 +31,7 @@ red herrings — lives in `docs/rules-evidence/long-running-command-hangs.md`.
    when the completion notice arrives — the command keeps running after the
    turn ends. A foreground subagent's background commands stop at its final
    response, so a subagent keeps its turn engaged with a bounded poll:
-
-   ```bash
-   deadline=$((SECONDS+540))
-   while [ $SECONDS -lt $deadline ]; do grep -q RC "$LOG" && break; sleep 15; done
-   ```
+   `deadline=$((SECONDS+540)); while [ $SECONDS -lt $deadline ]; do grep -qs RC "$LOG" && break; sleep 15; done`
 
    Preserve that `deadline`. The wait-loop guard accepts a bound only when the
    loop condition compares `SECONDS`, `deadline`/`DEADLINE`/`end`, or

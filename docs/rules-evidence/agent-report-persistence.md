@@ -215,3 +215,44 @@ asymmetry is the argument for rule 1, demonstrated rather than asserted.
 Fix: the `SubagentStart` payload now states append-only in its own clause, and
 that clause is a required token of `check_subagent_contract_endtoend`, so it
 cannot be dropped from the payload without the suite going red.
+
+
+## From the rule: Why this rule exists
+
+On 2026-07-05, an 11-agent sweep produced 13 detailed reports that existed only
+in context. On 2026-08-03, two agents died after about 40 minutes with nothing
+written because incremental persistence was omitted from all four briefs. The
+conclusion may survive condensation; exact commands, evidence, and file:line
+anchors do not.
+
+
+## From the rule: Native carriage — SubagentStop incident
+
+The first attempt used `decision: "block"` there; switching it to
+`additionalContext` was only half a fix, because **both** channels "keep the
+subagent running" (`$CC/hooks.md:2346`, `:2549`) — the only documented
+difference is the transcript label. Measured on the first live delegation under
+that hook, the reminder landed in **four** distinct `user` records of one
+subagent transcript: four forced continuations, unscoped, on every delegation
+in the repo. And the forced turn becomes the delegate's new *final assistant
+message*, so a one-line "already delivered" can displace the very report the
+parent is waiting on. `$CC/hooks.md:2346` names the alternative in the same
+sentence that documents the trap: "To inject context into the parent session
+after a subagent returns, use a `PostToolUse` hook on the `Agent` tool instead."
+
+
+## From the rule: Rules — append-only incident
+
+ Measured 2026-09-09: a codex lane opened its section by writing its
+   own heading as the whole file and silently destroyed the coordinator's
+   entries in both — the work survived only because the durable claims had
+   already been promoted to a tracked `docs/rules-evidence/` note, which is
+   exactly why rule 1 sends findings-bearing output somewhere tracked. The
+
+
+## From the rule: Native anchors
+
+Native anchors re-read 2026-09-09: `hooks.md:314`, `:870`, `:888`,
+`:2304-2317`, and `:2319-2346`; transcript paths at
+`$CC/sub-agents.md:1051-1057`. Probe detail is in
+`docs/rules-evidence/agent-report-persistence.md`.

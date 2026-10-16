@@ -20,19 +20,10 @@ Before broad source search, run `mise run graphify-health`.
 
 ## What `fresh` means
 
-`_staleness_problem` decides it from two independent sources: Git says what
-changed after `built_at_commit` — a field **graphify itself** writes from HEAD
-at export time — while `graphify-out/manifest.json` says which relative paths
-Graphify scanned. Equality with HEAD is immediately fresh. Otherwise a
-manifest-listed path is stale for any change status; an unlisted path is stale
-only when newly added with an extension already present in the manifest. A
-modified or deleted unlisted path stays outside the corpus even when its
-extension matches a scanned file.
+Health implementation reference: `docs/rules-evidence/graphify-first.md`.
 
 ⚠️ **Ancestry is deliberately not the test.** This repo squash-merges, so a graph
-built on a PR branch records a commit that never enters main's history — the
-2026-08-31 graph's `b75fa3b` has six commits unreachable from HEAD and no branch
-contains it. An "is it an ancestor" check would report `stale` on nearly every
+built on a PR branch records a commit that never enters main's history. An "is it an ancestor" check would report `stale` on nearly every
 graph: the mirror of the defect. Git compares the two endpoint trees instead;
 if the build commit is unknown to Git, health fails closed as `stale`.
 
@@ -45,19 +36,6 @@ dirty".
 
 ## Nothing records WHICH graphify built the graph
 
-`graphify` on bare `PATH` resolves the **user-global** pin
-(`~/.config/mise/config.toml`, outside this repo's review); the mise tasks
-resolve **this repo's locked version** (`python/uv.lock`), which
-`graphify_health`'s `version drift` check compares against. `mise run
-pin-parity` binds every repository-owned pin site; the SessionStart doctor's
-offline check names the user-global fix when the PATH binary drifts from the
-lock.
-
-Health reads the graphify installed in the *checking* process. Nothing records
-which binary *built* the graph bytes, so a graph rebuilt by a drifted PATH
-binary (a bare `graphify update .`) is indistinguishable from one built by the
-pin.
-
 So the guarantee here is **procedural, not enforced**: always run
 `mise run graphify-query`/`graphify-rebuild`, never the bare binary, and
 `graphify-first.md`'s `version drift`/`stale` states only ever catch the
@@ -69,10 +47,7 @@ authoritative, by convention, not by verification.
 
 A present KB-style build receipt (`graphify-out/build-receipt.json`) is
 still verified byte-for-byte when one exists, but its absence is not a
-fault: nothing in this repo writes one (that's the knowledge-base's
-committed-corpus pipeline; see `_receipt_problem`'s docstring in
-`python/src/dotfiles_setup/graphify.py` for why this repo cannot build one
-of its own for an on-demand graph).
+fault.
 
 For every dependency/session review, check the latest Graphify release and the
 project's critical/currency dependencies. Review release notes and source diffs,
