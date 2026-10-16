@@ -2204,3 +2204,120 @@ def test_failed_stop_repeats_the_exact_submit_recovery_command(
     assert "--request-id turn-1" in commands[0]
     assert stopped["decision"] == "block"
     assert commands[0] in str(stopped["reason"])
+
+
+_INCOMPLETE_OUTCOME = {
+    "status": "INCOMPLETE",
+    "coverage_complete": False,
+    "request_id": "turn-1",
+    "failed_routes": [{"route": "fnox", "error_class": "ProcessExitError"}],
+}
+
+
+@pytest.mark.parametrize(
+    ("change", "accepted"),
+    [
+        ({}, True),
+        ({"status": "COMPLETE"}, False),
+        ({"coverage_complete": True}, False),
+        ({"request_id": "turn-2"}, False),
+        ({"failed_routes": []}, False),
+        (
+            {
+                "failed_routes": [
+                    {"route": "arbitrary", "error_class": "ProcessExitError"}
+                ]
+            },
+            False,
+        ),
+        (
+            {
+                "failed_routes": [
+                    {"route": "fnox", "error_class": "raw secret diagnostic"}
+                ]
+            },
+            False,
+        ),
+        ({"failed_routes": [{"route": "fnox", "error_class": "ProviderError"}]}, False),
+        ({"diagnostic": "raw secret diagnostic"}, False),
+    ],
+)
+def test_durable_incomplete_outcome_is_bound_strict_and_never_complete(
+    tmp_path: Path, change: dict[str, object], *, accepted: bool
+) -> None:
+    """CG-36c F3: only a same-request sanitized marker releases an honest Stop."""
+    marker = _bound_marker(tmp_path)
+    record = json.loads(marker.read_text())
+    record["outcome"] = {**_INCOMPLETE_OUTCOME, **change}
+    marker.write_text(json.dumps(record))
+    base = {"session_id": "session-1", "turn_id": "turn-1", "hook_event_name": "Stop"}
+    claimed = _invoke(
+        tmp_path, {**base, "last_assistant_message": "Research complete."}
+    )
+    assert claimed["decision"] == "block"
+    honest = _invoke(
+        tmp_path,
+        {**base, "last_assistant_message": "RESEARCH INCOMPLETE: fnox failed."},
+    )
+    if accepted:
+        assert "decision" not in honest
+        assert "incomplete" in str(honest["systemMessage"]).lower()
+    else:
+        assert honest["decision"] == "block"
+
+
+def test_continued_honest_incomplete_records_a_durable_safe_outcome(
+    tmp_path: Path,
+) -> None:
+    """The legacy continued-Stop escape persists its honest status for later Stops."""
+    marker = _bound_marker(tmp_path)
+    original = json.loads(marker.read_text())
+    event: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "Stop",
+        "stop_hook_active": True,
+        "last_assistant_message": "RESEARCH INCOMPLETE: fixture blocker.",
+    }
+    assert "decision" not in _invoke(tmp_path, event)
+    recorded = json.loads(marker.read_text())
+    assert recorded == {
+        **original,
+        "outcome": {
+            **_INCOMPLETE_OUTCOME,
+            "failed_routes": [
+                {"route": "gate-validation", "error_class": "ReceiptValidationError"}
+            ],
+        },
+    }
+    assert stat.S_IMODE(marker.stat().st_mode) == 0o600
+    assert "decision" not in _invoke(tmp_path, {**event, "stop_hook_active": False})
+
+
+def test_durable_incomplete_marker_does_not_hide_later_complete_receipt(
+    tmp_path: Path,
+) -> None:
+    marker = _bound_marker(tmp_path)
+    record = json.loads(marker.read_text())
+    marker.write_text(json.dumps({**record, "outcome": _INCOMPLETE_OUTCOME}))
+    manifest = _hook_manifest(marker.parent)
+    data = json.loads(manifest.read_text())
+    raw = json.dumps(
+        {"success": True, "results": [{"url": "https://primary.test"}]}
+    ).encode()
+    raw_path = marker.parent / "firecrawl-developer.raw"
+    raw_path.write_bytes(raw)
+    data["sources"] = [
+        {
+            "source": "firecrawl-developer",
+            "status": "ok",
+            "items": [{"url": "https://primary.test"}],
+            "raw_file": str(raw_path),
+            "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        }
+        if row["source"] == "firecrawl-developer"
+        else row
+        for row in data["sources"]
+    ]
+    manifest.write_text(json.dumps(data))
+    assert _stop_once(tmp_path) == {}

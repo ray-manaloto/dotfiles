@@ -37,7 +37,7 @@ def _wrapper(
     )
     stub.chmod(0o700)
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
     env = {
         **os.environ,
         "HOME": str(home),
@@ -99,3 +99,67 @@ def test_wrapper_pins_native_profile_forwards_argv_and_preserves_exit(
         *forwarded,
     ]
     assert _NOISE not in result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    ("manifest_request", "status"),
+    [
+        (None, "error"),
+        ("turn-1", "error"),
+        ("stale-turn", "error"),
+        ("turn-1", "empty_unverified"),
+    ],
+)
+def test_failed_wrapper_records_only_safe_same_request_incomplete_metadata(
+    tmp_path: Path, manifest_request: str | None, status: str
+) -> None:
+    """CG-36c F3: failed native bootstrap/provider execution is durable and private."""
+    home = tmp_path / "home"
+    home.mkdir()
+    marker = home / ".codex/research-coverage/session-1/turn-1/required.json"
+    bound = {
+        "turn_id": "turn-1",
+        "scope": "research",
+        "policy": "strict-five-v2",
+        "prompt_sha256": "a" * 64,
+    }
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps(bound))
+    if manifest_request is not None:
+        (marker.parent / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "request_id": manifest_request,
+                    "strict_five": True,
+                    "policy_version": "strict-five-v2",
+                    "sources": [{"source": "exa", "status": status, "reason": _NOISE}],
+                }
+            )
+        )
+    result, _ = _wrapper(
+        tmp_path,
+        [
+            "topic",
+            "--strict-five",
+            "--request-id",
+            "turn-1",
+            "--out",
+            str(marker.parent),
+        ],
+        23,
+    )
+    assert result.returncode == 23
+    expected_routes = [{"route": "fnox", "error_class": "ProcessExitError"}]
+    if manifest_request == "turn-1":
+        expected_routes.append({"route": "exa", "error_class": "ProviderError"})
+    assert json.loads(marker.read_text()) == {
+        **bound,
+        "outcome": {
+            "status": "INCOMPLETE",
+            "coverage_complete": False,
+            "request_id": "turn-1",
+            "failed_routes": expected_routes,
+        },
+    }
+    assert marker.stat().st_mode & 0o777 == 0o600
+    assert _NOISE not in marker.read_text() + result.stdout + result.stderr

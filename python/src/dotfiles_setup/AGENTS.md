@@ -47,6 +47,17 @@ provisional source and `via <route>` for each substituted source, and say
 answer is null. It allows an already continued Stop (`stop_hook_active`),
 including a provisional pass after an earlier INCOMPLETE block; that accepted
 limitation can leave a provisional answer unnamed.
+Failed `research-gate` invocations retain a request-bound `outcome` in the
+research submission record: `status: INCOMPLETE`, `coverage_complete: false`, and only
+allowlisted failed route and error-class tokens. A valid outcome permits an
+answer beginning `RESEARCH INCOMPLETE:` to end immediately; it never permits
+a completion claim. Without that marker, a continued honest INCOMPLETE Stop
+records the outcome before allowing termination. A failed write produces an
+explicit notice and preserves the honest escape. A later valid receipt is
+checked first, so historical failures cannot override successful evidence.
+An invocation failure always retains `fnox/ProcessExitError`; any appended
+provider rows describe retained same-request manifest history and do not
+establish that the current attempt dispatched those providers.
 Codex hook scope: an exact caller first line `[research-scope: <scope>]`
 (CRLF accepted) decides. `research` binds the turn; `implementation`,
 `text-edit` and `local-only` write no hook state and are the opt-out. Without a

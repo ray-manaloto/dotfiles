@@ -12,7 +12,7 @@ import stat
 import sys
 from pathlib import Path
 
-from dotfiles_setup import research_scope
+from dotfiles_setup import research_gate_outcome, research_scope
 from dotfiles_setup.research_fanout import strict_five_verdict
 
 # Advisory hint only, never a binding: research verbs, not everyday words such
@@ -317,12 +317,22 @@ def _on_stop(
         }
     reason = verdict.reason[:_REASON_CAP]
     message = event.get("last_assistant_message")
+    marker = manifest.with_name("required.json")
+    record = _research_record(marker, str(event["turn_id"]))
+    honest = isinstance(message, str) and message.lstrip().startswith(
+        "RESEARCH INCOMPLETE:"
+    )
     if (
-        event.get("stop_hook_active") is True
-        and isinstance(message, str)
-        and message.lstrip().startswith("RESEARCH INCOMPLETE:")
+        isinstance(record, dict)
+        and research_gate_outcome.valid_outcome(record)
+        and honest
     ):
-        return {"systemMessage": f"Research coverage remains incomplete: {reason}"}
+        return {
+            "systemMessage": "Research coverage remains incomplete "
+            "(recorded INCOMPLETE)."
+        }
+    if event.get("stop_hook_active") is True and honest:
+        return _accept_incomplete(event, marker, reason)
     return {
         "decision": "block",
         "reason": (
@@ -337,7 +347,24 @@ def _on_stop(
     }
 
 
-def _invalid_submission(event: dict[str, object], reason: str) -> dict[str, object]:
+def _accept_incomplete(
+    event: dict[str, object], marker: Path, reason: str
+) -> dict[str, object]:
+    notice = f"Research coverage remains incomplete: {reason}"
+    try:
+        record_incomplete(
+            marker,
+            str(event["turn_id"]),
+            [{"route": "gate-validation", "error_class": "ReceiptValidationError"}],
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        notice += f"; INCOMPLETE outcome could not be persisted ({type(exc).__name__})"
+    return {"systemMessage": notice}
+
+
+def _invalid_submission(
+    event: dict[str, object], reason: str, marker: Path
+) -> dict[str, object]:
     """Allow only continued honest incomplete termination of a parsed Stop."""
     message = event.get("last_assistant_message")
     if (
@@ -345,7 +372,7 @@ def _invalid_submission(event: dict[str, object], reason: str) -> dict[str, obje
         and isinstance(message, str)
         and message.lstrip().startswith("RESEARCH INCOMPLETE:")
     ):
-        return {"systemMessage": f"Research coverage remains incomplete: {reason}"}
+        return _accept_incomplete(event, marker, reason)
     return {"decision": "block", "reason": reason}
 
 
@@ -389,6 +416,17 @@ def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | No
     ):
         return "malformed"
     return recorded
+
+
+def record_incomplete(
+    marker: Path, request_id: str, failures: list[dict[str, str]]
+) -> None:
+    """Record failures only against an existing valid same-request binding."""
+    record = _research_record(marker, request_id)
+    if not isinstance(record, dict):
+        message = "research binding unavailable"
+        raise TypeError(message)
+    research_gate_outcome.persist(marker, record, failures)
 
 
 def _on_bound_stop(
@@ -446,7 +484,7 @@ def _state_error(
         and isinstance(_research_record(paths[0], str(event["turn_id"])), dict)
     ):
         reason = f"Research hook could not validate evidence: {type(exc).__name__}"
-        return _invalid_submission(event, reason)
+        return _invalid_submission(event, reason, paths[0])
     return {
         "systemMessage": f"Research hook state unavailable ({type(exc).__name__}); "
         "this turn is not bound as research."
