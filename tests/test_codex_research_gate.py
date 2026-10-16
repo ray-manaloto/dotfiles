@@ -2185,3 +2185,22 @@ def test_a_research_not_needed_note_never_blocks_stop(tmp_path: Path) -> None:
     assert "This turn is research-enforced" not in json.dumps(submitted)
     assert not (tmp_path / _COVERAGE / "required.json").exists()
     assert _stop_once(tmp_path) == {}
+
+
+@pytest.mark.parametrize("prompt", [_RESEARCH, "Research the latest uv releases."])
+def test_failed_stop_repeats_the_exact_submit_recovery_command(
+    tmp_path: Path, prompt: str
+) -> None:
+    """CG-36c F1: a lost submit context cannot strand a blocked research turn."""
+    started, stopped = _submit_then_stop(
+        tmp_path, prompt, last_assistant_message="Done."
+    )
+    output = started["hookSpecificOutput"]
+    assert isinstance(output, dict)
+    context = str(output["additionalContext"])
+    commands = [part for part in context.split("`")[1::2] if "--strict-five" in part]
+    assert len(commands) == 1
+    assert "--profile codex_research" in commands[0]
+    assert "--request-id turn-1" in commands[0]
+    assert stopped["decision"] == "block"
+    assert commands[0] in str(stopped["reason"])

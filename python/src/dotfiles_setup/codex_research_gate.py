@@ -67,18 +67,26 @@ def _display(path: Path) -> str:
         return str(path)
 
 
-def _research_context(event: dict[str, object], repo_root: Path) -> str:
+def _research_command(event: dict[str, object], repo_root: Path) -> str:
+    """Render the same recovery command at submission and Stop."""
     relative_out = (
         f"~/.codex/research-coverage/{event['session_id']}/{event['turn_id']}"
     )
     return (
-        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
-        "`fnox --config ~/.config/fnox/config.toml --profile codex_research "
+        "fnox --config ~/.config/fnox/config.toml --profile codex_research "
         "--no-defaults --no-daemon --non-interactive "
         f"exec -- mise -C {_display(repo_root)} run research-fanout -- QUERY "
         "--repo OWNER/REPO --strict-five "
         f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
-        f"--out {relative_out}`. Verify manifest and primary sources. "
+        f"--out {relative_out}"
+    )
+
+
+def _research_context(event: dict[str, object], repo_root: Path) -> str:
+    return (
+        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
+        f"`{_research_command(event, repo_root)}`. "
+        "Verify manifest and primary sources. "
         "For failed routes report `RESEARCH INCOMPLETE:` and the exact blocker. "
         "A metered provider that cannot run (credits, quota, auth, missing key, "
         "network, sandbox) is recorded skipped with its code and evidence; the "
@@ -278,7 +286,7 @@ def _on_submit(
 
 
 def _on_stop(
-    event: dict[str, object], manifest: Path, opt_out: str = ""
+    event: dict[str, object], manifest: Path, repo_root: Path, opt_out: str = ""
 ) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
@@ -321,7 +329,8 @@ def _on_stop(
         "decision": "block",
         "reason": (
             f"Research coverage failed: {reason}. Run the strict-five research command "
-            f"for request {event['turn_id']} and verify all five provider groups. "
+            f"`{_research_command(event, repo_root)}` "
+            "and verify all five provider groups. "
             "If a provider cannot run, start the final answer with "
             "`RESEARCH INCOMPLETE:` "
             "and report its exact blocker; do not claim the research is complete."
@@ -385,13 +394,13 @@ def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | No
 
 
 def _on_bound_stop(
-    event: dict[str, object], marker: Path, manifest: Path
+    event: dict[str, object], marker: Path, manifest: Path, repo_root: Path
 ) -> dict[str, object]:
     """Block only a turn whose retained record is a valid research binding."""
     record = _research_record(marker, str(event["turn_id"]))
     if isinstance(record, dict):
         by_intent = record.get("binding") == "intent"
-        return _on_stop(event, manifest, _OPT_OUT if by_intent else "")
+        return _on_stop(event, manifest, repo_root, _OPT_OUT if by_intent else "")
     if record is None:
         return {}
     return {"systemMessage": f"{_NOTICE}research submission record {record}."}
@@ -412,7 +421,7 @@ def handle(
     if event.get("hook_event_name") == "Stop" and (
         marker.parent.exists() or marker.is_symlink()
     ):
-        return _on_bound_stop(event, marker, manifest)
+        return _on_bound_stop(event, marker, manifest, repo_root)
     return {}
 
 
