@@ -21,8 +21,11 @@ _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
 
 def directive(prompt: str) -> str | None:
-    """Return the scope an exact caller first line declares, else None."""
-    match = _DIRECTIVE.fullmatch(prompt.partition("\n")[0])
+    """Return the scope an exact caller first line declares, else None.
+
+    A CRLF line ending is accepted; case, spacing and lookalikes are not.
+    """
+    match = _DIRECTIVE.fullmatch(prompt.partition("\n")[0].removesuffix("\r"))
     return match[1] if match is not None and match[1] in SCOPES else None
 
 

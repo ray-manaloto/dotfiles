@@ -12,74 +12,123 @@ from pathlib import Path
 from dotfiles_setup import research_scope
 from dotfiles_setup.research_fanout import strict_five_verdict
 
-_EXPLICIT_RESEARCH = re.compile(
-    r"\b(research|look up|investigate|best practices|latest|upstream|"
-    r"releases?|versions?|search (?:the )?(?:web|internet|online|github))\b",
-    re.IGNORECASE,
-)
-_EXTERNAL_TOPIC = re.compile(
-    r"\b(tools?|libraries|frameworks?|plugins?|skills?|models?|agents?|"
-    r"workflows?|dependencies|uv|poetry|fnox|codex|mise)\b",
-    re.IGNORECASE,
-)
-_COMPARISON = re.compile(
-    r"\b(compare|evaluate|recommend|recommendations?|choose|versus|vs\.?|"
-    r"current|newest|modern|recent)\b",
-    re.IGNORECASE,
-)
 _IDENTIFIER = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 _SOURCE_NAMES = (
     "GitHub issues/discussions/releases, Exa, Context7, Firecrawl, Last30Days"
 )
+_AGENT_FIELDS = ("agent_id", "agent_type", "subagent")
 
-
-# Quoted material (fences, blockquotes, inline code, double-quoted strings such as
-# JSON ticket fields) is someone else's text, so it neither requests nor waives
-# research.
-_QUOTED = (
-    re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?(?:^\1[ \t]*$|\Z)", re.MULTILINE | re.DOTALL),
-    re.compile(r"^[ \t]*>[^\n]*", re.MULTILINE),
-    re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d"),
+# Every pattern runs on text whose blank runs are collapsed to one space, so no
+# quantifier repeats over whitespace and each search stays linear (security P2-2).
+_BLANKS = re.compile(r"[ \t]+")
+_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
+_BLOCKQUOTE = re.compile(r"^ ?>[^\n]*", re.MULTILINE)
+_SPAN = re.compile(
+    r"`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d|(?<!\w)'[^'\n]*'(?!\w)"
 )
-# An imperative implementation verb opening a line, list item or sentence.
-_IMPLEMENTATION = re.compile(
-    r"(?:^|[.!?;:]\s)\s*(?:[-*+]\s+|\d+[.)]\s+)?"
-    r"(?:implement|fix|edit|update|add|remove|delete|rename|refactor|rewrite|"
-    r"reword|write|change|modify|patch|apply|commit|merge|rebase|build|create|"
-    r"replace|move|format|draft|revise|migrate|bump|pin)\b(?![:-])",
+# An imperative research verb with an object: line start (list item or
+# heading), after clause punctuation and a space, or after a lead word.
+# "research" before a noun it modifies ("research gate", "research notes"),
+# `check:research` and "investigate why" are not requests.
+_RESEARCH_VERB = re.compile(
+    r"(?:^ ?(?:(?:[-*+]|\d{1,3}[.)]|#{1,6}) )?|[.!?;:,] |\(|"
+    r"\b(?:please|pls|to|and|then|also|now|you|first|next) )"
+    r"(?:research(?![ -](?:gate|hooks?|scope|receipts?|coverage|fanout|"
+    r"providers?|notes?|reports?|results?|summary|lanes?|team|folder|"
+    r"directory|plan|briefs?|runs?|outputs?|evidence|manifests?|tasks?|"
+    r"command|ticket|policy|mode|step|stage|incomplete|complete)\b)|"
+    r"(?:investigate|look into|look up|find out)(?! (?:why|whether|if|how come)\b))"
+    r"(?= [\"'\u201c`]?\w)",
     re.IGNORECASE | re.MULTILINE,
 )
-_NO_RESEARCH = re.compile(
-    r"\b(?:do not|don't|no|without)\s+(?:run\w*\s+|launch\w*\s+)?(?:any\s+)?"
-    r"(?:research|providers?)\b|\btext-only\b",
+_RESEARCH_PHRASE = re.compile(
+    r"\bsearch (?:the )?(?:web|internet|online|github)\b|\bbest[ -]practices?\b",
+    re.IGNORECASE,
+)
+_SENTENCE = re.compile(r"[^.!?\n]+")
+_ASKS_NEWEST = re.compile(
+    r"\b(?:(?:what|which)(?:'s|\u2019s| is| are| was| were)|find(?: out)?) "
+    r"(?:the )?(?:latest|newest|best|recommended|most recent)\b",
+    re.IGNORECASE,
+)
+_COMPARISON = re.compile(
+    r"\b(?:compar(?:e|es|ing|ison|isons)|evaluat(?:e|es|ing|ion|ions)|"
+    r"recommend(?:s|ing|ation|ations)?|alternatives? to)\b",
+    re.IGNORECASE,
+)
+_EXTERNAL_TOPIC = re.compile(
+    r"\b(?:tools?|librar(?:y|ies)|frameworks?|plugins?|skills?|models?|agents?|"
+    r"workflows?|dependencies|packages?|uv|poetry|fnox|codex|mise)\b",
+    re.IGNORECASE,
+)
+_RELEASE_TOPIC = re.compile(r"\b(?:versions?|releases?)\b", re.IGNORECASE)
+# Words that only hint at research: advisory context, never a receipt.
+_WEAK = re.compile(
+    r"\b(?:latest|newest|upstream|versions?|releases?|research\w*|"
+    r"investigat\w*|best practices?)\b",
     re.IGNORECASE,
 )
 
 
-def _caller_text(prompt: str) -> str:
-    for pattern in _QUOTED:
-        prompt = pattern.sub(" ", prompt)
-    return prompt
+def _normalize(prompt: str) -> str:
+    return _BLANKS.sub(" ", prompt.replace("\r\n", "\n").replace("\r", "\n"))
 
 
-def _needs_research(prompt: str) -> bool:
-    return bool(
-        _EXPLICIT_RESEARCH.search(prompt)
-        or (_COMPARISON.search(prompt) and _EXTERNAL_TOPIC.search(prompt))
-    )
+def _strip_fences(text: str) -> str:
+    """Drop closed fenced blocks; an unclosed fence strips nothing (CommonMark)."""
+    kept: list[str] = []
+    block: list[str] = []
+    fence = ""
+    for line in text.split("\n"):
+        if not fence:
+            opened = _FENCE.match(line)
+            if opened is None:
+                kept.append(line)
+            else:
+                fence, block = opened[1], [line]
+            continue
+        block.append(line)
+        closing = line.strip(" ")
+        if len(closing) >= len(fence) and closing == fence[0] * len(closing):
+            fence, block = "", []
+            kept.append("")
+    return "\n".join(kept + block)
+
+
+def _caller_text(text: str) -> str:
+    """Remove quoted material: someone else's words neither request nor waive.
+
+    Short quoted names (`Compare "uv" and "poetry"`) stay caller text.
+    """
+    text = _BLOCKQUOTE.sub(" ", _strip_fences(text))
+    return _SPAN.sub(lambda span: "quoted" if " " in span[0] else span[0], text)
+
+
+def _requests_research(text: str) -> bool:
+    if _RESEARCH_VERB.search(text) or _RESEARCH_PHRASE.search(text):
+        return True
+    for sentence in _SENTENCE.finditer(text):
+        clause = sentence[0]
+        external = _EXTERNAL_TOPIC.search(clause)
+        if (_COMPARISON.search(clause) and external) or (
+            _ASKS_NEWEST.search(clause) and (external or _RELEASE_TOPIC.search(clause))
+        ):
+            return True
+    return False
 
 
 def _turn_scope(prompt: str) -> str:
-    """Classify a native prompt: research, advisory (never blocks) or none."""
+    """Classify a native prompt: research, advisory (never blocks) or none.
+
+    Only a first-line directive turns a research request off (decision D236).
+    """
     declared = research_scope.directive(prompt)
     if declared is not None:
         return "research" if declared == "research" else "none"
-    text = _caller_text(prompt)
-    if not _needs_research(text):
-        return "none"
-    if _IMPLEMENTATION.search(text) or _NO_RESEARCH.search(text):
-        return "advisory"
-    return "research"
+    text = _normalize(prompt)
+    if _requests_research(_caller_text(text)):
+        return "research"
+    return "advisory" if _WEAK.search(text) else "none"
 
 
 def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | None:
@@ -116,6 +165,33 @@ def _repeat_submission(marker: Path, prompt: str) -> dict[str, object]:
     return {}
 
 
+def _display(path: Path) -> str:
+    """Render a checkout under the home directory as ~/... in model context."""
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _research_context(event: dict[str, object], repo_root: Path) -> str:
+    relative_out = (
+        f"~/.codex/research-coverage/{event['session_id']}/{event['turn_id']}"
+    )
+    return (
+        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
+        "`fnox --config ~/.config/fnox/config.toml --profile codex_research "
+        "--no-defaults --no-daemon --non-interactive "
+        f"exec -- mise -C {_display(repo_root)} run research-fanout -- QUERY "
+        "--repo OWNER/REPO --strict-five "
+        f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
+        f"--out {relative_out}`. Verify manifest and primary sources. "
+        "For failed routes report `RESEARCH INCOMPLETE:` and the exact blocker. "
+        "A metered provider that cannot run (credits, quota, auth, missing key, "
+        "network, sandbox) is recorded skipped with its code and evidence; the "
+        "receipt passes PROVISIONAL; name PROVISIONAL and each skipped provider."
+    )
+
+
 def _on_submit(
     event: dict[str, object], marker: Path, repo_root: Path
 ) -> dict[str, object]:
@@ -123,7 +199,7 @@ def _on_submit(
     if (
         not isinstance(prompt, str)
         or prompt.lstrip().startswith("<heartbeat>")
-        or event.get("subagent") is not None
+        or any(event.get(field) not in (None, "") for field in _AGENT_FIELDS)
     ):
         return {}
     binding = research_scope.bind_submission(
@@ -152,88 +228,70 @@ def _on_submit(
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
                 "additionalContext": (
-                    "Research gate advisory: this turn reads as implementation or "
-                    "text editing, so Stop requires no research receipt. A first "
-                    "line `[research-scope: research]` makes one required."
+                    "Research gate advisory: this turn mentions research words "
+                    "but asks for no external research, so Stop requires no "
+                    "research receipt. A first line `[research-scope: research]` "
+                    "makes one required."
                 ),
             }
         }
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(
-        json.dumps(
-            {
-                "turn_id": event["turn_id"],
-                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-                "policy": "strict-five-v2",
-            }
-        ),
-        encoding="utf-8",
-    )
-    relative_out = (
-        f"~/.codex/research-coverage/{event['session_id']}/{event['turn_id']}"
-    )
-    context = (
-        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
-        "`fnox --config ~/.config/fnox/config.toml --profile codex_research "
-        "--no-defaults --no-daemon --non-interactive "
-        f"exec -- mise -C {repo_root} run research-fanout -- QUERY "
-        "--repo OWNER/REPO --strict-five "
-        f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
-        f"--out {relative_out}`. Verify manifest and primary sources. "
-        "For failed routes report `RESEARCH INCOMPLETE:` and the exact blocker. "
-        "A provider out of credits (HTTP 402 or quota 429) is recorded "
-        "skipped: credits-exhausted or substituted; the receipt passes "
-        "PROVISIONAL; report it."
-    )
-    return {
+    result: dict[str, object] = {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": context,
+            "additionalContext": _research_context(event, repo_root),
         }
     }
-
-
-def _degraded_note(degraded: tuple[str, ...]) -> dict[str, object]:
-    """Report providers skipped before any call (D236) without blocking."""
-    if not degraded:
-        return {}
-    return {
-        "systemMessage": "Research receipt PROVISIONAL with fallback evidence; "
-        f"providers skipped before any call: {'; '.join(degraded)}. "
-        "Name PROVISIONAL and these providers in the answer."
-    }
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(
+            json.dumps(
+                {
+                    "turn_id": event["turn_id"],
+                    "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+                    "policy": "strict-five-v2",
+                }
+            ),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        # D236 fail-open: state that cannot be written never blocks the turn.
+        result["systemMessage"] = (
+            f"Research gate state unwritable ({type(exc).__name__}); Stop "
+            "cannot enforce the research receipt for this turn."
+        )
+    return result
 
 
 def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
-        if verdict.provisional_entries:
-            message = event.get("last_assistant_message")
-            tokens = [
-                token
-                for entry in verdict.provisional_entries
-                for token in (
-                    entry.source,
-                    *([f"via {entry.route}"] if entry.route else []),
-                )
-            ]
-            named = isinstance(message, str) and all(
-                re.search(r"(?<![\w-])" + re.escape(token) + r"(?![\w-])", message)
-                for token in ("PROVISIONAL", *tokens)
+        if not verdict.provisional_entries:
+            return {}
+        message = event.get("last_assistant_message")
+        tokens = [
+            token
+            for entry in verdict.provisional_entries
+            for token in (
+                entry.source,
+                *([f"via {entry.route}"] if entry.route else []),
             )
-            if named or event.get("stop_hook_active") is True:
-                return _degraded_note(verdict.degraded)
-            listed = "; ".join(
-                entry.source + (f" via {entry.route}" if entry.route else "")
-                for entry in verdict.provisional_entries
-            )
-            return {
-                "decision": "block",
-                "reason": "Research receipt PROVISIONAL "
-                "(credit-exhausted provider). Name PROVISIONAL and each of "
-                f"these in the answer: {listed}.",
-            }
-        return _degraded_note(verdict.degraded)
+        ]
+        named = isinstance(message, str) and all(
+            re.search(r"(?<![\w-])" + re.escape(token) + r"(?![\w-])", message)
+            for token in ("PROVISIONAL", *tokens)
+        )
+        if named or event.get("stop_hook_active") is True:
+            return {}
+        listed = "; ".join(
+            entry.source + (f" via {entry.route}" if entry.route else "")
+            for entry in verdict.provisional_entries
+        )
+        return {
+            "decision": "block",
+            "reason": "Research receipt PROVISIONAL "
+            "(skipped or substituted provider). Name PROVISIONAL and each of "
+            f"these in the answer: {listed}.",
+        }
     reason = verdict.reason
     message = event.get("last_assistant_message")
     if (
@@ -317,7 +375,11 @@ def handle(
     marker, manifest = paths
     if event.get("hook_event_name") == "UserPromptSubmit":
         return _on_submit(event, marker, repo_root)
-    if event.get("hook_event_name") == "Stop" and marker.parent.exists():
+    # Only a retained submission binds a Stop; a leftover turn directory with
+    # no marker (an unbound turn's research run) never blocks (decision 7).
+    if event.get("hook_event_name") == "Stop" and (
+        marker.exists() or marker.is_symlink()
+    ):
         return _stop_from_submission(event, marker, manifest)
     return {}
 

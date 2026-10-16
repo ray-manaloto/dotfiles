@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ray-manaloto/dotfiles/schemas/research-skip-reason.schema.json",
+  "title": "SkipReason",
+  "description": "Why research-fanout skipped a source instead of reporting an error.",
+  "type": "string",
+  "enum": [
+    "prerequisite",
+    "credits-exhausted",
+    "quota",
+    "credential-missing",
+    "auth-failed",
+    "unavailable",
+    "sandbox-denied"
+  ],
+  "x-enum-varnames": [
+    "PREREQUISITE",
+    "CREDITS_EXHAUSTED",
+    "QUOTA",
+    "CREDENTIAL_MISSING",
+    "AUTH_FAILED",
+    "UNAVAILABLE",
+    "SANDBOX_DENIED"
+  ],
+  "$comment": "D236: a metered provider that cannot run for one of these coded reasons is skipped, never a block, and the strict-five receipt passes PROVISIONAL once the code re-derives from the row's hashed evidence (HTTP status, error class or the fixed credential-missing text). prerequisite stays a strict failure. FailureCode must hold every value here (tests/test_research_fanout.py)."
+}

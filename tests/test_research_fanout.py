@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import signal
+import socket
 import socketserver
 import subprocess
 import sys
@@ -28,9 +29,11 @@ if TYPE_CHECKING:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup.generated.research_skip_reason import SkipReason
 from dotfiles_setup.research_fanout import (
     Endpoint,
     FanoutRequest,
+    Http,
     Status,
     default_http,
     default_runner,
@@ -404,7 +407,8 @@ def test_exa_failures_are_errors(
     assert result.control is None
 
 
-def test_http_timeout_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_http_timeout_is_unavailable_skip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D236: a metered provider that times out is skipped `unavailable`."""
     monkeypatch.setenv("EXA_API_KEY", "test-key")
 
     def timeout_http(
@@ -424,7 +428,7 @@ def test_http_timeout_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
         http=timeout_http,
     )
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
 
 
@@ -451,7 +455,7 @@ def test_wrapped_socket_timeout_reports_timed_out(
         http=timeout_http,
     )
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
 
 
@@ -561,7 +565,7 @@ def test_default_http_deadline_covers_real_streaming_body(
         )
         elapsed = time.monotonic() - started
 
-    assert result.status is Status.ERROR
+    assert (result.status, result.skip_reason) == (Status.SKIPPED, "unavailable")
     assert result.reason == "timed out"
     assert elapsed <= 1.15
 
@@ -2503,10 +2507,6 @@ def test_credit_http_reason_redacts_request_urls_and_keys(
 @pytest.mark.parametrize(
     "response",
     [
-        (401, b"Insufficient credits"),
-        (401, b"Not enough credits"),
-        (403, b"Insufficient credits"),
-        (429, b"rate limit"),
         (500, b"payment required"),
         (200, b"invalid JSON Insufficient credits"),
     ],
@@ -3336,7 +3336,7 @@ def test_projection_cli_preserves_diagnostics_only_in_evidence(
         "credit": "credits-exhausted",
         "process": "[process-failed]",
         "http": "[http-error]",
-        "prerequisite": "[prerequisite: EXA_API_KEY not inherited; "
+        "prerequisite": "[skipped: credential-missing; EXA_API_KEY not inherited; "
         "run through fnox exec]",
     }
     assert expected[arm] in output
@@ -3491,3 +3491,177 @@ def test_projection_strict_cli_line_contains_no_diagnostics(
     manifest = (tmp_path / "manifest.json").read_text()
     assert sentinel in manifest
     assert sentinel in (tmp_path / "firecrawl-search.json").read_text()
+
+
+def _raising_http(error: BaseException) -> Http:
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del endpoint, params, body, headers, timeout
+        raise error
+
+    return http
+
+
+def _relabel(manifest: Path, source: str, code: str) -> None:
+    data = json.loads(manifest.read_text())
+    next(r for r in data["sources"] if r["source"] == source)["skip_reason"] = code
+    manifest.write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ((401, b"Insufficient credits"), "auth-failed", "quota"),
+        ((403, b""), "auth-failed", "credits-exhausted"),
+        ((429, b"rate limit"), "quota", "auth-failed"),
+    ],
+)
+def test_metered_http_skip_code_rederives_from_hashed_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    case: tuple[tuple[int, bytes], str, str],
+) -> None:
+    """D236: 401/403 auth-failed and 429 quota skip with their HTTP evidence."""
+    del credit_env
+    response, code, forged = case
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    http = FakeHttp({"topic": response})
+    main(["topic", "--sources", "exa", "--out", str(tmp_path)], tmp_path, http=http)
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        code,
+        True,
+    )
+    assert len(http.calls) == 1
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert f"exa skipped: {code}" in reason
+    _relabel(manifest, "exa", forged)
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        (TimeoutError(), "unavailable", "timed out"),
+        (urllib.error.URLError(TimeoutError()), "unavailable", "timed out"),
+        (ConnectionRefusedError(61, "refused"), "unavailable", "request failed"),
+        (
+            urllib.error.URLError(socket.gaierror(8, "dns")),
+            "unavailable",
+            "request failed",
+        ),
+        (PermissionError(1, "denied"), "sandbox-denied", "request failed"),
+        (
+            urllib.error.URLError(OSError(1, "denied")),
+            "sandbox-denied",
+            "request failed",
+        ),
+    ],
+)
+def test_metered_transport_failure_skips_with_error_class_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    case: tuple[BaseException, str, str],
+) -> None:
+    """D236: connection, DNS and timeout are unavailable; EPERM is sandbox-denied."""
+    del credit_env
+    error, code, reason = case
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=_raising_http(error),
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["reason"]) == (
+        "skipped",
+        code,
+        reason,
+    )
+    evidence = json.loads(Path(row["raw_file"]).read_bytes())
+    assert set(evidence) == {"error_class", "errno"}
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "exa", "quota" if code == "unavailable" else "unavailable")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+def test_metered_cli_permission_error_is_sandbox_denied(
+    tmp_path: Path, credit_env: None
+) -> None:
+    del credit_env
+
+    def denied(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del argv, timeout, env
+        raise PermissionError(1, "denied")
+
+    main(
+        ["topic", "--sources", "context7", "--out", str(tmp_path)],
+        tmp_path,
+        runner=denied,
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"]) == ("skipped", "sandbox-denied")
+    assert validate_strict_five(_merge_credit_manifest(tmp_path, row), "turn-1")[0]
+
+
+def test_missing_exa_key_is_a_credential_missing_skip(
+    tmp_path: Path, credit_env: None
+) -> None:
+    """Cold review P2-2: the producer writes the code, not prerequisite."""
+    del credit_env
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({}),
+    )
+    row = json.loads((tmp_path / "manifest.json").read_text())["sources"][0]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "credential-missing",
+        True,
+    )
+    assert row["reason"] == "EXA_API_KEY not inherited; run through fnox exec"
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert "exa skipped: credential-missing" in reason
+
+
+def test_non_metered_transport_failure_stays_error(credit_env: None) -> None:
+    """GitHub and Last30Days are the fallback chain itself, never skipped."""
+    del credit_env
+
+    def denied(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del argv, timeout, env
+        raise PermissionError(1, "denied")
+
+    [result] = fan_out(
+        FanoutRequest("topic", "openai/codex", ("github-issues",), 10, 5.0),
+        runner=denied,
+        http=FakeHttp({}),
+    )
+    assert (result.status, result.skip_reason) == (Status.ERROR, None)
+
+
+def test_every_skip_reason_projects_to_its_own_failure_code() -> None:
+    """Cold review P3: no skip code collapses to `other`."""
+    for reason in SkipReason:
+        code = failure_code("diagnostic", status="skipped", skip_reason=reason.value)
+        assert code is not None
+        assert code.value == reason.value

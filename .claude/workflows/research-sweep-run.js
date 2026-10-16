@@ -125,7 +125,7 @@ const READ_BATCH = 3                                                // URLs per 
 const VERIFY_MAX = Number.isInteger(A.verifyMax) ? A.verifyMax : 5  // claims refuted
 const SOURCES = ['github-issues', 'github-discussions', 'github-releases', 'exa', 'context7',
   'firecrawl-developer', 'firecrawl-search', 'last30days']
-const FAILURE_CODES = new Set(['credits-exhausted', 'prerequisite', 'http-error', 'invalid-json', 'shape-error', 'provider-failure', 'process-failed', 'timeout', 'request-failed', 'credential-invalid', 'canary-failed', 'canary-empty', 'no-canary', 'not-found', 'redirected', 'empty-output', 'io-error', 'other'])
+const FAILURE_CODES = new Set(['credits-exhausted', 'prerequisite', 'http-error', 'invalid-json', 'shape-error', 'provider-failure', 'process-failed', 'timeout', 'request-failed', 'credential-invalid', 'canary-failed', 'canary-empty', 'no-canary', 'not-found', 'redirected', 'empty-output', 'io-error', 'credential-missing', 'auth-failed', 'quota', 'unavailable', 'sandbox-denied', 'other'])
 const WORKFLOW_CODES = new Set(['probe-missing', 'invalid-probe'])
 const PROVISIONAL_ROUTES = { exa: [], context7: [], 'firecrawl-developer': [], 'firecrawl-search': ['serper', 'serpapi'] }
 const MIRROR_ROUTES = ['firecrawl', 'webclaw']

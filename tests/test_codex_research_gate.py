@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -265,7 +266,6 @@ def test_ordinary_research_ignores_misplaced_and_stop_declarations(
         "stale-turn",
         "wrong-session",
         "changed-digest",
-        "missing-marker",
         "malformed-marker",
     ],
 )
@@ -573,7 +573,7 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
     context = specific["additionalContext"]
     assert isinstance(context, str)
     assert len(context) <= 1000
-    assert f"mise -C {root} run research-fanout" in context
+    assert f"mise -C ~/{root.relative_to(tmp_path)} run research-fanout" in context
     assert "PROVISIONAL" in context
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
     assert json.loads(marker.read_text())["policy"] == "strict-five-v2"
@@ -758,7 +758,7 @@ def test_projection_stop_exact_reason_and_prose_invariance(tmp_path: Path) -> No
         result = _invoke(tmp_path / str(n), {**base, "hook_event_name": "Stop"})
         assert result["decision"] == "block"
         assert result["reason"] == (
-            "Research receipt PROVISIONAL (credit-exhausted provider). "
+            "Research receipt PROVISIONAL (skipped or substituted provider). "
             "Name PROVISIONAL and each of "
             "these in the answer: firecrawl-developer; firecrawl-search via serpapi."
         )
@@ -877,7 +877,6 @@ def test_projection_stop_exa_token_boundary(
 @pytest.mark.parametrize(
     ("change", "reason"),
     [
-        ("missing", "Research submission marker missing."),
         ("non-object", "Research submission marker malformed."),
         ("malformed", "Research submission marker malformed."),
         ("invalid-utf8", "Research submission marker malformed."),
@@ -1020,7 +1019,7 @@ def test_script_entry_lets_quoted_ticket_brief_finish(tmp_path: Path) -> None:
     assert "decision" not in _invoke(tmp_path, {**stop, "last_assistant_message": ""})
 
 
-def test_unwritable_state_does_not_block_an_unbound_submission(
+def test_unwritable_state_warns_and_never_blocks_a_research_submission(
     tmp_path: Path,
 ) -> None:
     (tmp_path / ".codex").mkdir()
@@ -1033,67 +1032,293 @@ def test_unwritable_state_does_not_block_an_unbound_submission(
     }
     submitted = _invoke(tmp_path, event)
     assert "decision" not in submitted
-    assert "not bound" in str(submitted["systemMessage"])
+    assert "cannot enforce" in str(submitted["systemMessage"])
+    assert "--strict-five" in json.dumps(submitted["hookSpecificOutput"])
     stopped = _invoke(tmp_path, {**event, "hook_event_name": "Stop"})
     assert "decision" not in stopped
 
 
-def _degrade(manifest: Path, codes: dict[str, str]) -> None:
-    """Mark metered sources skipped before any call, with no transport evidence."""
+_ENVELOPES: dict[str, dict[str, object]] = {
+    "auth-failed": {"http_status": 401, "rc": None, "body": "", "stderr_redacted": ""},
+    "quota": {
+        "http_status": 429,
+        "rc": None,
+        "body": "rate limit",
+        "stderr_redacted": "",
+    },
+    "unavailable": {"error_class": "ConnectionRefusedError", "errno": 61},
+    "sandbox-denied": {"error_class": "PermissionError", "errno": 1},
+    "credits-exhausted": {
+        "http_status": 402,
+        "rc": None,
+        "body": "",
+        "stderr_redacted": "",
+    },
+}
+
+
+def _skip(manifest: Path, source: str, code: str, **override: object) -> None:
+    """Rewrite one metered row as the producer writes a coded routeless skip."""
     data = json.loads(manifest.read_text())
-    for row in data["sources"]:
-        if row["source"] in codes:
-            for key in ("provisional", "attempts"):
-                row.pop(key, None)
-            row.update(
-                status="skipped",
-                items=[],
-                skip_reason=codes[row["source"]],
-                raw_file=None,
-                raw_sha256=None,
-            )
+    row = next(r for r in data["sources"] if r["source"] == source)
+    for key in ("route", "control"):
+        row.pop(key, None)
+    if code == "credential-missing":
+        row.update(
+            status="skipped",
+            items=[],
+            skip_reason=code,
+            provisional=True,
+            reason="EXA_API_KEY not inherited; run through fnox exec",
+            raw_file=None,
+            raw_sha256=None,
+            attempts=[],
+        )
+    else:
+        raw = json.dumps(override.pop("envelope", _ENVELOPES[code])).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        primary = manifest.parent / f"{source}.primary.raw"
+        primary.write_bytes(raw)
+        (manifest.parent / f"{source}.raw").write_bytes(raw)
+        row.update(
+            status="skipped",
+            items=[],
+            skip_reason=code,
+            provisional=True,
+            reason=code,
+            raw_file=str(manifest.parent / f"{source}.raw"),
+            raw_sha256=digest,
+            attempts=[
+                {
+                    "route": source,
+                    "status": "skipped",
+                    "http_status": None,
+                    "reason": code,
+                    "raw_file": str(primary),
+                    "raw_sha256": digest,
+                }
+            ],
+        )
+    row.update(override)
     manifest.write_text(json.dumps(data))
 
 
-@pytest.mark.parametrize(
-    "code",
-    ["quota", "credential-missing", "auth-failed", "unavailable", "sandbox-denied"],
-)
-def test_preflight_skip_with_fallback_evidence_passes_provisional(
-    tmp_path: Path, code: str
-) -> None:
-    prompt = "Research Codex hooks"
-    _turn(tmp_path, prompt)
-    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
-    _degrade(
-        manifest,
-        {"exa": code, "context7": "quota", "firecrawl-developer": "sandbox-denied"},
-    )
-    result = _turn(tmp_path, prompt, last_assistant_message="Findings.")
-    assert "decision" not in result
-    assert "PROVISIONAL" in str(result["systemMessage"])
-    assert f"exa skipped: {code}" in str(result["systemMessage"])
+_ALL_SKIPPED = {
+    "exa": "credential-missing",
+    "context7": "unavailable",
+    "firecrawl-developer": "auth-failed",
+    "firecrawl-search": "sandbox-denied",
+}
 
 
 @pytest.mark.parametrize(
     "codes",
     [
-        {
-            "exa": "credential-missing",
-            "context7": "quota",
-            "firecrawl-developer": "sandbox-denied",
-            "firecrawl-search": "unavailable",
-        },
-        {"exa": "network-flake"},
-        {"github-issues": "credential-missing"},
+        {"exa": "credential-missing"},
+        {"context7": "quota"},
+        {"firecrawl-developer": "unavailable"},
+        {"firecrawl-search": "sandbox-denied"},
+        _ALL_SKIPPED,
+    ],
+    ids=["credential", "quota", "unavailable", "sandbox", "all-metered"],
+)
+def test_coded_skip_passes_provisional_once_answer_names_it(
+    tmp_path: Path, codes: dict[str, str]
+) -> None:
+    """D236 / R-A F2: skipped providers never block once the answer names them."""
+    prompt = "Research Codex hooks"
+    _turn(tmp_path, prompt)
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    for source, code in codes.items():
+        _skip(manifest, source, code)
+    names = sorted({*codes, "firecrawl-developer"})
+    unnamed = _turn(tmp_path, prompt, last_assistant_message="Findings.")
+    assert unnamed["decision"] == "block"
+    for source in names:
+        assert source in str(unnamed["reason"])
+    continued = _turn(
+        tmp_path, prompt, last_assistant_message="Findings.", stop_hook_active=True
+    )
+    assert "decision" not in continued
+    named = _turn(
+        tmp_path,
+        prompt,
+        last_assistant_message="PROVISIONAL: skipped " + "; ".join(names),
+    )
+    assert "decision" not in named
+
+
+@pytest.mark.parametrize(
+    ("source", "code", "override"),
+    [
+        (
+            "exa",
+            "auth-failed",
+            {
+                "envelope": {
+                    "http_status": 500,
+                    "rc": None,
+                    "body": "",
+                    "stderr_redacted": "",
+                }
+            },
+        ),
+        ("exa", "sandbox-denied", {"envelope": _ENVELOPES["unavailable"]}),
+        (
+            "context7",
+            "unavailable",
+            {"envelope": {"error_class": "ValueError", "errno": None}},
+        ),
+        ("exa", "credits-exhausted", {"items": [{"url": "https://fabricated.test"}]}),
+        ("exa", "credential-missing", {"reason": "no key"}),
+        ("context7", "credential-missing", {}),
+        ("exa", "credential-missing", {"items": [{"url": "https://fabricated.test"}]}),
+        ("exa", "prerequisite", {"envelope": _ENVELOPES["quota"]}),
+        ("exa", "network-flake", {"envelope": _ENVELOPES["unavailable"]}),
+    ],
+    ids=[
+        "relabelled-500",
+        "relabelled-class",
+        "unknown-class",
+        "fabricated-items",
+        "credential-text",
+        "credential-source",
+        "credential-items",
+        "prerequisite",
+        "unknown-code",
     ],
 )
-def test_preflight_skip_without_fallback_evidence_blocks(
-    tmp_path: Path, codes: dict[str, str]
+def test_coded_skip_without_rederivable_evidence_blocks(
+    tmp_path: Path, source: str, code: str, override: dict[str, object]
 ) -> None:
     prompt = "Research Codex hooks"
     _turn(tmp_path, prompt)
-    _degrade(_hook_manifest(tmp_path / "session-1" / "turn-1"), codes)
-    result = _turn(tmp_path, prompt, last_assistant_message="Findings.")
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    if code in {"prerequisite", "network-flake"}:
+        _skip(manifest, source, "quota", **override)
+        data = json.loads(manifest.read_text())
+        next(r for r in data["sources"] if r["source"] == source)["skip_reason"] = code
+        manifest.write_text(json.dumps(data))
+    else:
+        _skip(manifest, source, code, **override)
+    named = f"PROVISIONAL {source}; firecrawl-developer"
+    result = _turn(tmp_path, prompt, last_assistant_message=named)
     assert result["decision"] == "block"
     assert "Research coverage failed" in str(result["reason"])
+
+
+@pytest.mark.parametrize("code", ["quota", "auth-failed", "unavailable"])
+def test_bare_skip_row_without_evidence_blocks(tmp_path: Path, code: str) -> None:
+    """Security P1-1: a self-asserted skip code with no evidence is no receipt."""
+    prompt = "Research Codex hooks"
+    _turn(tmp_path, prompt)
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    data = json.loads(manifest.read_text())
+    for row in data["sources"]:
+        if row["source"] == "exa":
+            row.clear()
+            row.update(source="exa", status="skipped", skip_reason=code, items=[])
+    manifest.write_text(json.dumps(data))
+    named = "PROVISIONAL exa; firecrawl-developer"
+    result = _turn(tmp_path, prompt, last_assistant_message=named)
+    assert result["decision"] == "block"
+    assert "Research coverage failed" in str(result["reason"])
+
+
+_RESEARCH_PROMPTS = (
+    "Write a report on current best practices for Codex hooks.",
+    (
+        "Draft a comparison of the latest uv and poetry releases with upstream "
+        "best practices."
+    ),
+    "Create a recommendation: compare uv versus poetry for this repo.",
+    "Build an evaluation of the newest agent frameworks.",
+    "We have no research on this yet. Investigate the latest Codex releases.",
+    "Investigate upstream releases of uv without providers that need credits.",
+    "- Research the latest mise releases\n- Update the pin accordingly",
+    "Task: research the newest fnox release; summary: add notes after.",
+    'Compare "uv" and "poetry" for this repo.',
+    "```\nResearch the latest uv releases.",
+    "[research-scope: research]\r\nFix the typo in README.md.",
+    "Please research the latest uv release.\r\nThen pin it.",
+    'Please research "Codex hook output limits".',
+)
+
+
+@pytest.mark.parametrize("prompt", _RESEARCH_PROMPTS)
+def test_research_request_blocks_without_receipt(tmp_path: Path, prompt: str) -> None:
+    """Cold review P1-1: only a directive turns research off."""
+    result = _turn(tmp_path, prompt, last_assistant_message="Done.")
+    assert result["decision"] == "block"
+
+
+_WORK_PROMPTS = (
+    "Please bump the version to 1.2.3 in pyproject.toml.",
+    "Can you update the release notes for v2.1?",
+    "You are the implementer. Make the release check report the right version.",
+    "I need you to fix the version comparison in currency.py.",
+    "fix: the version check in CG-20",
+    "ok, implement the latest release check from CG-20",
+    "## Task\nThe latest versions table is wrong; correct the mise row.",
+    "Review commit abc123 against ticket CG-14 (latest versions table).",
+    "Implement ticket CG-12: 'Research the latest uv releases and pin them.'",
+    "Fix the research gate so it reads the latest manifest.",
+    "Investigate why the release check reports the wrong version.",
+    "[research-scope: implementation]\r\nResearch the latest uv releases.",
+)
+
+
+@pytest.mark.parametrize("prompt", _WORK_PROMPTS)
+def test_work_brief_never_blocks_stop(tmp_path: Path, prompt: str) -> None:
+    """Cold review P2-1: implementation and review briefs finish without research."""
+    result = _turn(tmp_path, prompt, last_assistant_message="Done.")
+    assert "decision" not in result
+
+
+@pytest.mark.parametrize(
+    "filler", ["\n", " ", "\t.", "`", '"', "'", "> ", "```\n", "a ", "\r\n"]
+)
+def test_classifier_is_linear_on_long_prompts(tmp_path: Path, filler: str) -> None:
+    """Security P2-2: no quantifier nesting; 32000 repeats stay well under 0.5 s."""
+    submit: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Research the latest uv releases." + filler * 32000,
+    }
+    repo = Path(__file__).parent.parent
+    started = time.perf_counter()
+    result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
+    elapsed = time.perf_counter() - started
+    assert "--strict-five" in json.dumps(result)
+    assert elapsed < 0.5
+
+
+def test_leftover_turn_directory_without_marker_never_blocks(tmp_path: Path) -> None:
+    """Decision 7: a Stop with no retained submission is not a research turn."""
+    directory = tmp_path / "session-1" / "turn-1"
+    directory.mkdir(parents=True)
+    _hook_manifest(directory)
+    stop: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "Stop",
+        "stop_hook_active": False,
+        "last_assistant_message": "Done.",
+    }
+    repo = Path(__file__).parent.parent
+    assert codex_research_gate.handle(stop, tmp_path, repo_root=repo) == {}
+
+
+@pytest.mark.parametrize(
+    "agent", [{"agent_id": "agent-1"}, {"agent_type": "worker"}, {"subagent": "x"}]
+)
+def test_subagent_turn_is_exempt(tmp_path: Path, agent: dict[str, str]) -> None:
+    """codex-rs/hooks/src/schema.rs:567-583 (rust-v0.163.0): agent_id, agent_type."""
+    base: dict[str, object] = {"session_id": "session-1", "turn_id": "turn-1", **agent}
+    repo = Path(__file__).parent.parent
+    submit = {**base, "hook_event_name": "UserPromptSubmit", "prompt": "Research uv"}
+    assert codex_research_gate.handle(submit, tmp_path, repo_root=repo) == {}
+    assert not (tmp_path / "session-1").exists()
+    stop = {**base, "hook_event_name": "Stop", "last_assistant_message": "Done."}
+    assert codex_research_gate.handle(stop, tmp_path, repo_root=repo) == {}
