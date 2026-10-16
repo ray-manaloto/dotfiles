@@ -42,6 +42,7 @@ from dotfiles_setup.research_fanout import (
     fan_out,
     is_credit_exhaustion,
     main,
+    strict_five_verdict,
     validate_strict_five,
 )
 
@@ -3823,3 +3824,55 @@ def test_non_string_skip_reason_projects_to_other(skip_reason: object) -> None:
     code = failure_code(None, status="skipped", skip_reason=skip_reason)
     assert code is not None
     assert code.value == "other"
+
+
+def _break_last30days(manifest: Path) -> None:
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "last30days")
+    row.update(status="error", items=[], reason="needs last30days script")
+    manifest.write_text(json.dumps(data))
+
+
+def test_web_route_covers_a_missing_last30days_as_provisional(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    """Round 4 (r3 P3-1): GitHub plus a Serper route passes without Last30Days."""
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    (tmp_path / "bin" / "firecrawl").unlink()
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    manifest = _merge_credit_manifest(tmp_path, _only_row(tmp_path))
+    _break_last30days(manifest)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed
+    assert any(line.startswith("last30days skipped") for line in verdict.provisional)
+    assert ("last30days", None) in {
+        (entry.source, entry.route) for entry in verdict.provisional_entries
+    }
+
+
+def test_missing_last30days_without_a_web_route_still_fails(tmp_path: Path) -> None:
+    manifest = _strict_manifest(tmp_path)
+    _break_last30days(manifest)
+    assert validate_strict_five(manifest, "turn-1") == (
+        False,
+        "last30days did not complete",
+    )
+
+
+@pytest.mark.parametrize("prefix", ["status", "status code", "Status:", "HTTP"])
+def test_credit_status_scan_is_linear_on_blank_runs(prefix: str) -> None:
+    """Security P3-4: long blank runs after a status word stay linear."""
+    text = (prefix + " " * 20_000 + "x ") * 3
+    started = time.perf_counter()
+    assert is_credit_exhaustion(None, text) is False
+    assert time.perf_counter() - started < 0.2
+
+
+def test_credit_scan_reads_a_bounded_prefix() -> None:
+    assert is_credit_exhaustion(None, "Error: HTTP 402") is True
+    assert is_credit_exhaustion(None, "a" * 200_000 + " HTTP 402") is False

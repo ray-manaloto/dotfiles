@@ -177,11 +177,18 @@ _FALLBACK_CREDIT_TEXT = re.compile(
     r"not enough credits|your account has run out of searches",
     re.IGNORECASE,
 )
+# Bounded blank runs keep the scan linear (security P3-4): adjacent unbounded
+# \s* and \s+ backtracked quadratically on long whitespace.
 _CREDIT_STATUS = re.compile(
-    r'(?:(?:"status"|"statusCode")\s*:\s*|'
-    r"\bstatus(?:\s+code)?\s*[:=]?\s+|\bHTTP(?:/\d(?:\.\d)?)?\s+)(\d{3})\b",
+    r'(?:(?:"status"|"statusCode")\s{0,4}:\s{0,4}|'
+    r"\bstatus(?:\s{1,4}code)?\s{0,4}[:=]?\s{1,4}|"
+    r"\bHTTP(?:/\d(?:\.\d)?)?\s{1,4})(\d{3})\b",
     re.IGNORECASE,
 )
+# Provider error text and stored evidence are scanned only up to this prefix,
+# and a bound evidence file larger than the cap is refused, not read.
+_SCAN_LIMIT = 65_536
+_EVIDENCE_LIMIT = 8 * 1024 * 1024
 _FALLBACK_ROUTES = MappingProxyType({"firecrawl-search": ("serper", "serpapi")})
 _SKIP_VALUES = frozenset(reason.value for reason in SkipReason)
 # D236: codes a metered row may carry while the receipt still passes PROVISIONAL.
@@ -225,6 +232,7 @@ _FALLBACK_KEYS = MappingProxyType(
 
 def is_credit_exhaustion(http_status: int | None, text: str) -> bool:
     """Distinguish exhausted quota from auth, transient limits and server errors."""
+    text = text[:_SCAN_LIMIT]
     if http_status is None and (match := _CREDIT_STATUS.search(text)):
         http_status = int(match[1])
     if http_status == _HTTP_PAYMENT_REQUIRED:
@@ -1435,7 +1443,11 @@ def _empty_control(
 
 
 def _attempt_credit(attempt: _Attempt) -> bool:
-    text = attempt.stderr_redacted + "\n" + attempt.raw.decode(errors="replace")
+    text = (
+        attempt.stderr_redacted[:_SCAN_LIMIT]
+        + "\n"
+        + attempt.raw[:_SCAN_LIMIT].decode(errors="replace")
+    )
     status = attempt.http_status
     if status is None and attempt.rc == 0:
         try:
@@ -1459,9 +1471,10 @@ def _attempt_skip(attempt: _Attempt) -> SkipReason | None:
             if isinstance(payload, dict) and payload.get("success") is False:
                 status = payload.get("status")
     elif status is None and attempt.rc:
-        if match := _CREDIT_STATUS.search(attempt.stderr_redacted):
+        stderr = attempt.stderr_redacted[:_SCAN_LIMIT]
+        if match := _CREDIT_STATUS.search(stderr):
             status = int(match[1])
-        elif _RATE_LIMIT_TEXT.search(attempt.stderr_redacted):
+        elif _RATE_LIMIT_TEXT.search(stderr):
             return SkipReason.QUOTA
     return _HTTP_SKIPS.get(status) if type(status) is int else None
 
@@ -2212,7 +2225,11 @@ def _bound_raw(file: object, digest: object, expected: Path) -> bytes:
     if not isinstance(file, str) or Path(file) != expected:
         message = "unbound raw evidence"
         raise _ReceiptError(message)
-    raw = Path(file).read_bytes()
+    with Path(file).open("rb") as handle:
+        raw = handle.read(_EVIDENCE_LIMIT + 1)
+    if len(raw) > _EVIDENCE_LIMIT:
+        message = "raw evidence too large"
+        raise _ReceiptError(message)
     if digest != hashlib.sha256(raw).hexdigest():
         message = "raw evidence hash is missing or changed"
         raise _ReceiptError(message)
@@ -2433,62 +2450,85 @@ def _validate_provisional_row(
     return None
 
 
+def _manifest_rows(manifest: object, request_id: str) -> list[dict[str, object]] | str:
+    """Return the manifest's source rows, or the identity failure."""
+    if not isinstance(manifest, dict):
+        return "malformed research manifest"
+    if (
+        not manifest.get("strict_five")
+        or manifest.get("policy_version") != "strict-five-v2"
+        or manifest.get("request_id") != request_id
+        or not manifest.get("query")
+        or not manifest.get("repo")
+    ):
+        return "request identity or policy mismatch"
+    rows = manifest["sources"]
+    if (
+        not isinstance(rows, list)
+        or len(rows) != len(_SOURCE_NAMES)
+        or any(not isinstance(row, dict) for row in rows)
+        or {row["source"] for row in rows} != set(_SOURCE_NAMES)
+    ):
+        return "required source missing or duplicated"
+    return rows
+
+
+def _row_reason(row: dict[str, object], manifest_path: Path) -> str | None:
+    if row.get("skip_reason") == SkipReason.CREDENTIAL_MISSING.value:
+        return _validate_credential_skip(row)
+    if (
+        row.get("provisional")
+        or row.get("route")
+        or row.get("skip_reason") in _EVIDENCED_SKIPS
+    ):
+        return _validate_provisional_row(row, manifest_path)
+    return _validate_strict_row(row, manifest_path)
+
+
+def _web_route(rows: list[dict[str, object]]) -> str | None:
+    """Name a validated firecrawl-search row that succeeded via a web route."""
+    for row in rows:
+        route = row.get("route")
+        if (
+            row.get("source") == "firecrawl-search"
+            and route in _FALLBACK_ROUTES["firecrawl-search"]
+            and row.get("status") == Status.OK.value
+        ):
+            return f"firecrawl-search via {route}"
+    return None
+
+
 def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
     """Validate same-turn hashed evidence and re-derive every skip exception.
 
     D236 fallback rule: every skipped metered provider must re-derive its code,
-    and GitHub plus Last30Days rows must carry strict evidence, so a receipt
-    with every metered provider skipped still passes PROVISIONAL.
+    and the GitHub rows must carry strict evidence. Last30Days must too, unless
+    firecrawl-search succeeded through a Serper or SerpApi route, which then
+    covers it PROVISIONAL (r3 P3-1). A receipt with every metered provider
+    skipped still passes PROVISIONAL.
     """
     provisional = []
     provisional_entries = []
+    last30days_gap = None
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict):
-            return StrictVerdict(
-                passed=False, provisional=(), reason="malformed research manifest"
-            )
-        if (
-            not manifest.get("strict_five")
-            or manifest.get("policy_version") != "strict-five-v2"
-            or manifest.get("request_id") != request_id
-            or not manifest.get("query")
-            or not manifest.get("repo")
-        ):
-            return StrictVerdict(
-                passed=False,
-                provisional=(),
-                reason="request identity or policy mismatch",
-            )
-        rows = manifest["sources"]
-        if (
-            not isinstance(rows, list)
-            or len(rows) != len(_SOURCE_NAMES)
-            or any(not isinstance(row, dict) for row in rows)
-            or {row["source"] for row in rows} != set(_SOURCE_NAMES)
-        ):
-            return StrictVerdict(
-                passed=False,
-                provisional=(),
-                reason="required source missing or duplicated",
-            )
+        rows = _manifest_rows(
+            json.loads(manifest_path.read_text(encoding="utf-8")), request_id
+        )
+        if isinstance(rows, str):
+            return StrictVerdict(passed=False, provisional=(), reason=rows)
         for row in rows:
-            if row.get("skip_reason") == SkipReason.CREDENTIAL_MISSING.value:
-                reason = _validate_credential_skip(row)
-            elif (
-                row.get("provisional")
-                or row.get("route")
-                or row.get("skip_reason") in _EVIDENCED_SKIPS
-            ):
-                reason = _validate_provisional_row(row, manifest_path)
-            else:
-                reason = _validate_strict_row(row, manifest_path)
-            if reason:
+            reason = _row_reason(row, manifest_path)
+            route = row.get("route")
+            if reason and row["source"] == "last30days":
+                last30days_gap = reason
+            elif reason:
                 return StrictVerdict(passed=False, provisional=(), reason=reason)
-            if row.get("provisional"):
+            elif row.get("provisional"):
                 provisional.append(_provisional_line(row))
                 provisional_entries.append(
-                    ProvisionalEntry(row["source"], row.get("route"))
+                    ProvisionalEntry(
+                        str(row["source"]), route if isinstance(route, str) else None
+                    )
                 )
     except OSError, ValueError, KeyError, TypeError, AttributeError:
         return StrictVerdict(
@@ -2496,6 +2536,12 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
             provisional=(),
             reason="malformed or unreadable research evidence",
         )
+    if last30days_gap is not None:
+        web = _web_route(rows)
+        if web is None:
+            return StrictVerdict(passed=False, provisional=(), reason=last30days_gap)
+        provisional.append(f"last30days skipped: {last30days_gap}; covered by {web}")
+        provisional_entries.append(ProvisionalEntry("last30days", None))
     reason = (
         "provisional: " + "; ".join(provisional)
         if provisional

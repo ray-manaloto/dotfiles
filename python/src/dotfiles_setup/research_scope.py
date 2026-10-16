@@ -1,24 +1,29 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Bind explicit caller scope at the native prompt-submission boundary.
+"""Read the caller's research scope from the native prompt submission.
 
 The native event is the authority, not a later declaration file or model text.
-Persisted bindings are integrity records, not protection against a process with
-write access to hook state. Native client qualification must establish delivery
-of the caller's original prompt to UserPromptSubmit.
+Only the research scope writes hook state (round 4); its record is an
+integrity record, not protection against a process with write access to hook
+state. Native client qualification must establish delivery of the caller's
+original prompt to UserPromptSubmit.
 """
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
+import unicodedata
 
 LOCAL_ONLY_DIRECTIVE = "[research-scope: local-only]"
 RESEARCH_DIRECTIVE = "[research-scope: research]"
-# implementation and text-edit bind no research; research requires a receipt.
+IMPLEMENTATION_DIRECTIVE = "[research-scope: implementation]"
+# Only research requires a receipt; the other scopes write no hook state.
 SCOPES = frozenset({"local-only", "implementation", "text-edit", "research"})
 _DIRECTIVE = re.compile(r"\[research-scope: ([a-z-]+)\]")
-_DIGEST = re.compile(r"^[a-f0-9]{64}$")
+_NEAR_MISS_PREFIX = "[research-scope"
+
+
+def _first_line(prompt: str) -> str:
+    return prompt.partition("\n")[0].removesuffix("\r")
 
 
 def directive(prompt: str) -> str | None:
@@ -26,59 +31,18 @@ def directive(prompt: str) -> str | None:
 
     A CRLF line ending is accepted; case, spacing and lookalikes are not.
     """
-    match = _DIRECTIVE.fullmatch(prompt.partition("\n")[0].removesuffix("\r"))
+    match = _DIRECTIVE.fullmatch(_first_line(prompt))
     return match[1] if match is not None and match[1] in SCOPES else None
 
 
-def bind_submission(
-    prompt: str, session_id: str, turn_id: str
-) -> dict[str, str] | None:
-    """Bind only an exact first-line directive supplied in the caller prompt."""
-    if directive(prompt) != "local-only":
-        return None
-    binding = {
-        "source": "UserPromptSubmit",
-        "scope": "local-only",
-        "session_id": session_id,
-        "turn_id": turn_id,
-        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-    }
-    return {**binding, "binding_sha256": _binding_digest(binding)}
+def near_miss(prompt: str) -> bool:
+    """Whether line 1 looks like a directive but is not an exact one.
 
-
-def _binding_digest(binding: dict[str, str]) -> str:
-    return hashlib.sha256(
-        json.dumps(binding, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-
-
-def validates_binding(
-    binding: object, session_id: str, turn_id: str, prompt: str | None = None
-) -> bool:
-    """Reject incomplete, changed or differently bound submission records.
-
-    An optional native prompt checks the full request digest. The checksum detects
-    corruption; it is deliberately not described as a caller-authentication token.
+    Leading blanks and a BOM are dropped, then a bounded head is NFKC-folded
+    (fullwidth brackets) and casefolded; each step is linear.
     """
-    if not isinstance(binding, dict) or set(binding) != {
-        "source",
-        "scope",
-        "session_id",
-        "turn_id",
-        "prompt_sha256",
-        "binding_sha256",
-    }:
+    if directive(prompt) is not None:
         return False
-    if not all(isinstance(value, str) for value in binding.values()):
-        return False
-    fields = {key: str(value) for key, value in binding.items()}
-    checksum = fields.pop("binding_sha256")
-    return (
-        fields["source"] == "UserPromptSubmit"
-        and fields["scope"] == "local-only"
-        and fields["session_id"] == session_id
-        and fields["turn_id"] == turn_id
-        and _DIGEST.fullmatch(fields["prompt_sha256"]) is not None
-        and checksum == _binding_digest(fields)
-        and (prompt is None or bind_submission(prompt, session_id, turn_id) == binding)
-    )
+    head = _first_line(prompt).lstrip().lstrip("﻿").lstrip()[:64]
+    folded = unicodedata.normalize("NFKC", head).casefold()
+    return folded.startswith(_NEAR_MISS_PREFIX)

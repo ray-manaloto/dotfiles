@@ -12,36 +12,24 @@ from pathlib import Path
 from dotfiles_setup import research_scope
 from dotfiles_setup.research_fanout import strict_five_verdict
 
-# Advisory hints only: a match adds context, never a binding (round 3). Word
-# alternations with no nested quantifier, so each search stays linear.
-_EXPLICIT_RESEARCH = re.compile(
-    r"\b(research|look up|investigate|best practices|latest|upstream|"
-    r"releases?|versions?|search (?:the )?(?:web|internet|online|github))\b",
-    re.IGNORECASE,
-)
-_EXTERNAL_TOPIC = re.compile(
-    r"\b(tools?|libraries|frameworks?|plugins?|skills?|models?|agents?|"
-    r"workflows?|dependencies|uv|poetry|fnox|codex|mise)\b",
-    re.IGNORECASE,
-)
-_COMPARISON = re.compile(
-    r"\b(compare|evaluate|recommend|recommendations?|choose|versus|vs\.?|"
-    r"current|newest|modern|recent)\b",
+# Advisory hint only, never a binding: research verbs, not everyday words such
+# as version, latest or codex (r3 P3-4). One alternation, so the search is linear.
+_RESEARCH_VERB = re.compile(
+    r"\b(research|look up|web search|search (?:the )?(?:web|internet|online|github))\b",
     re.IGNORECASE,
 )
 _IDENTIFIER = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
+_DIGEST = re.compile(r"[a-f0-9]{64}")
 _SOURCE_NAMES = (
     "GitHub issues/discussions/releases, Exa, Context7, Firecrawl, Last30Days"
 )
 _AGENT_FIELDS = ("agent_id", "agent_type", "subagent")
-_WORK_SCOPES = frozenset({"implementation", "text-edit"})
-
-
-def _needs_research(prompt: str) -> bool:
-    return bool(
-        _EXPLICIT_RESEARCH.search(prompt)
-        or (_COMPARISON.search(prompt) and _EXTERNAL_TOPIC.search(prompt))
-    )
+_POLICY = "strict-five-v2"
+_NOTICE = "Research enforcement did not apply to this turn: "
+_ACCEPTED_FORMS = ", ".join(
+    f"`[research-scope: {scope}]`"
+    for scope in ("research", "implementation", "text-edit", "local-only")
+)
 
 
 def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | None:
@@ -55,22 +43,9 @@ def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | No
     return root / "required.json", root / "manifest.json"
 
 
-def _repeat_submission(marker: Path, prompt: str) -> dict[str, object]:
-    recorded = _read_submission(marker)
-    if isinstance(recorded, str):
-        return {"decision": "block", "reason": recorded}
-    caller_scope = recorded.get("caller_scope")
-    prior_digest = (
-        caller_scope.get("prompt_sha256")
-        if isinstance(caller_scope, dict)
-        else recorded.get("prompt_sha256")
-    )
-    if (
-        not isinstance(prior_digest, str)
-        or re.fullmatch(r"[a-f0-9]{64}", prior_digest) is None
-    ):
-        return {"decision": "block", "reason": "Research submission digest invalid."}
-    if prior_digest != hashlib.sha256(prompt.encode()).hexdigest():
+def _repeat_submission(record: dict[str, object], prompt: str) -> dict[str, object]:
+    """A bound research turn refuses a different submission in the same turn."""
+    if record["prompt_sha256"] != hashlib.sha256(prompt.encode()).hexdigest():
         return {
             "decision": "block",
             "reason": "Research scope already bound to a different submission.",
@@ -105,34 +80,88 @@ def _research_context(event: dict[str, object], repo_root: Path) -> str:
     )
 
 
-def _write_record(
-    marker: Path, event: dict[str, object], prompt: str, **fields: str
-) -> None:
+def _write_record(marker: Path, event: dict[str, object], prompt: str) -> None:
     marker.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "turn_id": event["turn_id"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-        **fields,
+        "scope": "research",
+        "policy": _POLICY,
     }
     marker.write_text(json.dumps(record), encoding="utf-8")
 
 
-def _advisory(event: dict[str, object], repo_root: Path) -> dict[str, object]:
-    """Research words without the directive: guidance, never a Stop binding."""
+def _context(text: str) -> dict[str, object]:
     return {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": (
-                "Research hint (not enforced): no first line "
-                "`[research-scope: research]`, so Stop requires no receipt; that "
-                "line is how a caller requests enforced research. If this turn "
-                "needs external research: "
-                + _research_context(event, repo_root)
-                + " If research was needed but not run, start the answer with "
-                "`RESEARCH INCOMPLETE:`."
-            ),
+            "additionalContext": text,
         }
     }
+
+
+# r3 P3-4, security P3-6: a pointer only; no provider command in a work turn.
+_ADVISORY = (
+    "Research hint: this turn is not research-enforced. A caller requires "
+    "research evidence by putting `[research-scope: research]` as line 1. "
+    "Do not run paid or metered research providers unless the request asks "
+    "for research."
+)
+_LOCAL_ONLY = (
+    "Caller authorized local-only research scope for this turn. Do not launch "
+    "providers. Retain existing research evidence and report INCOMPLETE "
+    "honestly when coverage is incomplete."
+)
+
+
+def _unbound(prompt: str, scope: str | None) -> dict[str, object]:
+    """A turn that is not research: it never writes hook state (r3 P2-1)."""
+    if scope == "local-only":
+        return _context(_LOCAL_ONLY)
+    if scope is not None:
+        return {}
+    result = _context(_ADVISORY) if _RESEARCH_VERB.search(prompt) else {}
+    if research_scope.near_miss(prompt):
+        result["systemMessage"] = (
+            "Research scope directive not recognized, so research is not "
+            "enforced for this turn. Line 1 must be exactly one of "
+            f"{_ACCEPTED_FORMS}."
+        )
+    return result
+
+
+def _retained(
+    marker: Path, event: dict[str, object], prompt: str, scope: str | None
+) -> dict[str, object] | None:
+    """Answer a submission in a turn that already has hook state, if it must."""
+    if not (marker.exists() or marker.is_symlink()):
+        return None
+    record = _research_record(marker, str(event["turn_id"]))
+    if isinstance(record, dict):
+        return _repeat_submission(record, prompt)
+    if scope != "research":
+        return None
+    # Never rewrite retained state; this turn just is not enforced.
+    return {
+        "systemMessage": "Research gate state for this turn is not a research "
+        f"binding ({record or 'other format'}); research is not enforced for "
+        "this turn."
+    }
+
+
+def _bind_research(
+    event: dict[str, object], marker: Path, prompt: str, repo_root: Path
+) -> dict[str, object]:
+    result = _context(_research_context(event, repo_root))
+    try:
+        _write_record(marker, event, prompt)
+    except OSError as exc:
+        # D236 fail-open: state that cannot be written never blocks the turn.
+        result["systemMessage"] = (
+            f"Research gate state unwritable ({type(exc).__name__}); Stop "
+            "cannot enforce the research receipt for this turn."
+        )
+    return result
 
 
 def _on_submit(
@@ -145,46 +174,13 @@ def _on_submit(
         or any(event.get(field) not in (None, "") for field in _AGENT_FIELDS)
     ):
         return {}
-    binding = research_scope.bind_submission(
-        prompt, str(event["session_id"]), str(event["turn_id"])
-    )
-    if marker.exists():
-        return _repeat_submission(marker, prompt)
-    if binding is not None:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps({"caller_scope": binding}), encoding="utf-8")
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": (
-                    "Caller authorized local-only research scope for this turn. "
-                    "Do not launch providers. Retain existing research evidence "
-                    "and report INCOMPLETE honestly when coverage is incomplete."
-                ),
-            }
-        }
     scope = research_scope.directive(prompt)
-    if scope in _WORK_SCOPES:
-        # Names the caller's scope; Stop never blocks on this record.
-        _write_record(marker, event, prompt, scope=scope)
-        return {}
-    if scope != "research":
-        return _advisory(event, repo_root) if _needs_research(prompt) else {}
-    result: dict[str, object] = {
-        "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
-            "additionalContext": _research_context(event, repo_root),
-        }
-    }
-    try:
-        _write_record(marker, event, prompt, scope="research", policy="strict-five-v2")
-    except OSError as exc:
-        # D236 fail-open: state that cannot be written never blocks the turn.
-        result["systemMessage"] = (
-            f"Research gate state unwritable ({type(exc).__name__}); Stop "
-            "cannot enforce the research receipt for this turn."
-        )
-    return result
+    retained = _retained(marker, event, prompt, scope)
+    if retained is not None:
+        return retained
+    if scope == "research":
+        return _bind_research(event, marker, prompt, repo_root)
+    return _unbound(prompt, scope)
 
 
 def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
@@ -249,47 +245,47 @@ def _invalid_submission(event: dict[str, object], reason: str) -> dict[str, obje
     return {"decision": "block", "reason": reason}
 
 
-def _read_submission(marker: Path) -> dict[str, object] | str:
-    """Return retained authority or a fixed evidence failure class."""
+def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | None:
+    """Return a valid research record, a failure word, or None for another format.
+
+    r3 P3-3, security P3-1: every field is type-checked before comparison, so
+    a legacy, work-scope or forged record can never raise or bind research.
+    """
     try:
         recorded = json.loads(marker.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return "Research submission marker missing."
+        return "missing"
     except OSError:
-        return "Research submission marker unreadable."
+        return "unreadable"
     except ValueError:
-        return "Research submission marker malformed."
+        recorded = None
     if not isinstance(recorded, dict):
-        return "Research submission marker malformed."
+        return "malformed"
+    scope = recorded.get("scope")
+    if scope is None or (isinstance(scope, str) and scope != "research"):
+        return None
+    digest = recorded.get("prompt_sha256")
+    if (
+        scope != "research"
+        or recorded.get("turn_id") != turn_id
+        or recorded.get("policy") != _POLICY
+        or not isinstance(digest, str)
+        or _DIGEST.fullmatch(digest) is None
+    ):
+        return "malformed"
     return recorded
 
 
-def _stop_from_submission(
+def _on_bound_stop(
     event: dict[str, object], marker: Path, manifest: Path
 ) -> dict[str, object]:
-    """Use only retained submission authority, never scope from Stop/model text."""
-    recorded = _read_submission(marker)
-    if isinstance(recorded, str):
-        return _invalid_submission(event, recorded)
-    if recorded.get("scope") in _WORK_SCOPES and "policy" not in recorded:
+    """Block only a turn whose retained record is a valid research binding."""
+    record = _research_record(marker, str(event["turn_id"]))
+    if isinstance(record, dict):
+        return _on_stop(event, manifest)
+    if record is None:
         return {}
-    if "caller_scope" in recorded:
-        if not research_scope.validates_binding(
-            recorded["caller_scope"], str(event["session_id"]), str(event["turn_id"])
-        ):
-            return _invalid_submission(event, "Caller research scope binding invalid.")
-        verdict = strict_five_verdict(manifest, str(event["turn_id"]))
-        if not verdict.passed:
-            return {
-                "systemMessage": (
-                    "Caller authorized local work without a new provider run. "
-                    "This does not certify existing research. Retain any existing "
-                    "INCOMPLETE status. Provider calls remain outside that "
-                    "authorization."
-                )
-            }
-        return {}
-    return _on_stop(event, manifest)
+    return {"systemMessage": f"{_NOTICE}research submission record {record}."}
 
 
 def handle(
@@ -302,12 +298,12 @@ def handle(
     marker, manifest = paths
     if event.get("hook_event_name") == "UserPromptSubmit":
         return _on_submit(event, marker, repo_root)
-    # Only a retained submission binds a Stop; a leftover turn directory with
-    # no marker (an unbound turn's research run) never blocks (decision 7).
+    # Only a valid retained research record binds a Stop; an unbound turn that
+    # left a directory passes with a notice (decision 7, security P3-2).
     if event.get("hook_event_name") == "Stop" and (
-        marker.exists() or marker.is_symlink()
+        marker.parent.exists() or marker.is_symlink()
     ):
-        return _stop_from_submission(event, marker, manifest)
+        return _on_bound_stop(event, marker, manifest)
     return {}
 
 
@@ -320,14 +316,18 @@ def _read_event() -> dict[str, object]:
 
 
 def _state_error(
-    event: dict[str, object], state_root: Path, exc: OSError
+    event: dict[str, object], state_root: Path, exc: Exception
 ) -> dict[str, object]:
-    """Fail open on hook-state I/O unless a research marker binds this Stop."""
+    """Fail open unless a valid research record binds this Stop.
+
+    Even then the block keeps the `RESEARCH INCOMPLETE:` escape, so an
+    exception can never make a permanent block (security P3-1).
+    """
     paths = _paths(event, state_root)
     if (
         paths is not None
         and event.get("hook_event_name") == "Stop"
-        and paths[0].is_file()
+        and isinstance(_research_record(paths[0], str(event["turn_id"])), dict)
     ):
         reason = f"Research hook could not validate evidence: {type(exc).__name__}"
         return _invalid_submission(event, reason)
@@ -344,7 +344,7 @@ def main(*, repo_root: Path) -> int:
         event = _read_event()
         try:
             result = handle(event, state_root, repo_root=repo_root)
-        except OSError as exc:
+        except (OSError, ValueError, TypeError) as exc:
             result = _state_error(event, state_root, exc)
     except (OSError, ValueError, TypeError) as exc:
         result = {

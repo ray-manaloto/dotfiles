@@ -20,12 +20,17 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Literal
 from urllib.parse import quote
 
 from dotfiles_setup import codec, lane_result, sdlc_final_report
 from dotfiles_setup.codex_lane_mirror import SOL_MODEL
-from dotfiles_setup.research_scope import LOCAL_ONLY_DIRECTIVE, RESEARCH_DIRECTIVE
+from dotfiles_setup.research_scope import (
+    IMPLEMENTATION_DIRECTIVE,
+    LOCAL_ONLY_DIRECTIVE,
+    RESEARCH_DIRECTIVE,
+)
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -74,7 +79,11 @@ class SdlcTeamRequest(codec.Struct, frozen=True):
     allowlist: tuple[str, ...] = ()
     run_id: str = ""
     task: str = ""
-    research_scope: Literal["strict-five", "local-only"] = "strict-five"
+    # Only "research" binds a research turn; "strict-five" is the legacy
+    # default and, like "implementation", binds none (round 4, D236).
+    research_scope: Literal[
+        "implementation", "research", "local-only", "strict-five"
+    ] = "implementation"
     prompt_file: str = ""
     output_file: str = ""
     log_file: str = ""
@@ -255,6 +264,11 @@ def _resolved_dispatch(
     )
 
 
+_SCOPE_DIRECTIVES: Final = MappingProxyType(
+    {"research": RESEARCH_DIRECTIVE, "local-only": LOCAL_ONLY_DIRECTIVE}
+)
+
+
 def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
     """Build the complete dispatcher brief; callers supply no boilerplate."""
     allowlist = "\n".join(f"- {path}" for path in request.allowlist)
@@ -270,11 +284,7 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
     task = request.task.strip() or "Execute the authoritative specification."
     return (
         # The first line is the only research binding the Codex hook reads.
-        (
-            LOCAL_ONLY_DIRECTIVE
-            if request.research_scope == "local-only"
-            else RESEARCH_DIRECTIVE
-        )
+        _SCOPE_DIRECTIVES.get(request.research_scope, IMPLEMENTATION_DIRECTIVE)
         + "\n"
         + f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Spawn ALL FIVE "
         "specialists directly: sdlc-python-specialist, sdlc-config-specialist, "

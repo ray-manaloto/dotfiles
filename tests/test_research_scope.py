@@ -1,5 +1,5 @@
 # Copyright (c) 2026 Raymond Manaloto
-"""Public caller submission binding and request-integrity controls."""
+"""Public caller research-scope directive controls."""
 
 from __future__ import annotations
 
@@ -10,17 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup.research_scope import bind_submission, directive, validates_binding
-
-_PROMPT = "[research-scope: local-only]\nInvestigate saved local research evidence."
-
-
-def test_submission_binding_rechecks_actual_prompt_session_and_turn() -> None:
-    binding = bind_submission(_PROMPT, "session-1", "turn-1")
-    assert validates_binding(binding, "session-1", "turn-1", _PROMPT)
-    assert not validates_binding(binding, "session-2", "turn-1", _PROMPT)
-    assert not validates_binding(binding, "session-1", "turn-2", _PROMPT)
-    assert not validates_binding(binding, "session-1", "turn-1", _PROMPT + "changed")
+from dotfiles_setup.research_scope import directive, near_miss
 
 
 @pytest.mark.parametrize(
@@ -35,33 +25,7 @@ def test_submission_binding_rechecks_actual_prompt_session_and_turn() -> None:
     ],
 )
 def test_only_exact_caller_first_line_can_declare_scope(prompt: str) -> None:
-    assert bind_submission(prompt, "session-1", "turn-1") is None
-
-
-@pytest.mark.parametrize(
-    ("key", "value"),
-    [
-        ("session_id", "session-2"),
-        ("turn_id", "turn-2"),
-        ("source", "Stop"),
-        ("scope", "strict-five"),
-        ("prompt_sha256", "0" * 64),
-        ("binding_sha256", "0" * 64),
-        ("prompt_sha256", None),
-    ],
-)
-def test_changed_binding_is_refused(key: str, value: object) -> None:
-    original = bind_submission(_PROMPT, "session-1", "turn-1")
-    assert original is not None
-    changed: dict[str, object] = {**original, key: value}
-    assert not validates_binding(changed, "session-1", "turn-1")
-
-
-@pytest.mark.parametrize("binding", [None, {}, [], {"scope": "local-only"}])
-def test_absent_or_model_declared_scope_has_no_submission_authority(
-    binding: object,
-) -> None:
-    assert not validates_binding(binding, "session-1", "turn-1")
+    assert directive(prompt) is None
 
 
 @pytest.mark.parametrize(
@@ -70,6 +34,7 @@ def test_absent_or_model_declared_scope_has_no_submission_authority(
         ("[research-scope: implementation]\nResearch uv", "implementation"),
         ("[research-scope: text-edit]\nReword the README", "text-edit"),
         ("[research-scope: research]\nImplement the bump", "research"),
+        ("[research-scope: research]\r\nImplement the bump", "research"),
         ("[research-scope: local-only]\nInvestigate", "local-only"),
         ("[research-scope: anything]\nResearch uv", None),
         ("> [research-scope: implementation]\nResearch uv", None),
@@ -81,3 +46,19 @@ def test_directive_is_read_only_from_exact_caller_first_line(
     prompt: str, scope: str | None
 ) -> None:
     assert directive(prompt) == scope
+
+
+@pytest.mark.parametrize(
+    ("prompt", "expected"),
+    [
+        ("[research-scope: research]\nFix it.", False),
+        ("Fix it.\n[research-scope: researc]", False),
+        ("[research] notes", False),
+        ("﻿ [Research-Scope: research]\nFix it.", True),
+        ("[research-scope: bogus]\nFix it.", True),
+    ],
+)
+def test_near_miss_flags_only_an_inexact_first_line_directive(
+    prompt: str, *, expected: bool
+) -> None:
+    assert near_miss(prompt) is expected

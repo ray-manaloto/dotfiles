@@ -43,12 +43,17 @@ including a provisional pass after an earlier INCOMPLETE block; that accepted
 limitation can leave a provisional answer unnamed.
 Codex hook scope (opt-in): only a caller's exact first line
 `[research-scope: research]` (a CRLF ending is accepted) binds a turn as
-research, and only such a turn's Stop can block. Quoted, indented, fenced or
-later-line directives bind nothing. Without it, research words add advisory
-context and never a receipt. `implementation` and `text-edit` name the scope in
-the turn record and never block; `local-only` keeps its caller binding. SDLC
-strict-five prompts start with the research line. Subagent turns (`agent_id`,
-`agent_type`) and Stops without a retained submission never block.
+research, and only a valid record of that binding can block Stop. Quoted,
+indented, fenced or later-line directives bind nothing; a mistyped first-line
+directive gets a non-blocking notice naming the accepted forms. Research verbs
+without it add a short hint that names the directive and never a provider
+command. `implementation`, `text-edit` and `local-only` write no hook state.
+A legacy, non-research or malformed record passes Stop; a turn directory
+without a valid record passes with a notice that enforcement did not apply.
+SDLC dispatches start with `[research-scope: implementation]` unless the
+request sets `research_scope` to `research` (or `local-only`). Subagent turns
+(`agent_id`, `agent_type`) never block. Last30Days may be missing when
+firecrawl-search succeeded via Serper or SerpApi; the pass is PROVISIONAL.
 Two live hooks run this code: `~/.codex/config.toml` runs the source observer
 from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and
 `~/.codex/hooks.json` runs `scripts/codex-research-gate.py` from the installed

@@ -25,27 +25,38 @@ _DIRECTIVE = "[research-scope: research]\n"
 _RESEARCH = _DIRECTIVE + "Research Codex hooks"
 
 
+# Round 4: Stop blocks only on a valid new-format research record; anything
+# else passes, with this notice when the turn directory exists (r3 P3-3).
+_NOTICE = "Research enforcement did not apply to this turn: "
+
+
 @pytest.mark.parametrize(
-    ("raw", "reason"),
+    "raw",
     [
-        (b"{", "Research submission marker malformed."),
-        (b"[]", "Research submission marker malformed."),
-        (b"\xff", "Research submission marker malformed."),
-        (b"{}", "Research submission digest invalid."),
-        (b'{"prompt_sha256":null}', "Research submission digest invalid."),
-        (
-            b'{"prompt_sha256":"SYNTHETIC_BAD_DIGEST"}',
-            "Research submission digest invalid.",
-        ),
-        (b'{"caller_scope":{}}', "Research submission digest invalid."),
-        (None, "Research submission marker unreadable."),
+        b"{",
+        b"[]",
+        b"\xff",
+        b"{}",
+        b'{"prompt_sha256":null}',
+        b'{"scope":[]}',
+        b'{"caller_scope":{}}',
+        None,
+    ],
+    ids=[
+        "truncated",
+        "array",
+        "invalid-utf8",
+        "empty",
+        "null-digest",
+        "list-scope",
+        "caller-scope",
+        "directory",
     ],
 )
-def test_repeated_submit_reports_retained_evidence_failure_without_rewriting(
-    tmp_path: Path,
-    raw: bytes | None,
-    reason: str,
+def test_research_submit_over_unusable_state_warns_without_rewriting(
+    tmp_path: Path, raw: bytes | None
 ) -> None:
+    """r3 P2-1, P3-3: retained state that is no research binding never blocks."""
     event: dict[str, object] = {
         "session_id": "session-1",
         "turn_id": "turn-1",
@@ -59,76 +70,98 @@ def test_repeated_submit_reports_retained_evidence_failure_without_rewriting(
         marker.mkdir()
     else:
         marker.write_bytes(raw)
-    assert _invoke(tmp_path, event) == {"decision": "block", "reason": reason}
+    result = _invoke(tmp_path, event)
+    assert "decision" not in result
+    assert "not enforced" in str(result["systemMessage"])
     if raw is None:
         assert marker.is_dir()
     else:
         assert marker.read_bytes() == raw
 
 
-@pytest.mark.parametrize("local", [False, True])
-def test_valid_repeated_submit_distinguishes_same_and_different_prompts(
+def test_valid_repeated_research_submit_distinguishes_same_and_different_prompts(
     tmp_path: Path,
-    *,
-    local: bool,
 ) -> None:
-    prompt = (
-        "[research-scope: local-only]\n" if local else _DIRECTIVE
-    ) + "Research Codex hooks"
     event: dict[str, object] = {
         "session_id": "session-1",
         "turn_id": "turn-1",
         "hook_event_name": "UserPromptSubmit",
-        "prompt": prompt,
+        "prompt": _RESEARCH,
     }
     _invoke(tmp_path, event)
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
     original = marker.read_bytes()
     assert _invoke(tmp_path, event) == {}
-    assert _invoke(tmp_path, {**event, "prompt": prompt + " again"}) == {
+    assert _invoke(tmp_path, {**event, "prompt": _RESEARCH + " again"}) == {
         "decision": "block",
         "reason": "Research scope already bound to a different submission.",
     }
     assert marker.read_bytes() == original
 
 
+@pytest.mark.parametrize("scope", ["implementation", "text-edit", "local-only"])
+def test_non_research_directive_writes_no_state_and_never_blocks_a_later_prompt(
+    tmp_path: Path, scope: str
+) -> None:
+    """r3 P2-1: a later, different prompt in the same turn is never refused."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    first = f"[research-scope: {scope}]\nResearch the latest uv releases."
+    _invoke(tmp_path, {**submit, "prompt": first})
+    assert not (tmp_path / ".codex/research-coverage/session-1").exists()
+    later = _invoke(tmp_path, {**submit, "prompt": "Also fix the README typo."})
+    assert "decision" not in later
+    stop: dict[str, object] = {
+        **base,
+        "hook_event_name": "Stop",
+        "last_assistant_message": "Done.",
+    }
+    assert _invoke(tmp_path, stop) == {}
+
+
 @pytest.mark.parametrize(
-    "manifest_raw", [None, b'{"SYNTHETIC_PRIVATE_REASON":"unfinished"}']
+    "manifest_raw",
+    [None, b'{"strict_five":true,"request_id":"turn-1","sources":[]}'],
 )
-@pytest.mark.parametrize(
-    "message", ["Local edit completed.", "RESEARCH INCOMPLETE: prior coverage."]
-)
-def test_local_stop_states_authorization_without_inventing_research_requirement(
-    tmp_path: Path,
-    manifest_raw: bytes | None,
-    message: str,
+def test_local_only_turn_never_blocks_and_keeps_a_retained_manifest(
+    tmp_path: Path, manifest_raw: bytes | None
 ) -> None:
     base = {"session_id": "session-1", "turn_id": "turn-1"}
-    _invoke(
+    started = _invoke(
         tmp_path,
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "[research-scope: local-only]\nUpdate a local document.",
+            "prompt": "[research-scope: local-only]\nInvestigate the saved receipt.",
         },
     )
-    manifest = tmp_path / ".codex/research-coverage/session-1/turn-1/manifest.json"
+    assert "Do not launch providers" in json.dumps(started)
+    assert "research-fanout" not in json.dumps(started)
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    manifest = directory / "manifest.json"
     if manifest_raw is not None:
+        directory.mkdir(parents=True)
         manifest.write_bytes(manifest_raw)
-    assert _invoke(
-        tmp_path, {**base, "hook_event_name": "Stop", "last_assistant_message": message}
-    ) == {
-        "systemMessage": (
-            "Caller authorized local work without a new provider run. "
-            "This does not certify existing research. Retain any existing "
-            "INCOMPLETE status. Provider calls remain outside that authorization."
-        )
-    }
-    if manifest_raw is not None:
+    stopped = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "RESEARCH INCOMPLETE: Context7 monthly quota.",
+        },
+    )
+    if manifest_raw is None:
+        assert stopped == {}
+    else:
+        assert stopped == {
+            "systemMessage": _NOTICE + "research submission record missing."
+        }
         assert manifest.read_bytes() == manifest_raw
 
 
-@pytest.mark.parametrize("scope", ["local-only", "strict-five"])
+@pytest.mark.parametrize(
+    "scope", ["local-only", "strict-five", "implementation", "research"]
+)
 def test_rendered_sdlc_request_reaches_real_hook_submission_boundary(
     tmp_path: Path, scope: str
 ) -> None:
@@ -155,47 +188,12 @@ def test_rendered_sdlc_request_reaches_real_hook_submission_boundary(
             "last_assistant_message": "RESEARCH INCOMPLETE: retained quota blocker.",
         },
     )
-    if scope == "local-only":
-        assert "--strict-five" not in json.dumps(started)
-        assert stopped.get("decision") != "block"
-        assert "incomplete" in str(stopped["systemMessage"]).lower()
-    else:
+    if scope == "research":
         assert "--strict-five" in json.dumps(started)
         assert stopped["decision"] == "block"
-
-
-def test_caller_local_scope_finishes_on_first_stop_with_retained_incomplete(
-    tmp_path: Path,
-) -> None:
-    base = {"session_id": "session-1", "turn_id": "turn-1"}
-    started = _invoke(
-        tmp_path,
-        {
-            **base,
-            "hook_event_name": "UserPromptSubmit",
-            "prompt": (
-                "[research-scope: local-only]\n"
-                "Investigate the saved Codex research receipt locally. "
-                "Do not launch providers."
-            ),
-        },
-    )
-    assert "research-fanout" not in json.dumps(started)
-    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
-    manifest = directory / "manifest.json"
-    retained = b'{"strict_five":true,"request_id":"turn-1","sources":[]}'
-    manifest.write_bytes(retained)
-    result = _invoke(
-        tmp_path,
-        {
-            **base,
-            "hook_event_name": "Stop",
-            "last_assistant_message": "RESEARCH INCOMPLETE: Context7 monthly quota.",
-        },
-    )
-    assert result.get("decision") != "block"
-    assert "incomplete" in str(result.get("systemMessage", "")).lower()
-    assert manifest.read_bytes() == retained
+    else:
+        assert "--strict-five" not in json.dumps(started)
+        assert stopped == {}
 
 
 def test_same_turn_cannot_be_redeclared_local_after_research_submission(
@@ -263,51 +261,79 @@ def test_ordinary_research_ignores_misplaced_and_stop_declarations(
     assert "strict-five research command" in str(stop["reason"])
 
 
+_RESEARCH_DIGEST = hashlib.sha256(_RESEARCH.encode()).hexdigest()
+_VALID_RECORD: dict[str, object] = {
+    "turn_id": "turn-1",
+    "prompt_sha256": _RESEARCH_DIGEST,
+    "scope": "research",
+    "policy": "strict-five-v2",
+}
+
+
 @pytest.mark.parametrize(
-    "change",
+    ("record", "notice"),
     [
-        "stale-turn",
-        "wrong-session",
-        "changed-digest",
-        "malformed-marker",
+        (
+            {
+                "turn_id": "turn-1",
+                "prompt_sha256": _RESEARCH_DIGEST,
+                "policy": "strict-five-v2",
+            },
+            False,
+        ),
+        ({"scope": "implementation"}, False),
+        ({"caller_scope": {"scope": "local-only"}}, False),
+        ({"scope": []}, True),
+        ({"scope": {"research": 1}}, True),
+        ({"scope": "research"}, True),
+        ({**_VALID_RECORD, "turn_id": "turn-2"}, True),
+        ({**_VALID_RECORD, "policy": "strict-five-v1"}, True),
+        ({**_VALID_RECORD, "prompt_sha256": "SYNTHETIC_BAD_DIGEST"}, True),
+        ({**_VALID_RECORD, "policy": ["strict-five-v2"]}, True),
+    ],
+    ids=[
+        "legacy-hook-format",
+        "work-scope",
+        "caller-scope",
+        "list-scope",
+        "dict-scope",
+        "research-no-identity",
+        "other-turn",
+        "old-policy",
+        "bad-digest",
+        "list-policy",
     ],
 )
-def test_local_scope_requires_retained_matching_submission_evidence(
-    tmp_path: Path,
-    change: str,
+def test_stop_blocks_only_on_a_valid_research_record(
+    tmp_path: Path, record: dict[str, object], *, notice: bool
 ) -> None:
+    """r3 P3-3, security P3-1: no forged, legacy or malformed record can block."""
     base = {"session_id": "session-1", "turn_id": "turn-1"}
     _invoke(
-        tmp_path,
-        {
-            **base,
-            "hook_event_name": "UserPromptSubmit",
-            "prompt": "[research-scope: local-only]\nInvestigate local Codex research",
-        },
+        tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": _RESEARCH}
     )
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
-    data = json.loads(marker.read_text())
-    if change == "missing-marker":
-        marker.unlink()
-    elif change == "malformed-marker":
-        marker.write_text("[]")
-    else:
-        field, value = {
-            "stale-turn": ("turn_id", "turn-previous"),
-            "wrong-session": ("session_id", "session-other"),
-            "changed-digest": ("prompt_sha256", "0" * 64),
-        }[change]
-        data["caller_scope"][field] = value
-        marker.write_text(json.dumps(data))
-    result = _invoke(
-        tmp_path,
-        {
-            **base,
-            "hook_event_name": "Stop",
-            "last_assistant_message": "RESEARCH INCOMPLETE: local scope",
-        },
+    marker.write_text(json.dumps(record))
+    for active in (False, True):
+        result = _invoke(
+            tmp_path,
+            {
+                **base,
+                "hook_event_name": "Stop",
+                "stop_hook_active": active,
+                "last_assistant_message": "Done.",
+            },
+        )
+        if notice:
+            assert result == {
+                "systemMessage": _NOTICE + "research submission record malformed."
+            }
+        else:
+            assert result == {}
+    marker.write_text(json.dumps(_VALID_RECORD))
+    assert _invoke(tmp_path, {**base, "hook_event_name": "Stop"})["decision"] == (
+        "block"
     )
-    assert result["decision"] == "block"
 
 
 def _invoke(
@@ -395,15 +421,19 @@ def test_unrelated_turn_and_heartbeat_do_not_trigger_gate(tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     ("prompt", "expected"),
     [
-        ("Compare uv and Poetry for Python dependency management.", "gated"),
-        ("Find the latest fnox version.", "gated"),
+        ("Compare uv and Poetry for Python dependency management.", "ordinary"),
+        ("Find the latest fnox version.", "ordinary"),
+        ("Bump codex to the newest version of the current tools.", "ordinary"),
+        ("Investigate the failing test and fix it.", "ordinary"),
         ("Research Codex agent workflows.", "gated"),
+        ("Look up the uv changelog.", "gated"),
+        ("Search the web for mise release notes.", "gated"),
         ("Print the current directory.", "ordinary"),
         ("Rename the variable sources to inputs.", "ordinary"),
         ("Compare these two local functions.", "ordinary"),
     ],
 )
-def test_research_trigger_matches_external_requests(
+def test_research_hint_triggers_only_on_research_verbs(
     tmp_path: Path, prompt: str, expected: str
 ) -> None:
     result = _invoke(
@@ -880,16 +910,17 @@ def test_projection_stop_exa_token_boundary(
 @pytest.mark.parametrize(
     ("change", "reason"),
     [
-        ("non-object", "Research submission marker malformed."),
-        ("malformed", "Research submission marker malformed."),
-        ("invalid-utf8", "Research submission marker malformed."),
-        ("unreadable", "Research submission marker unreadable."),
-        ("binding", "Caller research scope binding invalid."),
+        ("non-object", "malformed"),
+        ("malformed", "malformed"),
+        ("invalid-utf8", "malformed"),
+        ("unreadable", "unreadable"),
+        ("missing", "missing"),
     ],
 )
-def test_invalid_submission_requires_first_refusal_then_honest_incomplete_stop(
+def test_unusable_research_record_passes_stop_with_a_notice(
     tmp_path: Path, change: str, reason: str
 ) -> None:
+    """Security P3-2: an unbound research turn passes Stop, visibly."""
     base = {"session_id": "session-1", "turn_id": "turn-1"}
     _invoke(
         tmp_path,
@@ -905,18 +936,17 @@ def test_invalid_submission_requires_first_refusal_then_honest_incomplete_stop(
         "non-object": b"[]",
         "malformed": b"{SYNTHETIC_NONSECRET",
         "invalid-utf8": b"\xff",
-        "binding": b'{"caller_scope":{"scope":"local-only"}}',
     }
     if change == "unreadable":
         marker.mkdir()
     elif change in payloads:
         marker.write_bytes(payloads[change])
     for active, message in (
-        (False, "RESEARCH INCOMPLETE: unavailable evidence"),
+        (False, "Done."),
         (True, "Research complete"),
-        (True, "Summary: RESEARCH INCOMPLETE: unavailable evidence"),
+        (True, "RESEARCH INCOMPLETE: unavailable evidence"),
     ):
-        blocked = _invoke(
+        result = _invoke(
             tmp_path,
             {
                 **base,
@@ -925,19 +955,9 @@ def test_invalid_submission_requires_first_refusal_then_honest_incomplete_stop(
                 "last_assistant_message": message,
             },
         )
-        assert blocked == {"decision": "block", "reason": reason}
-    completed = _invoke(
-        tmp_path,
-        {
-            **base,
-            "hook_event_name": "Stop",
-            "stop_hook_active": True,
-            "last_assistant_message": " \nRESEARCH INCOMPLETE: unavailable evidence",
-        },
-    )
-    assert completed == {
-        "systemMessage": f"Research coverage remains incomplete: {reason}"
-    }
+        assert result == {
+            "systemMessage": f"{_NOTICE}research submission record {reason}."
+        }
     if change in payloads:
         assert marker.read_bytes() == payloads[change]
     elif change == "unreadable":
@@ -1221,6 +1241,28 @@ def test_bare_skip_row_without_evidence_blocks(tmp_path: Path, code: str) -> Non
     assert "Research coverage failed" in str(result["reason"])
 
 
+@pytest.mark.parametrize("prefix", ["status", "status code", "Status:"])
+def test_long_blank_stderr_evidence_cannot_stall_stop(
+    tmp_path: Path, prefix: str
+) -> None:
+    """Security P3-4: forged stderr with long blank runs stays linear at Stop."""
+    prompt = _RESEARCH
+    _turn(tmp_path, prompt)
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    envelope = {
+        "http_status": None,
+        "rc": 1,
+        "body": "",
+        "stderr_redacted": (prefix + " " * 20_000 + "x ") * 3,
+    }
+    _skip(manifest, "context7", "quota", envelope=envelope)
+    started = time.perf_counter()
+    named = "PROVISIONAL context7; firecrawl-developer"
+    result = _turn(tmp_path, prompt, last_assistant_message=named)
+    assert time.perf_counter() - started < 0.5
+    assert result["decision"] == "block"
+
+
 # Round 3: only the exact first line `[research-scope: research]` binds research.
 # Both round-2 reviewers' probe sets: work briefs that mention research words, and
 # research lead-ins a verb classifier missed. Without the directive none blocks.
@@ -1329,17 +1371,6 @@ def test_crlf_research_directive_binds(tmp_path: Path) -> None:
     assert json.loads(_marker(tmp_path).read_text())["scope"] == "research"
 
 
-@pytest.mark.parametrize("scope", ["implementation", "text-edit"])
-def test_work_directive_names_scope_in_binding_record(
-    tmp_path: Path, scope: str
-) -> None:
-    prompt = f"[research-scope: {scope}]\nResearch the latest uv releases."
-    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
-    record = json.loads(_marker(tmp_path).read_text())
-    assert record["scope"] == scope
-    assert "policy" not in record
-
-
 def test_research_hint_without_directive_is_advisory_only(tmp_path: Path) -> None:
     submit: dict[str, object] = {
         "session_id": "session-1",
@@ -1350,34 +1381,132 @@ def test_research_hint_without_directive_is_advisory_only(tmp_path: Path) -> Non
     repo = Path(__file__).parent.parent
     result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
     context = str(json.dumps(result))
-    assert "--strict-five" in context
+    # r3 P3-4, security P3-6: a pointer only, never a provider command.
+    for absent in ("--strict-five", "fnox", "codex_research", "research-fanout"):
+        assert absent not in context
     assert "[research-scope: research]" in context
-    assert "RESEARCH INCOMPLETE:" in context
-    assert "not enforced" in context
+    assert "not research-enforced" in context
+    assert "paid" in context
+    assert len(context) < 600
+    assert not _marker(tmp_path).exists()
+
+
+@pytest.mark.parametrize("mode", ["implement", "review"])
+@pytest.mark.parametrize("scope", [None, "strict-five", "implementation"])
+def test_sdlc_implement_and_review_dispatch_never_binds_research(
+    tmp_path: Path, mode: str, scope: str | None
+) -> None:
+    """r3 P1-1, D236: an SDLC coding or review lane is never a research turn."""
+    fields: dict[str, object] = {
+        "spec_file": str(tmp_path / "spec.md"),
+        "task": "Implement ticket CG-36 test-first; keep research failures.",
+        "mode": mode,
+    }
+    if scope is not None:
+        fields["research_scope"] = scope
+    request = codec.decode(json.dumps(fields).encode(), sdlc_team.SdlcTeamRequest)
+    prompt = sdlc_team.build_prompt(request, tmp_path)
+    assert prompt.partition("\n")[0] == "[research-scope: implementation]"
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+    assert not _marker(tmp_path).exists()
+
+
+@pytest.mark.parametrize("mode", ["implement", "review"])
+def test_sdlc_explicit_research_scope_dispatch_binds_research(
+    tmp_path: Path, mode: str
+) -> None:
+    request = codec.decode(
+        json.dumps(
+            {
+                "spec_file": str(tmp_path / "spec.md"),
+                "task": "Research the latest uv releases.",
+                "mode": mode,
+                "research_scope": "research",
+            }
+        ).encode(),
+        sdlc_team.SdlcTeamRequest,
+    )
+    prompt = sdlc_team.build_prompt(request, tmp_path)
+    assert prompt.partition("\n")[0] == "[research-scope: research]"
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.")["decision"] == (
+        "block"
+    )
+
+
+_ACCEPTED_FORMS = tuple(
+    f"`[research-scope: {scope}]`"
+    for scope in ("research", "implementation", "text-edit", "local-only")
+)
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        " [research-scope: research]",
+        "\ufeff[research-scope: research]",
+        "\u00a0[research-scope: research]",
+        "[Research-Scope: research]",
+        "\uff3bresearch-scope: research\uff3d",
+        "[research-scope: research] now",
+        "[research-scope: researc]",
+        "[research-scope:research]",
+        "[research-scope: research]\rFix it.",
+        "[research-scope: research]\u2028Fix it.",
+    ],
+    ids=[
+        "leading-space",
+        "bom",
+        "nbsp",
+        "capitalized",
+        "fullwidth",
+        "trailing-text",
+        "typo",
+        "no-space",
+        "lone-cr",
+        "line-separator",
+    ],
+)
+def test_near_miss_directive_warns_and_binds_nothing(
+    tmp_path: Path, first: str
+) -> None:
+    """Security P3-3: a mistyped directive is visible to the caller."""
+    submit: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": first + "\nFix the README typo.",
+    }
+    repo = Path(__file__).parent.parent
+    result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
+    assert "decision" not in result
+    message = str(result["systemMessage"])
+    assert "not enforced" in message
+    for form in _ACCEPTED_FORMS:
+        assert form in message
     assert not _marker(tmp_path).exists()
 
 
 @pytest.mark.parametrize(
-    "mode_task",
+    "prompt",
     [
-        ("implement", "Implement ticket CG-36 test-first."),
-        ("review", "Review commit ddfc027f against CG-36."),
+        "Ticket:\n[research-scope: research]\nFix it.",
+        "Fix the research-scope note in the README.",
+        "[research] notes on the README",
+        "[research-scope: implementation]\nFix it.",
     ],
 )
-def test_sdlc_dispatcher_body_alone_never_binds_research(
-    tmp_path: Path, mode_task: tuple[str, str]
+def test_exact_or_absent_directive_gets_no_near_miss_notice(
+    tmp_path: Path, prompt: str
 ) -> None:
-    """The fixed "research failures" clause binds nothing; the directive line does."""
-    mode, task = mode_task
-    request = sdlc_team.SdlcTeamRequest(
-        spec_file=str(tmp_path / "spec.md"), task=task, mode=sdlc_team.SdlcMode(mode)
-    )
-    prompt = sdlc_team.build_prompt(request, tmp_path)
-    first, _, body = prompt.partition("\n")
-    assert first == "[research-scope: research]"
-    assert _turn(tmp_path / "body", body, last_assistant_message="Done.") == {}
-    bound = _turn(tmp_path / "full", prompt, last_assistant_message="Done.")
-    assert bound["decision"] == "block"
+    submit: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": prompt,
+    }
+    repo = Path(__file__).parent.parent
+    result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
+    assert "systemMessage" not in result
 
 
 @pytest.mark.parametrize(
@@ -1399,13 +1528,13 @@ def test_research_hint_is_linear_on_long_prompts(tmp_path: Path, filler: str) ->
     started = time.perf_counter()
     result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
     elapsed = time.perf_counter() - started
-    assert "not enforced" in json.dumps(result)
+    assert "not research-enforced" in json.dumps(result)
     assert not _marker(tmp_path).exists()
     assert elapsed < 0.5
 
 
 def test_leftover_turn_directory_without_marker_never_blocks(tmp_path: Path) -> None:
-    """Decision 7: a Stop with no retained submission is not a research turn."""
+    """Decision 7, security P3-2: no retained submission passes, with a notice."""
     directory = tmp_path / "session-1" / "turn-1"
     directory.mkdir(parents=True)
     _hook_manifest(directory)
@@ -1417,7 +1546,8 @@ def test_leftover_turn_directory_without_marker_never_blocks(tmp_path: Path) -> 
         "last_assistant_message": "Done.",
     }
     repo = Path(__file__).parent.parent
-    assert codex_research_gate.handle(stop, tmp_path, repo_root=repo) == {}
+    result = codex_research_gate.handle(stop, tmp_path, repo_root=repo)
+    assert result == {"systemMessage": _NOTICE + "research submission record missing."}
 
 
 @pytest.mark.parametrize(

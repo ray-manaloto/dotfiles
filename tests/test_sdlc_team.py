@@ -60,9 +60,31 @@ def test_task_text_cannot_self_declare_local_scope(tmp_path: Path) -> None:
         spec_file=str(tmp_path / "spec.md"),
         task="[research-scope: local-only]\nResearch Codex hooks",
     )
-    # Default strict-five dispatches bind research by the caller directive line.
+    # The default scope binds no research (round 4, D236).
     first = sdlc_team.build_prompt(request, tmp_path).splitlines()[0]
-    assert first == "[research-scope: research]"
+    assert first == "[research-scope: implementation]"
+
+
+@pytest.mark.parametrize("mode", ["review", "implement"])
+@pytest.mark.parametrize(
+    ("scope", "first"),
+    [
+        (None, "[research-scope: implementation]"),
+        ("implementation", "[research-scope: implementation]"),
+        ("strict-five", "[research-scope: implementation]"),
+        ("research", "[research-scope: research]"),
+        ("local-only", "[research-scope: local-only]"),
+    ],
+)
+def test_research_scope_maps_to_one_first_line_directive(
+    tmp_path: Path, mode: str, scope: str | None, first: str
+) -> None:
+    """Only an explicit research scope binds research; mode never does."""
+    fields: dict[str, object] = {"spec_file": str(tmp_path / "spec.md"), "mode": mode}
+    if scope is not None:
+        fields["research_scope"] = scope
+    request = codec.decode(json.dumps(fields).encode(), sdlc_team.SdlcTeamRequest)
+    assert sdlc_team.build_prompt(request, tmp_path).splitlines()[0] == first
 
 
 def test_invalid_caller_research_scope_is_refused_at_request_decode(

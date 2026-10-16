@@ -49,10 +49,12 @@
         },
         "research_scope": {
           "enum": [
+            "implementation",
             "local-only",
+            "research",
             "strict-five"
           ],
-          "default": "strict-five"
+          "default": "implementation"
         },
         "prompt_file": {
           "type": "string",
