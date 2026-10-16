@@ -102,6 +102,12 @@ a notice when broken. Hook state is 0700 directories and 0600 records. SDLC
 dispatches start with `[research-scope: implementation]` unless
 `research_scope` is `research` (or `local-only`). Subagent turns (`agent_id`,
 `agent_type`) and heartbeats never bind.
+Evidence reads reject symlinks in every path component and non-regular leaves,
+including FIFOs without waiting for a writer. Manifests, cached probe receipts,
+and Last30Days plan inputs are capped at 1 MiB; raw evidence at 8 MiB; binding
+records at 64 KiB. Reads check the opened file and request at most cap plus one
+bytes. Use canonical directory paths: a symlink alias such as macOS `/tmp`
+is rejected too; `/private/tmp` is accepted.
 D246 activation removed the `~/.codex/hooks.json` research entries, so one
 registration runs this code: `~/.codex/config.toml` runs the source observer
 from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and the

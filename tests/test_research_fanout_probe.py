@@ -9,6 +9,7 @@ calls itself and records what they returned; these tests pin that record.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import uuid
@@ -1037,3 +1038,99 @@ def test_projection_repo_name_rejects_diagnostic_bytes(
     )
     assert _only(payload)["full_name"] == ""
     assert sentinel not in json.dumps(payload)
+
+
+@pytest.mark.parametrize("lane", ["fanout-manifest", "mirror-index"])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "regular",
+        "exact-cap",
+        "oversize",
+        "symlink",
+        "parent-symlink",
+        "directory",
+        "fifo",
+        "deep-json",
+    ],
+)
+def test_probe_evidence_reads_are_bounded_regular_and_do_not_follow_links(
+    tmp_path: Path, lane: str, kind: str
+) -> None:
+    """CG-36c F4: probe mode applies the same safe-reader policy as Stop."""
+    directory = tmp_path / "evidence"
+    directory.mkdir()
+    if kind == "parent-symlink":
+        alias = tmp_path / "linked"
+        alias.symlink_to(directory, target_is_directory=True)
+        directory = alias
+    target = directory / (
+        "manifest.json" if lane == "fanout-manifest" else "1.probe.json"
+    )
+    if lane == "fanout-manifest":
+        _fanout_manifest(target, {"github-issues": "ok"}, age_s=10)
+        argv = ["--fanout-manifest", str(target), "--require", "github-issues"]
+    else:
+        target.write_text(
+            json.dumps(
+                {
+                    "generated_at": datetime.fromtimestamp(_NOW - 10, UTC).isoformat(),
+                    "probes": [
+                        {
+                            "kind": "mirror",
+                            "url": "https://primary.test",
+                            "path": str(directory / "1.md"),
+                            "rc": 0,
+                            "bytes": 42,
+                            "code": "",
+                        }
+                    ],
+                }
+            )
+        )
+        argv = ["--mirror-index", str(directory), "--mirror-count", "1"]
+    if kind == "deep-json":
+        target.write_bytes(b"[" * 1100 + b"]" * 1100)
+    elif kind in {"exact-cap", "oversize"}:
+        raw = target.read_bytes()
+        target.write_bytes(raw + b" " * (1024 * 1024 + (kind == "oversize") - len(raw)))
+    elif kind == "symlink":
+        saved = target.with_suffix(".saved")
+        target.rename(saved)
+        target.symlink_to(saved)
+    elif kind in {"directory", "fifo"}:
+        target.unlink()
+        target.mkdir() if kind == "directory" else os.mkfifo(target)
+    program = (
+        "import sys;from pathlib import Path;"
+        "from dotfiles_setup.research_fanout import main,ProbeTiming;"
+        "raise SystemExit(main(sys.argv[2:],Path(sys.argv[1]),timing=ProbeTiming("
+        f"lambda _:None,lambda:{_NOW})))"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            program,
+            str(tmp_path),
+            "--probe-out",
+            "out/probe.json",
+            *argv,
+        ],
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).parent.parent / "python/src"),
+        },
+        capture_output=True,
+        text=True,
+        timeout=3,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads((tmp_path / "out/probe.json").read_text())
+    row = _only(payload)
+    valid = kind in {"regular", "exact-cap"}
+    if lane == "fanout-manifest":
+        assert bool(row["required_failed"]) is not valid
+    else:
+        assert row["missing"] == (0 if valid else 1)

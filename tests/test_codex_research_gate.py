@@ -2321,3 +2321,28 @@ def test_durable_incomplete_marker_does_not_hide_later_complete_receipt(
     ]
     manifest.write_text(json.dumps(data))
     assert _stop_once(tmp_path) == {}
+
+
+@pytest.mark.parametrize("kind", ["exact-cap", "symlink", "parent-symlink"])
+def test_binding_marker_reads_are_capped_and_reject_symlinks(
+    tmp_path: Path, kind: str
+) -> None:
+    marker = _bound_marker(tmp_path)
+    if kind == "exact-cap":
+        raw = marker.read_bytes()
+        marker.write_bytes(raw + b" " * (64 * 1024 - len(raw)))
+    elif kind == "symlink":
+        saved = marker.with_suffix(".saved")
+        marker.rename(saved)
+        marker.symlink_to(saved)
+    else:
+        directory = marker.parent
+        saved = directory.with_name("saved-turn")
+        directory.rename(saved)
+        directory.symlink_to(saved, target_is_directory=True)
+    stopped = _stop_once(tmp_path)
+    if kind == "exact-cap":
+        assert stopped["decision"] == "block"
+    else:
+        assert "decision" not in stopped
+        assert "unreadable" in str(stopped["systemMessage"])

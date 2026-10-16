@@ -3876,3 +3876,129 @@ def test_credit_status_scan_is_linear_on_blank_runs(prefix: str) -> None:
 def test_credit_scan_reads_a_bounded_prefix() -> None:
     assert is_credit_exhaustion(None, "Error: HTTP 402") is True
     assert is_credit_exhaustion(None, "a" * 200_000 + " HTTP 402") is False
+
+
+_MANIFEST_CAP = 1024 * 1024
+_RAW_CAP = 8 * 1024 * 1024
+
+
+def _bounded_receipt(directory: Path, lane: str) -> tuple[Path, Path, int]:
+    directory.mkdir(exist_ok=True)
+    manifest = _strict_manifest(directory)
+    target = manifest if lane == "manifest" else directory / "context7.raw"
+    if lane in {"provisional", "attempt"}:
+        data = json.loads(manifest.read_text())
+        raw = json.dumps(
+            {"http_status": 402, "rc": None, "body": "", "stderr_redacted": ""}
+        ).encode()
+        primary = directory / "firecrawl-developer.primary.raw"
+        primary.write_bytes(raw)
+        top = directory / "firecrawl-developer.raw"
+        top.write_bytes(raw)
+        row = next(r for r in data["sources"] if r["source"] == "firecrawl-developer")
+        row.update(
+            status="skipped",
+            items=[],
+            provisional=True,
+            skip_reason="credits-exhausted",
+            raw_sha256=hashlib.sha256(raw).hexdigest(),
+            attempts=[
+                {
+                    "route": "firecrawl-developer",
+                    "status": "skipped",
+                    "http_status": 402,
+                    "reason": "HTTP 402",
+                    "raw_file": str(primary),
+                    "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            ],
+        )
+        manifest.write_text(json.dumps(data))
+        target = primary if lane == "attempt" else top
+    assert strict_five_verdict(manifest, "turn-1").passed
+    return manifest, target, _MANIFEST_CAP if lane == "manifest" else _RAW_CAP
+
+
+def _pad_bound_evidence(manifest: Path, target: Path, size: int) -> None:
+    raw = target.read_bytes()
+    target.write_bytes(raw + b" " * (size - len(raw)))
+    if target == manifest:
+        return
+    data = json.loads(manifest.read_text())
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    for row in data["sources"]:
+        evidence_rows = (row, *row.get("attempts", []))
+        paired_envelope = row.get("provisional") and any(
+            evidence.get("raw_file") == str(target) for evidence in evidence_rows
+        )
+        for evidence in evidence_rows:
+            if paired_envelope:
+                Path(evidence["raw_file"]).write_bytes(target.read_bytes())
+            if paired_envelope or evidence.get("raw_file") == str(target):
+                evidence["raw_sha256"] = digest
+    manifest.write_text(json.dumps(data))
+
+
+def _verdict_process(manifest: Path) -> subprocess.CompletedProcess[str]:
+    program = (
+        "import sys;from pathlib import Path;"
+        "from dotfiles_setup.research_fanout import strict_five_verdict;"
+        "print(strict_five_verdict(Path(sys.argv[1]),'turn-1').passed)"
+    )
+    return subprocess.run(
+        [sys.executable, "-c", program, str(manifest)],
+        env={
+            **os.environ,
+            "PYTHONPATH": str(Path(__file__).parent.parent / "python/src"),
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=3,
+    )
+
+
+@pytest.mark.parametrize("lane", ["manifest", "strict", "provisional", "attempt"])
+@pytest.mark.parametrize(
+    "kind", ["regular", "exact-cap", "oversize", "symlink", "directory", "fifo"]
+)
+def test_receipt_reads_are_bounded_regular_and_never_follow_leaf_links(
+    tmp_path: Path, lane: str, kind: str
+) -> None:
+    """CG-36c F4: every receipt lane has a passing control and a bounded failure."""
+    manifest, target, cap = _bounded_receipt(tmp_path / "evidence", lane)
+    if kind in {"exact-cap", "oversize"}:
+        _pad_bound_evidence(manifest, target, cap + (kind == "oversize"))
+    elif kind == "symlink":
+        saved = target.with_suffix(".saved")
+        target.rename(saved)
+        target.symlink_to(saved)
+    elif kind in {"directory", "fifo"}:
+        target.unlink()
+        target.mkdir() if kind == "directory" else os.mkfifo(target)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(kind in {"regular", "exact-cap"})
+
+
+def test_receipt_rejects_a_symlink_in_any_parent(tmp_path: Path) -> None:
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "linked"
+    link.symlink_to(real, target_is_directory=True)
+    manifest = _strict_manifest(link)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0
+    assert result.stdout.strip() == "False"
+
+
+@pytest.mark.parametrize("lane", ["manifest", "provisional", "attempt"])
+def test_deeply_nested_evidence_is_refused_without_crashing(
+    tmp_path: Path, lane: str
+) -> None:
+    manifest, target, _ = _bounded_receipt(tmp_path / "evidence", lane)
+    target.write_bytes(b"[" * 1100 + b"]" * 1100)
+    _pad_bound_evidence(manifest, target, target.stat().st_size)
+    result = _verdict_process(manifest)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "False"

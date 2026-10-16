@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from dotfiles_setup import research_gate_outcome, research_scope
+from dotfiles_setup.research_evidence import read_regular_bounded
 from dotfiles_setup.research_fanout import strict_five_verdict
 
 # Advisory hint only, never a binding: research verbs, not everyday words such
@@ -378,11 +379,7 @@ def _invalid_submission(
 
 def _read_marker(marker: Path) -> bytes:
     """Read a regular file only, capped; a FIFO never blocks (CG-36 retro)."""
-    with os.fdopen(os.open(marker, os.O_RDONLY | os.O_NONBLOCK), "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
-            message = "not a regular file"
-            raise OSError(message)
-        return handle.read(_MARKER_CAP + 1)
+    return read_regular_bounded(marker, _MARKER_CAP)
 
 
 def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | None:

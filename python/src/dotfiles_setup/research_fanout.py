@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING, Never, Protocol
 from dotfiles_setup import child_env
 from dotfiles_setup.generated.research_failure_code import FailureCode
 from dotfiles_setup.generated.research_skip_reason import SkipReason
+from dotfiles_setup.research_evidence import MANIFEST_LIMIT, read_regular_bounded
 
 if TYPE_CHECKING:
     from email.message import Message
@@ -189,6 +190,7 @@ _CREDIT_STATUS = re.compile(
 # and a bound evidence file larger than the cap is refused, not read.
 _SCAN_LIMIT = 65_536
 _EVIDENCE_LIMIT = 8 * 1024 * 1024
+_MANIFEST_LIMIT = MANIFEST_LIMIT
 _FALLBACK_ROUTES = MappingProxyType({"firecrawl-search": ("serper", "serpapi")})
 _SKIP_VALUES = frozenset(reason.value for reason in SkipReason)
 # D236: codes a metered row may carry while the receipt still passes PROVISIONAL.
@@ -1961,8 +1963,10 @@ def _validate_args(args: argparse.Namespace) -> None:
             message = "--strict-five requires every named source"
             raise _UsageError(message)
         try:
-            plan = json.loads(args.last30days_plan.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
+            plan = json.loads(
+                read_regular_bounded(args.last30days_plan, _MANIFEST_LIMIT)
+            )
+        except (OSError, ValueError, RecursionError) as exc:
             message = "--last30days-plan must be readable JSON"
             raise _UsageError(message) from exc
         if not isinstance(plan, dict) or not plan.get("subqueries"):
@@ -2157,7 +2161,7 @@ def _validate_strict_row(row: dict[str, object], manifest_path: Path) -> str | N
         manifest_path.parent / f"{source}.raw"
     ):
         return f"{source} has no bound raw evidence"
-    raw = Path(raw_file).read_bytes()
+    raw = read_regular_bounded(Path(raw_file), _EVIDENCE_LIMIT)
     if not raw:
         return f"{source} raw evidence is empty"
     if row.get("raw_sha256") != hashlib.sha256(raw).hexdigest():
@@ -2225,11 +2229,7 @@ def _bound_raw(file: object, digest: object, expected: Path) -> bytes:
     if not isinstance(file, str) or Path(file) != expected:
         message = "unbound raw evidence"
         raise _ReceiptError(message)
-    with Path(file).open("rb") as handle:
-        raw = handle.read(_EVIDENCE_LIMIT + 1)
-    if len(raw) > _EVIDENCE_LIMIT:
-        message = "raw evidence too large"
-        raise _ReceiptError(message)
+    raw = read_regular_bounded(Path(file), _EVIDENCE_LIMIT)
     if digest != hashlib.sha256(raw).hexdigest():
         message = "raw evidence hash is missing or changed"
         raise _ReceiptError(message)
@@ -2512,7 +2512,8 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
     last30days_gap = None
     try:
         rows = _manifest_rows(
-            json.loads(manifest_path.read_text(encoding="utf-8")), request_id
+            json.loads(read_regular_bounded(manifest_path, _MANIFEST_LIMIT)),
+            request_id,
         )
         if isinstance(rows, str):
             return StrictVerdict(passed=False, provisional=(), reason=rows)
@@ -2530,7 +2531,7 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
                         str(row["source"]), route if isinstance(route, str) else None
                     )
                 )
-    except OSError, ValueError, KeyError, TypeError, AttributeError:
+    except OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError:
         return StrictVerdict(
             passed=False,
             provisional=(),
@@ -2811,7 +2812,7 @@ def _fanout_manifest_probe(
         "provisional_invalid": False,
     }
     try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest = json.loads(read_regular_bounded(path, _MANIFEST_LIMIT))
         rows = manifest["sources"]
         statuses = {
             r["source"]: (r["status"], r.get("reason"), r.get("skip_reason"))
@@ -2820,7 +2821,14 @@ def _fanout_manifest_probe(
             and isinstance(r.get("source"), str)
             and r["source"] in _SOURCE_NAMES
         }
-    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        RecursionError,
+    ) as exc:
         reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
         row["required_failed"] = [f"{name}: {reason}" for name in required]
         return row
@@ -3094,7 +3102,9 @@ def _mirror_index_probe(
     missing = 0
     for n in range(1, count + 1):
         try:
-            data = json.loads((directory / f"{n}.probe.json").read_text("utf-8"))
+            data = json.loads(
+                read_regular_bounded(directory / f"{n}.probe.json", _MANIFEST_LIMIT)
+            )
             mirror = next(p for p in data["probes"] if p["kind"] == "mirror")
             code = _mirror_code(mirror)
             age = _manifest_age(data, clock)
@@ -3123,7 +3133,7 @@ def _mirror_index_probe(
                     mirror.get("route", ""),
                 )
             )
-        except OSError, ValueError, KeyError, TypeError, StopIteration:
+        except OSError, ValueError, KeyError, TypeError, StopIteration, RecursionError:
             missing += 1
             rows.append(
                 (

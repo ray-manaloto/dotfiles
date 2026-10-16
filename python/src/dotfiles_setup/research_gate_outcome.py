@@ -6,9 +6,9 @@ from __future__ import annotations
 import json
 import os
 import secrets
-import stat
 from typing import TYPE_CHECKING
 
+from dotfiles_setup.research_evidence import MANIFEST_LIMIT, read_regular_bounded
 from dotfiles_setup.research_fanout import Status
 
 if TYPE_CHECKING:
@@ -35,7 +35,6 @@ _INVOCATION_ERRORS = frozenset(
         "TimeoutError",
     }
 )
-_MANIFEST_LIMIT = 1024 * 1024
 
 
 def valid_outcome(record: dict[str, object]) -> bool:
@@ -104,13 +103,7 @@ def failed_routes(manifest: Path, request_id: str) -> list[dict[str, str]]:
     """Keep the observed invocation failure plus retained same-request history."""
     fallback = [{"route": "fnox", "error_class": "ProcessExitError"}]
     try:
-        flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
-        with os.fdopen(os.open(manifest, flags), "rb") as handle:
-            info = os.fstat(handle.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size > _MANIFEST_LIMIT:
-                return fallback
-            raw = handle.read(_MANIFEST_LIMIT + 1)
-        data = json.loads(raw) if len(raw) <= _MANIFEST_LIMIT else None
+        data = json.loads(read_regular_bounded(manifest, MANIFEST_LIMIT))
         if (
             not isinstance(data, dict)
             or data.get("request_id") != request_id

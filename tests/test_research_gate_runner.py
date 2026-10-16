@@ -108,6 +108,8 @@ def test_wrapper_pins_native_profile_forwards_argv_and_preserves_exit(
         ("turn-1", "error"),
         ("stale-turn", "error"),
         ("turn-1", "empty_unverified"),
+        ("turn-1", "oversize-manifest"),
+        ("turn-1", "deep-manifest"),
     ],
 )
 def test_failed_wrapper_records_only_safe_same_request_incomplete_metadata(
@@ -132,10 +134,24 @@ def test_failed_wrapper_records_only_safe_same_request_incomplete_metadata(
                     "request_id": manifest_request,
                     "strict_five": True,
                     "policy_version": "strict-five-v2",
-                    "sources": [{"source": "exa", "status": status, "reason": _NOISE}],
+                    "sources": [
+                        {
+                            "source": "exa",
+                            "status": "error"
+                            if status.endswith("manifest")
+                            else status,
+                            "reason": _NOISE,
+                        }
+                    ],
                 }
             )
         )
+    manifest = marker.parent / "manifest.json"
+    if status == "oversize-manifest":
+        raw = manifest.read_bytes()
+        manifest.write_bytes(raw + b" " * (1024 * 1024 + 1 - len(raw)))
+    elif status == "deep-manifest":
+        manifest.write_bytes(b"[" * 1100 + b"]" * 1100)
     result, _ = _wrapper(
         tmp_path,
         [
@@ -150,7 +166,7 @@ def test_failed_wrapper_records_only_safe_same_request_incomplete_metadata(
     )
     assert result.returncode == 23
     expected_routes = [{"route": "fnox", "error_class": "ProcessExitError"}]
-    if manifest_request == "turn-1":
+    if manifest_request == "turn-1" and not status.endswith("manifest"):
         expected_routes.append({"route": "exa", "error_class": "ProviderError"})
     assert json.loads(marker.read_text()) == {
         **bound,
