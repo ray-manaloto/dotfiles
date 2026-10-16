@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup import codec, codex_research_gate, sdlc_team
+from dotfiles_setup.research_fanout import StrictVerdict
 
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
 # Only this exact caller first line binds a turn as research (round 3).
@@ -1899,3 +1901,170 @@ def test_record_names_an_intent_binding_and_rejects_an_unknown_one(
     stopped = _turn(tmp_path, _DIRECTIVE + "Fix it.", last_assistant_message="x")
     assert "decision" not in stopped
     assert "malformed" in str(stopped["systemMessage"])
+
+
+# --- cg36b round 2 (lead decisions 5-6) -------------------------------------
+
+
+@pytest.mark.parametrize("scope", ["implementation", "text-edit", "local-only"])
+def test_same_turn_non_research_directive_lifts_an_intent_binding(
+    tmp_path: Path, scope: str
+) -> None:
+    """Decision 5: the in-turn opt-out removes an intent record, with a notice."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
+    marker = tmp_path / _COVERAGE / "required.json"
+    assert marker.exists()
+    lifted = _invoke(
+        tmp_path, {**submit, "prompt": f"[research-scope: {scope}]\nFix the typo."}
+    )
+    assert "decision" not in lifted
+    assert "lifted" in str(lifted["systemMessage"])
+    assert not marker.exists()
+    assert _stop_once(tmp_path) == {}
+
+
+def test_same_turn_directive_never_lifts_a_directive_binding(tmp_path: Path) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": _RESEARCH})
+    refused = _invoke(
+        tmp_path, {**submit, "prompt": "[research-scope: implementation]\nFix it."}
+    )
+    assert refused == {
+        "decision": "block",
+        "reason": "Research scope already bound to a different submission.",
+    }
+    assert (tmp_path / _COVERAGE / "required.json").exists()
+
+
+def test_intent_messages_name_the_next_prompt_opt_out_once(tmp_path: Path) -> None:
+    """Decision 5 and 7: no resubmit aimed at the model; one enforced sentence."""
+    started, stopped = _submit_then_stop(
+        tmp_path, "Research the latest uv releases.", last_assistant_message="Done."
+    )
+    output = started["hookSpecificOutput"]
+    assert isinstance(output, dict)
+    context = str(output["additionalContext"])
+    reason = str(stopped["reason"])
+    for text in (context, reason):
+        assert "resubmit" not in text.casefold()
+        assert "next prompt" in text
+        assert "`RESEARCH INCOMPLETE:`" in text
+    assert len(re.findall(r"research[ -]enforced", context, re.IGNORECASE)) == 1
+
+
+def _stdin_invoke(tmp_path: Path, raw: str) -> dict[str, object]:
+    env = os.environ.copy()
+    env["HOME"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=raw,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=15,
+        check=True,
+    )
+    assert result.stdout.count("\n") == 1
+    return json.loads(result.stdout)
+
+
+def test_deeply_nested_hook_input_is_a_validation_failure(tmp_path: Path) -> None:
+    """Decision 6: RecursionError is caught; malformed stdin still blocks."""
+    result = _stdin_invoke(tmp_path, "[" * 200_000)
+    assert result == {
+        "decision": "block",
+        "reason": "Research hook could not validate evidence: RecursionError",
+    }
+
+
+def _bound_marker(tmp_path: Path) -> Path:
+    _submit_then_stop(
+        tmp_path, "Research the latest uv releases.", last_assistant_message="x"
+    )
+    return tmp_path / _COVERAGE / "required.json"
+
+
+def _stop_once(tmp_path: Path) -> dict[str, object]:
+    return _invoke(
+        tmp_path,
+        {
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+            "last_assistant_message": "Done.",
+        },
+    )
+
+
+def test_deeply_nested_marker_is_malformed(tmp_path: Path) -> None:
+    marker = _bound_marker(tmp_path)
+    marker.write_text("[" * 200_000)
+    stopped = _stop_once(tmp_path)
+    assert "decision" not in stopped
+    assert "malformed" in str(stopped["systemMessage"])
+
+
+def test_marker_is_read_only_as_a_capped_regular_file(tmp_path: Path) -> None:
+    """Decision 6: a FIFO never hangs the hook; an oversized record is malformed."""
+    marker = _bound_marker(tmp_path)
+    record = marker.read_text()
+    marker.write_text(record + " " * 70_000)
+    oversized = _stop_once(tmp_path)
+    assert "decision" not in oversized
+    assert "malformed" in str(oversized["systemMessage"])
+    marker.unlink()
+    os.mkfifo(marker)
+    fifo = _stop_once(tmp_path)
+    assert "decision" not in fifo
+    assert "unreadable" in str(fifo["systemMessage"])
+
+
+def test_stop_bounds_the_verdict_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Decision 6: a long manifest-derived reason cannot flood the Stop message."""
+    long = "x" * 5_000
+    monkeypatch.setattr(
+        codex_research_gate,
+        "strict_five_verdict",
+        lambda *_: StrictVerdict(passed=False, provisional=(), reason=long),
+    )
+    blocked = _turn(tmp_path, "Research the latest uv releases.")
+    assert blocked["decision"] == "block"
+    assert len(str(blocked["reason"])) < 1_500
+    honest = _turn(
+        tmp_path,
+        "Research the latest uv releases.",
+        stop_hook_active=True,
+        last_assistant_message="RESEARCH INCOMPLETE: blocked.",
+    )
+    assert len(str(honest["systemMessage"])) < 1_500
+
+
+def test_state_is_private_to_the_user(tmp_path: Path) -> None:
+    """Decision 6: state directories are 0700 and the record is 0600."""
+    event = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Research the latest uv releases.",
+    }
+    env = {**os.environ, "HOME": str(tmp_path)}
+    subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=15,
+        check=True,
+        umask=0o022,
+    )
+    marker = tmp_path / _COVERAGE / "required.json"
+    assert marker.stat().st_mode & 0o777 == 0o600
+    for directory in (marker.parent, marker.parent.parent, marker.parents[2]):
+        assert directory.stat().st_mode & 0o777 == 0o700

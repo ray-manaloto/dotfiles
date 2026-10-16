@@ -46,22 +46,28 @@ limitation can leave a provisional answer unnamed.
 Codex hook scope: an exact caller first line `[research-scope: <scope>]`
 (CRLF accepted) decides. `research` binds the turn; `implementation`,
 `text-edit` and `local-only` write no hook state and are the opt-out. Without a
-directive, `research_scope.intent` binds a plain request in the caller's own
-prose: an imperative at a clause start (research X, search the web or GitHub,
-find or check the latest X, look up X online, compare A and B, what is the
-current version of X, what's new in X), never a mention, a repository object
-(path, identifier, this repo, test, commit) or text in fences, inline code,
-quotes, blockquotes, JSON, `title:`-style data lines, logs or after a bare
-`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:` or `---` line. Its record
-carries `"binding": "intent"`, and its context and Stop block name the opt-out.
+directive, `research_scope.intent` reads the first 32 KiB and binds a plain
+request in the caller's own prose: an imperative at a clause start (research
+X, search the web or GitHub, find or check the latest X, look up X online,
+compare A and B, what is the current version of X, what's new in X) whose
+object is not local (a path, a file name, an identifier, `in this repo`). It
+skips CommonMark fences, inline code, quotes, blockquotes, JSON, logs, `#`
+headings, task-list items, lines ending in `:`, the rest of a line after a
+label (`Ticket:`, `CG-12:`, `TODO:`, `title:`) and everything after a bare
+`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:` or `---` line.
+Suggestions (`We should research`, `Can someone ...`), `investigate` and
+`look into` never bind. Its record carries `"binding": "intent"`; its context
+and Stop block tell the user to opt out on the next prompt, and a same-turn
+non-research directive lifts an intent binding (a directive binding stays).
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
-instead of a provider command. Only a valid research record blocks Stop; a legacy, non-research or
-malformed record passes, with a notice when broken. SDLC dispatches start with
-`[research-scope: implementation]` unless `research_scope` is `research` (or
-`local-only`). Subagent turns (`agent_id`, `agent_type`) and heartbeats never
-bind.
-After D246 activation removes the `~/.codex/hooks.json` research entries, one
+instead of a provider command. Only a valid research record blocks Stop; a
+legacy, non-research, oversized, non-regular or malformed record passes, with
+a notice when broken. Hook state is 0700 directories and 0600 records. SDLC
+dispatches start with `[research-scope: implementation]` unless
+`research_scope` is `research` (or `local-only`). Subagent turns (`agent_id`,
+`agent_type`) and heartbeats never bind.
+D246 activation removed the `~/.codex/hooks.json` research entries, so one
 registration runs this code: `~/.codex/config.toml` runs the source observer
 from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and the
 installed clone `~/.codex/tools/dotfiles-research-gate` serves SessionStart

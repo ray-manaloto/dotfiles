@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -26,6 +29,8 @@ _SOURCE_NAMES = (
 _AGENT_FIELDS = ("agent_id", "agent_type", "subagent")
 _POLICY = "strict-five-v2"
 _NOTICE = "Research enforcement did not apply to this turn: "
+_MARKER_CAP = 64 * 1024  # a record is about 200 bytes
+_REASON_CAP = 500
 _ACCEPTED_FORMS = ", ".join(
     f"`[research-scope: {scope}]`"
     for scope in ("research", "implementation", "text-edit", "local-only")
@@ -83,7 +88,10 @@ def _research_context(event: dict[str, object], repo_root: Path) -> str:
 def _write_record(
     marker: Path, event: dict[str, object], prompt: str, *, by_intent: bool
 ) -> None:
-    marker.parent.mkdir(parents=True, exist_ok=True)
+    # Private state (CG-36 retro): 0700 directories, a new 0600 record.
+    marker.parents[3].mkdir(parents=True, exist_ok=True)
+    for directory in (marker.parents[2], marker.parents[1], marker.parent):
+        directory.mkdir(mode=0o700, exist_ok=True)
     record = {
         "turn_id": event["turn_id"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -92,7 +100,9 @@ def _write_record(
         # cg36b: no `binding` field means a directive record.
         **({"binding": "intent"} if by_intent else {}),
     }
-    marker.write_text(json.dumps(record), encoding="utf-8")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    with os.fdopen(os.open(marker, flags, 0o600), "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(record))
 
 
 def _context(text: str) -> dict[str, object]:
@@ -113,12 +123,14 @@ _ADVISORY = (
 )
 # cg36b (D246 item 3): a plain research request binds without a directive.
 _OPT_OUT = (
-    " Not a research request? Resubmit with `[research-scope: implementation]` "
-    "as line 1."
+    " If this is not a research request, the user opts out by starting the "
+    "next prompt with `[research-scope: implementation]`; for this turn, run "
+    "the research or answer starting `RESEARCH INCOMPLETE:`."
 )
-_INTENT = (
-    "Research enforced: the request reads as research, so this turn is "
-    "research-enforced." + _OPT_OUT + " "
+_INTENT = "This turn is research-enforced: the request reads as research." + _OPT_OUT
+_LIFTED = (
+    "Research binding lifted: a same-turn `[research-scope: ...]` directive "
+    "replaced the research intent; Stop does not enforce research."
 )
 _LOCAL_ONLY = (
     "Caller authorized local-only research scope for this turn. Do not launch "
@@ -151,6 +163,12 @@ def _retained(
         return None
     record = _research_record(marker, str(event["turn_id"]))
     if isinstance(record, dict):
+        if record.get("binding") == "intent" and scope not in (None, "research"):
+            # Decision 5: the in-turn opt-out lifts only an intent binding.
+            marker.unlink()
+            with contextlib.suppress(OSError):
+                marker.parent.rmdir()  # an empty turn directory binds nothing
+            return {**_unbound(prompt, scope), "systemMessage": _LIFTED}
         return _repeat_submission(record, prompt)
     if scope != "research":
         return None
@@ -170,7 +188,7 @@ def _bind_research(
     *,
     by_intent: bool = False,
 ) -> dict[str, object]:
-    lead = _INTENT if by_intent else ""
+    lead = _INTENT + " " if by_intent else ""
     result = _context(lead + _research_context(event, repo_root))
     try:
         _write_record(marker, event, prompt, by_intent=by_intent)
@@ -240,7 +258,7 @@ def _on_stop(
             "(skipped or substituted provider). Name PROVISIONAL and each of "
             f"these in the answer: {listed}.{opt_out}",
         }
-    reason = verdict.reason
+    reason = verdict.reason[:_REASON_CAP]
     message = event.get("last_assistant_message")
     if (
         event.get("stop_hook_active") is True
@@ -273,6 +291,15 @@ def _invalid_submission(event: dict[str, object], reason: str) -> dict[str, obje
     return {"decision": "block", "reason": reason}
 
 
+def _read_marker(marker: Path) -> bytes:
+    """Read a regular file only, capped; a FIFO never blocks (CG-36 retro)."""
+    with os.fdopen(os.open(marker, os.O_RDONLY | os.O_NONBLOCK), "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            message = "not a regular file"
+            raise OSError(message)
+        return handle.read(_MARKER_CAP + 1)
+
+
 def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | None:
     """Return a valid research record, a failure word, or None for another format.
 
@@ -280,12 +307,13 @@ def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | No
     a legacy, work-scope or forged record can never raise or bind research.
     """
     try:
-        recorded = json.loads(marker.read_text(encoding="utf-8"))
+        raw = _read_marker(marker)
+        recorded = json.loads(raw) if len(raw) <= _MARKER_CAP else None
     except FileNotFoundError:
         return "missing"
     except OSError:
         return "unreadable"
-    except ValueError:
+    except ValueError, RecursionError:
         recorded = None
     if not isinstance(recorded, dict):
         return "malformed"
@@ -374,9 +402,9 @@ def main(*, repo_root: Path) -> int:
         event = _read_event()
         try:
             result = handle(event, state_root, repo_root=repo_root)
-        except (OSError, ValueError, TypeError) as exc:
+        except (OSError, ValueError, TypeError, RecursionError) as exc:
             result = _state_error(event, state_root, exc)
-    except (OSError, ValueError, TypeError) as exc:
+    except (OSError, ValueError, TypeError, RecursionError) as exc:
         result = {
             "decision": "block",
             "reason": (

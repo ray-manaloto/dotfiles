@@ -49,22 +49,25 @@ def near_miss(prompt: str) -> bool:
 
 
 # --- Research intent (cg36b, D246 item 3) -----------------------------------
-# Only the caller's own prose counts. Lines are read once: fenced blocks (an
-# unclosed fence runs to the end), blockquote, JSON, timestamped-log and
-# indented-code lines are skipped, and a bare marker line (`Ticket:`, `Issue:`,
-# `Spec:`, `Acceptance criteria:`, `---`) ends the prose. Inline code and quote
-# spans are cut out, and `title:`-style data keys drop the rest of their line.
-# A request is an imperative at a clause start. Each step is a str method or a
-# regex without nested quantifiers, and every scan resumes past its last stop.
+# Only the caller's own prose in the first 32 KiB counts. Lines are read once:
+# CommonMark fences (an unclosed fence runs to the end), blockquote, JSON, log,
+# indented-code, `#` heading, task-list and colon-ended lines are skipped, and a
+# bare marker line (`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:`, `---`)
+# ends the prose. Inline code and quote spans are cut out, and a label key or a
+# ticket id before `:` drops the rest of its line. A request is an imperative at
+# a clause start whose object is not local. Each step is a str method or a regex
+# without nested quantifiers, and every scan resumes past its last stop.
 
 
 def _vocab(words: str) -> frozenset[str]:
     return frozenset(words.split())
 
 
+_SCAN_LIMIT = 32 * 1024  # a request sits in the opening prose (security P3-4)
 _RULE = 3  # a fence or a `---` marker line
 _MARKERS = frozenset({"ticket:", "issue:", "spec:", "acceptance criteria:"})
 _LOG_LINE = re.compile(r"\[?\d{4}-\d\d-\d\d")
+_TICKET = re.compile(r"#\d+|[a-z][a-z0-9]*-\d+")
 _OPEN = re.compile("[`\"'\u2018\u201c\u201e]")
 _CLOSE = {
     "`": re.compile("`"),
@@ -82,6 +85,11 @@ _KEYS = _vocab(
     "reads titled named file mode run id prompt query output info warn warning "
     "debug fatal"
 )
+# A clause opening with one of these labels quotes the rest of its line.
+_LABELS = _vocab(
+    "ticket issue spec task title story bug acceptance todo fixme note summary "
+    "body description"
+)
 _LEAD_WORDS = _vocab("please kindly go now also next first then and so hey ok just")
 _LEAD_PHRASES = {
     "can": ("you",),
@@ -92,14 +100,20 @@ _LEAD_PHRASES = {
     "let": ("us",),
     "i": ("need", "you", "to"),
 }
-# "research" followed by one of these is a noun or a subject, not a request.
-_NOUN_USE = _vocab(
-    "gate gates note notes record records receipt receipts scope workflow fanout "
-    "cache summary doc docs hook hooks hint coverage failure failures lane lanes "
-    "provider providers task tasks team mode step phase result results output "
-    "report reports directive directives log logs code test tests file files is "
-    "are was were has had will should can must may fails failed passes passed"
+# `research` + an auxiliary or copula (a closed class) is a subject or status.
+_AUX = _vocab(
+    "is are was were be been am has have had does did will would shall should "
+    "can could may might must done"
 )
+# The one closed list left: this repository's own research-* components. No
+# grammar tells `research gate tests fail` from `research uv releases`.
+_COMPONENTS = _vocab(
+    "gate gates scope fanout record records receipt receipts directive "
+    "directives hint cache coverage notes"
+)
+_WH = _vocab("how what why when where who whether which if")
+_OWNERS = _vocab("this the our")
+_PLACES = _vocab("repo repository codebase worktree branch pr")
 _FRESH = _vocab("latest newest current")
 _WEB = _vocab("web internet online github")
 _EXTERNAL = (
@@ -107,7 +121,6 @@ _EXTERNAL = (
     | _WEB
     | _vocab("upstream changelog release releases docs documentation version versions")
 )
-_NOT_NAMES = _vocab("two old new these those both first second previous") | {""}
 _LOCAL = _vocab(
     "this these our here local locally repo repository codebase branch commit "
     "commits diff function functions method class definition test tests lockfile "
@@ -148,22 +161,40 @@ def _norm(raw: str) -> str:
     return word.replace("\u2019", "'").casefold()
 
 
-def _local(raws: list[str]) -> bool:
-    """A repository object: a local word, a path, an identifier or a call."""
-    for raw in raws:
-        token = raw.strip(_EDGE).rstrip(_ENDS)
-        stem, dot, ext = token.rpartition(".")
+def _code_token(raw: str) -> bool:
+    """A path, a file name, an identifier or a call."""
+    token = raw.strip(_EDGE).rstrip(_ENDS)
+    stem, dot, ext = token.rpartition(".")
+    return (
+        "/" in token
+        or "_" in token
+        or "()" in raw
+        or token[:1] in {".", "~"}
+        or bool(dot and stem and ext.casefold() in _EXTENSIONS)
+    )
+
+
+def _local(raws: list[str], words: list[str], *, nouns: bool) -> bool:
+    """A code token, `in this|the|our repo|branch|PR...` or (nouns) a local word."""
+    for at, raw in enumerate(raws):
+        place = (*words[at : at + 3], "", "")
         if (
-            _norm(raw) in _LOCAL
-            or "_" in token
-            or "()" in raw
-            or token[:1] in {".", "/", "~"}
-            or token.endswith("/")
-            or token.count("/") > 1
-            or (dot and stem and ext.casefold() in _EXTENSIONS)
+            _code_token(raw)
+            or (nouns and words[at] in _LOCAL)
+            or (place[0] == "in" and place[1] in _OWNERS and place[2] in _PLACES)
         ):
             return True
     return False
+
+
+def _named(raws: list[str]) -> bool:
+    """An upstream object: a capitalised or versioned name, or an upstream word."""
+    return any(
+        raw.strip(_EDGE)[:1].isupper()
+        or any(char.isdigit() for char in raw)
+        or _norm(raw) in _EXTERNAL
+        for raw in raws
+    )
 
 
 def _lead_end(words: list[str]) -> int:
@@ -180,15 +211,29 @@ def _lead_end(words: list[str]) -> int:
     return at
 
 
-def _lookup(v: list[str]) -> bool:
-    """A look-up verb at the clause start whose object may be upstream."""
+def _research(v: list[str], raws: list[str], *, colon: bool) -> bool:
+    """`research X`, never a heading, a status line or a named component."""
+    if not v[1]:
+        return colon  # `Research:` with text after it on the line
+    return not (
+        not v[2]  # `Research done.`, `Research notes`
+        or raws[1].endswith(",")  # `Research done, now fix it.`
+        or v[1] in _AUX
+        or v[1].endswith(("n't", "ed"))
+        or (v[2] in _AUX and v[1] not in _WH)  # `Research notes are ...`
+        or v[1] in _COMPONENTS
+    )
+
+
+def _lookup(v: list[str], raws: list[str]) -> bool:
+    """A look-up verb at the clause start whose object names something upstream."""
     if v[0] in {"find", "check"}:
-        return v[1] == "the" and v[2] in _FRESH
+        return v[1] == "the" and v[2] in _FRESH and _named(raws[3:])
     if v[:2] == ["look", "up"]:
         return not _EXTERNAL.isdisjoint(v[2:])
     if v[0] == "compare":
         name = 2 if v[1] == "the" else 1
-        return v[name] not in _NOT_NAMES and v[name + 1] == "and"
+        return v[name + 1] == "and" and _named(raws[1:])
     if v[:2] == ["what", "is"] or v[0] == "what's":
         asked = v[2:5] if v[0] == "what" else v[1:4]
         return asked[:2] == ["new", "in"] or (
@@ -202,20 +247,24 @@ def _lookup(v: list[str]) -> bool:
 def _request(raws: list[str], *, colon: bool) -> bool:
     """Whether one clause opens with an imperative research request."""
     words = [_norm(raw) for raw in raws]
-    v = [*words[_lead_end(words) :], "", "", "", ""]
+    start = _lead_end(words)
+    raws, words = raws[start:], words[start:]
+    v = [*words, "", "", "", ""]
     if v[0] == "research":
-        return colon if not v[1] else v[1] not in _NOUN_USE
-    if v[0] == "do":
-        return "research" in {v[1], v[2] if v[1] in {"some", "more"} else ""}
-    if v[0] == "search":
-        return (v[2] if v[1] == "the" else v[1]) in _WEB
-    return _lookup(v) and not _local(raws)
+        found = _research(v, raws, colon=colon)
+    elif v[0] == "do":
+        found = "research" in {v[1], v[2] if v[1] in {"some", "more"} else ""}
+    elif v[0] == "search":
+        found = (v[2] if v[1] == "the" else v[1]) in _WEB
+    else:
+        return _lookup(v, raws) and not _local(raws, words, nouns=True)
+    return found and not _local(raws, words, nouns=False)
 
 
 def _feed(body: str, pending: list[str]) -> bool:
     """Add one prose line to the open clause; True once a clause is a request."""
     words = _unquoted(body).split()
-    if words and (words[0] in {"-", "*", "+"} or words[0].rstrip(".)").isdigit()):
+    if words and (words[0] in {"-", "*", "+", "//"} or words[0].rstrip(".)").isdigit()):
         del words[0]
     for raw in words:
         pending.append(raw)
@@ -224,17 +273,26 @@ def _feed(body: str, pending: list[str]) -> bool:
             continue
         if _request(pending, colon=end == ":"):
             return True
+        label = _norm(pending[0])
         pending.clear()
         key = _norm(raw)
-        if end == ":" and (key in _KEYS or key.endswith(("error", "exception"))):
+        if end == ":" and (
+            key in _KEYS
+            or label in _LABELS
+            or key.endswith(("error", "exception"))
+            or _TICKET.fullmatch(key) is not None
+        ):
             break
     return False
 
 
 def _quoted_line(line: str, body: str) -> bool:
+    """Pasted or structural: quotes, data, code, logs, headings, task items."""
     return (
         not body
-        or body[0] in ">{["
+        or body[0] in ">{[#"
+        or body.endswith(":")
+        or (body[0] in "-*+" and body[1:].lstrip()[:3] in {"[ ]", "[x]", "[X]"})
         or line.startswith(("\t", "    "))
         or _LOG_LINE.match(body) is not None
     )
@@ -242,16 +300,22 @@ def _quoted_line(line: str, body: str) -> bool:
 
 def intent(prompt: str) -> bool:
     """Whether the caller's own prose asks the assistant to research something."""
+    head = prompt[:_SCAN_LIMIT]
+    if len(prompt) > _SCAN_LIMIT:
+        head = head.rpartition("\n")[0]
     pending: list[str] = []
     fence = ""
-    for line in prompt.split("\n"):
+    for line in head.split("\n"):
         body = line.strip()
         if fence:
-            fence = "" if body.startswith(fence) else fence
+            # CommonMark: the same character, at least as long, nothing after.
+            if len(body) >= len(fence) and not body.strip(fence[0]):
+                fence = ""
             continue
         if body.casefold() in _MARKERS or (len(body) >= _RULE and not body.strip("-")):
             break
-        fence = body[:_RULE] if body.startswith(("```", "~~~")) else ""
+        if body.startswith(("```", "~~~")):
+            fence = body[: len(body) - len(body.lstrip(body[0]))]
         skip = bool(fence) or _quoted_line(line, body)
         # A lowercase line continues a wrapped clause; anything else starts one.
         if skip or not body[0].islower():

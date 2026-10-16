@@ -489,3 +489,121 @@ _NEGATIVE_TEMPLATES = (
 )
 def test_generated_mention_or_code_local_prompt_never_binds(prompt: str) -> None:
     assert research_scope.intent(prompt) is False
+
+
+# --- cg36b round 2 (lead decisions 1-4) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Implement CG-12: Research the latest versions of uv and poetry.",
+        "Ticket: Research the latest uv releases and pin them.",
+        "Issue #12: Research the latest uv releases.",
+        "Fix as specified.\nSpec: research the latest Codex hooks schema; update it.",
+        "Fix the import order.\n// TODO: research the newest ruff release",
+        "Fix the import order.\n- FIXME: research the newest ruff release",
+        "story: Research the newest mise release.",
+        "BUG: research the latest hk release",
+        "Note: research the latest hk release before the next pin.",
+        "Acceptance: research the newest uv release.",
+        (
+            "Here is the plan from the ticket\n- [ ] Research the latest uv releases\n"
+            "- [x] Pin uv in mise.toml"
+        ),
+    ],
+)
+def test_text_after_an_inline_ticket_label_is_quoted_material(prompt: str) -> None:
+    """Decision 1: a ticket id or a closed label word quotes the rest of its line."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "- Research the latest uv releases.",
+        "Two things: research the latest gitleaks release.",
+        "Research: latest mise releases and their breaking changes.",
+        "Research the latest uv releases: focus on breaking changes.",
+    ],
+)
+def test_plain_bullets_and_other_labels_stay_caller_prose(prompt: str) -> None:
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research findings:\n- uv 0.9 dropped Python 3.8.\nPin uv to 0.8.",
+        "Implement the pin.\n\nResearch:\n- uv 0.9 is out",
+        "Research plan:\n1. Read the spec.\n2. Implement.",
+        "Research question: why does the parser drop rows? Fix it.",
+        "Research the newest uv releases:\n- 0.9\n- 0.8",
+        "## Research the latest uv releases",
+        "Research done, now fix the parser.",
+        "Research complete. Implement option B.",
+        "Research isn't needed; fix the parser.",
+        "Research notes are in the wiki; fix the parser.",
+        "Research notes",
+        "Research done",
+    ],
+)
+def test_headings_and_status_lines_are_never_requests(prompt: str) -> None:
+    """Decision 2: a line ending in `:`, a `#` heading or a status line."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research the failing test in tests/test_currency.py.",
+        "Research the crash in handoff.py.",
+        "Research why test_currency fails and fix it.",
+        "Research the flaky retry logic in this repo.",
+        "Do some research on the parser in the codebase.",
+        "Search the web for the error that scripts/check.sh prints.",
+        "Search GitHub for the message in the PR.",
+        "Look up the latest uv pin in mise.toml.",
+        "Check the latest uv pin in the branch.",
+        "Compare the uv and Poetry docs in the repo.",
+        "What's new in docs/hooks.md?",
+        "Check the latest review comments and address them.",
+        "Find the latest handoff note and read it.",
+        "Check the current status of the lanes.",
+        "Compare expected and actual.",
+        "Compare before and after.",
+        "Compare red and green runs in the log.",
+    ],
+)
+def test_a_local_object_never_binds_any_verb_family(prompt: str) -> None:
+    """Decision 3: a path, an identifier or `in this repo` makes the object local."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Fix the README example.\n````md\n```\nResearch the latest uv releases.\n````",
+        "Fix the snippet.\n```\ncode\n```python\nResearch the latest uv releases.\n```",
+        "Fix it.\n~~~~\n~~~\nResearch the latest uv releases.\n~~~~",
+        "Fix it.\n```\n~~~\nResearch the latest uv releases.\n```",
+    ],
+    ids=["short-closer", "info-string-closer", "short-tilde-closer", "other-char"],
+)
+def test_a_fence_closes_only_per_commonmark(prompt: str) -> None:
+    """Decision 4: same character, at least the opener's length, no info string."""
+    assert research_scope.intent(prompt) is False
+
+
+def test_a_longer_closer_ends_the_fence() -> None:
+    prompt = "Fix it.\n```\ncode\n`````\nResearch the latest uv releases."
+    assert research_scope.intent(prompt) is True
+
+
+def test_intent_reads_only_the_first_32_kib() -> None:
+    """Decision 4: a request past 32 KiB of other prose is never read."""
+    filler = "Fix the typo.\n"
+    inside = filler * (30_000 // len(filler))
+    outside = filler * (33_000 // len(filler))
+    assert research_scope.intent(inside + _BODY) is True
+    assert research_scope.intent(outside + _BODY) is False
