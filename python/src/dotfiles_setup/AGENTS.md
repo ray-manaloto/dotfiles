@@ -69,7 +69,9 @@ and unlabelled commit messages; a parenthesised commit subject; ops look-ups
 paths such as `docs/agents` (read as `owner/repo`); `research` as a subject
 with an unlisted verb (`Research costs too much`, `Research calls Exa`); and a
 local noun after `research`, `do research` or a subordinate lead (`If needed,
-research the error message.`). Known misses fail open: `find out`, `survey`,
+research the error message.`); and a `Research:` label followed by a pointer
+or a verb phrase (`Research: see the notes in the wiki.`, `Research: uses the
+cache`). Known misses fail open: `find out`, `survey`,
 `gather`, `dig into`, `what are people saying`, `find documentation`,
 benchmarks or blog posts, `is there a newer release`, `what does X's changelog
 say`, `tell me the latest X`, `check the web`, a lowercase `research:` label
@@ -90,3 +92,6 @@ registration runs this code: `~/.codex/config.toml` runs the source observer
 from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and the
 installed clone `~/.codex/tools/dotfiles-research-gate` serves SessionStart
 only. Changes take effect when the coordinator moves the stable checkout.
+Deferred work: splitting the intent grammar out of `research_scope.py` (the
+section at line 51) into a new research_intent.py module is a later unit (size
+exception granted, DL-310).
