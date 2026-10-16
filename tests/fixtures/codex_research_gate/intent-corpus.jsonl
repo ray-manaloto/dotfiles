@@ -30,7 +30,7 @@
 {"prompt": "Please look up the Context7 rate limits online.", "expect": "research", "kind": "polite"}
 {"prompt": "Find the latest Exa API pricing.", "expect": "research", "kind": "imperative"}
 {"prompt": "Compare the mise and asdf docs on plugin installation.", "expect": "research", "kind": "imperative"}
-{"prompt": "Could you find the latest version of the actions/checkout action?", "expect": "none", "kind": "path-object"}
+{"prompt": "Could you find the latest version of the actions/checkout action?", "expect": "research", "kind": "polite"}
 {"prompt": "What is the current version of Xcode?", "expect": "research", "kind": "question"}
 {"prompt": "Research the upstream changelog of codex-rs between 0.160 and 0.163.", "expect": "research", "kind": "imperative"}
 {"prompt": "> uv 0.9 drops Python 3.8\n\nIs that true? Research the uv 0.9 release notes and confirm.", "expect": "research", "kind": "multi-line"}

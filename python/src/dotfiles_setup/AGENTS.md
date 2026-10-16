@@ -50,15 +50,18 @@ directive, `research_scope.intent` reads the first 32 KiB and binds a plain
 request in the caller's own prose: an imperative at a clause start (research
 X, search the web or GitHub, find or check the latest X, look up X online,
 compare A and B, what is the current version of X, what's new in X) whose
-object is not local (a path, a file name, an identifier, `in this repo`). It
-skips CommonMark fences, inline code, quotes, blockquotes, JSON, logs, `#`
-headings, task-list items, lines ending in `:`, the rest of a line after a
-label (`Ticket:`, `CG-12:`, `TODO:`, `title:`) and everything after a bare
-`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:` or `---` line.
-Suggestions (`We should research`, `Can someone ...`), `investigate` and
-`look into` never bind. Its record carries `"binding": "intent"`; its context
-and Stop block tell the user to opt out on the next prompt, and a same-turn
-non-research directive lifts an intent binding (a directive binding stays).
+object is not local (a rooted or two-slash path, a file name, a dotfile, an
+identifier, `in this repo`; a URL, an `owner/repo` slug or `Node.js` stays
+upstream). It skips CommonMark fences, inline code, quotes, blockquotes, JSON,
+logs, `#` headings, task-list items, commit subjects (`fix(hooks):`), lines
+ending in `:`, the rest of a line after a label (`Ticket:`, `CG-12:`, `TODO:`,
+`title:`) and everything after a bare `Ticket:`, `Issue:`, `Spec:`,
+`Acceptance criteria:` or `---` line. Suggestions (`We should research`,
+`Can someone ...`), `investigate` and `look into` never bind. Its record
+carries `"binding": "intent"`; its context and Stop block tell the user to opt
+out on the next prompt, and a same-turn non-research directive lifts an intent
+binding by renaming a `"scope": "lifted"` record over it, so Stop and later
+submissions stay unbound (a directive binding stays).
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
 instead of a provider command. Only a valid research record blocks Stop; a

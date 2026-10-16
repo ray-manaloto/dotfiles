@@ -607,3 +607,68 @@ def test_intent_reads_only_the_first_32_kib() -> None:
     outside = filler * (33_000 // len(filler))
     assert research_scope.intent(inside + _BODY) is True
     assert research_scope.intent(outside + _BODY) is False
+
+
+# --- cg36b round 3 (lead items 2 and 4) -------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "fix(hooks): research the latest hk release",
+        "feat: research the newest uv release",
+        "chore(deps)!: research the latest uv pin",
+        "Fix the import order.\n- docs: research the latest ruff release",
+        "Squash these.\nrefactor(scope): research the newest mise release",
+    ],
+)
+def test_a_conventional_commit_subject_is_quoted_material(prompt: str) -> None:
+    """Item 2: `type(scope)!:` at a line start quotes the rest of the line."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Goal: research the latest uv releases.",
+        "Plan: research the newest mise release.",
+    ],
+)
+def test_goal_and_plan_labels_stay_caller_prose(prompt: str) -> None:
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Look up the releases of astral-sh/uv.",
+        "Look up https://docs.astral.sh/uv/ for the resolver flags.",
+        "Compare Node.js and Deno docs.",
+        "Could you find the latest version of the actions/checkout action?",
+        "Research the @types/node 22 release.",
+    ],
+)
+def test_a_slug_url_or_library_name_is_an_upstream_object(prompt: str) -> None:
+    """Item 4: an owner/repo slug, a URL or a capitalised dotted name is upstream."""
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Find the latest commit in src/app/main.py.",
+        "Research the crash in ./tools/run.",
+        "Research why ../shared/lib breaks the build.",
+        "Research why ~/bin/fmt fails.",
+        "Research the failure in /usr/local/bin/hk now.",
+        "Research the failure in src/app/lib now.",
+        "Research why config.toml rejects the key.",
+        "Research why README.md renders badly.",
+        "Research why Cargo.toml pins serde.",
+        "Research the src/ layout.",
+        "Research why .env is ignored.",
+    ],
+)
+def test_a_rooted_deep_or_file_path_is_local(prompt: str) -> None:
+    """Item 4: a rooted path, two slashes or a file name with an extension."""
+    assert research_scope.intent(prompt) is False

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -1910,7 +1911,7 @@ def test_record_names_an_intent_binding_and_rejects_an_unknown_one(
 def test_same_turn_non_research_directive_lifts_an_intent_binding(
     tmp_path: Path, scope: str
 ) -> None:
-    """Decision 5: the in-turn opt-out removes an intent record, with a notice."""
+    """Decision 5: the in-turn opt-out replaces an intent record, with a notice."""
     base = {"session_id": "session-1", "turn_id": "turn-1"}
     submit = {**base, "hook_event_name": "UserPromptSubmit"}
     _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
@@ -1921,7 +1922,33 @@ def test_same_turn_non_research_directive_lifts_an_intent_binding(
     )
     assert "decision" not in lifted
     assert "lifted" in str(lifted["systemMessage"])
-    assert not marker.exists()
+    assert json.loads(marker.read_text()) == {"turn_id": "turn-1", "scope": "lifted"}
+    assert stat.S_IMODE(marker.stat().st_mode) == 0o600
+    assert sorted(path.name for path in marker.parent.iterdir()) == ["required.json"]
+    assert _stop_once(tmp_path) == {}
+
+
+def test_a_lifted_turn_with_other_state_stops_silently(tmp_path: Path) -> None:
+    """Round 3 item 5: a manifest beside the lifted record never draws a notice."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
+    (tmp_path / _COVERAGE / "manifest.json").write_text("{}")
+    _invoke(tmp_path, {**submit, "prompt": "[research-scope: implementation]\nFix."})
+    assert _stop_once(tmp_path) == {}
+
+
+def test_a_lifted_turn_stays_unbound_for_later_submissions(tmp_path: Path) -> None:
+    """A later same-turn request neither rebinds nor fails on the lifted record."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
+    _invoke(tmp_path, {**submit, "prompt": "[research-scope: implementation]\nFix."})
+    again = _invoke(tmp_path, {**submit, "prompt": "Research the newest hk release."})
+    assert list(again) == ["hookSpecificOutput"]  # the advisory hint only
+    assert "this turn is not research-enforced" in json.dumps(again)
+    marker = tmp_path / _COVERAGE / "required.json"
+    assert json.loads(marker.read_text())["scope"] == "lifted"
     assert _stop_once(tmp_path) == {}
 
 

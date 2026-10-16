@@ -51,12 +51,15 @@ def near_miss(prompt: str) -> bool:
 # --- Research intent (cg36b, D246 item 3) -----------------------------------
 # Only the caller's own prose in the first 32 KiB counts. Lines are read once:
 # CommonMark fences (an unclosed fence runs to the end), blockquote, JSON, log,
-# indented-code, `#` heading, task-list and colon-ended lines are skipped, and a
-# bare marker line (`Ticket:`, `Issue:`, `Spec:`, `Acceptance criteria:`, `---`)
-# ends the prose. Inline code and quote spans are cut out, and a label key or a
-# ticket id before `:` drops the rest of its line. A request is an imperative at
-# a clause start whose object is not local. Each step is a str method or a regex
-# without nested quantifiers, and every scan resumes past its last stop.
+# indented-code, `#` heading, task-list, commit-subject (`fix(scope)!:`) and
+# colon-ended lines are skipped, and a bare marker line (`Ticket:`, `Issue:`,
+# `Spec:`, `Acceptance criteria:`, `---`) ends the prose. Inline code and quote
+# spans are cut out, and a label key or a ticket id before `:` drops the rest of
+# its line. A request is an imperative at a clause start whose object is not
+# local: a rooted, two-slash or file-name path, a dotfile, an identifier or a
+# call is local; a URL, an owner/repo slug or a capitalised `Name.js` is
+# upstream. Each step is a str method or a regex without nested quantifiers,
+# and every scan resumes past its last stop.
 
 
 def _vocab(words: str) -> frozenset[str]:
@@ -68,6 +71,11 @@ _RULE = 3  # a fence or a `---` marker line
 _MARKERS = frozenset({"ticket:", "issue:", "spec:", "acceptance criteria:"})
 _LOG_LINE = re.compile(r"\[?\d{4}-\d\d-\d\d")
 _TICKET = re.compile(r"#\d+|[a-z][a-z0-9]*-\d+")
+# A conventional-commit subject quotes its line; `Goal:` and `Plan:` stay prose.
+_COMMIT = re.compile(
+    r"(?:[-*+]\s+)?(?:feat|fix|chore|docs|refactor|test|ci|build|perf|style)"
+    r"(?:\([^()]*\))?!?:"
+)
 _OPEN = re.compile("[`\"'\u2018\u201c\u201e]")
 _CLOSE = {
     "`": re.compile("`"),
@@ -162,15 +170,20 @@ def _norm(raw: str) -> str:
 
 
 def _code_token(raw: str) -> bool:
-    """A path, a file name, an identifier or a call."""
+    """A local path, file name, identifier or call; never a URL or a slug."""
     token = raw.strip(_EDGE).rstrip(_ENDS)
+    if "://" in token:
+        return False  # a URL names an upstream page
     stem, dot, ext = token.rpartition(".")
+    owner, slash, repo = token.partition("/")
+    library = ext == "js" and stem[:1].isupper()  # Node.js, Vue.js
     return (
-        "/" in token
-        or "_" in token
-        or "()" in raw
-        or token[:1] in {".", "~"}
-        or bool(dot and stem and ext.casefold() in _EXTENSIONS)
+        token.startswith(("./", "../", "~/", "/"))
+        or token.count("/") > 1
+        or bool(dot and stem and ext.casefold() in _EXTENSIONS and not library)
+        or bool(slash and not (owner and repo))  # `src/`; owner/repo is upstream
+        or (not slash and ("_" in token or "()" in raw))
+        or (token[:1] == "." and token[1:2].islower())  # a dotfile such as .env
     )
 
 
@@ -230,7 +243,7 @@ def _lookup(v: list[str], raws: list[str]) -> bool:
     if v[0] in {"find", "check"}:
         return v[1] == "the" and v[2] in _FRESH and _named(raws[3:])
     if v[:2] == ["look", "up"]:
-        return not _EXTERNAL.isdisjoint(v[2:])
+        return not _EXTERNAL.isdisjoint(v[2:]) or any("://" in raw for raw in raws)
     if v[0] == "compare":
         name = 2 if v[1] == "the" else 1
         return v[name + 1] == "and" and _named(raws[1:])
@@ -292,6 +305,7 @@ def _quoted_line(line: str, body: str) -> bool:
         not body
         or body[0] in ">{[#"
         or body.endswith(":")
+        or _COMMIT.match(body) is not None
         or (body[0] in "-*+" and body[1:].lstrip()[:3] in {"[ ]", "[x]", "[X]"})
         or line.startswith(("\t", "    "))
         or _LOG_LINE.match(body) is not None

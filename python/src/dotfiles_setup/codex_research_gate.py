@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import os
@@ -100,9 +99,29 @@ def _write_record(
         # cg36b: no `binding` field means a directive record.
         **({"binding": "intent"} if by_intent else {}),
     }
+    _create(marker, record)
+
+
+def _create(path: Path, record: dict[str, object]) -> None:
+    """Write a new 0600 file; never follow or reuse an existing name."""
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-    with os.fdopen(os.open(marker, flags, 0o600), "w", encoding="utf-8") as handle:
+    with os.fdopen(os.open(path, flags, 0o600), "w", encoding="utf-8") as handle:
         handle.write(json.dumps(record))
+
+
+def _lift(marker: Path, turn_id: str) -> None:
+    """Replace an intent record with a non-research one in a single rename.
+
+    Stop then reads a record that binds nothing and stays silent, whatever
+    else the turn directory holds (cg36b round 3 item 5).
+    """
+    staged = marker.with_name(f".{marker.name}.{os.getpid()}.lifted")
+    _create(staged, {"turn_id": turn_id, "scope": "lifted"})
+    try:
+        staged.replace(marker)
+    except OSError:
+        staged.unlink(missing_ok=True)
+        raise
 
 
 def _context(text: str) -> dict[str, object]:
@@ -165,13 +184,12 @@ def _retained(
     if isinstance(record, dict):
         if record.get("binding") == "intent" and scope not in (None, "research"):
             # Decision 5: the in-turn opt-out lifts only an intent binding.
-            marker.unlink()
-            with contextlib.suppress(OSError):
-                marker.parent.rmdir()  # an empty turn directory binds nothing
+            _lift(marker, str(event["turn_id"]))
             return {**_unbound(prompt, scope), "systemMessage": _LIFTED}
         return _repeat_submission(record, prompt)
     if scope != "research":
-        return None
+        # A settled non-research record (a lift) keeps the turn unbound.
+        return _unbound(prompt, scope) if record is None else None
     # Never rewrite retained state; this turn just is not enforced.
     return {
         "systemMessage": "Research gate state for this turn is not a research "
