@@ -1,0 +1,2 @@
+This is a text-only task. Reword the paragraph in docs/currency.md that says
+we research the latest releases of every tool, so it names the weekly version check.

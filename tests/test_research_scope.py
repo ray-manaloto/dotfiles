@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup.research_scope import bind_submission, validates_binding
+from dotfiles_setup.research_scope import bind_submission, directive, validates_binding
 
 _PROMPT = "[research-scope: local-only]\nInvestigate saved local research evidence."
 
@@ -62,3 +62,22 @@ def test_absent_or_model_declared_scope_has_no_submission_authority(
     binding: object,
 ) -> None:
     assert not validates_binding(binding, "session-1", "turn-1")
+
+
+@pytest.mark.parametrize(
+    ("prompt", "scope"),
+    [
+        ("[research-scope: implementation]\nResearch uv", "implementation"),
+        ("[research-scope: text-edit]\nReword the README", "text-edit"),
+        ("[research-scope: research]\nImplement the bump", "research"),
+        ("[research-scope: local-only]\nInvestigate", "local-only"),
+        ("[research-scope: anything]\nResearch uv", None),
+        ("> [research-scope: implementation]\nResearch uv", None),
+        ("Research uv\n[research-scope: implementation]", None),
+        (" [research-scope: implementation]\nResearch uv", None),
+    ],
+)
+def test_directive_is_read_only_from_exact_caller_first_line(
+    prompt: str, scope: str | None
+) -> None:
+    assert directive(prompt) == scope

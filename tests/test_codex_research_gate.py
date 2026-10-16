@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
-from dotfiles_setup import codec, sdlc_team
+from dotfiles_setup import codec, codex_research_gate, sdlc_team
 
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
 
@@ -958,3 +958,142 @@ def test_unparsable_or_nonobject_input_cannot_earn_incomplete_escape(
         check=True,
     )
     assert json.loads(result.stdout)["decision"] == "block"
+
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "codex_research_gate"
+_BRIEFS = (
+    "json-ticket-brief.txt",
+    "fenced-ticket-brief.txt",
+    "blockquote-ticket-brief.txt",
+    "acceptance-list-brief.txt",
+    "text-edit-brief.txt",
+)
+
+
+def _turn(state_root: Path, prompt: str, **stop: object) -> dict[str, object]:
+    """Submit one prompt and return the same turn's Stop response via handle()."""
+    base: dict[str, object] = {"session_id": "session-1", "turn_id": "turn-1"}
+    repo = Path(__file__).parent.parent
+    submit = {**base, "hook_event_name": "UserPromptSubmit", "prompt": prompt}
+    codex_research_gate.handle(submit, state_root, repo_root=repo)
+    event = {**base, "hook_event_name": "Stop", "stop_hook_active": False, **stop}
+    return codex_research_gate.handle(event, state_root, repo_root=repo)
+
+
+@pytest.mark.parametrize("brief", _BRIEFS)
+def test_implementation_brief_quoting_research_words_never_blocks_stop(
+    tmp_path: Path, brief: str
+) -> None:
+    prompt = (_FIXTURES / brief).read_text(encoding="utf-8")
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+
+
+@pytest.mark.parametrize("scope", ["implementation", "text-edit"])
+def test_caller_implementation_directive_never_blocks_stop(
+    tmp_path: Path, scope: str
+) -> None:
+    prompt = f"[research-scope: {scope}]\nResearch the latest uv releases."
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research the latest uv releases and compare them with poetry",
+        (_FIXTURES / "research-with-quoted-bypass.txt").read_text(encoding="utf-8"),
+        "[research-scope: research]\nImplement the bump after checking uv.",
+    ],
+)
+def test_genuine_research_request_without_evidence_still_blocks(
+    tmp_path: Path, prompt: str
+) -> None:
+    result = _turn(tmp_path, prompt, last_assistant_message="Done.")
+    assert result["decision"] == "block"
+    assert "strict-five research command" in str(result["reason"])
+
+
+def test_script_entry_lets_quoted_ticket_brief_finish(tmp_path: Path) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    prompt = (_FIXTURES / "json-ticket-brief.txt").read_text(encoding="utf-8")
+    _invoke(tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": prompt})
+    stop = {**base, "hook_event_name": "Stop", "stop_hook_active": False}
+    assert "decision" not in _invoke(tmp_path, {**stop, "last_assistant_message": ""})
+
+
+def test_unwritable_state_does_not_block_an_unbound_submission(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "research-coverage").write_text("not a directory")
+    event: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Research the latest uv releases",
+    }
+    submitted = _invoke(tmp_path, event)
+    assert "decision" not in submitted
+    assert "not bound" in str(submitted["systemMessage"])
+    stopped = _invoke(tmp_path, {**event, "hook_event_name": "Stop"})
+    assert "decision" not in stopped
+
+
+def _degrade(manifest: Path, codes: dict[str, str]) -> None:
+    """Mark metered sources skipped before any call, with no transport evidence."""
+    data = json.loads(manifest.read_text())
+    for row in data["sources"]:
+        if row["source"] in codes:
+            for key in ("provisional", "attempts"):
+                row.pop(key, None)
+            row.update(
+                status="skipped",
+                items=[],
+                skip_reason=codes[row["source"]],
+                raw_file=None,
+                raw_sha256=None,
+            )
+    manifest.write_text(json.dumps(data))
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["quota", "credential-missing", "auth-failed", "unavailable", "sandbox-denied"],
+)
+def test_preflight_skip_with_fallback_evidence_passes_provisional(
+    tmp_path: Path, code: str
+) -> None:
+    prompt = "Research Codex hooks"
+    _turn(tmp_path, prompt)
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    _degrade(
+        manifest,
+        {"exa": code, "context7": "quota", "firecrawl-developer": "sandbox-denied"},
+    )
+    result = _turn(tmp_path, prompt, last_assistant_message="Findings.")
+    assert "decision" not in result
+    assert "PROVISIONAL" in str(result["systemMessage"])
+    assert f"exa skipped: {code}" in str(result["systemMessage"])
+
+
+@pytest.mark.parametrize(
+    "codes",
+    [
+        {
+            "exa": "credential-missing",
+            "context7": "quota",
+            "firecrawl-developer": "sandbox-denied",
+            "firecrawl-search": "unavailable",
+        },
+        {"exa": "network-flake"},
+        {"github-issues": "credential-missing"},
+    ],
+)
+def test_preflight_skip_without_fallback_evidence_blocks(
+    tmp_path: Path, codes: dict[str, str]
+) -> None:
+    prompt = "Research Codex hooks"
+    _turn(tmp_path, prompt)
+    _degrade(_hook_manifest(tmp_path / "session-1" / "turn-1"), codes)
+    result = _turn(tmp_path, prompt, last_assistant_message="Findings.")
+    assert result["decision"] == "block"
+    assert "Research coverage failed" in str(result["reason"])

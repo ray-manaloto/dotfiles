@@ -14,14 +14,23 @@ import json
 import re
 
 LOCAL_ONLY_DIRECTIVE = "[research-scope: local-only]"
+# implementation and text-edit bind no research; research requires a receipt.
+SCOPES = frozenset({"local-only", "implementation", "text-edit", "research"})
+_DIRECTIVE = re.compile(r"\[research-scope: ([a-z-]+)\]")
 _DIGEST = re.compile(r"^[a-f0-9]{64}$")
+
+
+def directive(prompt: str) -> str | None:
+    """Return the scope an exact caller first line declares, else None."""
+    match = _DIRECTIVE.fullmatch(prompt.partition("\n")[0])
+    return match[1] if match is not None and match[1] in SCOPES else None
 
 
 def bind_submission(
     prompt: str, session_id: str, turn_id: str
 ) -> dict[str, str] | None:
     """Bind only an exact first-line directive supplied in the caller prompt."""
-    if prompt.partition("\n")[0] != LOCAL_ONLY_DIRECTIVE:
+    if directive(prompt) != "local-only":
         return None
     binding = {
         "source": "UserPromptSubmit",

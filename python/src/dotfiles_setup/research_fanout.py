@@ -108,6 +108,24 @@ class SkipReason(Enum):
 
     PREREQUISITE = "prerequisite"
     CREDITS_EXHAUSTED = "credits-exhausted"
+    QUOTA = "quota"
+    CREDENTIAL_MISSING = "credential-missing"
+    AUTH_FAILED = "auth-failed"
+    UNAVAILABLE = "unavailable"
+    SANDBOX_DENIED = "sandbox-denied"
+
+
+# D236: a metered provider skipped before any call, with no transport evidence.
+PREFLIGHT_SKIPS = frozenset(
+    reason.value
+    for reason in (
+        SkipReason.QUOTA,
+        SkipReason.CREDENTIAL_MISSING,
+        SkipReason.AUTH_FAILED,
+        SkipReason.UNAVAILABLE,
+        SkipReason.SANDBOX_DENIED,
+    )
+)
 
 
 class FailureCode(Enum):
@@ -2074,6 +2092,20 @@ class StrictVerdict:
     provisional: tuple[str, ...]
     reason: str
     provisional_entries: tuple[ProvisionalEntry, ...] = ()
+    degraded: tuple[str, ...] = ()
+
+
+def _preflight_skip(row: dict[str, object]) -> bool:
+    return (
+        row["source"] in CREDIT_METERED_SOURCES
+        and row.get("status") == Status.SKIPPED.value
+        and row.get("skip_reason") in PREFLIGHT_SKIPS
+        and not row.get("route")
+        and not row.get("provisional")
+        and row.get("raw_file") is None
+        and row.get("raw_sha256") is None
+        and not row.get("attempts")
+    )
 
 
 def _provisional_line(row: dict[str, object]) -> str:
@@ -2302,6 +2334,7 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
     """Validate same-turn hashed evidence and re-derive every credit exception."""
     provisional = []
     provisional_entries = []
+    degraded = []
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
@@ -2333,6 +2366,9 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
                 reason="required source missing or duplicated",
             )
         for row in rows:
+            if _preflight_skip(row):
+                degraded.append(f"{row['source']} skipped: {row['skip_reason']}")
+                continue
             reason = (
                 _validate_provisional_row(row, manifest_path)
                 if row.get("provisional")
@@ -2341,12 +2377,20 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
                 else _validate_strict_row(row, manifest_path)
             )
             if reason:
-                return StrictVerdict(passed=False, provisional=(), reason=reason)
+                break
             if row.get("provisional"):
                 provisional.append(_provisional_line(row))
                 provisional_entries.append(
                     ProvisionalEntry(row["source"], row.get("route"))
                 )
+        else:
+            reason = (
+                "no fallback evidence for skipped providers: " + "; ".join(degraded)
+                if len(degraded) == len(CREDIT_METERED_SOURCES)
+                else None
+            )
+        if reason:
+            return StrictVerdict(passed=False, provisional=(), reason=reason)
     except OSError, ValueError, KeyError, TypeError, AttributeError:
         return StrictVerdict(
             passed=False,
@@ -2354,8 +2398,8 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
             reason="malformed or unreadable research evidence",
         )
     reason = (
-        "provisional: " + "; ".join(provisional)
-        if provisional
+        "provisional: " + "; ".join(provisional + degraded)
+        if provisional or degraded
         else "all required sources completed"
     )
     return StrictVerdict(
@@ -2363,6 +2407,7 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
         provisional=tuple(provisional),
         reason=reason,
         provisional_entries=tuple(provisional_entries),
+        degraded=tuple(degraded),
     )
 
 

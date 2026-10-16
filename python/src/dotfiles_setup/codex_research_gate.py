@@ -33,11 +33,53 @@ _SOURCE_NAMES = (
 )
 
 
+# Quoted material (fences, blockquotes, inline code, double-quoted strings such as
+# JSON ticket fields) is someone else's text, so it neither requests nor waives
+# research.
+_QUOTED = (
+    re.compile(r"^(`{3,}|~{3,})[^\n]*\n.*?(?:^\1[ \t]*$|\Z)", re.MULTILINE | re.DOTALL),
+    re.compile(r"^[ \t]*>[^\n]*", re.MULTILINE),
+    re.compile(r"`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d"),
+)
+# An imperative implementation verb opening a line, list item or sentence.
+_IMPLEMENTATION = re.compile(
+    r"(?:^|[.!?;:]\s)\s*(?:[-*+]\s+|\d+[.)]\s+)?"
+    r"(?:implement|fix|edit|update|add|remove|delete|rename|refactor|rewrite|"
+    r"reword|write|change|modify|patch|apply|commit|merge|rebase|build|create|"
+    r"replace|move|format|draft|revise|migrate|bump|pin)\b(?![:-])",
+    re.IGNORECASE | re.MULTILINE,
+)
+_NO_RESEARCH = re.compile(
+    r"\b(?:do not|don't|no|without)\s+(?:run\w*\s+|launch\w*\s+)?(?:any\s+)?"
+    r"(?:research|providers?)\b|\btext-only\b",
+    re.IGNORECASE,
+)
+
+
+def _caller_text(prompt: str) -> str:
+    for pattern in _QUOTED:
+        prompt = pattern.sub(" ", prompt)
+    return prompt
+
+
 def _needs_research(prompt: str) -> bool:
     return bool(
         _EXPLICIT_RESEARCH.search(prompt)
         or (_COMPARISON.search(prompt) and _EXTERNAL_TOPIC.search(prompt))
     )
+
+
+def _turn_scope(prompt: str) -> str:
+    """Classify a native prompt: research, advisory (never blocks) or none."""
+    declared = research_scope.directive(prompt)
+    if declared is not None:
+        return "research" if declared == "research" else "none"
+    text = _caller_text(prompt)
+    if not _needs_research(text):
+        return "none"
+    if _IMPLEMENTATION.search(text) or _NO_RESEARCH.search(text):
+        return "advisory"
+    return "research"
 
 
 def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | None:
@@ -102,8 +144,20 @@ def _on_submit(
                 ),
             }
         }
-    if not _needs_research(prompt):
+    scope = _turn_scope(prompt)
+    if scope == "none":
         return {}
+    if scope == "advisory":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "Research gate advisory: this turn reads as implementation or "
+                    "text editing, so Stop requires no research receipt. A first "
+                    "line `[research-scope: research]` makes one required."
+                ),
+            }
+        }
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(
         json.dumps(
@@ -139,6 +193,17 @@ def _on_submit(
     }
 
 
+def _degraded_note(degraded: tuple[str, ...]) -> dict[str, object]:
+    """Report providers skipped before any call (D236) without blocking."""
+    if not degraded:
+        return {}
+    return {
+        "systemMessage": "Research receipt PROVISIONAL with fallback evidence; "
+        f"providers skipped before any call: {'; '.join(degraded)}. "
+        "Name PROVISIONAL and these providers in the answer."
+    }
+
+
 def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
     verdict = strict_five_verdict(manifest, str(event["turn_id"]))
     if verdict.passed:
@@ -157,7 +222,7 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
                 for token in ("PROVISIONAL", *tokens)
             )
             if named or event.get("stop_hook_active") is True:
-                return {}
+                return _degraded_note(verdict.degraded)
             listed = "; ".join(
                 entry.source + (f" via {entry.route}" if entry.route else "")
                 for entry in verdict.provisional_entries
@@ -168,7 +233,7 @@ def _on_stop(event: dict[str, object], manifest: Path) -> dict[str, object]:
                 "(credit-exhausted provider). Name PROVISIONAL and each of "
                 f"these in the answer: {listed}.",
             }
-        return {}
+        return _degraded_note(verdict.degraded)
     reason = verdict.reason
     message = event.get("last_assistant_message")
     if (
@@ -265,13 +330,33 @@ def _read_event() -> dict[str, object]:
     return event
 
 
+def _state_error(
+    event: dict[str, object], state_root: Path, exc: OSError
+) -> dict[str, object]:
+    """Fail open on hook-state I/O unless a research marker binds this Stop."""
+    paths = _paths(event, state_root)
+    if (
+        paths is not None
+        and event.get("hook_event_name") == "Stop"
+        and paths[0].is_file()
+    ):
+        reason = f"Research hook could not validate evidence: {type(exc).__name__}"
+        return _invalid_submission(event, reason)
+    return {
+        "systemMessage": f"Research hook state unavailable ({type(exc).__name__}); "
+        "this turn is not bound as research."
+    }
+
+
 def main(*, repo_root: Path) -> int:
     """Read one hook event and write one JSON response."""
+    state_root = Path.home() / ".codex" / "research-coverage"
     try:
         event = _read_event()
-        result = handle(
-            event, Path.home() / ".codex" / "research-coverage", repo_root=repo_root
-        )
+        try:
+            result = handle(event, state_root, repo_root=repo_root)
+        except OSError as exc:
+            result = _state_error(event, state_root, exc)
     except (OSError, ValueError, TypeError) as exc:
         result = {
             "decision": "block",
