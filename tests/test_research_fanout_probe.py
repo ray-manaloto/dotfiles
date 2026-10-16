@@ -774,13 +774,59 @@ def test_fanout_manifest_provisional_is_derived_and_clear_for_control(
         tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
     )
     assert _only(payload)["provisional"] == [
-        {"source": "firecrawl-search", "route": "serper"}
+        {"source": "firecrawl-search", "route": "serper", "code": "credits-exhausted"}
     ]
     _fanout_manifest(manifest, {"firecrawl-search": "ok"}, 0)
     _, payload = _probe(
         tmp_path, ["--fanout-manifest", str(manifest)], Runner([]), capsys
     )
     assert _only(payload)["provisional"] == []
+
+
+@pytest.mark.parametrize(
+    ("skip_reason", "code", "invalid"),
+    [
+        ("quota", "quota", False),
+        (None, "credits-exhausted", False),
+        (["quota"], None, True),
+        ({"quota": 1}, None, True),
+        ("network-flake", None, True),
+    ],
+)
+def test_fanout_manifest_provisional_carries_validated_skip_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    skip_reason: object,
+    code: str | None,
+    *,
+    invalid: bool,
+) -> None:
+    """Round 3 (a)/(c): a substituted route names its real skip code.
+
+    An unhashable or unknown skip_reason is a validation result, never a crash.
+    """
+    manifest = tmp_path / "manifest.json"
+    _fanout_manifest(manifest, {"firecrawl-search": "ok", "exa": "skipped"}, 0)
+    data = json.loads(manifest.read_text())
+    data["sources"][0].update(route="serper", provisional=True, skip_reason=skip_reason)
+    data["sources"][1].update(skip_reason=skip_reason)
+    manifest.write_text(json.dumps(data))
+    _, payload = _probe(
+        tmp_path,
+        ["--fanout-manifest", str(manifest), "--require", "exa"],
+        Runner([]),
+        capsys,
+    )
+    row = _only(payload)
+    assert row["provisional_invalid"] is invalid
+    expected = (
+        []
+        if invalid
+        else [{"source": "firecrawl-search", "route": "serper", "code": code}]
+    )
+    assert row["provisional"] == expected
+    failed = "quota" if skip_reason == "quota" else "other"
+    assert row["required_failed"] == [f"exa: skipped ({failed})"]
 
 
 def test_projection_manifest_rows_are_bounded_and_structured(
@@ -814,7 +860,9 @@ def test_projection_manifest_rows_are_bounded_and_structured(
     )
     row = _only(payload)
     assert row["required_failed"] == ["github-issues: error (process-failed)"]
-    assert row["provisional"] == [{"source": "firecrawl-search", "route": "serper"}]
+    assert row["provisional"] == [
+        {"source": "firecrawl-search", "route": "serper", "code": "credits-exhausted"}
+    ]
     assert sentinel not in json.dumps(payload)
     rows += [
         {"source": sentinel, "status": sentinel, "provisional": True},

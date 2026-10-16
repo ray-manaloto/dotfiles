@@ -14,6 +14,7 @@ import json
 import re
 
 LOCAL_ONLY_DIRECTIVE = "[research-scope: local-only]"
+RESEARCH_DIRECTIVE = "[research-scope: research]"
 # implementation and text-edit bind no research; research requires a receipt.
 SCOPES = frozenset({"local-only", "implementation", "text-edit", "research"})
 _DIRECTIVE = re.compile(r"\[research-scope: ([a-z-]+)\]")

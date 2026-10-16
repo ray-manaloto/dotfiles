@@ -25,7 +25,7 @@ from urllib.parse import quote
 
 from dotfiles_setup import codec, lane_result, sdlc_final_report
 from dotfiles_setup.codex_lane_mirror import SOL_MODEL
-from dotfiles_setup.research_scope import LOCAL_ONLY_DIRECTIVE
+from dotfiles_setup.research_scope import LOCAL_ONLY_DIRECTIVE, RESEARCH_DIRECTIVE
 
 __all__ = [
     "SDLC_RUNS_DIR",
@@ -269,7 +269,13 @@ def build_prompt(request: SdlcTeamRequest, repo_root: Path) -> str:
         )
     task = request.task.strip() or "Execute the authoritative specification."
     return (
-        (f"{LOCAL_ONLY_DIRECTIVE}\n" if request.research_scope == "local-only" else "")
+        # The first line is the only research binding the Codex hook reads.
+        (
+            LOCAL_ONLY_DIRECTIVE
+            if request.research_scope == "local-only"
+            else RESEARCH_DIRECTIVE
+        )
+        + "\n"
         + f"You are the SDLC dispatcher for `{repo_root.resolve()}`. Spawn ALL FIVE "
         "specialists directly: sdlc-python-specialist, sdlc-config-specialist, "
         "sdlc-documentation-specialist, sdlc-image-specialist and "

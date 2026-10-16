@@ -10,6 +10,7 @@ import os
 import signal
 import socket
 import socketserver
+import ssl
 import subprocess
 import sys
 import threading
@@ -3665,3 +3666,160 @@ def test_every_skip_reason_projects_to_its_own_failure_code() -> None:
         code = failure_code("diagnostic", status="skipped", skip_reason=reason.value)
         assert code is not None
         assert code.value == reason.value
+
+
+def _only_row(directory: Path) -> dict[str, Any]:
+    return json.loads((directory / "manifest.json").read_text())["sources"][0]
+
+
+_SERPER_OK = (
+    200,
+    json.dumps(
+        {"organic": [{"title": "R", "link": "https://primary.test/doc"}]}
+    ).encode(),
+)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ssl.SSLError(1, "tls alert"),
+        ssl.SSLCertVerificationError(1, "certificate verify failed"),
+        urllib.error.URLError(ssl.SSLEOFError(8, "eof")),
+    ],
+    ids=["ssl-errno-1", "cert-verify", "ssl-eof"],
+)
+def test_tls_failure_is_unavailable_not_sandbox_denied(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    error: BaseException,
+) -> None:
+    """Round 3 (b): errno 1 on a TLS error is not EPERM; only PermissionError is."""
+    del credit_env
+    monkeypatch.setenv("EXA_API_KEY", "exa-sentinel")
+    main(
+        ["topic", "--sources", "exa", "--out", str(tmp_path)],
+        tmp_path,
+        http=_raising_http(error),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["skip_reason"]) == ("skipped", "unavailable")
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "exa", "sandbox-denied")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize(
+    ("source", "cli"), [("context7", "ctx7"), ("firecrawl-search", "firecrawl")]
+)
+def test_missing_metered_cli_is_an_unavailable_skip(
+    tmp_path: Path, credit_env: None, source: str, cli: str
+) -> None:
+    """Round 3 (d): a missing ctx7 or firecrawl CLI is coded, not a blocker."""
+    del credit_env
+    (tmp_path / "bin" / cli).unlink()
+    main(["topic", "--sources", source, "--out", str(tmp_path)], tmp_path)
+    row = _only_row(tmp_path)
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "unavailable",
+        True,
+    )
+    assert row["reason"] == f"needs {cli}"
+    passed, reason = validate_strict_five(
+        _merge_credit_manifest(tmp_path, row), "turn-1"
+    )
+    assert passed
+    assert f"{source} skipped: unavailable" in reason
+
+
+def test_missing_firecrawl_cli_still_routes_to_serper_with_its_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    (tmp_path / "bin" / "firecrawl").unlink()
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["route"], row["skip_reason"]) == (
+        "ok",
+        "serper",
+        "unavailable",
+    )
+    passed, reason = validate_strict_five(
+        _merge_credit_manifest(tmp_path, row), "turn-1"
+    )
+    assert passed
+    assert reason.startswith("provisional: firecrawl-search via serper (unavailable)")
+
+
+@pytest.mark.parametrize(
+    ("stderr", "code"),
+    [
+        (b"Error: HTTP 429 Too Many Requests", "quota"),
+        (b"rate limited; retry later", "quota"),
+        (b"Error: too many requests", "quota"),
+        (b"Request failed with status code 401", "auth-failed"),
+        (b"Error: HTTP 500", None),
+        (b"Error: exited after 429 lines", None),
+    ],
+)
+def test_cli_status_or_rate_limit_with_nonzero_exit_is_coded(
+    tmp_path: Path, credit_env: None, stderr: bytes, code: str | None
+) -> None:
+    """Round 3 (e): a CLI rate limit with a non-zero exit is a quota skip."""
+    del credit_env
+    main(
+        ["topic", "--sources", "context7", "--out", str(tmp_path)],
+        tmp_path,
+        runner=ScriptedRunner([_completed([], 1, b"", stderr)]),
+    )
+    row = _only_row(tmp_path)
+    if code is None:
+        assert (row["status"], row.get("skip_reason")) == ("error", None)
+        return
+    assert (row["status"], row["skip_reason"]) == ("skipped", code)
+    manifest = _merge_credit_manifest(tmp_path, row)
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+    _relabel(manifest, "context7", "unavailable")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+def test_substituted_route_carries_its_real_skip_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    """Round 3 (a): a quota-limited primary routed to serper names quota."""
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-sentinel")
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        runner=ScriptedRunner([_completed([], 1, b"", b"Error: HTTP 429")]),
+        http=FakeHttp({"topic": _SERPER_OK}),
+    )
+    row = _only_row(tmp_path)
+    assert (row["status"], row["route"], row["skip_reason"]) == (
+        "ok",
+        "serper",
+        "quota",
+    )
+    manifest = _merge_credit_manifest(tmp_path, row)
+    passed, reason = validate_strict_five(manifest, "turn-1")
+    assert passed
+    assert reason.startswith("provisional: firecrawl-search via serper (quota)")
+    _relabel(manifest, "firecrawl-search", "auth-failed")
+    assert validate_strict_five(manifest, "turn-1")[0] is False
+
+
+@pytest.mark.parametrize("skip_reason", [["quota"], {"quota": 1}, 7])
+def test_non_string_skip_reason_projects_to_other(skip_reason: object) -> None:
+    """Round 3 (c): an unhashable or non-string skip_reason never crashes."""
+    code = failure_code(None, status="skipped", skip_reason=skip_reason)
+    assert code is not None
+    assert code.value == "other"

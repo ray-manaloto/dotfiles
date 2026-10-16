@@ -704,11 +704,12 @@ if (planManifests.length && planManifestProbe === null) {
 const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m => {
   if (!Array.isArray(m.provisional) || m.provisional.length > MAX_PROBE_ENTRIES || m.provisional_invalid === true ||
       !m.provisional.every(e => e && typeof e.source === 'string' && Object.hasOwn(PROVISIONAL_ROUTES, e.source) &&
-        (e.route === null || PROVISIONAL_ROUTES[e.source].includes(e.route)))) {
+        (e.route === null || PROVISIONAL_ROUTES[e.source].includes(e.route)) &&
+        (e.code === undefined || FAILURE_CODES.has(e.code)))) {
     mandatoryGaps.push(`${m.path}: provisional projection failed validation`)
     return []
   }
-  return m.provisional.map(e => `${m.path}: ${e.source}${e.route ? ` via ${e.route}` : ' skipped'} (credits-exhausted)`)
+  return m.provisional.map(e => `${m.path}: ${e.source}${e.route ? ` via ${e.route}` : ' skipped'} (${e.code ?? 'credits-exhausted'})`)
 })
 const provisionalRoutes = [...new Set([
   ...mirror.filter(m => m.provisional && mirrored(m)).map(m => `${m.url}: mirrored via webclaw (credits-exhausted)`),

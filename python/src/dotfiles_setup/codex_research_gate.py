@@ -12,123 +12,36 @@ from pathlib import Path
 from dotfiles_setup import research_scope
 from dotfiles_setup.research_fanout import strict_five_verdict
 
+# Advisory hints only: a match adds context, never a binding (round 3). Word
+# alternations with no nested quantifier, so each search stays linear.
+_EXPLICIT_RESEARCH = re.compile(
+    r"\b(research|look up|investigate|best practices|latest|upstream|"
+    r"releases?|versions?|search (?:the )?(?:web|internet|online|github))\b",
+    re.IGNORECASE,
+)
+_EXTERNAL_TOPIC = re.compile(
+    r"\b(tools?|libraries|frameworks?|plugins?|skills?|models?|agents?|"
+    r"workflows?|dependencies|uv|poetry|fnox|codex|mise)\b",
+    re.IGNORECASE,
+)
+_COMPARISON = re.compile(
+    r"\b(compare|evaluate|recommend|recommendations?|choose|versus|vs\.?|"
+    r"current|newest|modern|recent)\b",
+    re.IGNORECASE,
+)
 _IDENTIFIER = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 _SOURCE_NAMES = (
     "GitHub issues/discussions/releases, Exa, Context7, Firecrawl, Last30Days"
 )
 _AGENT_FIELDS = ("agent_id", "agent_type", "subagent")
-
-# Every pattern runs on text whose blank runs are collapsed to one space, so no
-# quantifier repeats over whitespace and each search stays linear (security P2-2).
-_BLANKS = re.compile(r"[ \t]+")
-_FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
-_BLOCKQUOTE = re.compile(r"^ ?>[^\n]*", re.MULTILINE)
-_SPAN = re.compile(
-    r"`[^`\n]*`|\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d|(?<!\w)'[^'\n]*'(?!\w)"
-)
-# An imperative research verb with an object: line start (list item or
-# heading), after clause punctuation and a space, or after a lead word.
-# "research" before a noun it modifies ("research gate", "research notes"),
-# `check:research` and "investigate why" are not requests.
-_RESEARCH_VERB = re.compile(
-    r"(?:^ ?(?:(?:[-*+]|\d{1,3}[.)]|#{1,6}) )?|[.!?;:,] |\(|"
-    r"\b(?:please|pls|to|and|then|also|now|you|first|next) )"
-    r"(?:research(?![ -](?:gate|hooks?|scope|receipts?|coverage|fanout|"
-    r"providers?|notes?|reports?|results?|summary|lanes?|team|folder|"
-    r"directory|plan|briefs?|runs?|outputs?|evidence|manifests?|tasks?|"
-    r"command|ticket|policy|mode|step|stage|incomplete|complete)\b)|"
-    r"(?:investigate|look into|look up|find out)(?! (?:why|whether|if|how come)\b))"
-    r"(?= [\"'\u201c`]?\w)",
-    re.IGNORECASE | re.MULTILINE,
-)
-_RESEARCH_PHRASE = re.compile(
-    r"\bsearch (?:the )?(?:web|internet|online|github)\b|\bbest[ -]practices?\b",
-    re.IGNORECASE,
-)
-_SENTENCE = re.compile(r"[^.!?\n]+")
-_ASKS_NEWEST = re.compile(
-    r"\b(?:(?:what|which)(?:'s|\u2019s| is| are| was| were)|find(?: out)?) "
-    r"(?:the )?(?:latest|newest|best|recommended|most recent)\b",
-    re.IGNORECASE,
-)
-_COMPARISON = re.compile(
-    r"\b(?:compar(?:e|es|ing|ison|isons)|evaluat(?:e|es|ing|ion|ions)|"
-    r"recommend(?:s|ing|ation|ations)?|alternatives? to)\b",
-    re.IGNORECASE,
-)
-_EXTERNAL_TOPIC = re.compile(
-    r"\b(?:tools?|librar(?:y|ies)|frameworks?|plugins?|skills?|models?|agents?|"
-    r"workflows?|dependencies|packages?|uv|poetry|fnox|codex|mise)\b",
-    re.IGNORECASE,
-)
-_RELEASE_TOPIC = re.compile(r"\b(?:versions?|releases?)\b", re.IGNORECASE)
-# Words that only hint at research: advisory context, never a receipt.
-_WEAK = re.compile(
-    r"\b(?:latest|newest|upstream|versions?|releases?|research\w*|"
-    r"investigat\w*|best practices?)\b",
-    re.IGNORECASE,
-)
+_WORK_SCOPES = frozenset({"implementation", "text-edit"})
 
 
-def _normalize(prompt: str) -> str:
-    return _BLANKS.sub(" ", prompt.replace("\r\n", "\n").replace("\r", "\n"))
-
-
-def _strip_fences(text: str) -> str:
-    """Drop closed fenced blocks; an unclosed fence strips nothing (CommonMark)."""
-    kept: list[str] = []
-    block: list[str] = []
-    fence = ""
-    for line in text.split("\n"):
-        if not fence:
-            opened = _FENCE.match(line)
-            if opened is None:
-                kept.append(line)
-            else:
-                fence, block = opened[1], [line]
-            continue
-        block.append(line)
-        closing = line.strip(" ")
-        if len(closing) >= len(fence) and closing == fence[0] * len(closing):
-            fence, block = "", []
-            kept.append("")
-    return "\n".join(kept + block)
-
-
-def _caller_text(text: str) -> str:
-    """Remove quoted material: someone else's words neither request nor waive.
-
-    Short quoted names (`Compare "uv" and "poetry"`) stay caller text.
-    """
-    text = _BLOCKQUOTE.sub(" ", _strip_fences(text))
-    return _SPAN.sub(lambda span: "quoted" if " " in span[0] else span[0], text)
-
-
-def _requests_research(text: str) -> bool:
-    if _RESEARCH_VERB.search(text) or _RESEARCH_PHRASE.search(text):
-        return True
-    for sentence in _SENTENCE.finditer(text):
-        clause = sentence[0]
-        external = _EXTERNAL_TOPIC.search(clause)
-        if (_COMPARISON.search(clause) and external) or (
-            _ASKS_NEWEST.search(clause) and (external or _RELEASE_TOPIC.search(clause))
-        ):
-            return True
-    return False
-
-
-def _turn_scope(prompt: str) -> str:
-    """Classify a native prompt: research, advisory (never blocks) or none.
-
-    Only a first-line directive turns a research request off (decision D236).
-    """
-    declared = research_scope.directive(prompt)
-    if declared is not None:
-        return "research" if declared == "research" else "none"
-    text = _normalize(prompt)
-    if _requests_research(_caller_text(text)):
-        return "research"
-    return "advisory" if _WEAK.search(text) else "none"
+def _needs_research(prompt: str) -> bool:
+    return bool(
+        _EXPLICIT_RESEARCH.search(prompt)
+        or (_COMPARISON.search(prompt) and _EXTERNAL_TOPIC.search(prompt))
+    )
 
 
 def _paths(event: dict[str, object], state_root: Path) -> tuple[Path, Path] | None:
@@ -192,6 +105,36 @@ def _research_context(event: dict[str, object], repo_root: Path) -> str:
     )
 
 
+def _write_record(
+    marker: Path, event: dict[str, object], prompt: str, **fields: str
+) -> None:
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "turn_id": event["turn_id"],
+        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+        **fields,
+    }
+    marker.write_text(json.dumps(record), encoding="utf-8")
+
+
+def _advisory(event: dict[str, object], repo_root: Path) -> dict[str, object]:
+    """Research words without the directive: guidance, never a Stop binding."""
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": (
+                "Research hint (not enforced): no first line "
+                "`[research-scope: research]`, so Stop requires no receipt; that "
+                "line is how a caller requests enforced research. If this turn "
+                "needs external research: "
+                + _research_context(event, repo_root)
+                + " If research was needed but not run, start the answer with "
+                "`RESEARCH INCOMPLETE:`."
+            ),
+        }
+    }
+
+
 def _on_submit(
     event: dict[str, object], marker: Path, repo_root: Path
 ) -> dict[str, object]:
@@ -220,21 +163,13 @@ def _on_submit(
                 ),
             }
         }
-    scope = _turn_scope(prompt)
-    if scope == "none":
+    scope = research_scope.directive(prompt)
+    if scope in _WORK_SCOPES:
+        # Names the caller's scope; Stop never blocks on this record.
+        _write_record(marker, event, prompt, scope=scope)
         return {}
-    if scope == "advisory":
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": (
-                    "Research gate advisory: this turn mentions research words "
-                    "but asks for no external research, so Stop requires no "
-                    "research receipt. A first line `[research-scope: research]` "
-                    "makes one required."
-                ),
-            }
-        }
+    if scope != "research":
+        return _advisory(event, repo_root) if _needs_research(prompt) else {}
     result: dict[str, object] = {
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
@@ -242,17 +177,7 @@ def _on_submit(
         }
     }
     try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(
-            json.dumps(
-                {
-                    "turn_id": event["turn_id"],
-                    "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-                    "policy": "strict-five-v2",
-                }
-            ),
-            encoding="utf-8",
-        )
+        _write_record(marker, event, prompt, scope="research", policy="strict-five-v2")
     except OSError as exc:
         # D236 fail-open: state that cannot be written never blocks the turn.
         result["systemMessage"] = (
@@ -346,6 +271,8 @@ def _stop_from_submission(
     recorded = _read_submission(marker)
     if isinstance(recorded, str):
         return _invalid_submission(event, recorded)
+    if recorded.get("scope") in _WORK_SCOPES and "policy" not in recorded:
+        return {}
     if "caller_scope" in recorded:
         if not research_scope.validates_binding(
             recorded["caller_scope"], str(event["session_id"]), str(event["turn_id"])

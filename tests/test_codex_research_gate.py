@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import codec, codex_research_gate, sdlc_team
 
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
+# Only this exact caller first line binds a turn as research (round 3).
+_DIRECTIVE = "[research-scope: research]\n"
+_RESEARCH = _DIRECTIVE + "Research Codex hooks"
 
 
 @pytest.mark.parametrize(
@@ -47,7 +50,7 @@ def test_repeated_submit_reports_retained_evidence_failure_without_rewriting(
         "session_id": "session-1",
         "turn_id": "turn-1",
         "hook_event_name": "UserPromptSubmit",
-        "prompt": "Research Codex hooks",
+        "prompt": _RESEARCH,
     }
     _invoke(tmp_path, event)
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
@@ -70,7 +73,7 @@ def test_valid_repeated_submit_distinguishes_same_and_different_prompts(
     local: bool,
 ) -> None:
     prompt = (
-        "[research-scope: local-only]\n" if local else ""
+        "[research-scope: local-only]\n" if local else _DIRECTIVE
     ) + "Research Codex hooks"
     event: dict[str, object] = {
         "session_id": "session-1",
@@ -204,7 +207,7 @@ def test_same_turn_cannot_be_redeclared_local_after_research_submission(
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
@@ -225,10 +228,10 @@ def test_same_turn_cannot_be_redeclared_local_after_research_submission(
 @pytest.mark.parametrize(
     "prompt",
     [
-        "Research Codex hooks",
-        "> [research-scope: local-only]\nResearch Codex hooks",
-        "Quoted directive:\n[research-scope: local-only]\nResearch Codex hooks",
-        "```\n[research-scope: local-only]\n```\nResearch Codex hooks",
+        _RESEARCH,
+        _DIRECTIVE + "> [research-scope: local-only]\nResearch Codex hooks",
+        _DIRECTIVE + "Quoted:\n[research-scope: local-only]\nResearch Codex hooks",
+        _DIRECTIVE + "```\n[research-scope: local-only]\n```\nResearch Codex hooks",
     ],
 )
 def test_ordinary_research_ignores_misplaced_and_stop_declarations(
@@ -335,7 +338,7 @@ def test_research_turn_requires_receipt_and_allows_honest_failure(
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     submit_output = started["hookSpecificOutput"]
@@ -422,7 +425,7 @@ def test_malformed_manifest_returns_block_decision(tmp_path: Path) -> None:
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     manifest = (
@@ -523,7 +526,7 @@ def test_hook_provisional_pass_and_forged_evidence_block(tmp_path: Path) -> None
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
@@ -564,7 +567,7 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
             "session_id": "session-1",
             "turn_id": "turn-1",
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
         script,
     )
@@ -611,7 +614,7 @@ def test_provisional_stop_names_each_source_and_route_once(
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
@@ -686,7 +689,7 @@ def _projection_receipt(tmp_path: Path, prose: str) -> tuple[dict[str, object], 
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
@@ -893,7 +896,7 @@ def test_invalid_submission_requires_first_refusal_then_honest_incomplete_stop(
         {
             **base,
             "hook_event_name": "UserPromptSubmit",
-            "prompt": "Research Codex hooks",
+            "prompt": _RESEARCH,
         },
     )
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
@@ -987,19 +990,12 @@ def test_implementation_brief_quoting_research_words_never_blocks_stop(
     assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
 
 
-@pytest.mark.parametrize("scope", ["implementation", "text-edit"])
-def test_caller_implementation_directive_never_blocks_stop(
-    tmp_path: Path, scope: str
-) -> None:
-    prompt = f"[research-scope: {scope}]\nResearch the latest uv releases."
-    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
-
-
 @pytest.mark.parametrize(
     "prompt",
     [
-        "Research the latest uv releases and compare them with poetry",
-        (_FIXTURES / "research-with-quoted-bypass.txt").read_text(encoding="utf-8"),
+        _DIRECTIVE + "Research the latest uv releases and compare them with poetry",
+        _DIRECTIVE
+        + (_FIXTURES / "research-with-quoted-bypass.txt").read_text(encoding="utf-8"),
         "[research-scope: research]\nImplement the bump after checking uv.",
     ],
 )
@@ -1028,7 +1024,7 @@ def test_unwritable_state_warns_and_never_blocks_a_research_submission(
         "session_id": "session-1",
         "turn_id": "turn-1",
         "hook_event_name": "UserPromptSubmit",
-        "prompt": "Research the latest uv releases",
+        "prompt": _DIRECTIVE + "Research the latest uv releases",
     }
     submitted = _invoke(tmp_path, event)
     assert "decision" not in submitted
@@ -1126,7 +1122,7 @@ def test_coded_skip_passes_provisional_once_answer_names_it(
     tmp_path: Path, codes: dict[str, str]
 ) -> None:
     """D236 / R-A F2: skipped providers never block once the answer names them."""
-    prompt = "Research Codex hooks"
+    prompt = _RESEARCH
     _turn(tmp_path, prompt)
     manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
     for source, code in codes.items():
@@ -1191,7 +1187,7 @@ def test_coded_skip_passes_provisional_once_answer_names_it(
 def test_coded_skip_without_rederivable_evidence_blocks(
     tmp_path: Path, source: str, code: str, override: dict[str, object]
 ) -> None:
-    prompt = "Research Codex hooks"
+    prompt = _RESEARCH
     _turn(tmp_path, prompt)
     manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
     if code in {"prerequisite", "network-flake"}:
@@ -1210,7 +1206,7 @@ def test_coded_skip_without_rederivable_evidence_blocks(
 @pytest.mark.parametrize("code", ["quota", "auth-failed", "unavailable"])
 def test_bare_skip_row_without_evidence_blocks(tmp_path: Path, code: str) -> None:
     """Security P1-1: a self-asserted skip code with no evidence is no receipt."""
-    prompt = "Research Codex hooks"
+    prompt = _RESEARCH
     _turn(tmp_path, prompt)
     manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
     data = json.loads(manifest.read_text())
@@ -1225,72 +1221,186 @@ def test_bare_skip_row_without_evidence_blocks(tmp_path: Path, code: str) -> Non
     assert "Research coverage failed" in str(result["reason"])
 
 
-_RESEARCH_PROMPTS = (
-    "Write a report on current best practices for Codex hooks.",
+# Round 3: only the exact first line `[research-scope: research]` binds research.
+# Both round-2 reviewers' probe sets: work briefs that mention research words, and
+# research lead-ins a verb classifier missed. Without the directive none blocks.
+_WORK_PROMPTS = (
+    "Investigate the failing test in tests/test_currency.py and fix it.",
+    "Look into the flaky test_research_fanout case and make it deterministic.",
+    "Find out which test fails on main and fix it.",
     (
-        "Draft a comparison of the latest uv and poetry releases with upstream "
-        "best practices."
+        "Look up the definition of _turn_scope in codex_research_gate.py and add a "
+        "docstring."
     ),
-    "Create a recommendation: compare uv versus poetry for this repo.",
-    "Build an evaluation of the newest agent frameworks.",
-    "We have no research on this yet. Investigate the latest Codex releases.",
-    "Investigate upstream releases of uv without providers that need credits.",
-    "- Research the latest mise releases\n- Update the pin accordingly",
-    "Task: research the newest fnox release; summary: add notes after.",
-    'Compare "uv" and "poetry" for this repo.',
-    "```\nResearch the latest uv releases.",
-    "[research-scope: research]\r\nFix the typo in README.md.",
-    "Please research the latest uv release.\r\nThen pin it.",
-    'Please research "Codex hook output limits".',
+    "Fix the bug: investigate the manifest reader and correct its error code.",
+    "Evaluate the agents config in .codex/agents and fix the model field.",
+    "Recommend a fix for the mise task, then apply it.",
+    "Rename the Best practices heading to Guidelines in docs/hooks.md.",
+    "Update the README to say we follow best practices for hooks.",
+    "Reword the README line that says: research the latest uv releases weekly.",
+    "Implement CG-12. Ticket title: Research the latest versions of uv and poetry.",
+    "title: Research the latest versions of uv",
+    (
+        "You are the reviewer. Read the diff; compare it with the ticket acceptance "
+        "criteria and the AGENTS.md rules for agents."
+    ),
+    "Write tests that search the web fallback path in research_fanout.py.",
+    (
+        "Apply the review: P2 says to research the skip codes; implement it in "
+        "research_fanout.py."
+    ),
+    (
+        "Fix the flaky test.\n- Investigate the failing test in tests/test_x.py and "
+        "patch it."
+    ),
+    "Fix the bug. First, investigate the stack trace in logs/err.txt.",
+    "Please look into the CI failure on this branch and fix it.",
+    "Find out which test fails, then fix the code.",
+    "Look up the definition of parse_args in src/cli.py and rename it.",
+    "Refactor the model class; recommend a name for the agent field.",
+    "Apply our best practices doc to src/x.py.",
 )
+_RESEARCH_PROMPTS = (
+    "Kindly research the latest uv releases.",
+    "We should research the latest uv releases before pinning.",
+    "Go research the newest Codex release.",
+    "Let's research uv releases this week.",
+    "Can someone investigate the newest mise release?",
+    "Please do some research on the newest mise releases.",
+    "Research: latest mise releases and their breaking changes.",
+    "Research: uv vs poetry for this repo",
+    "Do some research on the latest uv releases",
+    "Check the latest uv release notes",
+    "'tis urgent; research the latest uv releases, see the users' guide",
+    'Mount note: the 27" monitor. Research the latest uv releases and "pin" them.',
+)
+
+
+def _marker(state_root: Path) -> Path:
+    return state_root / "session-1" / "turn-1" / "required.json"
+
+
+@pytest.mark.parametrize("prompt", _WORK_PROMPTS + _RESEARCH_PROMPTS)
+def test_prompt_without_directive_never_blocks(tmp_path: Path, prompt: str) -> None:
+    """R2 cold and security reviews: no keyword or verb binds a turn as research."""
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+    assert not _marker(tmp_path).exists()
 
 
 @pytest.mark.parametrize("prompt", _RESEARCH_PROMPTS)
-def test_research_request_blocks_without_receipt(tmp_path: Path, prompt: str) -> None:
-    """Cold review P1-1: only a directive turns research off."""
-    result = _turn(tmp_path, prompt, last_assistant_message="Done.")
-    assert result["decision"] == "block"
-
-
-_WORK_PROMPTS = (
-    "Please bump the version to 1.2.3 in pyproject.toml.",
-    "Can you update the release notes for v2.1?",
-    "You are the implementer. Make the release check report the right version.",
-    "I need you to fix the version comparison in currency.py.",
-    "fix: the version check in CG-20",
-    "ok, implement the latest release check from CG-20",
-    "## Task\nThe latest versions table is wrong; correct the mise row.",
-    "Review commit abc123 against ticket CG-14 (latest versions table).",
-    "Implement ticket CG-12: 'Research the latest uv releases and pin them.'",
-    "Fix the research gate so it reads the latest manifest.",
-    "Investigate why the release check reports the wrong version.",
-    "[research-scope: implementation]\r\nResearch the latest uv releases.",
-)
-
-
-@pytest.mark.parametrize("prompt", _WORK_PROMPTS)
-def test_work_brief_never_blocks_stop(tmp_path: Path, prompt: str) -> None:
-    """Cold review P2-1: implementation and review briefs finish without research."""
-    result = _turn(tmp_path, prompt, last_assistant_message="Done.")
-    assert "decision" not in result
+def test_directive_research_blocks_then_passes_on_fallback_evidence(
+    tmp_path: Path, prompt: str
+) -> None:
+    """With the directive, a missing receipt blocks; coded fallback skips pass."""
+    prompt = _DIRECTIVE + prompt
+    blocked = _turn(tmp_path, prompt, last_assistant_message="Done.")
+    assert blocked["decision"] == "block"
+    assert "strict-five research command" in str(blocked["reason"])
+    manifest = _hook_manifest(tmp_path / "session-1" / "turn-1")
+    for source, code in _ALL_SKIPPED.items():
+        _skip(manifest, source, code)
+    answer = "PROVISIONAL: skipped " + "; ".join(sorted(_ALL_SKIPPED))
+    assert _turn(tmp_path, prompt, last_assistant_message=answer) == {}
 
 
 @pytest.mark.parametrize(
-    "filler", ["\n", " ", "\t.", "`", '"', "'", "> ", "```\n", "a ", "\r\n"]
+    "prompt",
+    [
+        "> [research-scope: research]\nResearch the latest uv releases.",
+        "Ticket:\n[research-scope: research]\nResearch the latest uv releases.",
+        "```\n[research-scope: research]\n```\nResearch the latest uv releases.",
+        " [research-scope: research]\nResearch the latest uv releases.",
+        "`[research-scope: research]`\nResearch the latest uv releases.",
+    ],
+    ids=["blockquote", "second-line", "fenced", "leading-space", "code-span"],
 )
-def test_classifier_is_linear_on_long_prompts(tmp_path: Path, filler: str) -> None:
-    """Security P2-2: no quantifier nesting; 32000 repeats stay well under 0.5 s."""
+def test_quoted_or_misplaced_research_directive_never_binds(
+    tmp_path: Path, prompt: str
+) -> None:
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+    assert not _marker(tmp_path).exists()
+
+
+def test_crlf_research_directive_binds(tmp_path: Path) -> None:
+    prompt = "[research-scope: research]\r\nFix the typo in README.md."
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.")["decision"] == (
+        "block"
+    )
+    assert json.loads(_marker(tmp_path).read_text())["scope"] == "research"
+
+
+@pytest.mark.parametrize("scope", ["implementation", "text-edit"])
+def test_work_directive_names_scope_in_binding_record(
+    tmp_path: Path, scope: str
+) -> None:
+    prompt = f"[research-scope: {scope}]\nResearch the latest uv releases."
+    assert _turn(tmp_path, prompt, last_assistant_message="Done.") == {}
+    record = json.loads(_marker(tmp_path).read_text())
+    assert record["scope"] == scope
+    assert "policy" not in record
+
+
+def test_research_hint_without_directive_is_advisory_only(tmp_path: Path) -> None:
     submit: dict[str, object] = {
         "session_id": "session-1",
         "turn_id": "turn-1",
         "hook_event_name": "UserPromptSubmit",
-        "prompt": "Research the latest uv releases." + filler * 32000,
+        "prompt": "Research the latest uv releases.",
+    }
+    repo = Path(__file__).parent.parent
+    result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
+    context = str(json.dumps(result))
+    assert "--strict-five" in context
+    assert "[research-scope: research]" in context
+    assert "RESEARCH INCOMPLETE:" in context
+    assert "not enforced" in context
+    assert not _marker(tmp_path).exists()
+
+
+@pytest.mark.parametrize(
+    "mode_task",
+    [
+        ("implement", "Implement ticket CG-36 test-first."),
+        ("review", "Review commit ddfc027f against CG-36."),
+    ],
+)
+def test_sdlc_dispatcher_body_alone_never_binds_research(
+    tmp_path: Path, mode_task: tuple[str, str]
+) -> None:
+    """The fixed "research failures" clause binds nothing; the directive line does."""
+    mode, task = mode_task
+    request = sdlc_team.SdlcTeamRequest(
+        spec_file=str(tmp_path / "spec.md"), task=task, mode=sdlc_team.SdlcMode(mode)
+    )
+    prompt = sdlc_team.build_prompt(request, tmp_path)
+    first, _, body = prompt.partition("\n")
+    assert first == "[research-scope: research]"
+    assert _turn(tmp_path / "body", body, last_assistant_message="Done.") == {}
+    bound = _turn(tmp_path / "full", prompt, last_assistant_message="Done.")
+    assert bound["decision"] == "block"
+
+
+@pytest.mark.parametrize(
+    "filler",
+    [
+        *("\n", " ", "\t.", "`", '"', "'", "> ", "```\n", "a ", "\r\n"),
+        *("\u201c", "\u201e", "\u201cab ", "\u201e\u201c' "),
+    ],
+)
+def test_research_hint_is_linear_on_long_prompts(tmp_path: Path, filler: str) -> None:
+    """Security P2-2: the hint scan stays linear; 32000 repeats stay under 0.5 s."""
+    submit: dict[str, object] = {
+        "session_id": "session-1",
+        "turn_id": "turn-1",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": filler * 32000 + "Research the latest uv releases.",
     }
     repo = Path(__file__).parent.parent
     started = time.perf_counter()
     result = codex_research_gate.handle(submit, tmp_path, repo_root=repo)
     elapsed = time.perf_counter() - started
-    assert "--strict-five" in json.dumps(result)
+    assert "not enforced" in json.dumps(result)
+    assert not _marker(tmp_path).exists()
     assert elapsed < 0.5
 
 
@@ -1317,7 +1427,7 @@ def test_subagent_turn_is_exempt(tmp_path: Path, agent: dict[str, str]) -> None:
     """codex-rs/hooks/src/schema.rs:567-583 (rust-v0.163.0): agent_id, agent_type."""
     base: dict[str, object] = {"session_id": "session-1", "turn_id": "turn-1", **agent}
     repo = Path(__file__).parent.parent
-    submit = {**base, "hook_event_name": "UserPromptSubmit", "prompt": "Research uv"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit", "prompt": _RESEARCH}
     assert codex_research_gate.handle(submit, tmp_path, repo_root=repo) == {}
     assert not (tmp_path / "session-1").exists()
     stop = {**base, "hook_event_name": "Stop", "last_assistant_message": "Done."}

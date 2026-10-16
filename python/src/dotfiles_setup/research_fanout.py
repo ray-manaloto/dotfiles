@@ -126,7 +126,7 @@ def failure_code(
     """Project producer literals to finite codes; never return diagnostic text."""
     if status in (Status.OK.value, Status.EMPTY_VERIFIED.value):
         return None
-    if skip_reason in _SKIP_VALUES:
+    if isinstance(skip_reason, str) and skip_reason in _SKIP_VALUES:
         return FailureCode(skip_reason)
     if (
         status == Status.SKIPPED.value
@@ -192,6 +192,7 @@ _EVIDENCED_SKIPS = frozenset(
     for reason in SkipReason
     if reason not in {SkipReason.PREREQUISITE, SkipReason.CREDENTIAL_MISSING}
 )
+_MISSING_CLI_TEXTS = frozenset({"needs ctx7", "needs firecrawl"})
 _CREDENTIAL_TEXTS = MappingProxyType(
     {"exa": "EXA_API_KEY not inherited; run through fnox exec"}
 )
@@ -209,9 +210,14 @@ _UNAVAILABLE_ERRORS = frozenset(
         "BrokenPipeError",
         "gaierror",
         "herror",
+        "FileNotFoundError",
+        "SSLError",
+        "SSLCertVerificationError",
+        "SSLEOFError",
     }
 )
-_SANDBOX_ERRNOS = frozenset({errno.EPERM, errno.EACCES})
+# A CLI with a non-zero exit names a rate limit in prose, not a status line.
+_RATE_LIMIT_TEXT = re.compile(r"rate[ -]limit|too many requests", re.IGNORECASE)
 _FALLBACK_KEYS = MappingProxyType(
     {"serper": "SERPER_API_KEY", "serpapi": "SERP_API_KEY"}
 )
@@ -1452,12 +1458,21 @@ def _attempt_skip(attempt: _Attempt) -> SkipReason | None:
             payload = _decode_json(attempt.raw)
             if isinstance(payload, dict) and payload.get("success") is False:
                 status = payload.get("status")
+    elif status is None and attempt.rc:
+        if match := _CREDIT_STATUS.search(attempt.stderr_redacted):
+            status = int(match[1])
+        elif _RATE_LIMIT_TEXT.search(attempt.stderr_redacted):
+            return SkipReason.QUOTA
     return _HTTP_SKIPS.get(status) if type(status) is int else None
 
 
-def _error_skip(error_class: object, error_number: object) -> SkipReason | None:
-    """Map an exception class and errno to a skip code (producer and verifier)."""
-    if error_class == "PermissionError" or error_number in _SANDBOX_ERRNOS:
+def _error_skip(error_class: object) -> SkipReason | None:
+    """Map an exception class to a skip code (producer and verifier).
+
+    Python raises EPERM and EACCES as PermissionError; an errno alone (an
+    SSLError carries errno 1) is never a sandbox denial.
+    """
+    if error_class == "PermissionError":
         return SkipReason.SANDBOX_DENIED
     if error_class in _UNAVAILABLE_ERRORS:
         return SkipReason.UNAVAILABLE
@@ -1623,7 +1638,7 @@ def _credit_result(
         reason,
         control if route else None,
         None,
-        skip_reason=code if status is Status.SKIPPED else None,
+        skip_reason=None if status is Status.ERROR else code,
         route=route,
         provisional=status is Status.SKIPPED or route is not None,
         attempts=tuple(attempts),
@@ -1633,6 +1648,36 @@ def _credit_result(
         final.raw if route else genuine_raw if status is Status.ERROR else envelope,
         tuple(evidence),
     )
+
+
+def _prerequisite_result(
+    source: str, request: FanoutRequest, prerequisite: str, run: _CreditRun
+) -> _Fetch:
+    if prerequisite in _MISSING_CLI_TEXTS:
+        # A missing metered CLI is coded unavailable and still tries fallbacks.
+        missing = FileNotFoundError(errno.ENOENT, prerequisite)
+        return _credit_result(
+            source,
+            request,
+            _Attempt((), b"", prerequisite),
+            run,
+            (SkipReason.UNAVAILABLE, _error_envelope(missing)),
+        )
+    credential = _CREDENTIAL_TEXTS.get(source) == prerequisite
+    result = SourceResult(
+        source,
+        Status.SKIPPED,
+        (),
+        time.monotonic() - run.started,
+        prerequisite,
+        None,
+        None,
+        skip_reason=SkipReason.CREDENTIAL_MISSING
+        if credential
+        else SkipReason.PREREQUISITE,
+        provisional=credential,
+    )
+    return _Fetch(result, None)
 
 
 def _source_result(
@@ -1645,22 +1690,10 @@ def _source_result(
     started = time.monotonic()
     boundaries = _Boundaries(runner, http)
     prerequisite = _prerequisite_reason(source, request)
-    if prerequisite:
-        result = SourceResult(
-            source,
-            Status.SKIPPED,
-            (),
-            time.monotonic() - started,
-            prerequisite,
-            None,
-            None,
-            skip_reason=SkipReason.CREDENTIAL_MISSING
-            if _CREDENTIAL_TEXTS.get(source) == prerequisite
-            else SkipReason.PREREQUISITE,
-            provisional=_CREDENTIAL_TEXTS.get(source) == prerequisite,
-        )
-        return _Fetch(result, None)
     deadline = _Deadline.after(_timeout_for(source, request.timeout))
+    if prerequisite:
+        run = _CreditRun(boundaries, deadline, started)
+        return _prerequisite_result(source, request, prerequisite, run)
     raw: bytes | None = None
     try:
         attempt = _primary_attempt(
@@ -1730,7 +1763,7 @@ def _source_result(
         items = ()
         envelope = _error_envelope(exc)
         decoded = json.loads(envelope)
-        code = _error_skip(decoded["error_class"], decoded["errno"])
+        code = _error_skip(decoded["error_class"])
         if source in CREDIT_METERED_SOURCES and code is not None:
             return _credit_result(
                 source,
@@ -2159,7 +2192,7 @@ def _provisional_line(row: dict[str, object]) -> str:
             errors.append(f"{attempt.get('route')}: {code.value if code else ''}")
     code = row.get("skip_reason") or SkipReason.CREDITS_EXHAUSTED.value
     if row.get("route"):
-        line = f"{source} via {row['route']} (credits-exhausted)"
+        line = f"{source} via {row['route']} ({code})"
     elif code == SkipReason.CREDENTIAL_MISSING.value:
         line = f"{source} skipped: {code}; {row.get('reason')}"
     else:
@@ -2315,7 +2348,7 @@ def _evidence_skip(raw: bytes) -> SkipReason | None:
         ):
             message = "malformed primary transport"
             raise _ReceiptError(message)
-        return _error_skip(envelope["error_class"], number)
+        return _error_skip(envelope["error_class"])
     return _attempt_skip(_decode_transport_envelope(raw))
 
 
@@ -2388,9 +2421,7 @@ def _validate_provisional_row(
     try:
         _validate_credit_status(row)
         attempts, primary_raw = _credit_attempts(row, manifest_path.parent)
-        _credit_envelope(
-            primary_raw, None if row.get("route") else row.get("skip_reason")
-        )
+        _credit_envelope(primary_raw, row.get("skip_reason"))
         raw = _bound_raw(
             row.get("raw_file"),
             row.get("raw_sha256"),
@@ -2752,12 +2783,15 @@ def _fanout_manifest_probe(
         if not isinstance(candidate, dict) or candidate.get("provisional") is not True:
             continue
         source, route = candidate.get("source"), candidate.get("route")
+        code = candidate.get("skip_reason") or SkipReason.CREDITS_EXHAUSTED.value
         if (
             isinstance(source, str)
             and source in CREDIT_METERED_SOURCES
             and (route is None or route in _FALLBACK_ROUTES.get(source, ()))
+            and isinstance(code, str)
+            and code in _SKIP_VALUES
         ):
-            provisional.append({"source": source, "route": route})
+            provisional.append({"source": source, "route": route, "code": code})
         else:
             row["provisional_invalid"] = True
     row["provisional"] = provisional[: len(_SOURCE_NAMES)]

@@ -8,9 +8,11 @@ Firecrawl) that cannot run for a coded reason. The producer records it
 `skipped` with a `skip_reason` from `schemas/research-skip-reason.schema.json`
 (generated `SkipReason`; edit the schema and run `mise run codegen`):
 `credits-exhausted` (HTTP 402, a 429 with quota text, "Insufficient credits"),
-`quota` (other 429), `auth-failed` (401/403), `credential-missing` (no
-`EXA_API_KEY` in the process), `unavailable` (connection, DNS, timeout) and
-`sandbox-denied` (EPERM/EACCES). Each row keeps its evidence: the hashed
+`quota` (other 429, or a CLI exit naming 429 or a rate limit), `auth-failed`
+(401/403), `credential-missing` (no `EXA_API_KEY` in the process),
+`unavailable` (connection, DNS, TLS, timeout, missing `ctx7` or `firecrawl`
+CLI) and `sandbox-denied` (`PermissionError` only). A substituted row keeps
+its code. Each row keeps its evidence: the hashed
 transport envelope (HTTP status, rc, redacted body) or an error-class envelope
 (class name and errno only); `credential-missing` has only the fixed producer
 text. `strict_five_verdict` re-derives every code from that evidence, so a
@@ -39,15 +41,16 @@ provisional source and `via <route>` for each substituted source, and say
 answer is null. It allows an already continued Stop (`stop_hook_active`),
 including a provisional pass after an earlier INCOMPLETE block; that accepted
 limitation can leave a provisional answer unnamed.
-Codex hook scope: only a caller's exact first line `[research-scope: X]`
-(X is `local-only`, `implementation`, `text-edit` or `research`; a CRLF ending
-is accepted) decides the scope outright. Otherwise a research request is a
-verb pattern in unquoted caller text: research, investigate, look up or find
-out with an object; search the web or GitHub; what are or find the latest,
-newest or best; best practices; compare, evaluate or recommend beside an
-external topic. Closed fences, blockquotes and multi-word quoted spans are
-someone else's text; an unclosed fence strips nothing. Version, release and
-latest words alone give advisory context and never a receipt. Subagent turns
-(`agent_id`, `agent_type`) and Stops without a retained submission never block.
-The live hook uses `~/.codex/tools/dotfiles-research-gate`; these changes take
-effect there only after the coordinator's O1 gate pull.
+Codex hook scope (opt-in): only a caller's exact first line
+`[research-scope: research]` (a CRLF ending is accepted) binds a turn as
+research, and only such a turn's Stop can block. Quoted, indented, fenced or
+later-line directives bind nothing. Without it, research words add advisory
+context and never a receipt. `implementation` and `text-edit` name the scope in
+the turn record and never block; `local-only` keeps its caller binding. SDLC
+strict-five prompts start with the research line. Subagent turns (`agent_id`,
+`agent_type`) and Stops without a retained submission never block.
+Two live hooks run this code: `~/.codex/config.toml` runs the source observer
+from the stable checkout `~/dev/github/ray-manaloto/dotfiles`, and
+`~/.codex/hooks.json` runs `scripts/codex-research-gate.py` from the installed
+clone `~/.codex/tools/dotfiles-research-gate`. Changes take effect only after
+the coordinator updates both (O1 gate pull).
