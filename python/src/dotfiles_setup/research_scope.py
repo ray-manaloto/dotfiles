@@ -100,18 +100,31 @@ _LABELS = _vocab(
 )
 _LEAD_WORDS = _vocab("please kindly go now also next first then and so hey ok just")
 _LEAD_PHRASES = {
-    "can": ("you",),
-    "could": ("you",),
-    "would": ("you",),
-    "will": ("you",),
-    "let's": (),
-    "let": ("us",),
-    "i": ("need", "you", "to"),
+    "can": (("you",),),
+    "could": (("you",),),
+    "would": (("you",),),
+    "will": (("you",),),
+    "let's": ((),),
+    "let": (("us",),),
+    "i": (("need", "you", "to"), ("want", "you", "to")),
+    "i'd": (("like", "you", "to"),),
 }
+# A leading subordinate clause (`Before we decide, research X`) ends at its comma.
+_SUBORDINATE = _vocab(
+    "before after once when whenever if since while until unless because although"
+)
 # `research` + an auxiliary or copula (a closed class) is a subject or status.
 _AUX = _vocab(
     "is are was were be been am has have had does did will would shall should "
     "can could may might must done"
+)
+# Finite verbs that follow `research` as a subject (`Research uses the cache`,
+# CG-36 r2's CG-3). Closed and anchored at the word after `research`; a plural
+# noun object (`Research releases of uv`) is never on it.
+_SUBJECT_VERBS = _vocab(
+    "uses needs runs covers takes shows found finds requires says suggests "
+    "returns fails passes works depends gets lives belongs happens helps means "
+    "matters seems starts stops goes stays remains involves"
 )
 # The one closed list left: this repository's own research-* components. No
 # grammar tells `research gate tests fail` from `research uv releases`.
@@ -214,14 +227,29 @@ def _lead_end(words: list[str]) -> int:
     """Skip polite lead-ins such as `please`, `can you`, `I need you to`."""
     at = 0
     while at < len(words):
-        rest = _LEAD_PHRASES.get(words[at])
+        rest = next(
+            (
+                rest
+                for rest in _LEAD_PHRASES.get(words[at], ())
+                if tuple(words[at + 1 : at + 1 + len(rest)]) == rest
+            ),
+            None,
+        )
         if words[at] in _LEAD_WORDS:
             at += 1
-        elif rest is not None and tuple(words[at + 1 : at + 1 + len(rest)]) == rest:
+        elif rest is not None:
             at += 1 + len(rest)
         else:
             break
     return at
+
+
+def _do_research(v: list[str]) -> bool:
+    """`do [some|more|a bit of] [deep] research [on|into|about|for ...]`."""
+    rest = v[4:] if v[1:4] == ["a", "bit", "of"] else v[1:]
+    rest = rest[1:] if rest[0] in {"some", "more"} else rest
+    rest = rest[1:] if rest[0] == "deep" else rest
+    return rest[0] == "research" and rest[1] in {"on", "into", "about", "for", ""}
 
 
 def _research(v: list[str], raws: list[str], *, colon: bool) -> bool:
@@ -232,6 +260,7 @@ def _research(v: list[str], raws: list[str], *, colon: bool) -> bool:
         not v[2]  # `Research done.`, `Research notes`
         or raws[1].endswith(",")  # `Research done, now fix it.`
         or v[1] in _AUX
+        or v[1] in _SUBJECT_VERBS
         or v[1].endswith(("n't", "ed"))
         or (v[2] in _AUX and v[1] not in _WH)  # `Research notes are ...`
         or v[1] in _COMPONENTS
@@ -243,7 +272,11 @@ def _lookup(v: list[str], raws: list[str]) -> bool:
     if v[0] in {"find", "check"}:
         return v[1] == "the" and v[2] in _FRESH and _named(raws[3:])
     if v[:2] == ["look", "up"]:
-        return not _EXTERNAL.isdisjoint(v[2:]) or any("://" in raw for raw in raws)
+        return (
+            not _EXTERNAL.isdisjoint(v[2:])
+            or v[2:5] in (["what's", "new", "in"], ["what", "is", "new"])
+            or any("://" in raw for raw in raws)
+        )
     if v[0] == "compare":
         name = 2 if v[1] == "the" else 1
         return v[name + 1] == "and" and _named(raws[1:])
@@ -262,11 +295,11 @@ def _request(raws: list[str], *, colon: bool) -> bool:
     words = [_norm(raw) for raw in raws]
     start = _lead_end(words)
     raws, words = raws[start:], words[start:]
-    v = [*words, "", "", "", ""]
+    v = [*words, "", "", "", "", "", "", ""]
     if v[0] == "research":
         found = _research(v, raws, colon=colon)
     elif v[0] == "do":
-        found = "research" in {v[1], v[2] if v[1] in {"some", "more"} else ""}
+        found = _do_research(v)
     elif v[0] == "search":
         found = (v[2] if v[1] == "the" else v[1]) in _WEB
     else:
@@ -281,6 +314,9 @@ def _feed(body: str, pending: list[str]) -> bool:
         del words[0]
     for raw in words:
         pending.append(raw)
+        if raw.endswith(",") and _norm(pending[0]) in _SUBORDINATE:
+            pending.clear()  # `Before we decide,` is not the request
+            continue
         end = raw.rstrip(_EDGE)[-1:]
         if not end or end not in _ENDS:
             continue
@@ -316,7 +352,8 @@ def intent(prompt: str) -> bool:
     """Whether the caller's own prose asks the assistant to research something."""
     head = prompt[:_SCAN_LIMIT]
     if len(prompt) > _SCAN_LIMIT:
-        head = head.rpartition("\n")[0]
+        # Drop the partial last line, or the partial last word of one line.
+        head = head.rpartition("\n")[0] or head.rpartition(" ")[0]
     pending: list[str] = []
     fence = ""
     for line in head.split("\n"):

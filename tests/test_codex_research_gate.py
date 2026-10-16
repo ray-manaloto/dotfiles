@@ -2095,3 +2095,58 @@ def test_state_is_private_to_the_user(tmp_path: Path) -> None:
     assert marker.stat().st_mode & 0o777 == 0o600
     for directory in (marker.parent, marker.parent.parent, marker.parents[2]):
         assert directory.stat().st_mode & 0o777 == 0o700
+
+
+# --- cg36b round 4 (security r2 P3-A, P3-C) ---------------------------------
+
+
+def test_a_failed_lift_says_the_research_requirement_stays(tmp_path: Path) -> None:
+    """P3-A: an unwritable turn directory keeps the binding and says so."""
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    submit = {**base, "hook_event_name": "UserPromptSubmit"}
+    _invoke(tmp_path, {**submit, "prompt": "Research the latest uv releases."})
+    turn = tmp_path / _COVERAGE
+    turn.chmod(0o500)
+    try:
+        kept = _invoke(
+            tmp_path, {**submit, "prompt": "[research-scope: implementation]\nFix."}
+        )
+        stopped = _stop_once(tmp_path)
+    finally:
+        turn.chmod(0o700)
+    notice = str(kept["systemMessage"])
+    assert "stays in force for this turn" in notice
+    assert "`RESEARCH INCOMPLETE:`" in notice
+    assert "not bound" not in notice
+    assert json.loads((turn / "required.json").read_text())["binding"] == "intent"
+    assert stopped["decision"] == "block"
+
+
+def test_an_existing_state_root_is_made_private(tmp_path: Path) -> None:
+    """P3-C: a user-owned root created earlier at 0755 is tightened to 0700."""
+    root = tmp_path / "research-coverage"
+    root.mkdir()
+    root.chmod(0o755)
+    _turn(root, "Research the latest uv releases.", last_assistant_message="x")
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+def test_state_tightening_skips_other_owners_and_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P3-C: never chmod a directory another user owns or one behind a link."""
+    other = tmp_path / "other"
+    other.mkdir()
+    other.chmod(0o755)
+    real_uid = os.getuid()
+    with monkeypatch.context() as patched:
+        patched.setattr(codex_research_gate.os, "getuid", lambda: real_uid + 1)
+        _turn(other, "Research the latest uv releases.", last_assistant_message="x")
+    assert stat.S_IMODE(other.stat().st_mode) == 0o755
+    target = tmp_path / "target"
+    target.mkdir()
+    target.chmod(0o755)
+    link = tmp_path / "link"
+    link.symlink_to(target)
+    _turn(link, "Research the latest uv releases.", last_assistant_message="x")
+    assert stat.S_IMODE(target.stat().st_mode) == 0o755

@@ -61,7 +61,12 @@ ending in `:`, the rest of a line after a label (`Ticket:`, `CG-12:`, `TODO:`,
 carries `"binding": "intent"`; its context and Stop block tell the user to opt
 out on the next prompt, and a same-turn non-research directive lifts an intent
 binding by renaming a `"scope": "lifted"` record over it, so Stop and later
-submissions stay unbound (a directive binding stays).
+submissions stay unbound (a directive binding stays; a failed lift says the
+requirement stays in force). Known residuals: pasted bullets, speaker labels
+and unlabelled commit messages, a parenthesised commit subject, ops look-ups
+(`check the latest X`) and single-slash local paths such as `docs/agents`
+(read as `owner/repo`) can bind; each gets the opt-out line, and the turn
+ends with `RESEARCH INCOMPLETE:`.
 A mistyped first-line directive gets a notice naming the accepted forms and
 binds nothing; other research words get a hint that names the directive
 instead of a provider command. Only a valid research record blocks Stop; a

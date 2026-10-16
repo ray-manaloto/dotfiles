@@ -672,3 +672,85 @@ def test_a_slug_url_or_library_name_is_an_upstream_object(prompt: str) -> None:
 def test_a_rooted_deep_or_file_path_is_local(prompt: str) -> None:
     """Item 4: a rooted path, two slashes or a file name with an extension."""
     assert research_scope.intent(prompt) is False
+
+
+# --- cg36b round 4 (lead items 1-3) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research uses the cache.",
+        "Research uses the five-stage workflow; document that in the workflow page.",
+        "Research needs the strict-five receipt; add that to the docs page.",
+        "Research runs the five providers before the answer.",
+        "Research covers Exa and Context7 only.",
+        "Research takes too long; make the hook faster.",
+        "Research shows the cache is cold.",
+        "Research found two regressions.",
+        "Research should run before the pin.",
+        "Research depends on the fnox profile.",
+    ],
+)
+def test_research_as_the_subject_of_a_verb_is_not_a_request(prompt: str) -> None:
+    """Round 4 item 1 (cold P2-1, CG-36 r2's CG-3): subject + finite verb."""
+    assert research_scope.intent(prompt) is False
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Research uv's cache design.",
+        "Research releases of uv and summarize them.",
+        "Research alternatives to mise.",
+        "Research tools for SBOM generation.",
+    ],
+)
+def test_research_with_a_noun_object_stays_a_request(prompt: str) -> None:
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Before we decide, research what the best practice is for mise secrets.",
+        "Once that's done, look up the latest mise docs.",
+        "If you have time, research the newest uv release.",
+        "I'd like you to research the state of C++26 reflection in clang.",
+        "I want you to research the newest hk release.",
+        "Please do deep research on agent memory architectures.",
+        "Do a bit of research into the latest uv resolver.",
+        "Do some deep research about Exa pricing.",
+        "Do more research on Codex hooks.",
+        "Look up what's new in Python 3.15.",
+        "Look up what is new in uv 0.9.",
+    ],
+)
+def test_round_four_request_forms_bind(prompt: str) -> None:
+    """Round 4 item 2 (cold P2-2): the four in-spec forms that missed."""
+    assert research_scope.intent(prompt) is True
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "Before we research this, fix the parser.",
+        "Once research is done, fix the parser.",
+        "I'd like to research this later myself.",
+        "I want you to fix the parser.",
+        "Do deep research runs cost more?",
+        "We should do some research on uv later.",
+        "We could look up what's new in Python 3.15 later.",
+        "Look up what's new in docs/hooks.md.",
+    ],
+)
+def test_round_four_mentions_stay_unbound(prompt: str) -> None:
+    """The mention side of each round 4 form."""
+    assert research_scope.intent(prompt) is False
+
+
+def test_a_single_long_line_is_scanned_up_to_32_kib() -> None:
+    """Round 4 item 3 (cold P3-1): no newline in the head keeps the head."""
+    tail = "and more filler words " * 3_000
+    assert research_scope.intent(_BODY + " " + tail) is True
+    assert research_scope.intent("Fix the typo " + tail + _BODY) is False

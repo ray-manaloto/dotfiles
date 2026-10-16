@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 from pathlib import Path
@@ -91,6 +92,7 @@ def _write_record(
     marker.parents[3].mkdir(parents=True, exist_ok=True)
     for directory in (marker.parents[2], marker.parents[1], marker.parent):
         directory.mkdir(mode=0o700, exist_ok=True)
+        _tighten(directory)
     record = {
         "turn_id": event["turn_id"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
@@ -100,6 +102,24 @@ def _write_record(
         **({"binding": "intent"} if by_intent else {}),
     }
     _create(marker, record)
+
+
+def _tighten(directory: Path) -> None:
+    """Make an existing user-owned state directory 0700 (security r2 P3-C).
+
+    A link or another user's directory is left as it is: the descriptor is
+    opened without following a link and its owner is checked before fchmod.
+    """
+    try:
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError:
+        return
+    try:
+        info = os.fstat(fd)
+        if info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) & 0o077:
+            os.fchmod(fd, 0o700)
+    finally:
+        os.close(fd)
 
 
 def _create(path: Path, record: dict[str, object]) -> None:
@@ -115,7 +135,7 @@ def _lift(marker: Path, turn_id: str) -> None:
     Stop then reads a record that binds nothing and stays silent, whatever
     else the turn directory holds (cg36b round 3 item 5).
     """
-    staged = marker.with_name(f".{marker.name}.{os.getpid()}.lifted")
+    staged = marker.with_name(f".{marker.name}.{secrets.token_hex(8)}.lifted")
     _create(staged, {"turn_id": turn_id, "scope": "lifted"})
     try:
         staged.replace(marker)
@@ -151,6 +171,11 @@ _LIFTED = (
     "Research binding lifted: a same-turn `[research-scope: ...]` directive "
     "replaced the research intent; Stop does not enforce research."
 )
+_LIFT_FAILED = (
+    "Research binding not lifted (gate state unwritable: {error}): the research "
+    "requirement stays in force for this turn. Run the research or start the "
+    "final answer with `RESEARCH INCOMPLETE:`."
+)
 _LOCAL_ONLY = (
     "Caller authorized local-only research scope for this turn. Do not launch "
     "providers. Retain existing research evidence and report INCOMPLETE "
@@ -184,7 +209,10 @@ def _retained(
     if isinstance(record, dict):
         if record.get("binding") == "intent" and scope not in (None, "research"):
             # Decision 5: the in-turn opt-out lifts only an intent binding.
-            _lift(marker, str(event["turn_id"]))
+            try:
+                _lift(marker, str(event["turn_id"]))
+            except OSError as exc:  # security r2 P3-A: say the binding stays
+                return {"systemMessage": _LIFT_FAILED.format(error=type(exc).__name__)}
             return {**_unbound(prompt, scope), "systemMessage": _LIFTED}
         return _repeat_submission(record, prompt)
     if scope != "research":
