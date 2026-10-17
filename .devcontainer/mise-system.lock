@@ -78,9 +78,9 @@ checksum = "sha256:f3f635c8481bf704a270fb8974fb2df2360b9fc6471d78f3c25f4cf48b3be
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libclang-cpp22.1-22.1.8-default_h01b09c7_11.conda"
 checksum = "sha256:ae31071580766e5b46423b46095430015b9cf10347c26abfebd29787ccfb8bfa"
 
-[conda-packages.linux-arm64."libcurl-8.22.0-h86273da_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcurl-8.22.0-h86273da_0.conda"
-checksum = "sha256:8634a43ca7161d49b94098d8d27f32040ccf19b5227b37d05826ec8b5729b3c4"
+[conda-packages.linux-arm64."libcurl-8.23.0-h86273da_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcurl-8.23.0-h86273da_0.conda"
+checksum = "sha256:4a9bc4ef7f6ddaef61a900d360214fb285c6aa474a3d7e1c5e4e42b4b2e36697"
 
 [conda-packages.linux-arm64."libedit-3.1.20260512-pl5321hc48eb74_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libedit-3.1.20260512-pl5321hc48eb74_0.conda"
@@ -174,9 +174,9 @@ checksum = "sha256:f8dd1d313c4e4e313f3ae6cc3f97061fbafd28c10787a5f336958cf2fbbb8
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsanitizer-16.2.0-h73cac2c_7.conda"
 checksum = "sha256:915f80d14bd9daf2357a5261443fd06e222f829aeef56fb6865ec7fcb1de9bdf"
 
-[conda-packages.linux-arm64."libsqlite-3.54.0-hd26f1b6_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.54.0-hd26f1b6_101.conda"
-checksum = "sha256:eefc18263358d4f260a1b62339972a45d943d8ccd6f3d2633f47128c0fab9ba7"
+[conda-packages.linux-arm64."libsqlite-3.54.1-hd26f1b6_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.54.1-hd26f1b6_100.conda"
+checksum = "sha256:1745e55f4c575bce5be22d3837b26d93bcf3b426dc9e3d1b230b09f036ba17b1"
 
 [conda-packages.linux-arm64."libssh2-1.11.1-h7572e3e_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libssh2-1.11.1-h7572e3e_1.conda"
@@ -414,9 +414,9 @@ checksum = "sha256:f3f635c8481bf704a270fb8974fb2df2360b9fc6471d78f3c25f4cf48b3be
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libclang-cpp22.1-22.1.8-default_h01b09c7_11.conda"
 checksum = "sha256:ae31071580766e5b46423b46095430015b9cf10347c26abfebd29787ccfb8bfa"
 
-[conda-packages.linux-arm64-musl."libcurl-8.22.0-h86273da_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcurl-8.22.0-h86273da_0.conda"
-checksum = "sha256:8634a43ca7161d49b94098d8d27f32040ccf19b5227b37d05826ec8b5729b3c4"
+[conda-packages.linux-arm64-musl."libcurl-8.23.0-h86273da_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libcurl-8.23.0-h86273da_0.conda"
+checksum = "sha256:4a9bc4ef7f6ddaef61a900d360214fb285c6aa474a3d7e1c5e4e42b4b2e36697"
 
 [conda-packages.linux-arm64-musl."libedit-3.1.20260512-pl5321hc48eb74_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libedit-3.1.20260512-pl5321hc48eb74_0.conda"
@@ -510,9 +510,9 @@ checksum = "sha256:f8dd1d313c4e4e313f3ae6cc3f97061fbafd28c10787a5f336958cf2fbbb8
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsanitizer-16.2.0-h73cac2c_7.conda"
 checksum = "sha256:915f80d14bd9daf2357a5261443fd06e222f829aeef56fb6865ec7fcb1de9bdf"
 
-[conda-packages.linux-arm64-musl."libsqlite-3.54.0-hd26f1b6_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.54.0-hd26f1b6_101.conda"
-checksum = "sha256:eefc18263358d4f260a1b62339972a45d943d8ccd6f3d2633f47128c0fab9ba7"
+[conda-packages.linux-arm64-musl."libsqlite-3.54.1-hd26f1b6_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libsqlite-3.54.1-hd26f1b6_100.conda"
+checksum = "sha256:1745e55f4c575bce5be22d3837b26d93bcf3b426dc9e3d1b230b09f036ba17b1"
 
 [conda-packages.linux-arm64-musl."libssh2-1.11.1-h7572e3e_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/libssh2-1.11.1-h7572e3e_1.conda"
@@ -750,9 +750,9 @@ checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_11.conda"
 checksum = "sha256:e7a3df524a2900677c460e8cd1407db8aabadc3d19e6a713a58a4f29b1d4bef7"
 
-[conda-packages.linux-x64."libcurl-8.22.0-ha042cf0_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.22.0-ha042cf0_0.conda"
-checksum = "sha256:483b7eb97f56fbb3a9cb7190d33012dfa0a5aaed99ede61465563cd97dd82504"
+[conda-packages.linux-x64."libcurl-8.23.0-ha042cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.23.0-ha042cf0_0.conda"
+checksum = "sha256:d2db14d80efb4f2e76e76561c633f1767f7543987f2bcb54a067a9d264d432ab"
 
 [conda-packages.linux-x64."libedit-3.1.20260512-pl5321h373387f_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20260512-pl5321h373387f_0.conda"
@@ -846,9 +846,9 @@ checksum = "sha256:ebbad0e52b2b009a54a0f49c0a6871ea2b4ae7792c04f63f0f882e99b0975
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-16.2.0-h3048135_7.conda"
 checksum = "sha256:e383569c331239308a8663facb76208fc0e141131ff3d17c1c2e50f34716a5a9"
 
-[conda-packages.linux-x64."libsqlite-3.54.0-h0737f62_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.0-h0737f62_101.conda"
-checksum = "sha256:b4d5d4428bd1931eede11d2d69389c5b9d396a7f3c8df9d7c39c9efd80761eb3"
+[conda-packages.linux-x64."libsqlite-3.54.1-h0737f62_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.1-h0737f62_100.conda"
+checksum = "sha256:107ba2f9134b45a6fdaf8d2485f432e3a643fdfaf711a325d0c9139b580b3523"
 
 [conda-packages.linux-x64."libssh2-1.11.1-h6154650_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-h6154650_1.conda"
@@ -1094,9 +1094,9 @@ checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_11.conda"
 checksum = "sha256:e7a3df524a2900677c460e8cd1407db8aabadc3d19e6a713a58a4f29b1d4bef7"
 
-[conda-packages.linux-x64-baseline."libcurl-8.22.0-ha042cf0_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.22.0-ha042cf0_0.conda"
-checksum = "sha256:483b7eb97f56fbb3a9cb7190d33012dfa0a5aaed99ede61465563cd97dd82504"
+[conda-packages.linux-x64-baseline."libcurl-8.23.0-ha042cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.23.0-ha042cf0_0.conda"
+checksum = "sha256:d2db14d80efb4f2e76e76561c633f1767f7543987f2bcb54a067a9d264d432ab"
 
 [conda-packages.linux-x64-baseline."libedit-3.1.20260512-pl5321h373387f_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20260512-pl5321h373387f_0.conda"
@@ -1190,9 +1190,9 @@ checksum = "sha256:ebbad0e52b2b009a54a0f49c0a6871ea2b4ae7792c04f63f0f882e99b0975
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-16.2.0-h3048135_7.conda"
 checksum = "sha256:e383569c331239308a8663facb76208fc0e141131ff3d17c1c2e50f34716a5a9"
 
-[conda-packages.linux-x64-baseline."libsqlite-3.54.0-h0737f62_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.0-h0737f62_101.conda"
-checksum = "sha256:b4d5d4428bd1931eede11d2d69389c5b9d396a7f3c8df9d7c39c9efd80761eb3"
+[conda-packages.linux-x64-baseline."libsqlite-3.54.1-h0737f62_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.1-h0737f62_100.conda"
+checksum = "sha256:107ba2f9134b45a6fdaf8d2485f432e3a643fdfaf711a325d0c9139b580b3523"
 
 [conda-packages.linux-x64-baseline."libssh2-1.11.1-h6154650_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-h6154650_1.conda"
@@ -1438,9 +1438,9 @@ checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_11.conda"
 checksum = "sha256:e7a3df524a2900677c460e8cd1407db8aabadc3d19e6a713a58a4f29b1d4bef7"
 
-[conda-packages.linux-x64-musl."libcurl-8.22.0-ha042cf0_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.22.0-ha042cf0_0.conda"
-checksum = "sha256:483b7eb97f56fbb3a9cb7190d33012dfa0a5aaed99ede61465563cd97dd82504"
+[conda-packages.linux-x64-musl."libcurl-8.23.0-ha042cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.23.0-ha042cf0_0.conda"
+checksum = "sha256:d2db14d80efb4f2e76e76561c633f1767f7543987f2bcb54a067a9d264d432ab"
 
 [conda-packages.linux-x64-musl."libedit-3.1.20260512-pl5321h373387f_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20260512-pl5321h373387f_0.conda"
@@ -1534,9 +1534,9 @@ checksum = "sha256:ebbad0e52b2b009a54a0f49c0a6871ea2b4ae7792c04f63f0f882e99b0975
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-16.2.0-h3048135_7.conda"
 checksum = "sha256:e383569c331239308a8663facb76208fc0e141131ff3d17c1c2e50f34716a5a9"
 
-[conda-packages.linux-x64-musl."libsqlite-3.54.0-h0737f62_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.0-h0737f62_101.conda"
-checksum = "sha256:b4d5d4428bd1931eede11d2d69389c5b9d396a7f3c8df9d7c39c9efd80761eb3"
+[conda-packages.linux-x64-musl."libsqlite-3.54.1-h0737f62_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.1-h0737f62_100.conda"
+checksum = "sha256:107ba2f9134b45a6fdaf8d2485f432e3a643fdfaf711a325d0c9139b580b3523"
 
 [conda-packages.linux-x64-musl."libssh2-1.11.1-h6154650_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-h6154650_1.conda"
@@ -1782,9 +1782,9 @@ checksum = "sha256:8ddad10d51fd327bff25cd74030f47b86d1c884c0e06fa02b0be914c225c4
 url = "https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp22.1-22.1.8-default_h0acdd01_11.conda"
 checksum = "sha256:e7a3df524a2900677c460e8cd1407db8aabadc3d19e6a713a58a4f29b1d4bef7"
 
-[conda-packages.linux-x64-musl-baseline."libcurl-8.22.0-ha042cf0_0"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.22.0-ha042cf0_0.conda"
-checksum = "sha256:483b7eb97f56fbb3a9cb7190d33012dfa0a5aaed99ede61465563cd97dd82504"
+[conda-packages.linux-x64-musl-baseline."libcurl-8.23.0-ha042cf0_0"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libcurl-8.23.0-ha042cf0_0.conda"
+checksum = "sha256:d2db14d80efb4f2e76e76561c633f1767f7543987f2bcb54a067a9d264d432ab"
 
 [conda-packages.linux-x64-musl-baseline."libedit-3.1.20260512-pl5321h373387f_0"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libedit-3.1.20260512-pl5321h373387f_0.conda"
@@ -1878,9 +1878,9 @@ checksum = "sha256:ebbad0e52b2b009a54a0f49c0a6871ea2b4ae7792c04f63f0f882e99b0975
 url = "https://conda.anaconda.org/conda-forge/linux-64/libsanitizer-16.2.0-h3048135_7.conda"
 checksum = "sha256:e383569c331239308a8663facb76208fc0e141131ff3d17c1c2e50f34716a5a9"
 
-[conda-packages.linux-x64-musl-baseline."libsqlite-3.54.0-h0737f62_101"]
-url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.0-h0737f62_101.conda"
-checksum = "sha256:b4d5d4428bd1931eede11d2d69389c5b9d396a7f3c8df9d7c39c9efd80761eb3"
+[conda-packages.linux-x64-musl-baseline."libsqlite-3.54.1-h0737f62_100"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/libsqlite-3.54.1-h0737f62_100.conda"
+checksum = "sha256:107ba2f9134b45a6fdaf8d2485f432e3a643fdfaf711a325d0c9139b580b3523"
 
 [conda-packages.linux-x64-musl-baseline."libssh2-1.11.1-h6154650_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/libssh2-1.11.1-h6154650_1.conda"
@@ -2238,7 +2238,7 @@ url = "https://github.com/twpayne/chezmoi/releases/download/v2.72.2/chezmoi_2.72
 url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/561706442"
 
 [[tools."conda:bear"]]
-version = "4.2.2"
+version = "4.2.3"
 backend = "conda:bear"
 specifiers = ["latest"]
 
@@ -2246,33 +2246,33 @@ specifiers = ["latest"]
 channel = "conda-forge"
 
 [tools."conda:bear"."platforms.linux-arm64"]
-checksum = "sha256:61add779a34db1255b1163bfad20dda7d9d9dbd107d6bef6c771dd1ab55ba4ac"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/bear-4.2.2-h4431f17_0.conda"
+checksum = "sha256:0869e55c2da5c787b2d66eaf67b26a1398fed272cb372575ee7db4e751e4750f"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/bear-4.2.3-h4431f17_0.conda"
 conda_deps = []
 
 [tools."conda:bear"."platforms.linux-arm64-musl"]
-checksum = "sha256:61add779a34db1255b1163bfad20dda7d9d9dbd107d6bef6c771dd1ab55ba4ac"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/bear-4.2.2-h4431f17_0.conda"
+checksum = "sha256:0869e55c2da5c787b2d66eaf67b26a1398fed272cb372575ee7db4e751e4750f"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/bear-4.2.3-h4431f17_0.conda"
 conda_deps = []
 
 [tools."conda:bear"."platforms.linux-x64"]
-checksum = "sha256:321b8c8fa4336cc82f9e857d9c2bb5e1421c4df5c3b946a3d211aaec6fafeb63"
-url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.2-h620f800_0.conda"
+checksum = "sha256:06dab849035a04c3de065b561dca2e11d6f9121cee45c94c82548c698abcc26f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.3-h620f800_0.conda"
 conda_deps = []
 
 [tools."conda:bear"."platforms.linux-x64-baseline"]
-checksum = "sha256:321b8c8fa4336cc82f9e857d9c2bb5e1421c4df5c3b946a3d211aaec6fafeb63"
-url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.2-h620f800_0.conda"
+checksum = "sha256:06dab849035a04c3de065b561dca2e11d6f9121cee45c94c82548c698abcc26f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.3-h620f800_0.conda"
 conda_deps = []
 
 [tools."conda:bear"."platforms.linux-x64-musl"]
-checksum = "sha256:321b8c8fa4336cc82f9e857d9c2bb5e1421c4df5c3b946a3d211aaec6fafeb63"
-url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.2-h620f800_0.conda"
+checksum = "sha256:06dab849035a04c3de065b561dca2e11d6f9121cee45c94c82548c698abcc26f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.3-h620f800_0.conda"
 conda_deps = []
 
 [tools."conda:bear"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:321b8c8fa4336cc82f9e857d9c2bb5e1421c4df5c3b946a3d211aaec6fafeb63"
-url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.2-h620f800_0.conda"
+checksum = "sha256:06dab849035a04c3de065b561dca2e11d6f9121cee45c94c82548c698abcc26f"
+url = "https://conda.anaconda.org/conda-forge/linux-64/bear-4.2.3-h620f800_0.conda"
 conda_deps = []
 
 [[tools."conda:ccache"]]
@@ -2380,11 +2380,11 @@ checksum = "sha256:dc8ff0ee118f93a820a2c677a548c4d35ba675c91a6f9917fd29116efe928
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.4-hcbeb305_0.conda"
 conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
-    "libcurl-8.22.0-h86273da_0",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
     "rhash-1.4.6-he30d5cf_2",
     "libzlib-1.3.2-hdc9db2a_3",
+    "libcurl-8.23.0-h86273da_0",
     "libuv-1.52.1-h80f16a2_1",
     "ncurses-6.6-h2b6f883_1",
     "liblzma-5.8.3-he30d5cf_1",
@@ -2410,11 +2410,11 @@ checksum = "sha256:dc8ff0ee118f93a820a2c677a548c4d35ba675c91a6f9917fd29116efe928
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/cmake-4.4.4-hcbeb305_0.conda"
 conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
-    "libcurl-8.22.0-h86273da_0",
     "libgcc-16.2.0-h205dda4_7",
     "libstdcxx-16.2.0-hef695bb_7",
     "rhash-1.4.6-he30d5cf_2",
     "libzlib-1.3.2-hdc9db2a_3",
+    "libcurl-8.23.0-h86273da_0",
     "libuv-1.52.1-h80f16a2_1",
     "ncurses-6.6-h2b6f883_1",
     "liblzma-5.8.3-he30d5cf_1",
@@ -2439,9 +2439,9 @@ conda_deps = [
 checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
-    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.5-hd2095e1_0",
     "ncurses-6.6-hdb14827_1",
+    "libcurl-8.23.0-ha042cf0_0",
     "rhash-1.4.6-hb03c661_2",
     "liblzma-5.8.3-hb03c661_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -2469,9 +2469,9 @@ conda_deps = [
 checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
-    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.5-hd2095e1_0",
     "ncurses-6.6-hdb14827_1",
+    "libcurl-8.23.0-ha042cf0_0",
     "rhash-1.4.6-hb03c661_2",
     "liblzma-5.8.3-hb03c661_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -2499,9 +2499,9 @@ conda_deps = [
 checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
-    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.5-hd2095e1_0",
     "ncurses-6.6-hdb14827_1",
+    "libcurl-8.23.0-ha042cf0_0",
     "rhash-1.4.6-hb03c661_2",
     "liblzma-5.8.3-hb03c661_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -2529,9 +2529,9 @@ conda_deps = [
 checksum = "sha256:1c04749bc4a45d5712ba81d7bf38204f6f3a53803b8c223571e7a0a1e1dbbebf"
 url = "https://conda.anaconda.org/conda-forge/linux-64/cmake-4.4.4-hff7ac6b_0.conda"
 conda_deps = [
-    "libcurl-8.22.0-ha042cf0_0",
     "libexpat-2.8.5-hd2095e1_0",
     "ncurses-6.6-hdb14827_1",
+    "libcurl-8.23.0-ha042cf0_0",
     "rhash-1.4.6-hb03c661_2",
     "liblzma-5.8.3-hb03c661_1",
     "libzlib-1.3.2-h25fd6f3_3",
@@ -2586,7 +2586,7 @@ conda_deps = [
     "libzlib-1.3.2-hdc9db2a_3",
     "ncurses-6.6-h2b6f883_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -2619,7 +2619,7 @@ conda_deps = [
     "libzlib-1.3.2-hdc9db2a_3",
     "ncurses-6.6-h2b6f883_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -2652,7 +2652,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -2685,7 +2685,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -2718,7 +2718,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -2751,7 +2751,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -2875,7 +2875,7 @@ conda_deps = [
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_103",
     "libffi-3.7.0-hdaad0be_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -2914,7 +2914,7 @@ conda_deps = [
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_103",
     "libffi-3.7.0-hdaad0be_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -2953,7 +2953,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -2992,7 +2992,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3031,7 +3031,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3070,7 +3070,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3090,7 +3090,7 @@ checksum = "sha256:8e788908bd8d4ced19d53a498868f471c6f2a33b1b34b3b467eaf081082c3
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.56.0-pl5440h0749d22_0.conda"
 conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
-    "libcurl-8.22.0-h86273da_0",
+    "libcurl-8.23.0-h86273da_0",
     "libzlib-1.3.2-hdc9db2a_3",
     "pcre2-10.47-he574923_1",
     "libgcc-16.2.0-h205dda4_7",
@@ -3121,7 +3121,7 @@ checksum = "sha256:8e788908bd8d4ced19d53a498868f471c6f2a33b1b34b3b467eaf081082c3
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/git-2.56.0-pl5440h0749d22_0.conda"
 conda_deps = [
     "libexpat-2.8.5-h4154aff_0",
-    "libcurl-8.22.0-h86273da_0",
+    "libcurl-8.23.0-h86273da_0",
     "libzlib-1.3.2-hdc9db2a_3",
     "pcre2-10.47-he574923_1",
     "libgcc-16.2.0-h205dda4_7",
@@ -3152,7 +3152,7 @@ checksum = "sha256:d5654608f2bed18580fa05e22d80093fc746cc70dea1d6a208e7a9f65b188
 url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.56.0-pl5440h3795e67_0.conda"
 conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
+    "libcurl-8.23.0-ha042cf0_0",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -3183,7 +3183,7 @@ checksum = "sha256:d5654608f2bed18580fa05e22d80093fc746cc70dea1d6a208e7a9f65b188
 url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.56.0-pl5440h3795e67_0.conda"
 conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
+    "libcurl-8.23.0-ha042cf0_0",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -3214,7 +3214,7 @@ checksum = "sha256:d5654608f2bed18580fa05e22d80093fc746cc70dea1d6a208e7a9f65b188
 url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.56.0-pl5440h3795e67_0.conda"
 conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
+    "libcurl-8.23.0-ha042cf0_0",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -3245,7 +3245,7 @@ checksum = "sha256:d5654608f2bed18580fa05e22d80093fc746cc70dea1d6a208e7a9f65b188
 url = "https://conda.anaconda.org/conda-forge/linux-64/git-2.56.0-pl5440h3795e67_0.conda"
 conda_deps = [
     "libexpat-2.8.5-hd2095e1_0",
-    "libcurl-8.22.0-ha042cf0_0",
+    "libcurl-8.23.0-ha042cf0_0",
     "libzlib-1.3.2-h25fd6f3_3",
     "pcre2-10.47-h8b3dc9c_1",
     "libgcc-16.2.0-ha9f2e26_7",
@@ -3573,7 +3573,7 @@ conda_deps = [
     "ncurses-6.6-h2b6f883_1",
     "python_abi-3.15-9_cp315",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -3605,7 +3605,7 @@ conda_deps = [
     "ncurses-6.6-h2b6f883_1",
     "python_abi-3.15-9_cp315",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -3637,7 +3637,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3669,7 +3669,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3701,7 +3701,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3733,7 +3733,7 @@ conda_deps = [
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3744,7 +3744,7 @@ conda_deps = [
 ]
 
 [[tools."conda:linux-perf"]]
-version = "7.2.10"
+version = "7.2.11"
 backend = "conda:linux-perf"
 specifiers = ["latest"]
 
@@ -3752,11 +3752,11 @@ specifiers = ["latest"]
 channel = "conda-forge"
 
 [tools."conda:linux-perf"."platforms.linux-arm64"]
-checksum = "sha256:5fbbd977f49fbd7850532c9a0ef154d9bd76977ee1fb3c57c17aeadb19763328"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.10-py315hd3922c5_0.conda"
+checksum = "sha256:19acaa3b42b81853cc5dd9020ad06f69cfbe94adb7d013f9b59c128a103884c9"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.11-py315hde49e25_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h80f16a2_0",
     "slang-2.3.3-h1c92901_0",
+    "libtraceevent-1.9.0-h80f16a2_0",
     "elfutils-0.196-h424db8c_0",
     "pcre-8.45-h01db608_0",
     "python-3.15.0-h0c7c799_101_cp315",
@@ -3765,21 +3765,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321hc48eb74_0",
     "libpython-3.15.0-hc71fabe_101_cp315",
     "libnuma-2.0.18-he30d5cf_4",
-    "liblzma-5.8.3-he30d5cf_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "python_abi-3.15-9_cp315",
-    "libcapstone-5.0.9-h5bc82ec_2",
     "libgcc-16.2.0-h205dda4_7",
     "libgcc-ng-16.2.0-he9431aa_7",
     "libstdcxx-16.2.0-hef695bb_7",
     "libstdcxx-ng-16.2.0-hdbbeba8_7",
+    "python_abi-3.15-9_cp315",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "libcapstone-5.0.9-h5bc82ec_2",
+    "liblzma-5.8.3-he30d5cf_1",
     "zstd-1.5.7-h9d15635_7",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_103",
     "libffi-3.7.0-hdaad0be_1",
     "ncurses-6.6-h2b6f883_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -3798,11 +3798,11 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-arm64-musl"]
-checksum = "sha256:5fbbd977f49fbd7850532c9a0ef154d9bd76977ee1fb3c57c17aeadb19763328"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.10-py315hd3922c5_0.conda"
+checksum = "sha256:19acaa3b42b81853cc5dd9020ad06f69cfbe94adb7d013f9b59c128a103884c9"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/linux-perf-7.2.11-py315hde49e25_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h80f16a2_0",
     "slang-2.3.3-h1c92901_0",
+    "libtraceevent-1.9.0-h80f16a2_0",
     "elfutils-0.196-h424db8c_0",
     "pcre-8.45-h01db608_0",
     "python-3.15.0-h0c7c799_101_cp315",
@@ -3811,21 +3811,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321hc48eb74_0",
     "libpython-3.15.0-hc71fabe_101_cp315",
     "libnuma-2.0.18-he30d5cf_4",
-    "liblzma-5.8.3-he30d5cf_1",
-    "libzlib-1.3.2-hdc9db2a_3",
-    "python_abi-3.15-9_cp315",
-    "libcapstone-5.0.9-h5bc82ec_2",
     "libgcc-16.2.0-h205dda4_7",
     "libgcc-ng-16.2.0-he9431aa_7",
     "libstdcxx-16.2.0-hef695bb_7",
     "libstdcxx-ng-16.2.0-hdbbeba8_7",
+    "python_abi-3.15-9_cp315",
+    "libzlib-1.3.2-hdc9db2a_3",
+    "libcapstone-5.0.9-h5bc82ec_2",
+    "liblzma-5.8.3-he30d5cf_1",
     "zstd-1.5.7-h9d15635_7",
     "bzip2-1.0.8-h4777abc_10",
     "ld_impl_linux-aarch64-2.46.1-default_h1979696_103",
     "libffi-3.7.0-hdaad0be_1",
     "ncurses-6.6-h2b6f883_1",
     "libmpdec-4.0.0-he30d5cf_2",
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "openssl-3.6.5-he6ad1d5_0",
     "tk-8.6.13-noxft_hf03c496_4",
     "tzdata-2026c-h151e31d_0",
@@ -3844,12 +3844,12 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64"]
-checksum = "sha256:7fa781f39f213df1c5022a715478c489cac6b730ffa748a3b1c4c4d259f4028c"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.10-py315h240b03c_0.conda"
+checksum = "sha256:c0fd8384c9cefa98817662b85ee02aa9e0c037ce2245c5d7dade41b8e8e6878c"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.11-py315h2ddcdbd_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "elfutils-0.196-h03e2bf6_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.15.0-h6e52b48_101_cp315",
     "libuuid-2.42.4-hcfc3c73_0",
@@ -3857,21 +3857,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321h373387f_0",
     "libpython-3.15.0-hdc7f604_101_cp315",
     "libnuma-2.0.18-hb03c661_4",
-    "libgcc-16.2.0-ha9f2e26_7",
-    "libgcc-ng-16.2.0-h69a702a_7",
     "libstdcxx-16.2.0-h934c35e_7",
+    "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-ng-16.2.0-hdf11a46_7",
+    "libgcc-ng-16.2.0-h69a702a_7",
     "libzlib-1.3.2-h25fd6f3_3",
-    "liblzma-5.8.3-hb03c661_1",
     "libcapstone-5.0.9-h7cc23a3_2",
     "python_abi-3.15-9_cp315",
+    "liblzma-5.8.3-hb03c661_1",
     "zstd-1.5.7-hb78ec9c_7",
     "libffi-3.7.0-h81df57d_1",
     "ncurses-6.6-hdb14827_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3890,12 +3890,12 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-baseline"]
-checksum = "sha256:7fa781f39f213df1c5022a715478c489cac6b730ffa748a3b1c4c4d259f4028c"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.10-py315h240b03c_0.conda"
+checksum = "sha256:c0fd8384c9cefa98817662b85ee02aa9e0c037ce2245c5d7dade41b8e8e6878c"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.11-py315h2ddcdbd_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "elfutils-0.196-h03e2bf6_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.15.0-h6e52b48_101_cp315",
     "libuuid-2.42.4-hcfc3c73_0",
@@ -3903,21 +3903,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321h373387f_0",
     "libpython-3.15.0-hdc7f604_101_cp315",
     "libnuma-2.0.18-hb03c661_4",
-    "libgcc-16.2.0-ha9f2e26_7",
-    "libgcc-ng-16.2.0-h69a702a_7",
     "libstdcxx-16.2.0-h934c35e_7",
+    "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-ng-16.2.0-hdf11a46_7",
+    "libgcc-ng-16.2.0-h69a702a_7",
     "libzlib-1.3.2-h25fd6f3_3",
-    "liblzma-5.8.3-hb03c661_1",
     "libcapstone-5.0.9-h7cc23a3_2",
     "python_abi-3.15-9_cp315",
+    "liblzma-5.8.3-hb03c661_1",
     "zstd-1.5.7-hb78ec9c_7",
     "libffi-3.7.0-h81df57d_1",
     "ncurses-6.6-hdb14827_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3936,12 +3936,12 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-musl"]
-checksum = "sha256:7fa781f39f213df1c5022a715478c489cac6b730ffa748a3b1c4c4d259f4028c"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.10-py315h240b03c_0.conda"
+checksum = "sha256:c0fd8384c9cefa98817662b85ee02aa9e0c037ce2245c5d7dade41b8e8e6878c"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.11-py315h2ddcdbd_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "elfutils-0.196-h03e2bf6_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.15.0-h6e52b48_101_cp315",
     "libuuid-2.42.4-hcfc3c73_0",
@@ -3949,21 +3949,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321h373387f_0",
     "libpython-3.15.0-hdc7f604_101_cp315",
     "libnuma-2.0.18-hb03c661_4",
-    "libgcc-16.2.0-ha9f2e26_7",
-    "libgcc-ng-16.2.0-h69a702a_7",
     "libstdcxx-16.2.0-h934c35e_7",
+    "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-ng-16.2.0-hdf11a46_7",
+    "libgcc-ng-16.2.0-h69a702a_7",
     "libzlib-1.3.2-h25fd6f3_3",
-    "liblzma-5.8.3-hb03c661_1",
     "libcapstone-5.0.9-h7cc23a3_2",
     "python_abi-3.15-9_cp315",
+    "liblzma-5.8.3-hb03c661_1",
     "zstd-1.5.7-hb78ec9c_7",
     "libffi-3.7.0-h81df57d_1",
     "ncurses-6.6-hdb14827_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -3982,12 +3982,12 @@ conda_deps = [
 ]
 
 [tools."conda:linux-perf"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:7fa781f39f213df1c5022a715478c489cac6b730ffa748a3b1c4c4d259f4028c"
-url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.10-py315h240b03c_0.conda"
+checksum = "sha256:c0fd8384c9cefa98817662b85ee02aa9e0c037ce2245c5d7dade41b8e8e6878c"
+url = "https://conda.anaconda.org/conda-forge/linux-64/linux-perf-7.2.11-py315h2ddcdbd_0.conda"
 conda_deps = [
-    "libtraceevent-1.9.0-h280c20c_0",
     "slang-2.3.3-hac012bb_0",
     "elfutils-0.196-h03e2bf6_0",
+    "libtraceevent-1.9.0-h280c20c_0",
     "pcre-8.45-h9c3ff4c_0",
     "python-3.15.0-h6e52b48_101_cp315",
     "libuuid-2.42.4-hcfc3c73_0",
@@ -3995,21 +3995,21 @@ conda_deps = [
     "libedit-3.1.20260512-pl5321h373387f_0",
     "libpython-3.15.0-hdc7f604_101_cp315",
     "libnuma-2.0.18-hb03c661_4",
-    "libgcc-16.2.0-ha9f2e26_7",
-    "libgcc-ng-16.2.0-h69a702a_7",
     "libstdcxx-16.2.0-h934c35e_7",
+    "libgcc-16.2.0-ha9f2e26_7",
     "libstdcxx-ng-16.2.0-hdf11a46_7",
+    "libgcc-ng-16.2.0-h69a702a_7",
     "libzlib-1.3.2-h25fd6f3_3",
-    "liblzma-5.8.3-hb03c661_1",
     "libcapstone-5.0.9-h7cc23a3_2",
     "python_abi-3.15-9_cp315",
+    "liblzma-5.8.3-hb03c661_1",
     "zstd-1.5.7-hb78ec9c_7",
     "libffi-3.7.0-h81df57d_1",
     "ncurses-6.6-hdb14827_1",
     "bzip2-1.0.8-hda65f42_10",
     "ld_impl_linux-64-2.46.1-default_hbd61a6d_103",
     "libmpdec-4.0.0-hb03c661_2",
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "openssl-3.6.5-h781a0a9_0",
     "tk-8.6.13-noxft_h1df4ec4_4",
     "tzdata-2026c-h151e31d_0",
@@ -4036,8 +4036,8 @@ specifiers = ["latest"]
 channel = "conda-forge"
 
 [tools."conda:make"."platforms.linux-arm64"]
-checksum = "sha256:b008fb8ba5c93478dacf36d60eed1b2de341d69773c3f73621d2a9e56f834d9d"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/make-4.4.1-he30d5cf_3.conda"
+checksum = "sha256:d2accef9d131077ad74894e05e533038e843739bd8bc3cb97a209d9f49bd176c"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/make-4.4.1-hfbd14cd_4.conda"
 conda_deps = [
     "libgcc-16.2.0-h205dda4_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4045,8 +4045,8 @@ conda_deps = [
 ]
 
 [tools."conda:make"."platforms.linux-arm64-musl"]
-checksum = "sha256:b008fb8ba5c93478dacf36d60eed1b2de341d69773c3f73621d2a9e56f834d9d"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/make-4.4.1-he30d5cf_3.conda"
+checksum = "sha256:d2accef9d131077ad74894e05e533038e843739bd8bc3cb97a209d9f49bd176c"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/make-4.4.1-hfbd14cd_4.conda"
 conda_deps = [
     "libgcc-16.2.0-h205dda4_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4054,8 +4054,8 @@ conda_deps = [
 ]
 
 [tools."conda:make"."platforms.linux-x64"]
-checksum = "sha256:4c65d2769847778a6d84db6984ac81bcec6f8958d349f1fe57ae040ccc56a801"
-url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb03c661_3.conda"
+checksum = "sha256:d6a81e5c142d7be6a992f618097351e7996f81a6295045df3f9b4f498e1066a8"
+url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-h1114479_4.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4063,8 +4063,8 @@ conda_deps = [
 ]
 
 [tools."conda:make"."platforms.linux-x64-baseline"]
-checksum = "sha256:4c65d2769847778a6d84db6984ac81bcec6f8958d349f1fe57ae040ccc56a801"
-url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb03c661_3.conda"
+checksum = "sha256:d6a81e5c142d7be6a992f618097351e7996f81a6295045df3f9b4f498e1066a8"
+url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-h1114479_4.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4072,8 +4072,8 @@ conda_deps = [
 ]
 
 [tools."conda:make"."platforms.linux-x64-musl"]
-checksum = "sha256:4c65d2769847778a6d84db6984ac81bcec6f8958d349f1fe57ae040ccc56a801"
-url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb03c661_3.conda"
+checksum = "sha256:d6a81e5c142d7be6a992f618097351e7996f81a6295045df3f9b4f498e1066a8"
+url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-h1114479_4.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4081,8 +4081,8 @@ conda_deps = [
 ]
 
 [tools."conda:make"."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:4c65d2769847778a6d84db6984ac81bcec6f8958d349f1fe57ae040ccc56a801"
-url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-hb03c661_3.conda"
+checksum = "sha256:d6a81e5c142d7be6a992f618097351e7996f81a6295045df3f9b4f498e1066a8"
+url = "https://conda.anaconda.org/conda-forge/linux-64/make-4.4.1-h1114479_4.conda"
 conda_deps = [
     "libgcc-16.2.0-ha9f2e26_7",
     "_openmp_mutex-4.5-20_gnu",
@@ -4874,33 +4874,33 @@ url = "https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-
 url_api = "https://api.github.com/repos/mamba-org/micromamba-releases/releases/assets/505526153"
 
 [[tools.node]]
-version = "26.11.1"
+version = "26.12.0"
 backend = "core:node"
 specifiers = ["latest"]
 
 [tools.node."platforms.linux-arm64"]
-checksum = "sha256:170454fb022f5e9b5f6cc76c25fa32ef5100895be44eb04e92f9780591491bbf"
-url = "https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-arm64.tar.gz"
+checksum = "sha256:ec53c915c3fdd8786c5685abd25ae3fe9fba0692307f9811d7caaadea1bcaf03"
+url = "https://nodejs.org/dist/v26.12.0/node-v26.12.0-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-arm64-musl"]
-checksum = "sha256:5ac42d71176924d34be570c85567c729cc9283294d3fd710011851510b30c9d1"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.11.1/node-v26.11.1-linux-arm64-musl.tar.gz"
+checksum = "sha256:2e70b6d5adbae94546c4d7e01de7b64c50bf8d3dbfaad2bb0774942e9da902b8"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.12.0/node-v26.12.0-linux-arm64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:15fc043a51a5783f2f4b634561091658f5a7f0e3db03f997dca3a8033a33e45b"
-url = "https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.gz"
+checksum = "sha256:d9f88af72ad34f7ddf8e67289829f1698f54b6254f7d4f54b7453117ff1a3d2c"
+url = "https://nodejs.org/dist/v26.12.0/node-v26.12.0-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-baseline"]
-checksum = "sha256:15fc043a51a5783f2f4b634561091658f5a7f0e3db03f997dca3a8033a33e45b"
-url = "https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.gz"
+checksum = "sha256:d9f88af72ad34f7ddf8e67289829f1698f54b6254f7d4f54b7453117ff1a3d2c"
+url = "https://nodejs.org/dist/v26.12.0/node-v26.12.0-linux-x64.tar.gz"
 
 [tools.node."platforms.linux-x64-musl"]
-checksum = "sha256:dc822f43a55877e060b9e16702019c91deb9684310fa47ea4e9bdab0f2146366"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.11.1/node-v26.11.1-linux-x64-musl.tar.gz"
+checksum = "sha256:48ba1cdf21e684f13f38b6295f43bfea951f1ffd008b4cf93361c966b33f6938"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.12.0/node-v26.12.0-linux-x64-musl.tar.gz"
 
 [tools.node."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:dc822f43a55877e060b9e16702019c91deb9684310fa47ea4e9bdab0f2146366"
-url = "https://unofficial-builds.nodejs.org/download/release/v26.11.1/node-v26.11.1-linux-x64-musl.tar.gz"
+checksum = "sha256:48ba1cdf21e684f13f38b6295f43bfea951f1ffd008b4cf93361c966b33f6938"
+url = "https://unofficial-builds.nodejs.org/download/release/v26.12.0/node-v26.12.0-linux-x64-musl.tar.gz"
 
 [[tools.pinact]]
 version = "5.0.0"
@@ -5064,28 +5064,28 @@ backend = "core:python"
 specifiers = ["3.14.8"]
 
 [tools.python."platforms.linux-arm64"]
-checksum = "sha256:54f9cd13b97add6bbd077175b6d89f974cc582ece1c40ace1893067582edaf0e"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:d8ae14f303d3971431184cf423ae5467202de2bc19bf6491a490250b87647d4b"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [tools.python."platforms.linux-arm64-musl"]
-checksum = "sha256:b869ae31f3b4185474157c4295c8006a9758b592f079df60e2d0986e8d081622"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-aarch64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:7b6714675192dc381e14de4f2615c73d8ce5c15775562f4843282c34c3df8b6c"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-aarch64-unknown-linux-musl-install_only_stripped.tar.gz"
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:ddc902fd26460f728758c67d80417c1031edf97589f1f162c4ba3aa158a35998"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:d8faa1b588506b9e3e5a3f57807bb056d534a1641a6b10d15b6ea3f0b413b960"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [tools.python."platforms.linux-x64-baseline"]
-checksum = "sha256:ddc902fd26460f728758c67d80417c1031edf97589f1f162c4ba3aa158a35998"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:d8faa1b588506b9e3e5a3f57807bb056d534a1641a6b10d15b6ea3f0b413b960"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 
 [tools.python."platforms.linux-x64-musl"]
-checksum = "sha256:172df428945e2edf6765292a9e41773d2dbf136f5814c6449ff471698cc4e4e3"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:6ee5218694c3ddf1098aa306bb01b621d14c0bca4134b317614d9daa99f16ba2"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
 
 [tools.python."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:172df428945e2edf6765292a9e41773d2dbf136f5814c6449ff471698cc4e4e3"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8+20261009-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
+checksum = "sha256:6ee5218694c3ddf1098aa306bb01b621d14c0bca4134b317614d9daa99f16ba2"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.14.8+20261013-x86_64-unknown-linux-musl-install_only_stripped.tar.gz"
 
 [[tools.ruby]]
 version = "4.0.7"
@@ -5123,7 +5123,7 @@ checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e
 url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
 
 [[tools.rust]]
-version = "1.99.0"
+version = "1.99.1"
 backend = "core:rust"
 specifiers = ["latest"]
 
@@ -5208,7 +5208,7 @@ url = "https://github.com/mvdan/sh/releases/download/v3.14.0/shfmt_v3.14.0_linux
 url_api = "https://api.github.com/repos/mvdan/sh/releases/assets/534119985"
 
 [[tools.sqlite]]
-version = "3.54.0"
+version = "3.54.1"
 backend = "conda:sqlite"
 specifiers = ["latest"]
 
@@ -5216,10 +5216,10 @@ specifiers = ["latest"]
 channel = "conda-forge"
 
 [tools.sqlite."platforms.linux-arm64"]
-checksum = "sha256:2d742ba1996f940ddbf48718697fa5789e209a488e959038be26a673ea7959ff"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/sqlite-3.54.0-h363059a_101.conda"
+checksum = "sha256:5fc4966fccff0775ce868e8fb1df49b1fa44d81c341b1ba7b0c777ad9ab5b335"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/sqlite-3.54.1-h363059a_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "libgcc-16.2.0-h205dda4_7",
     "libzlib-1.3.2-hdc9db2a_3",
     "ncurses-6.6-h2b6f883_1",
@@ -5229,10 +5229,10 @@ conda_deps = [
 ]
 
 [tools.sqlite."platforms.linux-arm64-musl"]
-checksum = "sha256:2d742ba1996f940ddbf48718697fa5789e209a488e959038be26a673ea7959ff"
-url = "https://conda.anaconda.org/conda-forge/linux-aarch64/sqlite-3.54.0-h363059a_101.conda"
+checksum = "sha256:5fc4966fccff0775ce868e8fb1df49b1fa44d81c341b1ba7b0c777ad9ab5b335"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/sqlite-3.54.1-h363059a_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-hd26f1b6_101",
+    "libsqlite-3.54.1-hd26f1b6_100",
     "libgcc-16.2.0-h205dda4_7",
     "libzlib-1.3.2-hdc9db2a_3",
     "ncurses-6.6-h2b6f883_1",
@@ -5242,10 +5242,10 @@ conda_deps = [
 ]
 
 [tools.sqlite."platforms.linux-x64"]
-checksum = "sha256:97c00dc9e6d95fbafcd0c8869ae59db2320d8dd1e1b174452ad077531d329d65"
-url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.0-h6e79ffa_101.conda"
+checksum = "sha256:f027973cd4f9396ce907f95a7853a33bc9a38127ff473f8bf29eb129a14ce841"
+url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.1-h6e79ffa_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "libzlib-1.3.2-h25fd6f3_3",
     "ncurses-6.6-hdb14827_1",
     "readline-8.3-hd6e31c0_1",
@@ -5255,10 +5255,10 @@ conda_deps = [
 ]
 
 [tools.sqlite."platforms.linux-x64-baseline"]
-checksum = "sha256:97c00dc9e6d95fbafcd0c8869ae59db2320d8dd1e1b174452ad077531d329d65"
-url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.0-h6e79ffa_101.conda"
+checksum = "sha256:f027973cd4f9396ce907f95a7853a33bc9a38127ff473f8bf29eb129a14ce841"
+url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.1-h6e79ffa_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "libzlib-1.3.2-h25fd6f3_3",
     "ncurses-6.6-hdb14827_1",
     "readline-8.3-hd6e31c0_1",
@@ -5268,10 +5268,10 @@ conda_deps = [
 ]
 
 [tools.sqlite."platforms.linux-x64-musl"]
-checksum = "sha256:97c00dc9e6d95fbafcd0c8869ae59db2320d8dd1e1b174452ad077531d329d65"
-url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.0-h6e79ffa_101.conda"
+checksum = "sha256:f027973cd4f9396ce907f95a7853a33bc9a38127ff473f8bf29eb129a14ce841"
+url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.1-h6e79ffa_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "libzlib-1.3.2-h25fd6f3_3",
     "ncurses-6.6-hdb14827_1",
     "readline-8.3-hd6e31c0_1",
@@ -5281,10 +5281,10 @@ conda_deps = [
 ]
 
 [tools.sqlite."platforms.linux-x64-musl-baseline"]
-checksum = "sha256:97c00dc9e6d95fbafcd0c8869ae59db2320d8dd1e1b174452ad077531d329d65"
-url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.0-h6e79ffa_101.conda"
+checksum = "sha256:f027973cd4f9396ce907f95a7853a33bc9a38127ff473f8bf29eb129a14ce841"
+url = "https://conda.anaconda.org/conda-forge/linux-64/sqlite-3.54.1-h6e79ffa_100.conda"
 conda_deps = [
-    "libsqlite-3.54.0-h0737f62_101",
+    "libsqlite-3.54.1-h0737f62_100",
     "libzlib-1.3.2-h25fd6f3_3",
     "ncurses-6.6-hdb14827_1",
     "readline-8.3-hd6e31c0_1",
