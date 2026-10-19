@@ -1,0 +1,15 @@
+# Separate, inert release-CHECK candidate; not included in the native server bundle.
+# ROOT alone may publish/activate after independent review and private log staging.
+[settings]
+auto_install = false
+
+[bootstrap.macos.launchd.agents."com.raymanaloto.agentsview-native-release-check"]
+program = "/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview"
+args = ["update", "--check", "--force"]
+working_directory = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive"
+stdout_path = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-release-check.stdout.log"
+stderr_path = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-release-check.stderr.log"
+run_at_load = false
+keep_alive = false
+start_interval = 900
+environment = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", PATH = "/usr/bin:/bin" }

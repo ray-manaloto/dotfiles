@@ -1,0 +1,38 @@
+# Public, secret-free OVERLAY ONLY. Never replace the existing private config.
+# ROOT merges these keys while preserving cursor_secret, auth_token, identity and unrelated settings.
+# Refuse active remote/AI/push configuration or conflicting source overrides before publication.
+host = "127.0.0.1"
+require_auth = true
+disable_update_check = true
+archive_content = "full"
+result_content_blocked_categories = []
+tool_result_images = "keep"
+remote_hosts = []
+disabled_agents = ["openclaude","cowork","traex","copilot","gemini","mimocode","opencode","opencodereview","kilo","kilo-legacy","openhands","cursor","cursor-ide","amp","zencoder","iflow","vscode-copilot","windsurf","trae","visualstudio-copilot","pi","tau","prime-agent","omp","qwen","commandcode","deepseek-tui","deepseek-harness","openclaw","qclaw","kimi","kimi-work","kiro","kiro-ide","cortex","hermes","grok","goose","workbuddy","forge","devin","piebald","warp","positron","posit-assistant","zcode","zed","antigravity","antigravity-cli","qwenpaw","gptme","qoder","shelley","vibe","aider","evener","reasonix","icodemate","roocode","poolside","omnigent","codebuff"]
+
+[agents.claude]
+dirs = []
+homes = ["/Users/rmanaloto/.claude"]
+
+[agents.codex]
+dirs = []
+homes = ["/Users/rmanaloto/.codex"]
+
+# Explicit native automatic AI OFF; no inference from omitted defaults.
+[vector]
+enabled = false
+
+[vector.embed]
+run_after_sync = false
+recall = false
+backstop_interval = "-1s"
+
+[recall.extract]
+enabled = false
+backstop_interval = "-1s"
+
+[insights]
+endpoint = ""
+model = ""
+api_key_env = ""
+allow_http = false

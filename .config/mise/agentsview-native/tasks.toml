@@ -1,0 +1,62 @@
+# Preparation candidate. Host mutations require independent review and ROOT authorization.
+# Include this file in global task_config.includes only by preserving the existing array.
+
+["av-native:status"]
+description = "Show native writable-server status"
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" daemon status"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:open"]
+description = "Open token-free browser URL; use native login prompt"
+run = "/usr/bin/open \"http://127.0.0.1:8080\""
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:session-get"]
+description = "Read known session metadata from authenticated server"
+usage = '''
+arg "<id>" help="Canonical session ID"
+'''
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" session get \"${usage_id?}\" --server \"http://127.0.0.1:8080\" --server-token-file \"/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token\" --json"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:session-messages"]
+description = "Read a bounded full-content session window"
+usage = '''
+arg "<id>" help="Canonical session ID"
+flag "--limit <limit>" default="5" help="Maximum messages"
+'''
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" session messages \"${usage_id?}\" --limit \"${usage_limit?}\" --server \"http://127.0.0.1:8080\" --server-token-file \"/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token\" --json"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:session-search"]
+description = "Native lexical content search; no embeddings or reveal"
+usage = '''
+arg "<pattern>" help="Literal search text"
+'''
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" session search \"${usage_pattern?}\" --limit 10 --server \"http://127.0.0.1:8080\" --server-token-file \"/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token\" --json"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:skills-list"]
+description = "Inspect both user-level generated skill installs"
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" skills list --server \"http://127.0.0.1:8080\" --server-token-file \"/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token\" --json"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:skills-install"]
+description = "Install both native user-level skills; refuse modified files"
+run = "\"/Users/rmanaloto/.local/share/mise/installs/github-kenn-io-agentsview/0.43.0/agentsview\" skills install --server \"http://127.0.0.1:8080\" --server-token-file \"/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive/native-server-token\""
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
+
+["av-native:login-status"]
+description = "Inspect only the isolated native LaunchAgent"
+run = "/usr/bin/env -u MISE_ENV_FILE -u MISE_ENV -u MISE_IGNORED_CONFIG_PATHS \"/Users/rmanaloto/.local/bin/mise\" -C \"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native\" bootstrap macos launchd-agents status"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full", MISE_GLOBAL_CONFIG_FILE = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/isolated-global.toml", MISE_SYSTEM_CONFIG_DIR = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/isolated-system", MISE_OVERRIDE_CONFIG_FILENAMES = "native.toml", MISE_CEILING_PATHS = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise", MISE_AUTO_INSTALL = "0", MISE_TRUSTED_CONFIG_PATHS = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/native.toml" }
+
+["av-native:login-apply"]
+description = "Install/reconcile only native login and recovery LaunchAgent"
+run = "/usr/bin/env -u MISE_ENV_FILE -u MISE_ENV -u MISE_IGNORED_CONFIG_PATHS \"/Users/rmanaloto/.local/bin/mise\" -C \"/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native\" bootstrap macos launchd-agents apply --yes"
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full", MISE_GLOBAL_CONFIG_FILE = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/isolated-global.toml", MISE_SYSTEM_CONFIG_DIR = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/isolated-system", MISE_OVERRIDE_CONFIG_FILENAMES = "native.toml", MISE_CEILING_PATHS = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise", MISE_AUTO_INSTALL = "0", MISE_TRUSTED_CONFIG_PATHS = "/Users/rmanaloto/dev/github/ray-manaloto/dotfiles.worktrees/agentsview-native-service/.config/mise/agentsview-native/native.toml" }
+
+["av-native:login-stop"]
+description = "Unload native login agent without KeepAlive respawn"
+run = "/bin/launchctl bootout \"gui/501/dev.mise.com.raymanaloto.agentsview-native\""
+env = { HOME = "/Users/rmanaloto", AGENTSVIEW_DATA_DIR = "/Users/rmanaloto/Library/Application Support/AgentsView-M1-working-b0ae79c5365e-20260915/archive", AGENTSVIEW_TELEMETRY_ENABLED = "0", AGENTSVIEW_DISABLE_UPDATE_CHECK = "1", AGENTSVIEW_ARCHIVE_CONTENT = "full" }
