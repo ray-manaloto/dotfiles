@@ -31,7 +31,7 @@ recover direct user corrections; a summary alone is not acceptance evidence.
    Exa, Firecrawl, Serper (`SERPER_API_KEY`) and SerpApi (`SERP_API_KEY`)
    credentials. Do not infer missing credentials from the inherited shell,
    print their values, or copy them into reports.
-3. Always require `--strict-five` for a team recommendation. When the global
+3. Always require `--strict-five --policy-version strict-five-v3-d381` for a team recommendation. When the global
    Codex research hook supplies a turn ID and output directory, use those as
    `--request-id` and `--out`. Otherwise create a unique request ID and output
    directory outside the repository. Supply an explicit JSON Last30Days plan
@@ -39,15 +39,18 @@ recover direct user corrections; a summary alone is not acceptance evidence.
    dotfiles checkout that contains the canonical task:
 
    ```text
-   fnox --config ~/.config/fnox/config.toml --profile codex_research --no-defaults --no-daemon --non-interactive exec -- mise -C <dotfiles-checkout> run research-fanout -- <query> --repo <owner/repo> --strict-five --request-id <turn-id> --last30days-plan <plan.json> --out <output-dir>
+   fnox --config ~/.config/fnox/config.toml --profile codex_research --no-defaults --no-daemon --non-interactive exec -- mise -C <dotfiles-checkout> run research-fanout -- <query> --repo <owner/repo> --strict-five --policy-version strict-five-v3-d381 --request-id <turn-id> --last30days-plan <plan.json> --out <output-dir>
    ```
 
-   Keep stdout and the direct exit code. A failed arm is a blocker for a
-   five-provider claim. A metered arm skipped or substituted for credit
-   exhaustion is the exception: the receipt passes **provisional**, and the
-   answer must name every provisional route. A retry gets its own recorded
-   outcome; never erase the failed route. Verify the manifest's per-source
-   status and raw-file SHA-256.
+   Keep stdout and the direct exit code. Apply the recorded policy as defined
+   in `python/src/dotfiles_setup/AGENTS.md`. Under `strict-five-v3-d381`, known
+   exhausted credits/payment/quota is evidence-bound SKIPPED for any provider,
+   nonprovisional and nonblocking. Continue on remaining providers; do not retry,
+   top up or wait for renewal. Auth, missing prerequisites and unrunnable routes
+   remain incomplete; substitutes cannot erase them. Keep skips separate from
+   successful evidence. Verify request identity, all eight arms, hashes and
+   positive empty controls. Historical v2 retains its provisional interpretation;
+   select it intentionally with `--policy-version strict-five-v2`.
 4. Run targeted GitHub **repository code** search separately when the decision
    depends on an implementation detail. The fan-out GitHub arms cover issues,
    discussions, and releases; an `empty_verified` result does not establish

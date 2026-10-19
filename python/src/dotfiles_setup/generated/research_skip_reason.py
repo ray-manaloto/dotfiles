@@ -5,7 +5,7 @@ from enum import StrEnum
 
 
 class SkipReason(StrEnum):
-    """Why research-fanout skipped a source instead of reporting an error."""
+    """Finite research skip code; acceptance depends on the recorded policy version."""
 
     PREREQUISITE = "prerequisite"
     CREDITS_EXHAUSTED = "credits-exhausted"

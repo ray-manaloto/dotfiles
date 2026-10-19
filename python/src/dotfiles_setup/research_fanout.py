@@ -22,6 +22,7 @@ import errno
 import hashlib
 import http.client as http_client
 import json
+import math
 import os
 import queue
 import re
@@ -63,6 +64,46 @@ _HTTP_OK = 200
 _HTTP_REDIRECT = 300
 _HTTP_PAYMENT_REQUIRED = 402
 _HTTP_QUOTA = 429
+_REASON_LIMIT = 300
+_PREFLIGHT_PROOF_SCHEMA = "research-preflight-proof/v1"
+_PREFLIGHT_BINDINGS = (
+    "schema",
+    "request_id",
+    "source",
+    "policy_version",
+    "input_sha256",
+)
+POLICY_V2 = "strict-five-v2"
+POLICY_D381 = "strict-five-v3-d381"
+_D381_QUOTA = re.compile(
+    r"(?:monthly |daily )?quota (?:reached|exhausted|exceeded)|"
+    r"exceeded (?:your |the )?quota",
+    re.IGNORECASE,
+)
+_D381_CREDENTIAL = (
+    r"(?:[a-z][a-z0-9_]{0,63}_)?api[ _-]?keys?|credentials?|"
+    r"(?:(?:access|refresh|bearer|auth)[ _-])?tokens?|auth(?:entication|orization)?"
+)
+# Finite separators and at most four auxiliary words bound every refusal scan.
+_D381_CREDENTIAL_AUX = (
+    r"(?:[ \t_-]{1,4}(?:is|are|was|were|has|have|had|been|now|already)){0,4}"
+)
+_D381_ROUTE_FAILURE = re.compile(
+    rf"\b(?:invalid|expired|revoked)[ \t_-]{{1,4}}(?:{_D381_CREDENTIAL})\b|"
+    r"auth(?:entication|orization)? (?:failed|required)|unauthori[sz]ed|forbidden|"
+    r"invalid (?:api[ _-]?)?key|invalid (?:access )?token|"
+    r"(?:missing|expired|invalid) credentials?|login required|"
+    rf"\b(?:missing|unset|absent|required|no) (?:{_D381_CREDENTIAL})\b|"
+    rf"\b(?:{_D381_CREDENTIAL}){_D381_CREDENTIAL_AUX}[ \t_-]{{1,4}}"
+    r"(?:missing|unset|absent|required|invalid|expired|revoked|failed|"
+    r"not[ \t_-]{1,4}(?:valid|set|provided|found|configured)|"
+    r"no[ \t_-]{1,4}longer[ \t_-]{1,4}valid|failure|error)\b|"
+    r"timed? out|timeout|command not found|not installed|"
+    r"permission denied|sandbox|missing prerequisite|unavailable|"
+    r"connection (?:refused|reset|failed)|network (?:error|unreachable)|"
+    r"could not resolve",
+    re.IGNORECASE,
+)
 _RELEASE_STOPWORDS = frozenset(
     {"the", "and", "for", "with", "from", "this", "that", "are", "was", "not", "you"}
 )
@@ -317,6 +358,8 @@ class SourceResult:
     route: str | None = None
     provisional: bool = False
     attempts: tuple[RouteAttempt, ...] = ()
+    renewal_at: str | None = None
+    preflight: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -329,6 +372,8 @@ class FanoutRequest:
     limit: int
     timeout: float | None
     last30days_plan: Path | None = None
+    policy_version: str = POLICY_V2
+    preflight: tuple[tuple[str, bytes], ...] = ()
 
 
 class Runner(Protocol):
@@ -1231,7 +1276,7 @@ def _context7(
         )
     library_id = _context7_library_id(library_raw)
     if library_id is None:
-        return _Attempt((), library_raw)
+        return _Attempt((), library_raw, rc=library.returncode)
     docs = runner(
         ["ctx7", "docs", library_id, query],
         timeout=deadline.remaining(),
@@ -1246,7 +1291,12 @@ def _context7(
             rc=docs.returncode,
             stderr_redacted=_redacted_stderr(docs, env),
         )
-    return _Attempt(_context7_items(docs_raw, limit=request.limit), docs_raw)
+    return _Attempt(
+        _context7_items(docs_raw, limit=request.limit),
+        docs_raw,
+        rc=docs.returncode,
+        stderr_redacted=_redacted_stderr(docs, env),
+    )
 
 
 def _numeric_version(value: str) -> tuple[int, ...] | None:
@@ -1481,6 +1531,37 @@ def _attempt_skip(attempt: _Attempt) -> SkipReason | None:
     return _HTTP_SKIPS.get(status) if type(status) is int else None
 
 
+def _d381_exhaustion(attempt: _Attempt) -> SkipReason | None:
+    """Recognize exhausted balances, keeping auth and transient limits failures."""
+    text = (attempt.stderr_redacted + "\n" + attempt.raw.decode(errors="replace"))[
+        :_SCAN_LIMIT
+    ]
+    status = attempt.http_status
+    if (
+        attempt.items
+        or attempt.rc not in (None, 0, 1)
+        or _D381_ROUTE_FAILURE.search(text)
+    ):
+        return None
+    if status is None:
+        with contextlib.suppress(ValueError):
+            payload = _decode_json(attempt.raw)
+            if isinstance(payload, dict) and payload.get("success") is False:
+                claimed = payload.get("status")
+                status = claimed if type(claimed) is int else None
+        if status is None and (match := _CREDIT_STATUS.search(text)):
+            status = int(match[1])
+    if status == _HTTP_PAYMENT_REQUIRED:
+        return SkipReason.CREDITS_EXHAUSTED
+    if status not in (None, _HTTP_QUOTA):
+        return None
+    if _D381_QUOTA.search(text):
+        return SkipReason.QUOTA
+    if _CREDIT_TEXT.search(text):
+        return SkipReason.CREDITS_EXHAUSTED
+    return None
+
+
 def _error_skip(error_class: object) -> SkipReason | None:
     """Map an exception class to a skip code (producer and verifier).
 
@@ -1665,9 +1746,47 @@ def _credit_result(
     )
 
 
+def _policy_skip(
+    source: str, request: FanoutRequest, attempt: _Attempt, run: _CreditRun
+) -> _Fetch | None:
+    if request.policy_version == POLICY_D381:
+        code = _d381_exhaustion(attempt)
+        if code is not None:
+            return _d381_skip(
+                source,
+                code,
+                _transport_envelope(attempt),
+                run.started,
+                http_status=attempt.http_status,
+            )
+    elif source in CREDIT_METERED_SOURCES and attempt.error:
+        code = _attempt_skip(attempt)
+        if code is not None:
+            return _credit_result(
+                source, request, attempt, run, (code, _transport_envelope(attempt))
+            )
+    return None
+
+
 def _prerequisite_result(
     source: str, request: FanoutRequest, prerequisite: str, run: _CreditRun
 ) -> _Fetch:
+    if request.policy_version == POLICY_D381:
+        return _Fetch(
+            SourceResult(
+                source,
+                Status.ERROR,
+                (),
+                time.monotonic() - run.started,
+                prerequisite,
+                None,
+                None,
+                skip_reason=SkipReason.CREDENTIAL_MISSING
+                if _CREDENTIAL_TEXTS.get(source) == prerequisite
+                else SkipReason.PREREQUISITE,
+            ),
+            None,
+        )
     if prerequisite in _MISSING_CLI_TEXTS:
         # A missing metered CLI is coded unavailable and still tries fallbacks.
         missing = FileNotFoundError(errno.ENOENT, prerequisite)
@@ -1695,7 +1814,7 @@ def _prerequisite_result(
     return _Fetch(result, None)
 
 
-def _source_result(
+def _source_fetch(
     source: str,
     request: FanoutRequest,
     *,
@@ -1719,15 +1838,10 @@ def _source_result(
             deadline=deadline,
         )
         raw = attempt.raw
-        code = _attempt_skip(attempt) if attempt.error else None
-        if source in CREDIT_METERED_SOURCES and code is not None:
-            return _credit_result(
-                source,
-                request,
-                attempt,
-                _CreditRun(boundaries, deadline, started),
-                (code, _transport_envelope(attempt)),
-            )
+        if skipped := _policy_skip(
+            source, request, attempt, _CreditRun(boundaries, deadline, started)
+        ):
+            return skipped
         if attempt.error:
             status = Status.ERROR
             reason = attempt.error
@@ -1779,7 +1893,11 @@ def _source_result(
         envelope = _error_envelope(exc)
         decoded = json.loads(envelope)
         code = _error_skip(decoded["error_class"])
-        if source in CREDIT_METERED_SOURCES and code is not None:
+        if (
+            request.policy_version == POLICY_V2
+            and source in CREDIT_METERED_SOURCES
+            and code is not None
+        ):
             return _credit_result(
                 source,
                 request,
@@ -1797,6 +1915,76 @@ def _source_result(
         None,
     )
     return _Fetch(result, raw)
+
+
+def _d381_skip(
+    source: str,
+    code: SkipReason,
+    raw: bytes,
+    started: float,
+    *,
+    http_status: int | None = None,
+) -> _Fetch:
+    """One exhausted route, one finite code, and no successful evidence items."""
+    return _Fetch(
+        SourceResult(
+            source,
+            Status.SKIPPED,
+            (),
+            time.monotonic() - started,
+            code.value,
+            None,
+            None,
+            skip_reason=code,
+            attempts=(
+                RouteAttempt(
+                    source, Status.SKIPPED, http_status, code.value, None, None
+                ),
+            ),
+        ),
+        raw,
+        (raw,),
+    )
+
+
+def _source_result(
+    source: str,
+    request: FanoutRequest,
+    *,
+    runner: Runner,
+    http: Http,
+) -> _Fetch:
+    balance = dict(request.preflight).get(source)
+    metadata = None
+    if balance is not None:
+        proof = _preflight_proof(balance)
+        normalized = _balance_payload(json.dumps(proof["balances"]).encode())
+        remaining = normalized["remaining"]
+        metadata = {
+            **{key: proof[key] for key in _PREFLIGHT_BINDINGS},
+            "outcome": "exhausted"
+            if remaining == 0
+            else "unknown"
+            if remaining is None
+            else "available",
+        }
+        if remaining == 0:
+            fetched = _d381_skip(
+                source,
+                SkipReason.CREDITS_EXHAUSTED,
+                balance,
+                time.monotonic(),
+            )
+            return replace(
+                fetched,
+                result=replace(
+                    fetched.result,
+                    preflight=metadata,
+                    renewal_at=normalized.get("renewal_at"),
+                ),
+            )
+    fetched = _source_fetch(source, request, runner=runner, http=http)
+    return replace(fetched, result=replace(fetched.result, preflight=metadata))
 
 
 def _is_timeout_failure(exc: BaseException) -> bool:
@@ -1859,6 +2047,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout", type=float)
     parser.add_argument("--list-sources", action="store_true")
     parser.add_argument("--strict-five", action="store_true")
+    parser.add_argument("--policy-version", choices=(POLICY_V2, POLICY_D381))
+    parser.add_argument("--preflight-manifest", type=Path)
     parser.add_argument("--request-id")
     parser.add_argument("--last30days-plan", type=Path)
     # Probe mode (#1514): record real exit codes instead of agent-typed ones.
@@ -1957,6 +2147,7 @@ def _validate_args(args: argparse.Namespace) -> None:
                 "--strict-five requires --repo, --request-id, and --last30days-plan"
             )
             raise _UsageError(message)
+
         if args.sources is not None and set(args.sources.split(",")) != set(
             _SOURCE_NAMES
         ):
@@ -1972,6 +2163,101 @@ def _validate_args(args: argparse.Namespace) -> None:
         if not isinstance(plan, dict) or not plan.get("subqueries"):
             message = "--last30days-plan needs subqueries"
             raise _UsageError(message)
+
+
+def _balance_payload(raw: bytes) -> dict[str, object]:
+    """Allowlist balance evidence before any output or route admission."""
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or "remaining" not in payload:
+        message = "invalid balance evidence"
+        raise _ReceiptError(message)
+    remaining = payload["remaining"]
+    if remaining is not None and (
+        type(remaining) not in (int, float)
+        or remaining < 0
+        or (type(remaining) is float and not math.isfinite(remaining))
+    ):
+        message = "invalid remaining balance"
+        raise _ReceiptError(message)
+    result = {"remaining": remaining}
+    if "renewal_at" in payload:
+        renewal = payload["renewal_at"]
+        if renewal is not None:
+            if not isinstance(renewal, str):
+                message = "invalid renewal date"
+                raise _ReceiptError(message)
+            try:
+                parsed = datetime.fromisoformat(renewal)
+            except ValueError:
+                message = "invalid renewal date"
+                raise _ReceiptError(message) from None
+            if parsed.tzinfo is None or "T" not in renewal:
+                message = "invalid renewal date"
+                raise _ReceiptError(message)
+        result["renewal_at"] = renewal
+    return result
+
+
+def _read_preflight_file(path: Path, directory: Path) -> bytes:
+    """Admit bounded regular files beneath one directory without following links."""
+    if not path.is_absolute():
+        path = directory / path
+    relative = path.relative_to(directory)
+    if ".." in relative.parts:
+        message = "invalid preflight path"
+        raise _ReceiptError(message)
+    return read_regular_bounded(path, _EVIDENCE_LIMIT)
+
+
+def _preflight_balances(
+    args: argparse.Namespace, policy: str
+) -> tuple[tuple[str, bytes], ...]:
+    if args.preflight_manifest is None:
+        return ()
+    try:
+        directory = args.preflight_manifest.parent.absolute()
+        manifest = json.loads(
+            _read_preflight_file(directory / args.preflight_manifest.name, directory)
+        )
+        if (
+            policy != POLICY_D381
+            or manifest.get("schema") != "research-preflight/v1"
+            or manifest.get("policy_version") != policy
+            or manifest.get("request_id") != args.request_id
+            or not args.request_id
+            or not isinstance(manifest.get("sources"), list)
+        ):
+            message = "invalid preflight identity"
+            raise _ReceiptError(message)
+        balances = {}
+        for row in manifest["sources"]:
+            source = row["source"]
+            if source not in _SOURCE_NAMES or source in balances:
+                message = "invalid preflight source"
+                raise _ReceiptError(message)
+            raw = _read_preflight_file(Path(row["raw_file"]), directory)
+            if (
+                len(raw) > _EVIDENCE_LIMIT
+                or hashlib.sha256(raw).hexdigest() != row["raw_sha256"]
+            ):
+                message = "invalid preflight evidence"
+                raise _ReceiptError(message)
+            balances[source] = json.dumps(
+                {
+                    "schema": _PREFLIGHT_PROOF_SCHEMA,
+                    "request_id": manifest["request_id"],
+                    "source": source,
+                    "policy_version": policy,
+                    "input_sha256": hashlib.sha256(raw).hexdigest(),
+                    "balances": _balance_payload(raw),
+                },
+                sort_keys=True,
+            ).encode()
+        return tuple(balances.items())
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
+        # Raw account bodies and arbitrary input diagnostics never reach output.
+        message = "invalid preflight manifest or balance evidence"
+        raise _UsageError(message) from None
 
 
 def _slug(query: str) -> str:
@@ -2005,13 +2291,25 @@ def _persist(
     owned_names = ["manifest.json"]
     for source in _SOURCE_NAMES:
         owned_names.extend((f"{source}.json", f"{source}.raw", f"{source}.primary.raw"))
+        owned_names.append(f"{source}.balance.raw")
         owned_names.extend(
             f"{source}.{route}.raw" for route in _FALLBACK_ROUTES.get(source, ())
         )
     for name in owned_names:
         (out_dir / name).unlink(missing_ok=True)
     results: list[SourceResult] = []
+    balances = dict(request.preflight)
     for outcome in fetched:
+        preflight = outcome.result.preflight
+        if outcome.result.source in balances:
+            balance = balances[outcome.result.source]
+            balance_path = out_dir / f"{outcome.result.source}.balance.raw"
+            balance_path.write_bytes(balance)
+            preflight = {
+                **(preflight or {}),
+                "raw_file": str(balance_path),
+                "raw_sha256": hashlib.sha256(balance).hexdigest(),
+            }
         raw_path: Path | None = None
         if outcome.raw is not None:
             raw_path = out_dir / f"{outcome.result.source}.raw"
@@ -2040,6 +2338,7 @@ def _persist(
             )
         result = replace(
             outcome.result,
+            preflight=preflight,
             attempts=tuple(persisted_attempts),
             raw_file=str(raw_path) if raw_path is not None else None,
             raw_sha256=(
@@ -2058,12 +2357,25 @@ def _persist(
             "repo": request.repo,
             "request_id": request_id,
             "strict_five": strict_five,
-            "policy_version": "strict-five-v2" if strict_five else None,
+            "policy_version": request.policy_version,
             "generated_at": datetime.now(UTC).isoformat(),
             "sources": [asdict(result) for result in results],
             "out_dir": str(out_dir),
         },
     )
+    if request.policy_version == POLICY_D381:
+        manifest = json.loads(manifest_path.read_bytes())
+        failed = [
+            row["source"]
+            for row in manifest["sources"]
+            if _d381_row_reason(row, manifest_path, manifest)
+        ]
+        manifest.update(
+            disposition="incomplete" if failed else "complete",
+            skipped_sources=[r.source for r in results if r.status is Status.SKIPPED],
+            failed_sources=failed,
+        )
+        _write_json(manifest_path, manifest)
     return manifest_path, results
 
 
@@ -2450,13 +2762,19 @@ def _validate_provisional_row(
     return None
 
 
-def _manifest_rows(manifest: object, request_id: str) -> list[dict[str, object]] | str:
+def _manifest_rows(
+    manifest: object, request_id: str, policy_version: str | None
+) -> list[dict[str, object]] | str:
     """Return the manifest's source rows, or the identity failure."""
     if not isinstance(manifest, dict):
         return "malformed research manifest"
     if (
         not manifest.get("strict_five")
-        or manifest.get("policy_version") != "strict-five-v2"
+        or manifest.get("policy_version") not in (POLICY_V2, POLICY_D381)
+        or (
+            policy_version is not None
+            and manifest.get("policy_version") != policy_version
+        )
         or manifest.get("request_id") != request_id
         or not manifest.get("query")
         or not manifest.get("repo")
@@ -2498,7 +2816,165 @@ def _web_route(rows: list[dict[str, object]]) -> str | None:
     return None
 
 
-def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
+def _preflight_proof(raw: bytes) -> dict[str, object]:
+    """Decode the minimal identity-bound normalized proof, never an account body."""
+    proof = json.loads(raw)
+    if (
+        not isinstance(proof, dict)
+        or set(proof) != {*_PREFLIGHT_BINDINGS, "balances"}
+        or proof.get("schema") != _PREFLIGHT_PROOF_SCHEMA
+        or not isinstance(proof.get("request_id"), str)
+        or not proof["request_id"]
+        or proof.get("source") not in _SOURCE_NAMES
+        or proof.get("policy_version") != POLICY_D381
+        or not isinstance(proof.get("input_sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", proof["input_sha256"])
+        or proof.get("balances")
+        != _balance_payload(json.dumps(proof.get("balances")).encode())
+    ):
+        message = "invalid bound preflight proof"
+        raise _ReceiptError(message)
+    return proof
+
+
+def _validate_d381_preflight(
+    row: dict[str, object], path: Path, manifest: dict[str, object]
+) -> dict[str, object]:
+    metadata = row.get("preflight")
+    if not isinstance(metadata, dict):
+        message = "invalid preflight metadata"
+        raise _ReceiptError(message)
+    raw = _bound_raw(
+        metadata.get("raw_file"),
+        metadata.get("raw_sha256"),
+        path.parent / f"{row['source']}.balance.raw",
+    )
+    proof = _preflight_proof(raw)
+    if (
+        any(metadata.get(key) != proof[key] for key in _PREFLIGHT_BINDINGS)
+        or proof["source"] != row["source"]
+        or proof["request_id"] != manifest.get("request_id")
+        or proof["policy_version"] != manifest.get("policy_version")
+    ):
+        message = "preflight admission identity differs"
+        raise _ReceiptError(message)
+    balance = _balance_payload(json.dumps(proof["balances"]).encode())
+    remaining = balance["remaining"]
+    outcome = (
+        "unknown"
+        if remaining is None
+        else "exhausted"
+        if remaining == 0
+        else "available"
+    )
+    if metadata.get("outcome") != outcome:
+        message = "preflight outcome differs"
+        raise _ReceiptError(message)
+    return balance
+
+
+def _validate_d381_skip_fields(row: dict[str, object]) -> None:
+    reason = row.get("reason")
+    if (
+        row.get("skip_reason")
+        not in {SkipReason.CREDITS_EXHAUSTED.value, SkipReason.QUOTA.value}
+        or row.get("provisional") is not False
+        or row.get("items") != []
+        or row.get("control") is not None
+        or not isinstance(reason, str)
+        or not 0 < len(reason) <= _REASON_LIMIT
+        or "\n" in reason
+        or reason != row["skip_reason"]
+    ):
+        message = "invalid exhaustion skip"
+        raise _ReceiptError(message)
+
+
+def _validate_d381_skip(
+    row: dict[str, object], path: Path, manifest: dict[str, object]
+) -> None:
+    source = row["source"]
+    _validate_d381_skip_fields(row)
+    attempts, primary = _credit_attempts(row, path.parent)
+    if len(attempts) != 1 or attempts[0].get("status") != Status.SKIPPED.value:
+        message = "exhausted route was retried or substituted"
+        raise _ReceiptError(message)
+    raw = _bound_raw(
+        row.get("raw_file"), row.get("raw_sha256"), path.parent / f"{source}.raw"
+    )
+    if raw != primary:
+        message = "primary exhaustion evidence differs"
+        raise _ReceiptError(message)
+    metadata = row.get("preflight")
+    if metadata is not None:
+        if not isinstance(metadata, dict):
+            message = "invalid preflight metadata"
+            raise _ReceiptError(message)
+        balance = _validate_d381_preflight(row, path, manifest)
+        code = SkipReason.CREDITS_EXHAUSTED if balance["remaining"] == 0 else None
+        if (
+            row.get("renewal_at") != balance.get("renewal_at")
+            or _preflight_proof(raw)["balances"] != balance
+            or hashlib.sha256(raw).hexdigest() != metadata.get("raw_sha256")
+        ):
+            message = "preflight exhaustion differs"
+            raise _ReceiptError(message)
+    else:
+        if row.get("renewal_at") is not None:
+            message = "unbound renewal date"
+            raise _ReceiptError(message)
+        code = _d381_exhaustion(_decode_transport_envelope(raw))
+    if code is None or code.value != row["skip_reason"]:
+        message = "exhaustion evidence does not re-derive"
+        raise _ReceiptError(message)
+
+
+def _validate_d381_row(
+    row: dict[str, object], path: Path, manifest: dict[str, object]
+) -> str | None:
+    if row.get("provisional") or row.get("route"):
+        message = "unexpected provisional or substituted row"
+        raise _ReceiptError(message)
+    if row.get("status") == Status.SKIPPED.value:
+        _validate_d381_skip(row, path, manifest)
+        return None
+    if row.get("skip_reason") is not None or row.get("attempts"):
+        message = "unexpected skip code or prior route attempts"
+        raise _ReceiptError(message)
+    if row.get("preflight") is not None:
+        balance = _validate_d381_preflight(row, path, manifest)
+        if balance["remaining"] == 0:
+            message = "exhausted route was attempted"
+            raise _ReceiptError(message)
+    return _validate_strict_row(row, path)
+
+
+def _d381_row_reason(
+    row: dict[str, object], manifest_path: Path, manifest: dict[str, object]
+) -> str | None:
+    """D381 admits only bound exhaustion; substitutes cannot erase failures."""
+    try:
+        return _validate_d381_row(row, manifest_path, manifest)
+    except _ReceiptError as exc:
+        return f"{row['source']} {exc}"
+
+
+def _d381_verdict(
+    rows: list[dict[str, object]], path: Path, manifest: dict[str, object]
+) -> StrictVerdict:
+    for row in rows:
+        if reason := _d381_row_reason(row, path, manifest):
+            return StrictVerdict(passed=False, provisional=(), reason=reason)
+    return StrictVerdict(
+        passed=True,
+        provisional=(),
+        reason="required sources completed or evidenced exhaustion skipped",
+    )
+
+
+def strict_five_verdict(
+    manifest_path: Path, request_id: str, policy_version: str | None = None
+) -> StrictVerdict:
     """Validate same-turn hashed evidence and re-derive every skip exception.
 
     D236 fallback rule: every skipped metered provider must re-derive its code,
@@ -2511,12 +2987,12 @@ def strict_five_verdict(manifest_path: Path, request_id: str) -> StrictVerdict:
     provisional_entries = []
     last30days_gap = None
     try:
-        rows = _manifest_rows(
-            json.loads(read_regular_bounded(manifest_path, _MANIFEST_LIMIT)),
-            request_id,
-        )
+        manifest = json.loads(read_regular_bounded(manifest_path, _MANIFEST_LIMIT))
+        rows = _manifest_rows(manifest, request_id, policy_version)
         if isinstance(rows, str):
             return StrictVerdict(passed=False, provisional=(), reason=rows)
+        if manifest["policy_version"] == POLICY_D381:
+            return _d381_verdict(rows, manifest_path, manifest)
         for row in rows:
             reason = _row_reason(row, manifest_path)
             route = row.get("route")
@@ -2615,6 +3091,7 @@ class _ProbeSpec:
     mirror: tuple[str, Path] | None
     mirror_index: tuple[Path, int] | None
     timeout: float
+    policy_version: str = POLICY_D381
 
 
 @dataclass(frozen=True)
@@ -2810,10 +3287,24 @@ def _fanout_manifest_probe(
         "required_failed": [],
         "provisional": [],
         "provisional_invalid": False,
+        "policy_version": None,
+        "disposition": "incomplete",
+        "skipped_sources": [],
+        "failed_sources": [],
     }
+    policy_invalid = False
     try:
         manifest = json.loads(read_regular_bounded(path, _MANIFEST_LIMIT))
-        rows = manifest["sources"]
+        row["policy_version"] = manifest.get("policy_version")
+        policy_invalid = "policy_version" in manifest and row["policy_version"] not in (
+            POLICY_V2,
+            POLICY_D381,
+        )
+        rows = (
+            _d381_source_rows(manifest)
+            if row["policy_version"] == POLICY_D381
+            else manifest["sources"]
+        )
         statuses = {
             r["source"]: (r["status"], r.get("reason"), r.get("skip_reason"))
             for r in rows
@@ -2830,7 +3321,13 @@ def _fanout_manifest_probe(
         RecursionError,
     ) as exc:
         reason = "no manifest" if isinstance(exc, FileNotFoundError) else "unreadable"
-        row["required_failed"] = [f"{name}: {reason}" for name in required]
+        names = required or (
+            _SOURCE_NAMES
+            if row["policy_version"] == POLICY_D381 or policy_invalid
+            else ()
+        )
+        row["required_failed"] = [f"{name}: {reason}" for name in names]
+        row["failed_sources"] = list(names)
         return row
     provisional = []
     for candidate in rows:
@@ -2865,6 +3362,17 @@ def _fanout_manifest_probe(
         name: status if status in status_values else "invalid"
         for name, (status, _, _) in statuses.items()
     }
+    row["policy_version"] = manifest.get("policy_version")
+    if "policy_version" not in manifest:
+        row.pop("policy_version")
+    if policy_invalid:
+        names = required or _SOURCE_NAMES
+        row["required_failed"] = [f"{name}: invalid" for name in names]
+        row["failed_sources"] = list(names)
+        row["provisional"] = []
+        return row
+    if manifest.get("policy_version") == POLICY_D381:
+        return _d381_manifest_projection(manifest, path, row, required)
     successful = {Status.OK.value, Status.EMPTY_VERIFIED.value}
     failed = []
     for name in required:
@@ -2882,6 +3390,105 @@ def _fanout_manifest_probe(
             failed.append(f"{name}: {projected_status}{detail}")
     row["required_failed"] = failed[: len(_SOURCE_NAMES)]
     return row
+
+
+def _d381_source_rows(manifest: dict[str, object]) -> list[dict[str, object]]:
+    rows = manifest["sources"]
+    if (
+        not isinstance(rows, list)
+        or not rows
+        or any(
+            not isinstance(row, dict) or not isinstance(row.get("source"), str)
+            for row in rows
+        )
+    ):
+        message = "invalid manifest source rows"
+        raise _ReceiptError(message)
+    return rows
+
+
+def _d381_manifest_errors(
+    manifest: dict[str, object], path: Path
+) -> dict[str, str | None]:
+    rows = _d381_source_rows(manifest)
+    names = [r["source"] for r in rows]
+    if (
+        not names
+        or len(set(names)) != len(names)
+        or any(n not in _SOURCE_NAMES for n in names)
+        or not manifest.get("query")
+        or (
+            not manifest.get("repo")
+            and (
+                manifest.get("strict_five")
+                or any(n in _SOURCE_NAMES[:3] for n in names)
+            )
+        )
+        or (
+            manifest.get("strict_five")
+            and (not manifest.get("request_id") or set(names) != set(_SOURCE_NAMES))
+        )
+    ):
+        message = "invalid manifest identity or sources"
+        raise _ReceiptError(message)
+    errors = {}
+    for row in rows:
+        try:
+            errors[str(row["source"])] = _d381_row_reason(row, path, manifest)
+        except OSError, ValueError, KeyError, TypeError, AttributeError:
+            errors[str(row["source"])] = "invalid evidence"
+    return errors
+
+
+def _d381_manifest_projection(
+    manifest: dict[str, object],
+    path: Path,
+    projection: dict[str, object],
+    required: tuple[str, ...],
+) -> dict[str, object]:
+    """Project independently validated rows, never trust a summary waiver."""
+    rows = _d381_source_rows(manifest)
+    wanted = required or tuple(str(r["source"]) for r in rows)
+    try:
+        errors = _d381_manifest_errors(manifest, path)
+    except OSError, ValueError, KeyError, TypeError, AttributeError:
+        errors = dict.fromkeys(wanted, "invalid evidence")
+    skipped = [
+        r["source"]
+        for r in rows
+        if r.get("status") == Status.SKIPPED.value
+        and not errors.get(r["source"])
+        and projection["fresh"]
+    ]
+    failed = []
+    for name in wanted:
+        if name not in errors or errors[name] or not projection["fresh"]:
+            candidate = next((r for r in rows if r["source"] == name), {})
+            status = candidate.get("status")
+            projected_status = (
+                "not run"
+                if status is None
+                else status
+                if status in tuple(s.value for s in Status)
+                else "invalid"
+            )
+            code = failure_code(
+                candidate.get("reason"),
+                status=status,
+                skip_reason=candidate.get("skip_reason"),
+            )
+            detail = f" ({code.value})" if code else ""
+            failed.append(f"{name}: {projected_status}{detail}")
+    projection.update(
+        skipped_sources=skipped,
+        failed_sources=[name for name, error in errors.items() if error],
+        required_failed=failed,
+        provisional=[],
+        disposition="incomplete"
+        if failed or any(errors.values()) or not projection["fresh"]
+        else "complete",
+    )
+    return projection
 
 
 def _webclaw_mirror(
@@ -2952,8 +3559,33 @@ def _write_webclaw_mirror(raw: bytes, url: str, path: Path) -> tuple[int, str, s
     return 0, "", ""
 
 
+def _mirror_exhausted(policy: str, attempt: _Attempt, *, failed: bool) -> bool:
+    if policy == POLICY_D381:
+        return bool((failed or attempt.error) and _d381_exhaustion(attempt))
+    return failed and is_credit_exhaustion(
+        attempt.http_status,
+        attempt.stderr_redacted + "\n" + attempt.raw.decode(errors="replace"),
+    )
+
+
+def _mirror_projection(row: dict[str, object], policy: str) -> dict[str, object]:
+    """Keep historical v2 mirror fields while projecting current-policy outcomes."""
+    if policy == POLICY_D381:
+        return row
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in {"policy_version", "disposition", "skipped_sources"}
+    }
+
+
 def _mirror_probe(
-    url: str, path: Path, *, runner: Runner, timeout: float
+    url: str,
+    path: Path,
+    *,
+    runner: Runner,
+    timeout: float,
+    policy_version: str = POLICY_D381,
 ) -> dict[str, object]:
     """Persist a validated native scrape, or a credit-triggered webclaw mirror."""
     row: dict[str, object] = {
@@ -2962,6 +3594,8 @@ def _mirror_probe(
         "path": str(path),
         "route": "firecrawl",
         "provisional": False,
+        "policy_version": policy_version,
+        "skipped_sources": [],
         "detail": {"reason": "", "primary_reason": ""},
     }
     try:
@@ -3023,17 +3657,27 @@ def _mirror_probe(
                 pass
             if markdown and not reason:
                 path.write_text(markdown, encoding="utf-8")
-        credit = (rc != 0 or failure_payload) and is_credit_exhaustion(
-            claimed_status, redacted + "\n" + raw.decode(errors="replace")
+        credit = _mirror_exhausted(
+            policy_version,
+            _Attempt(
+                (),
+                raw,
+                reason,
+                http_status=claimed_status,
+                rc=rc,
+                stderr_redacted=redacted,
+            ),
+            failed=rc != 0 or failure_payload,
         )
         if credit:
             primary_reason = (redacted.strip() or raw.decode(errors="replace")).replace(
                 "\n", " | "
             )[-300:]
             row["route"] = "webclaw"
+            row["skipped_sources"] = ["firecrawl"]
             rc, reason, code = _webclaw_mirror(url, path, runner, deadline.remaining())
             status = 0
-            row["provisional"] = rc == 0 and not reason
+            row["provisional"] = policy_version == POLICY_V2 and rc == 0 and not reason
     except subprocess.TimeoutExpired, TimeoutError:
         rc, reason = _RC_TIMEOUT, "timed out"
         code = FailureCode.TIMEOUT.value
@@ -3048,14 +3692,20 @@ def _mirror_probe(
             if rc == 0
             else FailureCode.PROCESS_FAILED.value
         )
-    return {
-        **row,
-        "rc": rc,
-        "http_status": status,
-        "bytes": size,
-        "code": code,
-        "detail": {"reason": reason, "primary_reason": primary_reason},
-    }
+    return _mirror_projection(
+        {
+            **row,
+            "rc": rc,
+            "http_status": status,
+            "bytes": size,
+            "disposition": "complete"
+            if rc == 0 and size > 0 and not reason
+            else "incomplete",
+            "code": code,
+            "detail": {"reason": reason, "primary_reason": primary_reason},
+        },
+        policy_version,
+    )
 
 
 def _scrape_payload(raw: bytes) -> tuple[int, str, str, str]:
@@ -3157,7 +3807,8 @@ def _mirror_index_probe(
             "failure whatever its size. Every value below is read from the "
             "`<n>.probe.json` beside it. When firecrawl answered credit exhaustion "
             "the link was fetched with `webclaw -f json` instead "
-            "(route `webclaw`, provisional). The failure code is a fixed value; "
+            "(route `webclaw`; nonprovisional under D381, historical v2 provisional). "
+            "The failure code is a fixed value; "
             "diagnostics are in each "
             "`<n>.probe.json` `detail`."
         ),
@@ -3223,7 +3874,14 @@ def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
         path = Path(value)
         return path if path.is_absolute() else repo_root / path
 
-    fanout_only = (args.query, args.sources, args.repo, args.out, args.request_id)
+    fanout_only = (
+        args.query,
+        args.sources,
+        args.repo,
+        args.out,
+        args.request_id,
+        args.preflight_manifest,
+    )
     if any(fanout_only) or args.strict_five or args.list_sources:
         message = (
             "--probe-out takes no QUERY, --sources, --repo, --out, --request-id,"
@@ -3267,6 +3925,7 @@ def _probe_spec(args: argparse.Namespace, repo_root: Path) -> _ProbeSpec:
         mirror=mirror,
         mirror_index=index,
         timeout=args.timeout or _DEFAULT_TIMEOUT,
+        policy_version=args.policy_version or POLICY_D381,
     )
 
 
@@ -3300,7 +3959,13 @@ def run_probes(
     if spec.mirror is not None:
         url, path = spec.mirror
         probes.append(
-            _mirror_probe(url, path, runner=boundaries.runner, timeout=spec.timeout)
+            _mirror_probe(
+                url,
+                path,
+                runner=boundaries.runner,
+                timeout=spec.timeout,
+                policy_version=spec.policy_version,
+            )
         )
     if spec.mirror_index is not None:
         directory, count = spec.mirror_index
@@ -3393,8 +4058,16 @@ def _run_fanout(
         out_dir = repo_root / out_dir
     if args.strict_five:
         sources = _SOURCE_NAMES
+    policy = args.policy_version or (POLICY_D381 if args.strict_five else POLICY_V2)
     request = FanoutRequest(
-        args.query, args.repo, sources, args.limit, args.timeout, args.last30days_plan
+        args.query,
+        args.repo,
+        sources,
+        args.limit,
+        args.timeout,
+        args.last30days_plan,
+        policy,
+        _preflight_balances(args, policy),
     )
     try:
         fetched = _fan_out_with_raw(request, runner=runner, http=http)
@@ -3418,6 +4091,9 @@ def _run_fanout(
         passed, reason = validate_strict_five(manifest_path, args.request_id)
         sys.stdout.write(f"strict-five  {'pass' if passed else 'fail'}  [{reason}]\n")
         return 0 if passed else 1
+    if policy == POLICY_D381:
+        manifest = json.loads(manifest_path.read_bytes())
+        return 1 if manifest["failed_sources"] else 0
     successful = {Status.OK, Status.EMPTY_VERIFIED}
     return 0 if any(result.status in successful for result in results) else 1
 
@@ -3444,10 +4120,10 @@ def main(
         if args.list_sources:
             _list_sources(args.repo)
             return 0
+        return _run_fanout(args, sources, repo_root, runner=runner, http=http)
     except _UsageError as exc:
         sys.stderr.write(f"research-fanout: {exc}\n")
         return 2
-    return _run_fanout(args, sources, repo_root, runner=runner, http=http)
 
 
 def _repo_root() -> Path:

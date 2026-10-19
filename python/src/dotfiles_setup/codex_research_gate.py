@@ -14,7 +14,7 @@ from pathlib import Path
 
 from dotfiles_setup import research_gate_outcome, research_scope
 from dotfiles_setup.research_evidence import read_regular_bounded
-from dotfiles_setup.research_fanout import strict_five_verdict
+from dotfiles_setup.research_fanout import POLICY_D381, POLICY_V2, strict_five_verdict
 
 # Advisory hint only, never a binding: research verbs, not everyday words such
 # as version, latest or codex (r3 P3-4). One alternation, so the search is linear.
@@ -28,7 +28,7 @@ _SOURCE_NAMES = (
     "GitHub issues/discussions/releases, Exa, Context7, Firecrawl, Last30Days"
 )
 _AGENT_FIELDS = ("agent_id", "agent_type", "subagent")
-_POLICY = "strict-five-v2"
+_POLICY = POLICY_D381
 _NOTICE = "Research enforcement did not apply to this turn: "
 _MARKER_CAP = 64 * 1024  # a record is about 200 bytes
 _REASON_CAP = 500
@@ -75,7 +75,7 @@ def _research_command(event: dict[str, object], repo_root: Path) -> str:
     )
     return (
         f"mise -C {_display(repo_root)} run research-gate -- QUERY "
-        "--repo OWNER/REPO --strict-five "
+        f"--repo OWNER/REPO --strict-five --policy-version {_POLICY} "
         f"--request-id {event['turn_id']} --last30days-plan PLAN.json "
         f"--out {relative_out}"
     )
@@ -83,13 +83,13 @@ def _research_command(event: dict[str, object], repo_root: Path) -> str:
 
 def _research_context(event: dict[str, object], repo_root: Path) -> str:
     return (
-        f"Research strict-five-v2: {_SOURCE_NAMES}. Run "
+        f"Research {_POLICY}: {_SOURCE_NAMES}. Run "
         f"`{_research_command(event, repo_root)}`. "
         "Verify manifest and primary sources. "
-        "For failed routes report `RESEARCH INCOMPLETE:` and the exact blocker. "
-        "A metered provider that cannot run (credits, quota, auth, missing key, "
-        "network, sandbox) is recorded skipped with its code and evidence; the "
-        "receipt passes PROVISIONAL; name PROVISIONAL and each skipped provider."
+        "Exhausted credits/payment/quota: evidenced SKIPPED, renewal when known. "
+        "Continue remaining providers; no retries, topups, renewal waits or "
+        "PROVISIONAL. Invalid credentials, missing prerequisites and unrunnable "
+        "routes remain `RESEARCH INCOMPLETE:`; name the exact blocker."
     )
 
 
@@ -285,9 +285,14 @@ def _on_submit(
 
 
 def _on_stop(
-    event: dict[str, object], manifest: Path, repo_root: Path, opt_out: str = ""
+    event: dict[str, object],
+    manifest: Path,
+    repo_root: Path,
+    opt_out: str = "",
+    *,
+    policy: str,
 ) -> dict[str, object]:
-    verdict = strict_five_verdict(manifest, str(event["turn_id"]))
+    verdict = strict_five_verdict(manifest, str(event["turn_id"]), policy)
     if verdict.passed:
         if not verdict.provisional_entries:
             return {}
@@ -406,7 +411,7 @@ def _research_record(marker: Path, turn_id: str) -> dict[str, object] | str | No
     if (
         scope != "research"
         or recorded.get("turn_id") != turn_id
-        or recorded.get("policy") != _POLICY
+        or recorded.get("policy") not in (_POLICY, POLICY_V2)
         or recorded.get("binding") not in (None, "intent")
         or not isinstance(digest, str)
         or _DIGEST.fullmatch(digest) is None
@@ -433,7 +438,13 @@ def _on_bound_stop(
     record = _research_record(marker, str(event["turn_id"]))
     if isinstance(record, dict):
         by_intent = record.get("binding") == "intent"
-        return _on_stop(event, manifest, repo_root, _OPT_OUT if by_intent else "")
+        return _on_stop(
+            event,
+            manifest,
+            repo_root,
+            _OPT_OUT if by_intent else "",
+            policy=str(record["policy"]),
+        )
     if record is None:
         return {}
     return {"systemMessage": f"{_NOTICE}research submission record {record}."}

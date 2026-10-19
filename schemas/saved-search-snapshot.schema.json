@@ -12,7 +12,7 @@
     "controls": {"type": "array", "items": {"$ref": "#/$defs/SearchControl"}}
   },
   "$defs": {
-    "RerunStatus": {"description": "Verified answer or explicit failure of a rerun.", "type": "string", "enum": ["ok", "empty-verified", "empty-unarmed", "rate-limited", "incomplete", "uncollectable", "error"]},
+    "RerunStatus": {"description": "Verified answer or explicit failure of a rerun.", "type": "string", "enum": ["ok", "empty-verified", "empty-unarmed", "rate-limited", "incomplete", "uncollectable", "error", "skipped"]},
     "WatchRun": {
       "description": "Search outcome with its count and returned URLs.",
       "type": "object",

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import stat
 import subprocess
@@ -20,6 +21,7 @@ import tomli_w
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
 from dotfiles_setup.research_fanout import ProbeTiming
+from dotfiles_setup.research_fanout import main as produce_fanout
 from dotfiles_setup.saved_searches import GENERATED_HEADER, load, main, shape_of
 
 _ROOT = Path(__file__).parent.parent
@@ -31,6 +33,9 @@ _HIT = "present repo:a/b language:rust"
 # Canonical (HEAD-pinned) blob URLs: what a snapshot stores for a code hit.
 _OLD_URL = "https://github.com/a/b/blob/HEAD/old.rs"
 _NEW_URL = "https://github.com/a/b/blob/HEAD/new.rs"
+
+
+_D381_POLICY = "strict-five-v3-d381"
 
 
 @dataclass
@@ -148,6 +153,15 @@ def _rows(snapshot: dict[str, object]) -> dict[str, dict[str, object]]:
     }
 
 
+def _historical_fanout_fixture(directory: Path, name: str) -> Path:
+    # Historical controls intentionally omit policy; explicit null now fails closed.
+    payload = json.loads((_FIXTURES / name).read_bytes())
+    payload.pop("policy_version")
+    output = directory / name
+    output.write_text(json.dumps(payload), encoding="utf-8")
+    return output
+
+
 def test_record_never_saves_known_absent(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -155,7 +169,9 @@ def test_record_never_saves_known_absent(
 
     FAIL arm: broaden _probe_record's CodeRole gate to include known-absent.
     """
-    extended = json.loads((_FIXTURES / "fanout-items.json").read_bytes())
+    extended = json.loads(
+        _historical_fanout_fixture(tmp_path, "fanout-items.json").read_bytes()
+    )
     extended["sources"].append({"source": "exa", "items": [], "status": "ok"})
     extra = tmp_path / "extended.json"
     extra.write_text(json.dumps(extended), encoding="utf-8")
@@ -166,7 +182,7 @@ def test_record_never_saves_known_absent(
         "--fanout-manifest",
         str(extra),
         "--fanout-manifest",
-        str(_FIXTURES / "fanout-empty.json"),
+        str(_historical_fanout_fixture(tmp_path, "fanout-empty.json")),
         "--probe-manifest",
         str(_FIXTURES / "probe.json"),
     ]
@@ -219,12 +235,12 @@ def test_record_merge_and_curated_refusal(
         "--out",
         str(path),
         "--fanout-manifest",
-        str(_FIXTURES / "fanout-items.json"),
+        str(_historical_fanout_fixture(tmp_path, "fanout-items.json")),
     ]
     assert main(args, tmp_path) == 0
     first = load(path)
     _receipt(capsys)
-    updated = json.loads((_FIXTURES / "fanout-items.json").read_bytes())
+    updated = json.loads((tmp_path / "fanout-items.json").read_bytes())
     updated["generated_at"] = "2026-10-04T00:00:00Z"
     updated["sources"][0]["items"] = []
     manifest = tmp_path / "new.json"
@@ -349,7 +365,9 @@ def test_record_classifies_failed_rows(
             ]
         ],
     }
-    fanout = json.loads((_FIXTURES / "fanout-items.json").read_bytes())
+    fanout = json.loads(
+        _historical_fanout_fixture(tmp_path, "fanout-items.json").read_bytes()
+    )
     fanout["sources"][0]["status"] = "error"
     fanout["sources"][1]["status"] = "empty_verified"
     fanout["sources"][1]["items"] = []
@@ -1669,3 +1687,415 @@ def test_collect_all_only_on_code_query_watches(
     runner = _Runner()
     assert main(["rerun", str(path)], tmp_path, runner=runner) == 2
     assert runner.calls == []
+
+
+def _d381_saved_manifest(directory: Path, source: str) -> Path:
+    """All eight bound arms; GitHub exhaustion has no measured result count."""
+    payloads: dict[str, object] = {
+        "github-issues": {"items": [{"html_url": "https://primary.test"}]},
+        "github-discussions": {
+            "data": {"search": {"nodes": [{"url": "https://primary.test"}]}},
+        },
+        "github-releases": [{"html_url": "https://primary.test"}],
+        "exa": {"requestId": "fixture", "results": [{"url": "https://primary.test"}]},
+        "context7": "Context7 documentation",
+        "firecrawl-developer": {
+            "success": True,
+            "results": [{"url": "https://primary.test"}],
+        },
+        "firecrawl-search": {
+            "success": True,
+            "data": {"web": [{"url": "https://primary.test"}]},
+        },
+        "last30days": {"schema_version": "1.3", "source_status": {"reddit": "ok"}},
+    }
+    rows = []
+    for name, primary_payload in payloads.items():
+        skipped = name == source
+        payload = (
+            {
+                "http_status": 429,
+                "rc": None,
+                "body": "Monthly quota exhausted",
+                "stderr_redacted": "",
+            }
+            if skipped
+            else primary_payload
+        )
+        raw = (
+            payload.encode()
+            if isinstance(payload, str)
+            else json.dumps(payload).encode()
+        )
+        path = directory / f"{name}.raw"
+        path.write_bytes(raw)
+        digest = hashlib.sha256(raw).hexdigest()
+        row = {
+            "source": name,
+            "status": "skipped" if skipped else "ok",
+            "items": [] if skipped else [{"url": "https://primary.test"}],
+            "raw_file": str(path),
+            "raw_sha256": digest,
+            "provisional": False,
+        }
+        if skipped:
+            primary = directory / f"{name}.primary.raw"
+            primary.write_bytes(raw)
+            row.update(
+                reason="quota",
+                skip_reason="quota",
+                control=None,
+                attempts=[
+                    {
+                        "route": name,
+                        "status": "skipped",
+                        "http_status": 429,
+                        "reason": "quota",
+                        "raw_file": str(primary),
+                        "raw_sha256": digest,
+                    }
+                ],
+            )
+        rows.append(row)
+    manifest = directory / "d381-manifest.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "strict_five": True,
+                "policy_version": _D381_POLICY,
+                "request_id": "turn-1",
+                "query": "term",
+                "repo": "a/b",
+                "generated_at": "2026-10-03T00:00:00+00:00",
+                "disposition": "complete",
+                "skipped_sources": [source],
+                "failed_sources": [],
+                "sources": rows,
+            }
+        )
+    )
+    return manifest
+
+
+@pytest.mark.parametrize(
+    "source", ["github-issues", "github-discussions", "github-releases"]
+)
+def test_d381_saved_search_import_preserves_exhaustion_as_skipped_not_zero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], source: str
+) -> None:
+    manifest = _d381_saved_manifest(tmp_path, source)
+    output = tmp_path / "saved.toml"
+    assert (
+        main(
+            ["record", "--out", str(output), "--fanout-manifest", str(manifest)],
+            tmp_path,
+        )
+        == 0
+    )
+    receipt = _receipt(capsys)
+    assert receipt["written"] is True
+    model = load(output)
+    kind = source.removeprefix("github-")
+    watch_id = next(watch.id for watch in model.watch if str(watch.kind) == kind)
+    saved = tomllib.loads(output.read_text())
+    row = next(r for r in saved["result"] if r["watch_id"] == watch_id)
+    assert (row["status"], row["count"], row["urls"]) == ("skipped", -1, [])
+
+
+@pytest.mark.parametrize("damage", ["hash", "bare", "auth-relabel", "v2"])
+def test_d381_saved_search_import_cannot_launder_invalid_exhaustion(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], damage: str
+) -> None:
+    manifest = _d381_saved_manifest(tmp_path, "github-issues")
+    data = json.loads(manifest.read_text())
+    row = data["sources"][0]
+    if damage == "hash":
+        (tmp_path / "github-issues.raw").write_bytes(b"altered")
+    elif damage == "bare":
+        row.update(raw_file=None, raw_sha256=None, attempts=[])
+    elif damage == "auth-relabel":
+        raw = json.dumps(
+            {
+                "http_status": 401,
+                "rc": None,
+                "body": "Monthly quota exhausted",
+                "stderr_redacted": "",
+            }
+        ).encode()
+        (tmp_path / "github-issues.raw").write_bytes(raw)
+        (tmp_path / "github-issues.primary.raw").write_bytes(raw)
+        row["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        row["attempts"][0].update(raw_sha256=row["raw_sha256"], http_status=401)
+    else:
+        data["policy_version"] = "strict-five-v2"
+    manifest.write_text(json.dumps(data))
+    output = tmp_path / "saved.toml"
+    rc = main(
+        ["record", "--out", str(output), "--fanout-manifest", str(manifest)], tmp_path
+    )
+    receipt = _receipt(capsys)
+    # Refusal or an explicit error baseline is acceptable; a nonblocking skip
+    # is reserved for revalidated v3 exhaustion, never a trusted summary field.
+    if receipt["written"]:
+        saved = tomllib.loads(output.read_text())
+        watch_id = next(w["id"] for w in saved["watch"] if w["kind"] == "issues")
+        result = next(r for r in saved["result"] if r["watch_id"] == watch_id)
+        assert (result["status"], result["count"]) == ("error", -1)
+    else:
+        assert rc != 0
+
+
+@pytest.mark.parametrize("status", ["ok", "empty_verified"])
+@pytest.mark.parametrize("damage", ["hash", "route", "attempts"])
+def test_d381_saved_search_invalid_success_is_error_not_baseline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], status: str, damage: str
+) -> None:
+    manifest = _d381_saved_manifest(tmp_path, "exa")
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "github-releases")
+    if status == "empty_verified":
+        raw = b"[]"
+        Path(row["raw_file"]).write_bytes(raw)
+        row.update(
+            status=status,
+            items=[],
+            raw_sha256=hashlib.sha256(raw).hexdigest(),
+            control={"query": "python/cpython", "count": 1},
+        )
+    manifest.write_text(json.dumps(data))
+    valid = tmp_path / "valid.toml"
+    assert (
+        main(
+            ["record", "--out", str(valid), "--fanout-manifest", str(manifest)],
+            tmp_path,
+        )
+        == 0
+    )
+    _receipt(capsys)
+    saved = tomllib.loads(valid.read_text())
+    watch_id = next(w["id"] for w in saved["watch"] if w["kind"] == "releases")
+    baseline = next(r for r in saved["result"] if r["watch_id"] == watch_id)
+    expected = ("ok", 1) if status == "ok" else ("empty-verified", 0)
+    assert (baseline["status"], baseline["count"]) == expected
+    if damage == "hash":
+        Path(row["raw_file"]).write_bytes(b"altered")
+    elif damage == "route":
+        row.update(route="serper", provisional=True)
+    else:
+        row["attempts"] = [{"route": "github-releases", "status": "error"}]
+    manifest.write_text(json.dumps(data))
+    output = tmp_path / "invalid.toml"
+    assert (
+        main(
+            ["record", "--out", str(output), "--fanout-manifest", str(manifest)],
+            tmp_path,
+        )
+        == 0
+    )
+    _receipt(capsys)
+    invalid = tomllib.loads(output.read_text())
+    result = next(r for r in invalid["result"] if r["watch_id"] == watch_id)
+    assert (result["status"], result["count"], result["urls"]) == ("error", -1, [])
+
+
+def test_d381_saved_search_skipped_baseline_is_not_comparable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = _d381_saved_manifest(tmp_path, "github-issues")
+    output = tmp_path / "saved.toml"
+    assert (
+        main(
+            ["record", "--out", str(output), "--fanout-manifest", str(manifest)],
+            tmp_path,
+        )
+        == 0
+    )
+    _receipt(capsys)
+    saved = tomllib.loads(output.read_text())
+    watch_id = next(w["id"] for w in saved["watch"] if w["kind"] == "issues")
+    baseline = next(r for r in saved["result"] if r["watch_id"] == watch_id)
+    assert (baseline["status"], baseline["count"]) == ("skipped", -1)
+    tool = tmp_path / "gh"
+    tool.write_text("#!/bin/sh\nexit 99\n")
+    tool.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    runner = _Runner(
+        plain={
+            "/search/issues?q=repo:a/b+term&per_page=10": {
+                "items": [{"html_url": _NEW_URL}],
+            }
+        }
+    )
+    assert (
+        main(
+            ["rerun", str(output), "--id", watch_id],
+            tmp_path,
+            runner=runner,
+            timing=_Timing().boundaries(),
+        )
+        == 0
+    )
+    line = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith(f"| {watch_id} |")
+    )
+    assert line.endswith("| n/a | n/a |")
+
+
+def test_d381_partial_github_skips_stay_skipped_in_live_saved_search_consumer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tool = tmp_path / "gh"
+    tool.write_text("#!/bin/sh\nexit 99\n")
+    tool.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    names = ("github-issues", "github-discussions", "github-releases")
+    calls = []
+
+    def runner(
+        argv: list[str],
+        *,
+        timeout: float,
+        env: dict[str, str],
+    ) -> subprocess.CompletedProcess[bytes]:
+        del timeout, env
+        calls.append(argv)
+        return subprocess.CompletedProcess(
+            argv, 1, b"", b"HTTP 429 Monthly quota exhausted"
+        )
+
+    manifest = tmp_path / "out/manifest.json"
+    assert (
+        produce_fanout(
+            [
+                "topic",
+                "--repo",
+                "owner/repo",
+                "--policy-version",
+                _D381_POLICY,
+                "--sources",
+                ",".join(names),
+                "--out",
+                str(manifest.parent),
+            ],
+            tmp_path,
+            runner=runner,
+        )
+        == 0
+    )
+    data = json.loads(manifest.read_text())
+    assert data["failed_sources"] == []
+    assert set(data["skipped_sources"]) == set(names)
+    target = tmp_path / "saved.toml"
+    assert (
+        main(
+            ["record", "--fanout-manifest", str(manifest), "--out", str(target)],
+            tmp_path,
+        )
+        == 0
+    )
+    _receipt(capsys)
+    saved = tomllib.loads(target.read_text())
+    assert len(saved["result"]) == 3
+    assert all(
+        (row["status"], row["count"], row["urls"]) == ("skipped", -1, [])
+        for row in saved["result"]
+    )
+    assert len(calls) == 3
+
+
+def test_d381_live_github_rerun_preserves_exhaustion_as_not_comparable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tool = tmp_path / "gh"
+    tool.write_text("#!/bin/sh\nexit 99\n")
+    tool.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    manifest = _d381_saved_manifest(tmp_path, "github-issues")
+    target = tmp_path / "saved.toml"
+    assert (
+        main(
+            ["record", "--fanout-manifest", str(manifest), "--out", str(target)],
+            tmp_path,
+        )
+        == 0
+    )
+    _receipt(capsys)
+    data = tomllib.loads(target.read_text())
+    watch = next(w for w in data["watch"] if w["kind"] == "issues")
+    calls = []
+
+    def runner(
+        argv: list[str],
+        *,
+        timeout: float,
+        env: dict[str, str],
+    ) -> subprocess.CompletedProcess[bytes]:
+        del timeout, env
+        calls.append(argv)
+        return subprocess.CompletedProcess(
+            argv, 1, b"", b"HTTP 429 Monthly quota exhausted"
+        )
+
+    # Rerun's existing CLI reports noncomparable snapshots with rc1.
+    assert (
+        main(["rerun", str(target), "--id", watch["id"]], tmp_path, runner=runner) == 1
+    )
+    snapshots = list((tmp_path / ".agent/kb/raw/saved-searches").rglob("*.json"))
+    assert snapshots
+    run = json.loads(snapshots[0].read_text())["watches"][0]
+    assert (run["status"], run["count"], run["urls"]) == ("skipped", -1, [])
+    line = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("| " + watch["id"] + " |")
+    )
+    assert line.endswith("| n/a | n/a |")
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "policy", ["strict-five-v999", None, "absent", "strict-five-v2"]
+)
+@pytest.mark.parametrize("status", ["ok", "empty_verified", "skipped"])
+def test_d381_security_import_policy_dispatch_fails_closed(
+    tmp_path: Path, policy: str | None, status: str
+) -> None:
+    manifest = _d381_saved_manifest(tmp_path, "exa")
+    data = json.loads(manifest.read_bytes())
+    if policy == "absent":
+        data.pop("policy_version")
+    else:
+        data["policy_version"] = policy
+    source = next(row for row in data["sources"] if row["source"] == "github-issues")
+    source["status"] = status
+    source["items"] = [{"url": "https://primary.test"}] if status == "ok" else []
+    manifest.write_text(json.dumps(data))
+    output = tmp_path / "saved.toml"
+    assert (
+        main(
+            ["record", "--out", str(output), "--fanout-manifest", str(manifest)],
+            tmp_path,
+        )
+        == 0
+    )
+    saved = tomllib.loads(output.read_text())
+    watch = next(row for row in saved["watch"] if row["kind"] == "issues")
+    row = next(row for row in saved["result"] if row["watch_id"] == watch["id"])
+    if policy not in {"absent", "strict-five-v2"}:
+        assert (row["status"], row["count"], row["urls"]) == ("error", -1, [])
+    elif status == "ok":
+        assert (row["status"], row["count"], row["urls"]) == (
+            "ok",
+            1,
+            ["https://primary.test"],
+        )
+    elif status == "empty_verified":
+        assert (row["status"], row["count"], row["urls"]) == ("empty-verified", 0, [])
+    else:
+        assert (row["status"], row["count"], row["urls"]) == ("error", -1, [])

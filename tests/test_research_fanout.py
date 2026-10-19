@@ -20,6 +20,7 @@ import urllib.request
 import uuid
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
@@ -30,11 +31,13 @@ if TYPE_CHECKING:
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 
+from dotfiles_setup import codex_research_gate
 from dotfiles_setup.generated.research_skip_reason import SkipReason
 from dotfiles_setup.research_fanout import (
     Endpoint,
     FanoutRequest,
     Http,
+    ProbeTiming,
     Status,
     default_http,
     default_runner,
@@ -45,6 +48,7 @@ from dotfiles_setup.research_fanout import (
     strict_five_verdict,
     validate_strict_five,
 )
+from dotfiles_setup.saved_searches import main as record_saved_searches
 
 
 def _strict_manifest(tmp_path: Path) -> Path:
@@ -3474,6 +3478,8 @@ def test_projection_strict_cli_line_contains_no_diagnostics(
                 "--repo",
                 "owner/repo",
                 "--strict-five",
+                "--policy-version",
+                "strict-five-v2",
                 "--request-id",
                 "turn-1",
                 "--last30days-plan",
@@ -4002,3 +4008,1862 @@ def test_deeply_nested_evidence_is_refused_without_crashing(
     result = _verdict_process(manifest)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "False"
+
+
+# D381 axes: policy x eight arms x transport evidence x identity/integrity x
+# completion. These fixtures extend, rather than relabel, the v2 fixtures above.
+_D381_POLICY = "strict-five-v3-d381"
+_D381_SOURCES = (
+    "github-issues",
+    "github-discussions",
+    "github-releases",
+    "exa",
+    "context7",
+    "firecrawl-developer",
+    "firecrawl-search",
+    "last30days",
+)
+_D381_NOW = datetime(2026, 10, 18, 12, tzinfo=UTC)
+_D381_RENEWAL = "2026-11-01T00:00:00+00:00"
+_D381_REASON_CAP = 300
+
+
+def _d381_manifest(
+    directory: Path,
+    source: str = "exa",
+    *,
+    envelope: dict[str, object] | None = None,
+    code: str = "credits-exhausted",
+) -> Path:
+    """Independent literal receipt: one bound refusal and seven real-shaped hits."""
+    path = _strict_manifest(directory)
+    data = json.loads(path.read_text())
+    data.update(
+        policy_version=_D381_POLICY,
+        generated_at=_D381_NOW.isoformat(),
+        disposition="complete",
+        skipped_sources=[source],
+        failed_sources=[],
+    )
+    proof = (
+        envelope
+        if envelope is not None
+        else {
+            "http_status": 402,
+            "rc": None,
+            "body": "Insufficient credits",
+            "stderr_redacted": "",
+        }
+    )
+    raw = json.dumps(proof).encode()
+    digest = hashlib.sha256(raw).hexdigest()
+    for label in (source, f"{source}.primary"):
+        (directory / f"{label}.raw").write_bytes(raw)
+    for row in data["sources"]:
+        row["provisional"] = False
+        if row["source"] == source:
+            row.update(
+                status="skipped",
+                items=[],
+                control=None,
+                reason=code,
+                skip_reason=code,
+                raw_sha256=digest,
+                attempts=[
+                    {
+                        "route": source,
+                        "status": "skipped",
+                        "http_status": proof.get("http_status"),
+                        "reason": code,
+                        "raw_file": str(directory / f"{source}.primary.raw"),
+                        "raw_sha256": digest,
+                    }
+                ],
+            )
+    path.write_text(json.dumps(data))
+    return path
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize(
+    ("envelope", "code"),
+    [
+        (
+            {"http_status": 402, "rc": None, "body": "", "stderr_redacted": ""},
+            "credits-exhausted",
+        ),
+        (
+            {
+                "http_status": 429,
+                "rc": None,
+                "body": "Monthly quota exhausted",
+                "stderr_redacted": "",
+            },
+            "quota",
+        ),
+        (
+            {
+                "http_status": None,
+                "rc": 0,
+                "body": "Monthly quota reached",
+                "stderr_redacted": "",
+            },
+            "quota",
+        ),
+    ],
+    ids=["payment-required", "quota-exhausted", "rc0-quota-refusal"],
+)
+def test_d381_verdict_accepts_only_evidenced_exhaustion_without_provisional(
+    tmp_path: Path, source: str, envelope: dict[str, object], code: str
+) -> None:
+    manifest = _d381_manifest(tmp_path, source, envelope=envelope, code=code)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed, verdict.reason
+    assert verdict.provisional == ()
+    assert verdict.provisional_entries == ()
+    assert "provisional" not in verdict.reason.lower()
+    assert validate_strict_five(manifest, "turn-1")[0] is True
+
+
+def test_d381_all_eight_exhausted_arms_are_skips_without_successful_items(
+    tmp_path: Path,
+) -> None:
+    rows = []
+    evidence: dict[Path, bytes] = {}
+    for source in _D381_SOURCES:
+        manifest = _d381_manifest(tmp_path, source)
+        rows.append(
+            next(
+                row
+                for row in json.loads(manifest.read_text())["sources"]
+                if row["source"] == source
+            )
+        )
+        for label in (source, f"{source}.primary"):
+            raw = tmp_path / f"{label}.raw"
+            evidence[raw] = raw.read_bytes()
+    for raw, content in evidence.items():
+        raw.write_bytes(content)
+    data = json.loads(manifest.read_text())
+    data.update(sources=rows, skipped_sources=list(_D381_SOURCES))
+    manifest.write_text(json.dumps(data))
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed, verdict.reason
+    assert verdict.provisional == ()
+    assert verdict.provisional_entries == ()
+    assert all(row["items"] == [] for row in rows)
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize(
+    ("envelope", "code"),
+    [
+        (
+            {
+                "http_status": 401,
+                "rc": None,
+                "body": "Insufficient credits",
+                "stderr_redacted": "",
+            },
+            "auth-failed",
+        ),
+        (
+            {"http_status": 403, "rc": None, "body": "", "stderr_redacted": ""},
+            "auth-failed",
+        ),
+        ({"error_class": "FileNotFoundError", "errno": 2}, "unavailable"),
+        ({"error_class": "PermissionError", "errno": 1}, "sandbox-denied"),
+        ({"error_class": "TimeoutExpired"}, "unavailable"),
+    ],
+    ids=["auth401-credit-decoy", "auth403", "missing-cli", "sandbox", "timeout"],
+)
+def test_d381_verdict_keeps_nonexhaustion_incomplete(
+    tmp_path: Path, source: str, envelope: dict[str, object], code: str
+) -> None:
+    manifest = _d381_manifest(tmp_path, source)
+    # The positive arm prevents an unimplemented-policy rejection masquerading
+    # as successful authentication/unrunnable coverage.
+    assert strict_five_verdict(manifest, "turn-1").passed
+    _d381_manifest(tmp_path, source, envelope=envelope, code=code)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert not verdict.passed
+    assert source in verdict.reason
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "hash",
+        "primary-hash",
+        "bare",
+        "auth-relabel",
+        "items",
+        "reason",
+        "wrong-turn",
+        "unknown-policy",
+        "missing-arm",
+        "duplicate-arm",
+        "empty-unverified",
+        "empty-without-control",
+        "raw-path",
+    ],
+)
+def test_d381_verdict_does_not_trust_skip_labels_or_summary(
+    tmp_path: Path, corruption: str
+) -> None:
+    manifest = _d381_manifest(tmp_path)
+    assert strict_five_verdict(manifest, "turn-1").passed
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "exa")
+    overrides = {
+        "primary-hash": {"attempts": [{**row["attempts"][0], "raw_sha256": "0" * 64}]},
+        "bare": {"raw_file": None, "raw_sha256": None, "attempts": []},
+        "items": {"items": [{"url": "https://fabricated.test"}]},
+        "reason": {"skip_reason": "arbitrary-waiver"},
+        "raw-path": {"raw_file": str(tmp_path / "exa.primary.raw")},
+    }
+    if corruption in overrides:
+        row.update(overrides[corruption])
+    elif corruption == "hash":
+        (tmp_path / "exa.raw").write_bytes(b"altered")
+    elif corruption == "auth-relabel":
+        _d381_manifest(
+            tmp_path,
+            envelope={
+                "http_status": 401,
+                "rc": None,
+                "body": "Insufficient credits",
+                "stderr_redacted": "",
+            },
+        )
+        data = json.loads(manifest.read_text())
+    elif corruption == "wrong-turn":
+        data["request_id"] = "other-turn"
+    elif corruption == "unknown-policy":
+        data["policy_version"] = "strict-five-v999"
+    elif corruption == "missing-arm":
+        data["sources"].pop()
+    elif corruption == "duplicate-arm":
+        data["sources"][-1] = data["sources"][0]
+    else:
+        sibling = data["sources"][0]
+        sibling.update(
+            status=(
+                "empty_unverified"
+                if corruption == "empty-unverified"
+                else "empty_verified"
+            ),
+            items=[],
+            control=None,
+        )
+    manifest.write_text(json.dumps(data))
+    assert not strict_five_verdict(manifest, "turn-1").passed
+
+
+@pytest.mark.parametrize("damage", ["count", "query"])
+def test_d381_verified_empty_accepts_bound_positive_control_then_rejects_corruption(
+    tmp_path: Path, damage: str
+) -> None:
+    manifest = _d381_manifest(tmp_path)
+    data = json.loads(manifest.read_text())
+    row = next(r for r in data["sources"] if r["source"] == "github-releases")
+    raw = tmp_path / "github-releases.raw"
+    raw.write_bytes(b"[]")
+    row.update(
+        status="empty_verified",
+        items=[],
+        raw_sha256=hashlib.sha256(b"[]").hexdigest(),
+        control={"query": "python/cpython", "count": 1},
+    )
+    manifest.write_text(json.dumps(data))
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed, verdict.reason
+    assert verdict.provisional == ()
+    row["control"][damage] = 0 if damage == "count" else ""
+    manifest.write_text(json.dumps(data))
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert not verdict.passed
+    assert "github-releases" in verdict.reason
+
+
+@dataclass(frozen=True)
+class _D381Refusal:
+    source: str | None = None
+    message: bytes = b"Insufficient credits"
+    rc: int = 1
+    http_status: int = 402
+    inherited_exa: bool = True
+    command: str | None = None
+
+
+def _d381_command_response(argv: list[str]) -> tuple[str, bytes]:
+    if argv[0] == "ctx7":
+        return "context7", (
+            b"Context7-compatible library ID: /owner/topic"
+            if argv[1] == "library"
+            else b"### Topic documentation\nSource: https://primary.test/docs\nExample"
+        )
+    if argv[0] == "firecrawl":
+        return (
+            "firecrawl-search",
+            b'{"success":true,"data":{"web":[{"url":"https://primary.test"}]}}',
+        )
+    if argv[0] == "python3":
+        return "last30days", (
+            b'{"schema_version":"1.3","source_status":{"hackernews":"ok"},'
+            b'"results":[{"url":"https://primary.test"}]}'
+        )
+    if "graphql" in argv:
+        return (
+            "github-discussions",
+            b'{"data":{"search":{"nodes":[{"url":"https://primary.test"}]}}}',
+        )
+    if any("/releases" in arg for arg in argv):
+        return (
+            "github-releases",
+            b'[{"html_url":"https://primary.test","name":"topic"}]',
+        )
+    return "github-issues", b'{"items":[{"html_url":"https://primary.test"}]}'
+
+
+def _d381_produce(
+    directory: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    refusal: _D381Refusal | None = None,
+    exhausted_sources: tuple[str, ...] = (),
+    extra: tuple[str, ...] = (),
+) -> tuple[int, list[tuple[str, str]]]:
+    """Use the real CLI/persistence with only process and HTTP doubles."""
+    refusal = refusal or _D381Refusal()
+    monkeypatch.setenv("EXA_API_KEY", "fixture-key")
+    if not refusal.inherited_exa:
+        monkeypatch.delenv("EXA_API_KEY")
+    monkeypatch.setenv("GH_TOKEN", "fixture-key")
+    monkeypatch.setenv("GITHUB_TOKEN", "fixture-key")
+    script = directory / "last30days.py"
+    script.write_text("# fixture; never executed\n")
+    monkeypatch.setenv("LAST30DAYS_SCRIPT", str(script))
+    plan = directory / "plan.json"
+    plan.write_text(
+        '{"subqueries":[{"search_query":"topic","sources":["hackernews"]}]}'
+    )
+    calls: list[tuple[str, str]] = []
+
+    def runner(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del timeout, env
+        source, payload = _d381_command_response(argv)
+        calls.append((source, "process"))
+        if (
+            source == refusal.source
+            and (refusal.command is None or argv[1] == refusal.command)
+        ) or source in exhausted_sources:
+            return _completed(
+                argv,
+                refusal.rc,
+                refusal.message if refusal.rc == 0 else b"",
+                refusal.message if refusal.rc else b"",
+            )
+        return _completed(argv, 0, payload)
+
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del params, body, headers, timeout
+        source = {
+            Endpoint.EXA_SEARCH: "exa",
+            Endpoint.FIRECRAWL_DEVELOPER: "firecrawl-developer",
+        }[endpoint]
+        calls.append((source, "http"))
+        if source == refusal.source or source in exhausted_sources:
+            return refusal.http_status, refusal.message
+        if source == "exa":
+            return (
+                200,
+                b'{"requestId":"fixture","results":[{"url":"https://primary.test"}]}',
+            )
+        return 200, b'{"success":true,"results":[{"url":"https://primary.test"}]}'
+
+    rc = main(
+        [
+            "topic",
+            "--repo",
+            "owner/repo",
+            "--strict-five",
+            "--request-id",
+            "turn-1",
+            "--last30days-plan",
+            str(plan),
+            "--out",
+            str(directory / "out"),
+            *extra,
+        ],
+        directory,
+        runner=runner,
+        http=http,
+    )
+    return rc, calls
+
+
+def test_d381_offline_boundary_fixture_can_complete_all_eight_arms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    """A green control proves producer reds are not broken success fixtures."""
+    del credit_env
+    rc, calls = _d381_produce(tmp_path, monkeypatch)
+    assert rc == 0
+    rows = json.loads((tmp_path / "out/manifest.json").read_text())["sources"]
+    assert {row["source"] for row in rows} == set(_D381_SOURCES)
+    assert all(row["status"] == "ok" for row in rows)
+    assert {name for name, _ in calls} == set(_D381_SOURCES)
+
+
+def test_d381_all_eight_exhausted_producer_receipt_passes_stop_without_naming(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    state = tmp_path / "state"
+    base = {"session_id": "fixture", "turn_id": "turn-1"}
+    codex_research_gate.handle(
+        {
+            **base,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: research]\nResearch the fixture.",
+        },
+        state,
+        repo_root=tmp_path,
+    )
+    stop: dict[str, object] = {
+        **base,
+        "hook_event_name": "Stop",
+        "last_assistant_message": "Results are ready.",
+    }
+    assert codex_research_gate.handle(stop, state, repo_root=tmp_path)["decision"] == (
+        "block"
+    )
+    output = state / "fixture/turn-1"
+    rc, calls = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        exhausted_sources=_D381_SOURCES,
+        extra=("--out", str(output)),
+    )
+    counts = {
+        source: sum(name == source for name, _ in calls) for source in _D381_SOURCES
+    }
+    assert counts == dict.fromkeys(_D381_SOURCES, 1)
+    assert rc == 0
+    data = json.loads((output / "manifest.json").read_text())
+    assert data["policy_version"] == _D381_POLICY
+    assert data["disposition"] == "complete"
+    assert set(data["skipped_sources"]) == set(_D381_SOURCES)
+    assert data["failed_sources"] == []
+    rows = data["sources"]
+    assert len(rows) == len(_D381_SOURCES)
+    assert {row["source"] for row in rows} == set(_D381_SOURCES)
+    assert all(row["status"] == "skipped" for row in rows)
+    assert all(row["provisional"] is False and row["items"] == [] for row in rows)
+    assert all(row["status"] != "ok" for row in rows)
+    verdict = strict_five_verdict(output / "manifest.json", "turn-1")
+    assert verdict.passed, verdict.reason
+    assert verdict.provisional == verdict.provisional_entries == ()
+    assert codex_research_gate.handle(stop, state, repo_root=tmp_path) == {}
+    (output / "exa.raw").write_bytes(b"altered")
+    assert codex_research_gate.handle(stop, state, repo_root=tmp_path)["decision"] == (
+        "block"
+    )
+
+
+@pytest.mark.parametrize("gap", ["auth401", "auth403", "missing-key", "missing-cli"])
+def test_d381_producer_does_not_complete_with_auth_or_prerequisite_gaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None, gap: str
+) -> None:
+    del credit_env
+    if gap == "missing-cli":
+        (tmp_path / "bin/ctx7").unlink()
+    rc, _ = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal(
+            source="exa" if gap.startswith("auth") else None,
+            http_status=401 if gap == "auth401" else 403,
+            message=b"Unauthorized",
+            inherited_exa=gap != "missing-key",
+        ),
+    )
+    assert rc == 1
+    data = json.loads((tmp_path / "out/manifest.json").read_text())
+    assert data["policy_version"] == _D381_POLICY
+    assert data["disposition"] == "incomplete"
+    assert ("context7" if gap == "missing-cli" else "exa") in data["failed_sources"]
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+def test_d381_producer_exhaustion_is_nonblocking_and_not_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None, source: str
+) -> None:
+    del credit_env
+    rc, calls = _d381_produce(tmp_path, monkeypatch, refusal=_D381Refusal(source))
+    assert sum(name == source for name, _ in calls) == 1
+    assert rc == 0
+    data = json.loads((tmp_path / "out/manifest.json").read_text())
+    assert data["policy_version"] == _D381_POLICY
+    assert {r["source"] for r in data["sources"]} == set(_D381_SOURCES)
+    row = next(r for r in data["sources"] if r["source"] == source)
+    assert (row["status"], row["provisional"]) == ("skipped", False)
+    assert row["items"] == []
+    assert 0 < len(row["reason"]) <= _D381_REASON_CAP
+    assert (data["disposition"], data["skipped_sources"], data["failed_sources"]) == (
+        "complete",
+        [source],
+        [],
+    )
+    assert strict_five_verdict(tmp_path / "out/manifest.json", "turn-1").passed
+
+
+def test_d381_context7_rc0_monthly_quota_does_not_run_empty_canary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    rc, calls = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal("context7", b"Monthly quota reached", 0),
+    )
+    assert [name for name, _ in calls].count("context7") == 1
+    assert rc == 0
+    row = json.loads((tmp_path / "out/manifest.json").read_text())["sources"][4]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "quota",
+        False,
+    )
+
+
+def test_d381_context7_docs_rc0_quota_preserves_transport_and_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    rc, calls = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal("context7", b"Monthly quota reached", 0, command="docs"),
+    )
+    assert rc == 0
+    assert [name for name, _ in calls].count("context7") == 2
+    manifest = tmp_path / "out/manifest.json"
+    row = json.loads(manifest.read_text())["sources"][4]
+    assert (row["status"], row["skip_reason"], row["provisional"]) == (
+        "skipped",
+        "quota",
+        False,
+    )
+    assert row["items"] == []
+    assert json.loads(Path(row["raw_file"]).read_text())["rc"] == 0
+    assert strict_five_verdict(manifest, "turn-1").passed
+
+
+def test_d381_exhaustion_reason_is_bounded_without_fabricating_renewal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None
+) -> None:
+    del credit_env
+    rc, _ = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal(
+            "github-issues", b"Insufficient credits\n" + b"detail " * 1000
+        ),
+    )
+    assert rc == 0
+    data = json.loads((tmp_path / "out/manifest.json").read_text())
+    row = next(r for r in data["sources"] if r["source"] == "github-issues")
+    assert 0 < len(row["reason"]) <= _D381_REASON_CAP
+    assert "\n" not in row["reason"]
+    assert row.get("renewal_at") is None
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize("remaining", [0, None, 5])
+@pytest.mark.usefixtures("credit_env")
+def test_d381_preflight_minimizes_balance_evidence_and_skips_only_known_zero(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    source: str,
+    remaining: int | None,
+) -> None:
+    """Selected additive CLI seam: --preflight-manifest, never an account call.
+
+    research-preflight/v1 binds source, request, policy and hashed balance input.
+    Only remaining/renewal_at may survive normalization. Unknown is not zero.
+    """
+    account_marker = "UNRELATED-ACCOUNT-FIELD-MUST-NOT-PERSIST"
+    credential_marker = "CREDENTIAL-SENTINEL-MUST-NOT-PERSIST"
+    extra_marker = "ARBITRARY-EXTRA-FIELD-MUST-NOT-PERSIST"
+    raw = json.dumps(
+        {
+            "remaining": remaining,
+            "renewal_at": _D381_RENEWAL,
+            "account_email": account_marker,
+            "account_id": account_marker,
+            "billing": {"card": account_marker},
+            "api_key": credential_marker,
+            "authorization": credential_marker,
+            "unrecognized": {"nested": [extra_marker, credential_marker]},
+        }
+    ).encode()
+    proof = tmp_path / "balance-input.json"
+    proof.write_bytes(raw)
+    preflight = tmp_path / "preflight.json"
+    preflight.write_text(
+        json.dumps(
+            {
+                "schema": "research-preflight/v1",
+                "policy_version": _D381_POLICY,
+                "request_id": "turn-1",
+                "sources": [
+                    {
+                        "source": source,
+                        "raw_file": str(proof),
+                        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                    }
+                ],
+            }
+        )
+    )
+    rc, calls = _d381_produce(
+        tmp_path, monkeypatch, extra=("--preflight-manifest", str(preflight))
+    )
+    captured = capsys.readouterr()
+    output = tmp_path / "out"
+    emitted = [captured.out.encode(), captured.err.encode()]
+    emitted.extend(path.read_bytes() for path in output.rglob("*") if path.is_file())
+    for content in emitted:
+        for forbidden in (
+            account_marker,
+            credential_marker,
+            extra_marker,
+            "account_email",
+            "account_id",
+            '"billing"',
+            '"api_key"',
+            '"authorization"',
+            '"unrecognized"',
+        ):
+            assert forbidden.encode() not in content
+    assert rc == 0
+    assert any(name == source for name, _ in calls) is (remaining != 0)
+    data = json.loads((output / "manifest.json").read_text())
+    row = next(r for r in data["sources"] if r["source"] == source)
+    assert row["status"] == ("skipped" if remaining == 0 else "ok")
+    proof_metadata = row["preflight"]
+    proof_bytes = Path(proof_metadata["raw_file"]).read_bytes()
+    assert json.loads(proof_bytes) == {
+        "schema": "research-preflight-proof/v1",
+        "request_id": "turn-1",
+        "source": source,
+        "policy_version": _D381_POLICY,
+        "input_sha256": hashlib.sha256(raw).hexdigest(),
+        "balances": {"remaining": remaining, "renewal_at": _D381_RENEWAL},
+    }
+    assert proof_metadata["raw_sha256"] == hashlib.sha256(proof_bytes).hexdigest()
+    if remaining == 0:
+        assert row["renewal_at"] == _D381_RENEWAL
+        assert row["provisional"] is False
+        assert row["raw_sha256"]
+        assert row["raw_sha256"] != hashlib.sha256(raw).hexdigest()
+        normalized = Path(row["raw_file"]).read_bytes()
+        assert json.loads(normalized) == {
+            "schema": "research-preflight-proof/v1",
+            "request_id": "turn-1",
+            "source": source,
+            "policy_version": _D381_POLICY,
+            "input_sha256": hashlib.sha256(raw).hexdigest(),
+            "balances": {"remaining": 0, "renewal_at": _D381_RENEWAL},
+        }
+        assert row["raw_sha256"] == hashlib.sha256(normalized).hexdigest()
+    assert strict_five_verdict(output / "manifest.json", "turn-1").passed
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "hash",
+        "turn",
+        "source",
+        "negative",
+        "string",
+        "policy",
+        "schema",
+        "duplicate-source",
+        "false",
+        "true",
+        "renewal-type",
+        "renewal-format",
+    ],
+)
+def test_d381_invalid_preflight_cannot_waive_a_route(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    capsys: pytest.CaptureFixture[str],
+    damage: str,
+) -> None:
+    del credit_env
+    balances = {"negative": -1, "string": "0", "false": False, "true": True}
+    balance: dict[str, object] = {"remaining": balances.get(damage, 0)}
+    if damage.startswith("renewal-"):
+        balance["renewal_at"] = (
+            {"date": _D381_RENEWAL} if damage == "renewal-type" else "not-a-date"
+        )
+    raw = json.dumps(balance).encode()
+    proof = tmp_path / "balance-input.json"
+    proof.write_bytes(raw)
+    preflight = tmp_path / "preflight.json"
+    row = {
+        "source": "invented" if damage == "source" else "exa",
+        "raw_file": str(proof),
+        "raw_sha256": "0" * 64 if damage == "hash" else hashlib.sha256(raw).hexdigest(),
+    }
+    preflight.write_text(
+        json.dumps(
+            {
+                "schema": "research-preflight/v999"
+                if damage == "schema"
+                else "research-preflight/v1",
+                "policy_version": "strict-five-v2"
+                if damage == "policy"
+                else _D381_POLICY,
+                "request_id": "wrong-turn" if damage == "turn" else "turn-1",
+                "sources": [row, dict(row)] if damage == "duplicate-source" else [row],
+            }
+        )
+    )
+    rc, _ = _d381_produce(
+        tmp_path, monkeypatch, extra=("--preflight-manifest", str(preflight))
+    )
+    # A malformed preflight is usage/prerequisite failure, never completion.
+    assert rc in {1, 2}
+    assert "unrecognized arguments" not in capsys.readouterr().err
+    manifest = tmp_path / "out/manifest.json"
+    assert not manifest.exists() or not strict_five_verdict(manifest, "turn-1").passed
+
+
+@pytest.mark.parametrize("damage", [None, "hash", "turn", "stale", "auth"])
+def test_d381_probe_projects_only_validated_fresh_exhaustion_as_nonblocking(
+    tmp_path: Path, damage: str | None
+) -> None:
+    manifest = _d381_manifest(tmp_path)
+    if damage == "hash":
+        (tmp_path / "exa.raw").write_bytes(b"altered")
+    elif damage == "auth":
+        _d381_manifest(
+            tmp_path,
+            envelope={
+                "http_status": 401,
+                "rc": None,
+                "body": "",
+                "stderr_redacted": "",
+            },
+            code="auth-failed",
+        )
+    elif damage in {"turn", "stale"}:
+        data = json.loads(manifest.read_text())
+        data["request_id" if damage == "turn" else "generated_at"] = (
+            "other-turn" if damage == "turn" else "2025-01-01T00:00:00+00:00"
+        )
+        manifest.write_text(json.dumps(data))
+    output = tmp_path / "probe.json"
+    assert (
+        main(
+            [
+                "--probe-out",
+                str(output),
+                "--fanout-manifest",
+                str(manifest),
+                "--require",
+                "exa",
+                "--expect-request-id",
+                "turn-1",
+                "--max-age",
+                "60",
+            ],
+            tmp_path,
+            runner=_unused_runner,
+            timing=ProbeTiming(lambda _: None, _D381_NOW.timestamp),
+        )
+        == 0
+    )
+    row = json.loads(output.read_text())["probes"][0]
+    if damage is None:
+        assert row["required_failed"] == []
+        assert row["provisional"] == []
+        assert row["fresh"] is True
+        assert row["sources"]["exa"] == "skipped"
+    elif damage in {"turn", "stale"}:
+        assert row["fresh"] is False
+    else:
+        assert row["required_failed"]
+
+
+@pytest.mark.parametrize(
+    "policy", ["strict-five-v999", "strict-five-v2", None, "missing"]
+)
+@pytest.mark.parametrize("require", [False, True])
+def test_d381_probe_unknown_explicit_policy_is_mandatory_gap(
+    tmp_path: Path, policy: str | None, *, require: bool
+) -> None:
+    manifest = _d381_manifest(tmp_path)
+    data = json.loads(manifest.read_text())
+    if policy == "missing":
+        data.pop("policy_version")
+    else:
+        data["policy_version"] = policy
+    manifest.write_text(json.dumps(data))
+    output = tmp_path / "probe.json"
+    assert (
+        main(
+            [
+                "--probe-out",
+                str(output),
+                "--fanout-manifest",
+                str(manifest),
+                *(["--require", "exa"] if require else []),
+            ],
+            tmp_path,
+            runner=_unused_runner,
+            timing=ProbeTiming(lambda _: None, _D381_NOW.timestamp),
+        )
+        == 0
+    )
+    row = json.loads(output.read_text())["probes"][0]
+    assert row["fresh"] is True
+    if policy == "missing":
+        assert "policy_version" not in row
+    if policy not in {"strict-five-v2", "missing"}:
+        assert row["required_failed"]
+        assert row["disposition"] == "incomplete"
+        assert row["skipped_sources"] == []
+        assert row["failed_sources"]
+    elif require:
+        assert row["required_failed"] == ["exa: skipped (credits-exhausted)"]
+    else:
+        assert row["required_failed"] == []
+
+
+@pytest.mark.parametrize(
+    "outcome", ["credit-alternative-ok", "credit-alternative-fails", "auth"]
+)
+def test_d381_mirror_retains_route_and_genuine_failure_without_credit_provisional(
+    tmp_path: Path, outcome: str
+) -> None:
+    url = "https://primary.test/docs"
+    responses = [
+        _completed(
+            [],
+            1,
+            stderr=(
+                b"HTTP 401 Unauthorized"
+                if outcome == "auth"
+                else b"Insufficient credits"
+            ),
+        )
+    ]
+    if outcome != "auth":
+        responses.append(
+            _completed(
+                [],
+                1 if outcome.endswith("fails") else 0,
+                json.dumps(
+                    {
+                        "metadata": {"url": url},
+                        "content": {"markdown": "# Primary documentation"},
+                    }
+                ).encode(),
+            )
+        )
+    runner = ScriptedRunner(responses)
+    output, mirror = tmp_path / "probe.json", tmp_path / "mirror.md"
+    assert (
+        main(
+            [
+                "--probe-out",
+                str(output),
+                "--mirror-url",
+                url,
+                "--mirror-path",
+                str(mirror),
+            ],
+            tmp_path,
+            runner=runner,
+        )
+        == 0
+    )
+    row = json.loads(output.read_text())["probes"][0]
+    assert row["provisional"] is False
+    if outcome == "credit-alternative-ok":
+        assert (row["route"], row["rc"]) == ("webclaw", 0)
+        assert mirror.read_text() == "# Primary documentation"
+    elif outcome == "credit-alternative-fails":
+        assert row["rc"] != 0
+        assert row["code"]
+    else:
+        assert (row["route"], row["rc"]) == ("firecrawl", 1)
+        assert len(runner.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "gap", ["primary-auth", "primary-missing-cli", "fallback-auth"]
+)
+def test_d381_successful_substitute_cannot_erase_an_incomplete_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, credit_env: None, gap: str
+) -> None:
+    del credit_env
+    monkeypatch.setenv("SERPER_API_KEY", "serper-fixture")
+    monkeypatch.setenv("SERP_API_KEY", "serpapi-fixture")
+    if gap == "primary-missing-cli":
+        (tmp_path / "bin/firecrawl").unlink()
+    refusal = (
+        b"HTTP 401 Unauthorized" if gap == "primary-auth" else b"Insufficient credits"
+    )
+    runner = ScriptedRunner([_completed([], 1, stderr=refusal)])
+
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del params, body, headers, timeout
+        if endpoint is Endpoint.SERPER_SEARCH:
+            return (
+                (401, b"Unauthorized")
+                if gap == "fallback-auth"
+                else (200, b'{"organic":[{"link":"https://primary.test"}]}')
+            )
+        assert endpoint is Endpoint.SERPAPI_SEARCH
+        return 200, b'{"organic_results":[{"link":"https://primary.test"}]}'
+
+    main(
+        ["topic", "--sources", "firecrawl-search", "--out", str(tmp_path)],
+        tmp_path,
+        runner=runner,
+        http=http,
+    )
+    row = _only_row(tmp_path)
+    manifest = _merge_credit_manifest(tmp_path, row)
+    data = json.loads(manifest.read_text())
+    data["policy_version"] = _D381_POLICY
+    for candidate in data["sources"]:
+        candidate["provisional"] = False
+    manifest.write_text(json.dumps(data))
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert not verdict.passed
+    assert "firecrawl-search" in verdict.reason
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize("refusal", ["transient429", "auth-credit-decoy"])
+def test_d381_unknown_limit_and_auth_credit_decoy_remain_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    source: str,
+    refusal: str,
+) -> None:
+    del credit_env
+    message = (
+        b"HTTP 429 Too Many Requests"
+        if refusal == "transient429"
+        else b"HTTP 401 Unauthorized Insufficient credits"
+    )
+    status = 429 if refusal == "transient429" else 401
+    rc, calls = _d381_produce(
+        tmp_path, monkeypatch, refusal=_D381Refusal(source, message, 1, status)
+    )
+    assert rc == 1
+    assert sum(name == source for name, _ in calls) == 1
+    data = json.loads((tmp_path / "out/manifest.json").read_text())
+    assert source in data["failed_sources"]
+    assert source not in data["skipped_sources"]
+    assert data["disposition"] == "incomplete"
+
+
+def test_d381_intentional_v2_path_keeps_historical_provisional(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+) -> None:
+    del credit_env
+    exhausted = ("exa", "context7", "firecrawl-developer", "firecrawl-search")
+    rc, _ = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        exhausted_sources=exhausted,
+        extra=("--policy-version", "strict-five-v2"),
+    )
+    assert rc == 0
+    data = json.loads((tmp_path / "out/manifest.json").read_text())
+    assert data["policy_version"] == "strict-five-v2"
+    verdict = strict_five_verdict(tmp_path / "out/manifest.json", "turn-1")
+    assert verdict.passed
+    assert len(verdict.provisional_entries) == 4
+
+
+def test_d381_successful_receipt_cannot_hide_prior_failure_attempts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+) -> None:
+    del credit_env
+    rc, _ = _d381_produce(tmp_path, monkeypatch)
+    assert rc == 0
+    path = tmp_path / "out/manifest.json"
+    assert strict_five_verdict(path, "turn-1").passed
+    data = json.loads(path.read_text())
+    data["sources"][0]["attempts"] = [{"route": "github-issues", "status": "error"}]
+    path.write_text(json.dumps(data))
+    assert not strict_five_verdict(path, "turn-1").passed
+
+
+@pytest.mark.parametrize("malformed", [{}, {"exa": {}}, ["exa"]])
+def test_d381_malformed_current_policy_probe_is_explicit_gap(
+    tmp_path: Path,
+    malformed: object,
+) -> None:
+    path = _d381_manifest(tmp_path)
+    data = json.loads(path.read_text())
+    data["sources"] = malformed
+    path.write_text(json.dumps(data))
+    target = tmp_path / "probe.json"
+    assert (
+        main(
+            ["--probe-out", str(target), "--fanout-manifest", str(path)],
+            tmp_path,
+            runner=_unused_runner,
+        )
+        == 0
+    )
+    row = json.loads(target.read_text())["probes"][0]
+    assert row["disposition"] == "incomplete"
+    assert row["required_failed"]
+    assert row["skipped_sources"] == []
+
+
+def _d381_security_preflight(directory: Path, remaining: int | None = 0) -> Path:
+    raw = (
+        b'{"remaining": null}'
+        if remaining is None
+        else json.dumps({"remaining": remaining}).encode()
+    )
+    balance = directory / "balance-input.json"
+    balance.write_bytes(raw)
+    path = directory / "preflight.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "research-preflight/v1",
+                "request_id": "turn-1",
+                "policy_version": _D381_POLICY,
+                "sources": [
+                    {
+                        "source": "exa",
+                        "raw_file": str(balance),
+                        "raw_sha256": hashlib.sha256(raw).hexdigest(),
+                    }
+                ],
+            }
+        )
+    )
+    return path
+
+
+@pytest.mark.parametrize("remaining", [0, None, 5])
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "request_id",
+        "source",
+        "policy_version",
+        "input_sha256",
+        "schema",
+        "missing-request_id",
+        "missing-source",
+        "missing-policy_version",
+        "missing-input_sha256",
+        "receipt-relabel",
+        "proof-hash",
+        "proof-binding",
+        "proof-extra",
+        "proof-missing-binding",
+    ],
+)
+def test_d381_security_preflight_retains_and_revalidates_admission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    credit_env: None,
+    remaining: int | None,
+    damage: str,
+) -> None:
+    del credit_env
+    preflight = _d381_security_preflight(tmp_path, remaining)
+    rc, _ = _d381_produce(
+        tmp_path, monkeypatch, extra=("--preflight-manifest", str(preflight))
+    )
+    assert rc == 0
+    manifest = tmp_path / "out/manifest.json"
+    assert strict_five_verdict(manifest, "turn-1").passed
+    data = json.loads(manifest.read_bytes())
+    row = next(row for row in data["sources"] if row["source"] == "exa")
+    metadata = row["preflight"]
+    request_id = "turn-1"
+    if damage.startswith("missing-"):
+        metadata.pop(damage.removeprefix("missing-"), None)
+    elif damage == "receipt-relabel":
+        request_id = "relabelled-turn"
+        data["request_id"] = request_id
+    elif damage == "proof-hash":
+        Path(metadata["raw_file"]).write_bytes(b'{"remaining": 0}')
+    elif damage.startswith("proof-"):
+        proof_path = Path(metadata["raw_file"])
+        proof = json.loads(proof_path.read_bytes())
+        if damage == "proof-binding":
+            proof["request_id"] = "prior-turn"
+        elif damage == "proof-missing-binding":
+            proof.pop("request_id", None)
+        else:
+            proof["unexpected"] = "FAKE-EXTRA"
+        raw = json.dumps(proof).encode()
+        proof_path.write_bytes(raw)
+        metadata["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+        if remaining == 0:
+            for key in ("raw_file",):
+                Path(row[key]).write_bytes(raw)
+            Path(row["attempts"][0]["raw_file"]).write_bytes(raw)
+            row["raw_sha256"] = row["attempts"][0]["raw_sha256"] = metadata[
+                "raw_sha256"
+            ]
+    else:
+        metadata[damage] = "0" * 64 if damage == "input_sha256" else "wrong-binding"
+    manifest.write_text(json.dumps(data))
+    assert not strict_five_verdict(manifest, request_id).passed
+
+
+_D381_SECURITY_FAILURES = [
+    (1, b"Authentication failed: invalid API key. Insufficient credits."),
+    (124, b"Timed out; Monthly quota reached"),
+    (127, b"command not found; Monthly quota reached"),
+    (126, b"Permission denied; Insufficient credits"),
+    (1, b"Missing prerequisite; Monthly quota reached"),
+    (1, b"Connection refused; Insufficient credits"),
+]
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize(("rc", "message"), _D381_SECURITY_FAILURES)
+def test_d381_security_verdict_route_failure_precedes_credit_prose(
+    tmp_path: Path, source: str, rc: int, message: bytes
+) -> None:
+    manifest = _d381_manifest(tmp_path, source)
+    assert strict_five_verdict(manifest, "turn-1").passed
+    for envelope_key in ("body", "stderr_redacted"):
+        envelope: dict[str, object] = {
+            "http_status": None,
+            "rc": rc,
+            "body": "",
+            "stderr_redacted": "",
+        }
+        envelope[envelope_key] = message.decode()
+        manifest = _d381_manifest(
+            tmp_path,
+            source,
+            envelope=envelope,
+            code="quota" if b"quota" in message else "credits-exhausted",
+        )
+        assert not strict_five_verdict(manifest, "turn-1").passed
+
+
+@pytest.mark.usefixtures("credit_env")
+@pytest.mark.parametrize(
+    "source", [s for s in _D381_SOURCES if s not in {"exa", "firecrawl-developer"}]
+)
+@pytest.mark.parametrize(("rc", "message"), _D381_SECURITY_FAILURES)
+def test_d381_security_producer_route_failure_precedes_credit_prose(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    rc: int,
+    message: bytes,
+) -> None:
+    result, calls = _d381_produce(
+        tmp_path, monkeypatch, refusal=_D381Refusal(source, rc=rc, message=message)
+    )
+    assert result == 1
+    assert sum(name == source for name, _ in calls) == 1
+    data = json.loads((tmp_path / "out/manifest.json").read_bytes())
+    assert source in data["failed_sources"]
+    assert data["disposition"] == "incomplete"
+    assert not strict_five_verdict(tmp_path / "out/manifest.json", "turn-1").passed
+
+
+_D381_MISSING_CREDENTIALS = [
+    "Missing API key",
+    "API key is missing",
+    "Unset API-key",
+    "API-key is unset",
+    "Absent API_key",
+    "API_key is absent",
+    "Required API key",
+    "API key is required",
+    "Missing credential",
+    "Credential is missing",
+    "Unset credentials",
+    "Credentials are unset",
+    "Absent credentials",
+    "Credentials are absent",
+    "Required credentials",
+    "Credentials are required",
+    "Missing EXA_API_KEY",
+    "FIRECRAWL_API_KEY is required",
+    "No API key provided",
+    "API key not set",
+    "API key not found",
+    "Credentials not configured",
+    "API key failure",
+    "Credential error",
+]
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize("credential_failure", _D381_MISSING_CREDENTIALS)
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        ("Monthly quota reached", True),
+        ("Monthly quota reached", False),
+        ("Insufficient credits", True),
+        ("Insufficient credits", False),
+    ],
+)
+def test_d381_missing_key_verdict_precedes_exhaustion_prose(
+    tmp_path: Path,
+    source: str,
+    credential_failure: str,
+    scenario: tuple[str, bool],
+) -> None:
+    exhaustion, failure_first = scenario
+    manifest = _d381_manifest(tmp_path, source)
+    assert strict_five_verdict(manifest, "turn-1").passed
+    message = (
+        f"{credential_failure}; {exhaustion}"
+        if failure_first
+        else f"{exhaustion}; {credential_failure}"
+    )
+    for envelope_key in ("body", "stderr_redacted"):
+        envelope: dict[str, object] = {
+            "http_status": None,
+            "rc": 1,
+            "body": "",
+            "stderr_redacted": "",
+        }
+        envelope[envelope_key] = message
+        manifest = _d381_manifest(
+            tmp_path,
+            source,
+            envelope=envelope,
+            code="quota"
+            if exhaustion == "Monthly quota reached"
+            else "credits-exhausted",
+        )
+        assert not strict_five_verdict(manifest, "turn-1").passed
+
+
+@pytest.mark.usefixtures("credit_env")
+@pytest.mark.parametrize(
+    "source", [s for s in _D381_SOURCES if s not in {"exa", "firecrawl-developer"}]
+)
+@pytest.mark.parametrize("credential_failure", _D381_MISSING_CREDENTIALS)
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        ("Monthly quota reached", True),
+        ("Monthly quota reached", False),
+        ("Insufficient credits", True),
+        ("Insufficient credits", False),
+    ],
+)
+def test_d381_missing_key_producer_precedes_exhaustion_prose(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    credential_failure: str,
+    scenario: tuple[str, bool],
+) -> None:
+    exhaustion, failure_first = scenario
+    message = (
+        f"{credential_failure}; {exhaustion}"
+        if failure_first
+        else f"{exhaustion}; {credential_failure}"
+    ).encode()
+    rc, calls = _d381_produce(
+        tmp_path, monkeypatch, refusal=_D381Refusal(source, rc=1, message=message)
+    )
+    assert rc == 1
+    assert sum(name == source for name, _ in calls) == 1
+    manifest = tmp_path / "out/manifest.json"
+    data = json.loads(manifest.read_bytes())
+    assert source in data["failed_sources"]
+    assert data["disposition"] == "incomplete"
+    assert not strict_five_verdict(manifest, "turn-1").passed
+
+
+def _d381_security_damage_file(path: Path, damage: str) -> None:
+    if damage == "oversize":
+        with path.open("ab") as handle:
+            handle.write(b" " * (8 * 1024 * 1024 + 1))
+        return
+    original = path.with_suffix(".original")
+    path.rename(original)
+    if damage == "fifo":
+        os.mkfifo(path)
+    elif damage == "directory":
+        path.mkdir()
+    else:
+        path.symlink_to(original)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "manifest-fifo",
+        "manifest-symlink",
+        "manifest-directory",
+        "manifest-oversize",
+        "raw-fifo",
+        "raw-symlink",
+        "raw-directory",
+        "raw-oversize",
+        "raw-relative-escape",
+        "raw-absolute-escape",
+        "raw-parent-symlink",
+    ],
+)
+def test_d381_security_preflight_safe_bounded_file_admission(
+    tmp_path: Path,
+    damage: str,
+) -> None:
+    admitted = tmp_path / "admitted"
+    admitted.mkdir()
+    manifest = _d381_security_preflight(admitted)
+    data = json.loads(manifest.read_bytes())
+    raw = admitted / "balance-input.json"
+    if damage.startswith("manifest-"):
+        _d381_security_damage_file(manifest, damage.removeprefix("manifest-"))
+    elif damage in {"raw-oversize", "raw-fifo", "raw-directory", "raw-symlink"}:
+        _d381_security_damage_file(raw, damage.removeprefix("raw-"))
+    else:
+        outside = tmp_path / "fake-outside.json"
+        outside.write_bytes(raw.read_bytes())
+        if damage == "raw-relative-escape":
+            data["sources"][0]["raw_file"] = "../fake-outside.json"
+        elif damage == "raw-absolute-escape":
+            data["sources"][0]["raw_file"] = str(outside)
+        else:
+            link = admitted / "parent-link"
+            link.symlink_to(tmp_path, target_is_directory=True)
+            data["sources"][0]["raw_file"] = str(link / outside.name)
+        manifest.write_text(json.dumps(data))
+    # A subprocess timeout bounds the unfixed FIFO reader without leaving a thread.
+    script = """
+import sys
+from pathlib import Path
+from dotfiles_setup.research_fanout import main
+
+def forbidden(*args, **kwargs):
+    raise AssertionError('FAKE-ROUTE-MUST-NOT-RUN')
+
+raise SystemExit(main(sys.argv[1:], Path.cwd(), runner=forbidden, http=forbidden))
+"""
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-c",
+                script,
+                "topic",
+                "--repo",
+                "owner/repo",
+                "--sources",
+                "exa",
+                "--policy-version",
+                _D381_POLICY,
+                "--request-id",
+                "turn-1",
+                "--preflight-manifest",
+                str(manifest),
+                "--out",
+                str(tmp_path / "out"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("preflight file admission blocked")
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert (
+        result.stderr
+        == "research-fanout: invalid preflight manifest or balance evidence\n"
+    )
+    assert not (tmp_path / "out").exists()
+
+
+_REPAIR_FAILURES = (
+    None,
+    "Invalid API key",
+    "Missing API key",
+    "Connection refused",
+    "Permission denied",
+    "command not found",
+)
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize("http_status", [None, 200, 401, 402, 429])
+@pytest.mark.parametrize("failure", _REPAIR_FAILURES)
+@pytest.mark.parametrize("channel", ["body", "stderr_redacted"])
+def test_d381_repair_status_axis_cannot_waive_failure_at_verdict_and_stop(
+    tmp_path: Path,
+    source: str,
+    http_status: int | None,
+    failure: str | None,
+    channel: str,
+) -> None:
+    state = tmp_path / "state"
+    event = {"session_id": "fixture", "turn_id": "turn-1"}
+    codex_research_gate.handle(
+        {
+            **event,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: research]\nResearch the fixture.",
+        },
+        state,
+        repo_root=tmp_path,
+    )
+    directory = state / "fixture/turn-1"
+    exhaustion = (
+        "Insufficient credits" if http_status == 402 else "Monthly quota reached"
+    )
+    envelope: dict[str, object] = {
+        "http_status": http_status,
+        "rc": 1 if http_status is None else None,
+        "body": "",
+        "stderr_redacted": "",
+    }
+    envelope[channel] = f"{failure}; {exhaustion}" if failure else exhaustion
+    manifest = _d381_manifest(
+        directory,
+        source,
+        envelope=envelope,
+        code="credits-exhausted" if http_status == 402 else "quota",
+    )
+    expected = failure is None and http_status in (None, 402, 429)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    assert verdict.passed is expected
+    stopped = codex_research_gate.handle(
+        {
+            **event,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "Results ready.",
+        },
+        state,
+        repo_root=tmp_path,
+    )
+    assert (stopped.get("decision") != "block") is expected
+    assert verdict.provisional == ()
+
+
+@pytest.mark.parametrize("source", ["exa", "firecrawl-developer"])
+@pytest.mark.parametrize("failure", _REPAIR_FAILURES)
+@pytest.mark.parametrize(
+    "scenario",
+    [(status, quota) for status in (200, 401, 402, 429) for quota in (False, True)],
+)
+@pytest.mark.usefixtures("credit_env")
+def test_d381_repair_status_axis_producer_keeps_refusals_incomplete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    failure: str | None,
+    scenario: tuple[int, bool],
+) -> None:
+    http_status, quota = scenario
+    exhaustion = (
+        "Insufficient credits" if http_status == 402 else "Monthly quota reached"
+    )
+    message = "; ".join(
+        part for part in (failure, exhaustion if quota else None) if part
+    )
+    rc, _ = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal(source, message.encode(), 1, http_status),
+    )
+    expected = failure is None and (
+        http_status == 402 or (http_status == 429 and quota)
+    )
+    manifest = json.loads((tmp_path / "out/manifest.json").read_bytes())
+    row = next(row for row in manifest["sources"] if row["source"] == source)
+    assert rc == (0 if expected else 1)
+    assert row["status"] == ("skipped" if expected else "error")
+    assert (source in manifest["failed_sources"]) is (not expected)
+    assert (source in manifest["skipped_sources"]) is expected
+
+
+@pytest.mark.parametrize("outcome", ["success", "exhausted"])
+def test_d381_repair_nonstrict_no_repo_projects_and_imports_real_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    outcome: str,
+) -> None:
+    monkeypatch.setenv("EXA_API_KEY", "fixture-key")
+
+    def http(
+        endpoint: Endpoint,
+        *,
+        params: dict[str, str | int] | None,
+        body: dict[str, object] | None,
+        headers: dict[str, str],
+        timeout: float,
+    ) -> tuple[int, bytes]:
+        del endpoint, params, body, headers, timeout
+        return (
+            (429, b"Monthly quota reached")
+            if outcome == "exhausted"
+            else (
+                200,
+                b'{"requestId":"fixture","results":[{"url":"https://primary.test"}]}',
+            )
+        )
+
+    output = tmp_path / "output"
+    assert (
+        main(
+            [
+                "topic",
+                "--sources",
+                "exa",
+                "--policy-version",
+                _D381_POLICY,
+                "--out",
+                str(output),
+            ],
+            tmp_path,
+            runner=_unused_runner,
+            http=http,
+        )
+        == 0
+    )
+    manifest = output / "manifest.json"
+    probe = tmp_path / "probe.json"
+    assert (
+        main(
+            ["--probe-out", str(probe), "--fanout-manifest", str(manifest)],
+            tmp_path,
+            runner=_unused_runner,
+        )
+        == 0
+    )
+    row = json.loads(probe.read_bytes())["probes"][0]
+    assert row["disposition"] == "complete"
+    assert row["required_failed"] == []
+    assert row["skipped_sources"] == (["exa"] if outcome == "exhausted" else [])
+    capsys.readouterr()
+    # Exa is intentionally not a GitHub watch; valid ignored input is not missing input.
+    assert (
+        record_saved_searches(
+            [
+                "record",
+                "--fanout-manifest",
+                str(manifest),
+                "--out",
+                str(tmp_path / "saved.toml"),
+            ],
+            tmp_path,
+        )
+        == 1
+    )
+    line = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith("SAVED-SEARCH-JSON ")
+    )
+    receipt = json.loads(line.removeprefix("SAVED-SEARCH-JSON "))
+    assert receipt["missing"] == []
+    assert receipt["reason"] == "no watches"
+    assert receipt["skipped_sources"] == 1
+
+
+@pytest.mark.parametrize(
+    "source", ["github-issues", "github-discussions", "github-releases"]
+)
+def test_d381_repair_missing_repo_still_refuses_github_manifest(
+    tmp_path: Path,
+    source: str,
+) -> None:
+    manifest = _d381_manifest(tmp_path, source)
+    data = json.loads(manifest.read_bytes())
+    data["repo"] = None
+    manifest.write_text(json.dumps(data))
+    assert not strict_five_verdict(manifest, "turn-1").passed
+    data.update(
+        strict_five=False,
+        sources=[row for row in data["sources"] if row["source"] == source],
+    )
+    manifest.write_text(json.dumps(data))
+    probe = tmp_path / "probe.json"
+    assert (
+        main(
+            ["--probe-out", str(probe), "--fanout-manifest", str(manifest)],
+            tmp_path,
+            runner=_unused_runner,
+        )
+        == 0
+    )
+    assert json.loads(probe.read_bytes())["probes"][0]["disposition"] == "incomplete"
+
+
+@pytest.mark.parametrize("kind", ["canonical", "leaf", "parent", "ancestor"])
+def test_d381_repair_preflight_never_follows_any_manifest_component(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    admitted = tmp_path / "admitted"
+    admitted.mkdir()
+    nested = admitted / "nested"
+    nested.mkdir()
+    manifest = _d381_security_preflight(nested)
+    data = json.loads(manifest.read_bytes())
+    data["sources"][0]["raw_file"] = "balance-input.json"
+    manifest.write_text(json.dumps(data))
+    if kind == "leaf":
+        alias = nested / "manifest-link.json"
+        alias.symlink_to(manifest)
+        manifest = alias
+    elif kind == "parent":
+        alias = admitted / "parent-link"
+        alias.symlink_to(nested, target_is_directory=True)
+        manifest = alias / manifest.name
+    elif kind == "ancestor":
+        alias = tmp_path / "ancestor-link"
+        alias.symlink_to(admitted, target_is_directory=True)
+        manifest = alias / "nested" / manifest.name
+    output = tmp_path / "output"
+    rc = main(
+        [
+            "topic",
+            "--sources",
+            "exa",
+            "--policy-version",
+            _D381_POLICY,
+            "--request-id",
+            "turn-1",
+            "--preflight-manifest",
+            str(manifest),
+            "--out",
+            str(output),
+        ],
+        tmp_path,
+        runner=_unused_runner,
+    )
+    assert rc == (0 if kind == "canonical" else 2)
+    assert output.exists() is (kind == "canonical")
+
+
+_REPAIR2_CREDENTIAL_REFUSALS = (
+    None,
+    "API key is invalid",
+    "API key has expired",
+    "API key invalid",
+    "API key is expired",
+    "API key was revoked",
+    "API key has been revoked",
+    "API key is not valid",
+    "API key is no longer valid",
+    "Invalid API key",
+    "Expired API key",
+    "Revoked API key",
+    "Invalid API-key",
+    "API_key has expired",
+    "EXA_API_KEY is invalid",
+    "EXA_API_KEY has been revoked",
+    "Credentials are invalid",
+    "Credentials have expired",
+    "Credential was revoked",
+    "Invalid credentials",
+    "Expired credentials",
+    "Revoked credentials",
+    "Token is invalid",
+    "Token has expired",
+    "Token has been revoked",
+    "Invalid token",
+    "Expired token",
+    "Revoked token",
+    "Access token is invalid",
+    "Access token has expired",
+    "Access token was revoked",
+    "Invalid access token",
+    "Expired access token",
+    "Revoked access token",
+    "Authentication is invalid",
+    "Authentication has expired",
+    "Authentication was revoked",
+    "Invalid authentication",
+    "Expired authorization",
+    "Authorization has been revoked",
+    "Auth is invalid",
+    "Bearer token is invalid",
+    "Refresh token has expired",
+)
+
+
+@pytest.mark.usefixtures("credit_env")
+@pytest.mark.parametrize("source", ["exa", "firecrawl-developer"])
+@pytest.mark.parametrize("failure", _REPAIR2_CREDENTIAL_REFUSALS)
+@pytest.mark.parametrize(
+    "scenario",
+    [(status, first) for status in (401, 402, 429) for first in (False, True)],
+)
+def test_d381_repair2_explicit_credential_refusal_never_completes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+    failure: str | None,
+    scenario: tuple[int, bool],
+) -> None:
+    status, failure_first = scenario
+    exhaustion = "Insufficient credits" if status == 402 else "Monthly quota reached"
+    text = (
+        exhaustion
+        if failure is None
+        else (
+            f"{failure}; {exhaustion}" if failure_first else f"{exhaustion}; {failure}"
+        )
+    )
+    state = tmp_path / "state"
+    event = {"session_id": "fixture", "turn_id": "turn-1"}
+    codex_research_gate.handle(
+        {
+            **event,
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": "[research-scope: research]\nResearch the fixture.",
+        },
+        state,
+        repo_root=tmp_path,
+    )
+    output = state / "fixture/turn-1"
+    rc, _ = _d381_produce(
+        tmp_path,
+        monkeypatch,
+        refusal=_D381Refusal(source, text.encode(), 1, status),
+        extra=("--out", str(output)),
+    )
+    manifest = output / "manifest.json"
+    data = json.loads(manifest.read_bytes())
+    row = next(row for row in data["sources"] if row["source"] == source)
+    verdict = strict_five_verdict(manifest, "turn-1")
+    stop = codex_research_gate.handle(
+        {
+            **event,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "Results ready.",
+        },
+        state,
+        repo_root=tmp_path,
+    )
+    allowed = failure is None and status in (402, 429)
+    assert (
+        rc,
+        row["status"],
+        data["disposition"],
+        verdict.passed,
+        stop.get("decision"),
+    ) == (
+        (0, "skipped", "complete", True, None)
+        if allowed
+        else (1, "error", "incomplete", False, "block")
+    )
+    assert row["provisional"] is False
+    assert verdict.provisional == ()
+
+
+@pytest.mark.parametrize("source", _D381_SOURCES)
+@pytest.mark.parametrize("status", [None, 402, 429])
+@pytest.mark.parametrize("failure", ["API key is invalid", "API key has expired"])
+@pytest.mark.parametrize("channel", ["body", "stderr_redacted"])
+def test_d381_repair2_saved_skip_rederives_suffix_refusal_for_every_arm(
+    tmp_path: Path,
+    source: str,
+    status: int | None,
+    failure: str,
+    channel: str,
+) -> None:
+    envelope: dict[str, object] = {
+        "http_status": status,
+        "rc": 1 if status is None else None,
+        "body": "",
+        "stderr_redacted": "",
+    }
+    envelope[channel] = f"{failure}; Monthly quota reached"
+    manifest = _d381_manifest(
+        tmp_path,
+        source,
+        envelope=envelope,
+        code="credits-exhausted" if status == 402 else "quota",
+    )
+    assert not strict_five_verdict(manifest, "turn-1").passed
+
+
+@pytest.mark.usefixtures("credit_env")
+@pytest.mark.parametrize("status", [402, 429])
+@pytest.mark.parametrize(
+    "code",
+    [
+        "quota_exhausted",
+        "invalid_api_key",
+        "api_key_expired",
+        "revoked_access_token",
+        "authentication_invalid",
+    ],
+)
+def test_d381_repair2_structured_credential_error_is_not_a_quota_waiver(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    status: int,
+    code: str,
+) -> None:
+    raw = json.dumps(
+        {"success": False, "error": {"code": code, "message": "Monthly quota reached"}}
+    ).encode()
+    rc, _ = _d381_produce(
+        tmp_path, monkeypatch, refusal=_D381Refusal("exa", raw, 1, status)
+    )
+    path = tmp_path / "out/manifest.json"
+    verdict = strict_five_verdict(path, "turn-1")
+    data = json.loads(path.read_bytes())
+    assert (rc, data["disposition"], verdict.passed) == (
+        (0, "complete", True) if code == "quota_exhausted" else (1, "incomplete", False)
+    )

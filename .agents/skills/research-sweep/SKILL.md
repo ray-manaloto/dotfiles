@@ -51,7 +51,8 @@ this repo use this skill and do not import `kb_setup.research`
   **Three mandatory stages** (Ray, 2026-09-30) run whatever the planner chooses:
   **dependencies** (`github-issues,github-discussions,github-releases` for
   `repo` and every `relatedRepos` entry, both directions, one agent per repo;
-  EACH of the three must answer `ok`/`empty_verified`, read from the run's
+  EACH of the three must answer `ok`/`empty_verified` or a validated D381
+  exhaustion skip, read from the run's
   manifest — the fan-out's own rc is 0 when any one source answered, #1473 —
   except a tracker the repos API reports DISABLED (`has_discussions` false, or
   `has_issues` AND `has_pull_requests` false — the issues search also returns
@@ -102,7 +103,7 @@ this repo use this skill and do not import `kb_setup.research`
   hidden (#1513). A planner fan-out run that failed
   is listed in `fanoutGaps`; a link that will not fetch is a named gap
   (`mirrorGaps`) and is read live. A successful webclaw mirror records
-  `route: "webclaw"`, `provisional: true`, webclaw's rc (0), and an empty
+  `route: "webclaw"`, `provisional: false` under D381, webclaw's rc (0), and an empty
   reason; its README records that rc and route. `provisionalRoutes` names
   provisional mirrors and routes from planner and dependency manifests.
   Omitting both `repo` and `relatedRepos` is a
@@ -169,7 +170,7 @@ this repo use this skill and do not import `kb_setup.research`
    sentences — scoped with `--repo` whenever the question is about one project:
 
    ```bash
-   mise run research-fanout -- "<terms>" --repo <owner/repo> --sources <list>
+   mise run research-fanout -- "<terms>" --policy-version strict-five-v3-d381 --repo <owner/repo> --sources <list>
    ```
 
    Choose sources by the question's shape: behaviour of a tool or library →
@@ -231,20 +232,23 @@ this repo use this skill and do not import `kb_setup.research`
   failed, with / without caller links; `stageGaps` names which, and the report
   states what was actually READ — caller links read, hits triaged from the
   planner or dependency-repo manifests, deep-read URLs, answered code-search
-  rows), then `provisional` (a credit-exhausted provider was skipped or
-  substituted); early exits `plan-null`, `no-manifests`, `triage-null`,
+  rows), then `provisional` (a historical v2 provisional route); early exits `plan-null`, `no-manifests`, `triage-null`,
   `synth-null` stay degraded without adding `provisional`.
   `statuses` carries every one that applies. Anything but `complete` is degraded; even
   `complete` verifies only the first `verifyMax` load-bearing claims and
   says so in the report's Verification section.
-- **Credit exhaustion stays visible.** A metered provider's HTTP 402, quota
-  429 or "Insufficient credits" is `skipped: credits-exhausted`, or Firecrawl
-  search is substituted by Serper (`SERPER_API_KEY`), then SerpApi
-  (`SERP_API_KEY`); the mirror probe can substitute webclaw for scrape.
-  These receipts pass **provisional**, and the report must name every entry
-  in `provisionalRoutes`. Auth failures, 5xx, timeouts, malformed JSON, plain
-  rate limits and GitHub errors remain failures and do not trigger fallback.
-  Bare `firecrawl scrape`, including the deep-read step, has no fallback.
+- **Use the recorded policy.** Current sweep commands select
+  `--policy-version strict-five-v3-d381`; its contract is in
+  `python/src/dotfiles_setup/AGENTS.md`. Known exhausted credits/payment/quota
+  is evidence-bound SKIPPED for any provider, nonprovisional and nonblocking.
+  Keep skips separate from successful evidence; do not retry, top up or wait
+  for renewal. Auth, missing prerequisites and unrunnable routes remain
+  incomplete, and substitutes cannot erase them. The probe projects policy,
+  disposition and skipped/failed sets; only fresh validated skips avoid gaps.
+  Historical v2 keeps its provisional substitutions and naming requirements;
+  select `--policy-version strict-five-v2` intentionally for compatibility.
+  A validated webclaw mirror preserves route provenance; genuine alternative
+  failures remain gaps. Bare `firecrawl scrape` has no fallback.
 - **GitHub code search** (mandatory on every sweep): in-lane, `gh api -X GET
   search/code -f q='QUERY'` — no parentheses/`**`, 10 requests/min (a 403/429
   is a rate limit, not zero; the probe waits out a reset under 60 s once), and

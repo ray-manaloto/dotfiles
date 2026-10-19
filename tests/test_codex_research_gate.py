@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python" / "src"))
 from dotfiles_setup import codec, codex_research_gate, sdlc_team
 from dotfiles_setup.research_fanout import StrictVerdict
 
+_D381_POLICY = "strict-five-v3-d381"
+
 HOOK = Path(__file__).parent.parent / "scripts" / "codex-research-gate.py"
 # Only this exact caller first line binds a turn as research (round 3).
 _DIRECTIVE = "[research-scope: research]\n"
@@ -484,8 +486,13 @@ def test_malformed_manifest_returns_block_decision(tmp_path: Path) -> None:
     assert "malformed research manifest" in reason
 
 
-def _hook_manifest(directory: Path) -> Path:
+def _hook_manifest(directory: Path, *, marker_policy: str = "strict-five-v2") -> Path:
     """Independent complete receipt with one hashed metered-provider envelope."""
+    marker = directory / "required.json"
+    if marker.is_file():
+        record = json.loads(marker.read_text())
+        record["policy"] = marker_policy
+        marker.write_text(json.dumps(record))
     sources = {
         "github-issues": {"items": [{"html_url": "https://primary.test"}]},
         "github-discussions": {
@@ -619,7 +626,8 @@ def test_submit_context_stays_compact_from_long_checkout(tmp_path: Path) -> None
     assert f"mise -C ~/{root.relative_to(tmp_path)} run research-gate" in context
     assert "PROVISIONAL" in context
     marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
-    assert json.loads(marker.read_text())["policy"] == "strict-five-v2"
+    assert json.loads(marker.read_text())["policy"] == _D381_POLICY
+    assert f"--policy-version {_D381_POLICY}" in context
 
 
 @pytest.mark.parametrize(
@@ -2346,3 +2354,163 @@ def test_binding_marker_reads_are_capped_and_reject_symlinks(
     else:
         assert "decision" not in stopped
         assert "unreadable" in str(stopped["systemMessage"])
+
+
+def _d381_hook_receipt(directory: Path, source: str) -> Path:
+    """Extend the historical v2 fixture with explicit current-policy rows."""
+    manifest = _hook_manifest(directory, marker_policy=_D381_POLICY)
+    _skip(manifest, source, "credits-exhausted")
+    data = json.loads(manifest.read_text())
+    skipped = []
+    for row in data["sources"]:
+        row["provisional"] = False
+        if row["status"] == "skipped":
+            row["reason"] = "credits-exhausted"
+            skipped.append(row["source"])
+    data.update(
+        policy_version=_D381_POLICY,
+        disposition="complete",
+        skipped_sources=skipped,
+        failed_sources=[],
+    )
+    manifest.write_text(json.dumps(data))
+    return manifest
+
+
+def test_d381_research_submission_explicitly_selects_current_policy(
+    tmp_path: Path,
+) -> None:
+    submitted = _invoke(
+        tmp_path,
+        {
+            "session_id": "session-1",
+            "turn_id": "turn-1",
+            "hook_event_name": "UserPromptSubmit",
+            "prompt": _RESEARCH,
+        },
+    )
+    marker = tmp_path / ".codex/research-coverage/session-1/turn-1/required.json"
+    assert json.loads(marker.read_text())["policy"] == _D381_POLICY
+    assert _D381_POLICY in json.dumps(submitted)
+
+
+@pytest.mark.parametrize("marker_policy", ["strict-five-v2", _D381_POLICY])
+@pytest.mark.parametrize("gap", ["auth-failed", "credential-missing"])
+def test_d381_stop_binds_receipt_to_selected_marker_policy(
+    tmp_path: Path, marker_policy: str, gap: str
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": _RESEARCH}
+    )
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    manifest = _hook_manifest(directory, marker_policy=marker_policy)
+    _skip(manifest, "exa", gap)
+    result = _invoke(
+        tmp_path,
+        {
+            **base,
+            "hook_event_name": "Stop",
+            "last_assistant_message": "PROVISIONAL exa firecrawl-developer",
+        },
+    )
+    if marker_policy == "strict-five-v2":
+        assert result == {}
+    else:
+        assert result["decision"] == "block"
+        reason = result["reason"]
+        assert isinstance(reason, str)
+        assert "policy" in reason
+        assert "RESEARCH INCOMPLETE:" in reason
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "github-issues",
+        "github-discussions",
+        "github-releases",
+        "exa",
+        "context7",
+        "firecrawl-developer",
+        "firecrawl-search",
+        "last30days",
+    ],
+)
+def test_d381_stop_allows_exhaustion_without_provisional_naming(
+    tmp_path: Path, source: str
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": _RESEARCH}
+    )
+    _d381_hook_receipt(tmp_path / ".codex/research-coverage/session-1/turn-1", source)
+    assert (
+        _invoke(
+            tmp_path,
+            {
+                **base,
+                "hook_event_name": "Stop",
+                "last_assistant_message": "Results are ready.",
+            },
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize(
+    "gap",
+    [
+        "credential-missing",
+        "auth-failed",
+        "unavailable",
+        "sandbox-denied",
+        "missing-last30days",
+        "forged-credit",
+    ],
+)
+def test_d381_stop_blocks_incomplete_even_when_answer_names_provisional(
+    tmp_path: Path, gap: str
+) -> None:
+    base = {"session_id": "session-1", "turn_id": "turn-1"}
+    _invoke(
+        tmp_path, {**base, "hook_event_name": "UserPromptSubmit", "prompt": _RESEARCH}
+    )
+    directory = tmp_path / ".codex/research-coverage/session-1/turn-1"
+    manifest = _d381_hook_receipt(directory, "exa")
+    stop: dict[str, object] = {
+        **base,
+        "hook_event_name": "Stop",
+        "last_assistant_message": "PROVISIONAL exa last30days firecrawl-developer",
+    }
+    assert _invoke(tmp_path, stop) == {}
+    if gap == "missing-last30days":
+        data = json.loads(manifest.read_text())
+        next(r for r in data["sources"] if r["source"] == "last30days").update(
+            status="skipped",
+            items=[],
+            skip_reason="prerequisite",
+            reason="needs last30days script",
+            raw_file=None,
+            raw_sha256=None,
+        )
+        manifest.write_text(json.dumps(data))
+    elif gap == "forged-credit":
+        _skip(manifest, "exa", "credits-exhausted", envelope=_ENVELOPES["auth-failed"])
+    else:
+        _skip(manifest, "exa", gap)
+    result = _invoke(tmp_path, stop)
+    assert result["decision"] == "block"
+    reason = result["reason"]
+    assert isinstance(reason, str)
+    assert "RESEARCH INCOMPLETE:" in reason
+    # Preserve the honest incomplete escape, without converting it to a pass.
+    escaped = _invoke(
+        tmp_path,
+        {
+            **stop,
+            "stop_hook_active": True,
+            "last_assistant_message": "RESEARCH INCOMPLETE: prerequisite failed.",
+        },
+    )
+    assert "remains incomplete" in str(escaped.get("systemMessage"))
