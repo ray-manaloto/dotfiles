@@ -34,6 +34,10 @@ matcher is ``Bash|AskUserQuestion|Edit|Write|NotebookEdit|Grep|Read|Glob|EnterWo
 and :mod:`dotfiles_setup.hook_dispatch` routes EnterWorktree to its dedicated guard.
 This module dispatches on ``tool_name``: the three file-modifying tools route to
 :mod:`dotfiles_setup.branch_guard` (the write-time default-branch gate, #400).
+
+Broad environment stdout is an additional transcript admission policy delegated
+to :mod:`dotfiles_setup.environment_admission` before workflow redirects. Native
+Codex activation requires separately trusted hook definitions and client probes.
 """
 
 from __future__ import annotations
@@ -48,6 +52,7 @@ from dotfiles_setup import (
     ask_quality,
     branch_guard,
     coordinator_write_guard,
+    environment_admission,
     script_guard,
 )
 from dotfiles_setup.heredoc import HEREDOC_PATTERN, NUL_FILLER, blank_heredoc
@@ -990,26 +995,97 @@ def _quoted_blind_masked(command: str) -> str:
 
 
 def rules() -> tuple[Rule, ...]:
-    """Every deny rule, in match order — the guard's introspection surface.
+    """The redirect rule table in match order, for table introspection.
 
     The rule table is a contract, not an implementation detail: `since` and
     `name` are read outside this module (the audit dates bypasses by the first
     and groups denials by the second), and the invariants that keep those
     honest — every rule dated, every name unique — are asserted against this.
+    The separately composed environment admission policy is outside this table.
     """
     return _RULES
 
 
+def _join_continuations(match: re.Match[str]) -> str:
+    span = match.group(0)
+    if span == "\\\n":
+        return ""
+    if span.startswith('"'):
+        return re.sub(
+            r"\\.",
+            lambda escaped: "" if escaped.group(0) == "\\\n" else escaped.group(0),
+            span,
+            flags=re.DOTALL,
+        )
+    return span
+
+
+def normalize_shell_continuations(command: str) -> str:
+    """Join ordinary escaped LF pairs in a private command-analysis copy.
+
+    Single-quoted data and paired escapes remain literal. Heredocs, hashes,
+    backticks and dollar substitutions retain the old analysis unchanged;
+    consumers may separately analyze an extracted simple substitution body.
+    This neither converts CRLF nor interprets general shell syntax.
+    """
+    if any(marker in command for marker in ("<<", "#", "`", "$(")):
+        return command
+    return _QUOTED_SPAN.sub(_join_continuations, command)
+
+
+def command_views(command: str) -> tuple[str, str]:
+    """Quotation-aware command views for admission policies sharing this guard.
+
+    The first retains argument content with inert separators and redirect
+    punctuation masked. The second masks quoted data completely. Both mask
+    every heredoc body, including interpreter input and substitutions inside
+    those bodies. Neither interprets dynamic shell programs or normalizes
+    continuations. The rule table retains its own view.
+    """
+    target = _QUOTED_SPAN.sub(
+        lambda match: (
+            match.group(0).replace(">", _FILLER).replace("<", _FILLER)
+            if match.group(0).startswith(("'", '"'))
+            else match.group(0)
+        ),
+        _inert_masked(command),
+    )
+    return target, _quoted_blind_masked(command)
+
+
+def literal_command_substitutions(command: str) -> tuple[str, ...]:
+    """Simple executable substitutions outside single-quoted data.
+
+    This shares the existing quotation/heredoc mask and deliberately does not
+    parse nested shell expansions or arbitrary interpreter programs. Every
+    heredoc body is masked, including executable substitutions within it.
+    Masks find executable spans; returned text comes from the input source.
+    """
+    target = _QUOTED_SPAN.sub(
+        lambda match: (
+            _FILLER * len(match.group(0))
+            if match.group(0).startswith("'")
+            else match.group(0)
+        ),
+        HEREDOC_PATTERN.sub(blank_heredoc, command),
+    )
+    pattern = r"(?<!\\)\$\(([^()]*)\)|(?<!\\)`([^`]*)`"
+    spans = (
+        match.span(1 if match.group(1) is not None else 2)
+        for match in re.finditer(pattern, target)
+    )
+    return tuple(command[start:stop] for start, stop in spans)
+
+
 def match(command: str) -> Rule | None:
-    """The first :class:`Rule` matching ``command``, else None.
+    """The first table :class:`Rule` matching ``command``, else None.
 
     Rules run against :func:`_inert_masked`, never the raw string, so a
     separator that is quoted or inside a heredoc body cannot fake a command
-    position (#265). Masking here — the one chokepoint :func:`decide` and
-    :mod:`dotfiles_setup.command_audit` both go through — is what lets the audit
-    MEASURE the fix: the same call that denies a command is the one that
-    classifies it, so the report's `blocked` bucket moves without any change
-    there.
+    position (#265). :func:`decide` and :mod:`dotfiles_setup.command_audit`
+    share this table lookup, so the audit measures table-mask corrections.
+    The environment policy composed separately by :func:`decide` is not
+    classified or dated by this table or by command_audit.
 
     Split out of :func:`decide` for :mod:`dotfiles_setup.command_audit`, which
     needs the matched rule's ``since`` date (and ``name``) — not just its
@@ -1025,6 +1101,8 @@ def match(command: str) -> Rule | None:
 
 def decide(command: str) -> str | None:
     """Redirect reason when ``command`` should be denied, else None."""
+    if reason := environment_admission.decide(command):
+        return reason
     rule = match(command)
     return rule.reason if rule is not None else None
 

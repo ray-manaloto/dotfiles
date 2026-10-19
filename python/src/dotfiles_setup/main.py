@@ -1639,17 +1639,22 @@ def _add_pr_subcommands(
     """
     pr_parser = subparsers.add_parser(
         "pr",
-        help="PR workflow: ship (gates → push → PR → watch) and land "
+        help="PR workflow: ship (gates → push → PR → auto-merge or draft) and land "
         "(merge → main CI → local validation)",
     )
     pr_sub = pr_parser.add_subparsers(dest="pr_command", help="PR commands")
     ship_parser = pr_sub.add_parser(
         "ship",
         help="Run the path-aware gate matrix, push, open/update the PR, "
-        "watch checks to a verified-green terminal state",
+        "then enable native auto-merge (or return a verified --draft)",
     )
     ship_parser.add_argument(
         "--title", help="PR title (default: gh --fill from the commits)"
+    )
+    ship_parser.add_argument(
+        "--draft",
+        action="store_true",
+        help="Open or reuse a gated draft PR and return without enabling auto-merge",
     )
     land_parser = pr_sub.add_parser(
         "land",
@@ -2502,7 +2507,7 @@ def handle_pr(args: argparse.Namespace, project_root: Path) -> None:
         project_root: The project root path.
     """
     if args.pr_command == "ship":
-        sys.exit(ship_main(project_root, title=args.title))
+        sys.exit(ship_main(project_root, title=args.title, draft=args.draft))
     elif args.pr_command == "land":
         sys.exit(land_main(project_root, args.number, resume=args.resume))
     elif args.pr_command == "automerge":

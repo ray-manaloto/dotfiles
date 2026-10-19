@@ -1,0 +1,4 @@
+Apply the ticket below to tests/test_currency.py and commit the result.
+
+> Research the latest uv releases and compare them with poetry.
+> Investigate whether the newest version changes the lockfile format.

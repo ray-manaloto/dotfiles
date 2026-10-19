@@ -15,8 +15,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 from dotfiles_setup import host_lock, pr, process_env
+from dotfiles_setup.main import handle_pr, setup_parser
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from dotfiles_setup.sync import SyncOptions
 
 _WORKSPACE = Path("/workspaces-host/dotfiles")
@@ -415,6 +418,492 @@ def test_pr_checks_not_green_on_bad_bucket(
 
 
 # ------------------------------------------------------------------- ship
+
+
+def _ship_git_response(
+    cmd: list[str], workspace: Path, state: dict[str, object]
+) -> subprocess.CompletedProcess[str] | None:
+    if "config" in cmd or "hook" in cmd:
+        return _cp(returncode=1)
+    responses = {
+        "--abbrev-ref": "feat/draft\n",
+        "status": "",
+        "--cached": "",
+        "diff": str(state.get("paths", "README.md\n")),
+        "--path-format=absolute": f"{workspace}/.git\n{workspace}/.git\n",
+        "HEAD": str(state["head"]) + "\n",
+    }
+    for marker, response in responses.items():
+        if marker in cmd:
+            return _cp(response)
+    return None
+
+
+def _ship_view_response(
+    cmd: list[str], state: dict[str, object]
+) -> subprocess.CompletedProcess[str]:
+    if cmd[-1] == "number" and state.get("created"):
+        return _cp(json.dumps({"number": state.get("resolved_number", 42)}))
+    if str(state.get("resolved_number", 42)) in cmd and "returned_raw" in state:
+        return _cp(str(state["returned_raw"]))
+    info = (
+        state["returned"]
+        if str(state.get("resolved_number", 42)) in cmd or state.get("created")
+        else state["existing"]
+    )
+    return _cp(json.dumps(info)) if info is not None else _cp(returncode=1)
+
+
+def _ship_gh_response(
+    cmd: list[str], state: dict[str, object]
+) -> subprocess.CompletedProcess[str] | None:
+    if cmd[1:3] == ["pr", "list"]:
+        if "listed_raw" in state:
+            return _cp(str(state["listed_raw"]))
+        existing = state["existing"]
+        return _cp(json.dumps([] if existing is None else [existing]))
+    if cmd[1:3] == ["pr", "view"]:
+        return _ship_view_response(cmd, state)
+    if cmd[1:3] == ["pr", "create"]:
+        state["created"] = True
+        return _cp()
+    if cmd[1:3] == ["pr", "checks"]:
+        return _cp('[{"name":"ci-gate","bucket":"pass"}]')
+    return _cp() if cmd[1:3] == ["pr", "merge"] else None
+
+
+def _ship_boundary_response(
+    cmd: list[str], workspace: Path, state: dict[str, object]
+) -> subprocess.CompletedProcess[str] | None:
+    if state.get("fail_command") == cmd:
+        return _cp(returncode=23)
+    if cmd[0] == "git":
+        return _ship_git_response(cmd, workspace, state)
+    if cmd[0] == "gh":
+        return _ship_gh_response(cmd, state)
+    if cmd[0] == "fnox":
+        assert "push" in cmd
+        if changed := state.get("head_after_push"):
+            state["head"] = changed
+        return _cp(returncode=23 if state.get("push_fails") else 0)
+    if cmd[0] in ("mise", "uv"):
+        if cmd == ["mise", "run", "lint"] and (
+            changed := state.get("head_during_gates")
+        ):
+            state["head"] = changed
+        return _cp()
+    return None
+
+
+@pytest.fixture
+def ship_cli_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, list[list[str]], dict[str, object]]:
+    """Run the public CLI with substitutes only for external process results."""
+    workspace = tmp_path / "checkout"
+    workspace.mkdir()
+    monkeypatch.setenv("DOTFILES_LOCK_DIR", str(tmp_path / "locks"))
+    monkeypatch.delenv("GIT_SSH", raising=False)
+    seen: list[list[str]] = []
+    state: dict[str, object] = {
+        "existing": None,
+        "head": "a" * 40,
+        "returned": {
+            "number": 42,
+            "state": "OPEN",
+            "isDraft": True,
+            "headRefOid": "a" * 40,
+        },
+    }
+
+    def run(
+        command: Sequence[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        cmd = list(command)
+        seen.append(cmd)
+        response = _ship_boundary_response(cmd, workspace, state)
+        if response is None:
+            message = f"unexpected external command: {cmd}"
+            raise AssertionError(message)
+        return response
+
+    monkeypatch.setattr(subprocess, "run", run)
+    return workspace, seen, state
+
+
+def _ship_cli(workspace: Path, *flags: str) -> int:
+    args = setup_parser().parse_args(["pr", "ship", *flags])
+    with pytest.raises(SystemExit) as exited:
+        handle_pr(args, workspace)
+    assert isinstance(exited.value.code, int)
+    return exited.value.code
+
+
+def test_ship_cli_opens_a_verified_draft_without_arming(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace, seen, _state = ship_cli_boundary
+    assert _ship_cli(workspace, "--draft", "--title", "Integration") == 0
+    create = ["gh", "pr", "create", "--fill", "--draft", "--title", "Integration"]
+    assert create in seen
+    assert seen.index(["mise", "run", "lint"]) < seen.index(create)
+    assert any("dotfiles_setup.pytest_runner" in cmd for cmd in seen)
+    assert ["mise", "run", "eval"] in seen
+    push_index = next(i for i, cmd in enumerate(seen) if cmd[0] == "fnox")
+    query_index = seen.index(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            "feat/draft",
+            "--state",
+            "open",
+            "--json",
+            "number,state,isDraft",
+        ]
+    )
+    assert seen.index(["mise", "run", "eval"]) < query_index < push_index
+    assert all(
+        cmd[0] == "git" and "config" in cmd
+        for cmd in seen[query_index + 1 : push_index]
+    )
+    assert not any(
+        cmd[:3]
+        in (["gh", "pr", "merge"], ["gh", "pr", "ready"], ["gh", "pr", "checks"])
+        for cmd in seen
+    )
+    assert "draft" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("isDraft", False),
+        ("isDraft", "true"),
+        ("state", "CLOSED"),
+        ("headRefOid", "b" * 40),
+        ("headRefOid", ""),
+        ("number", 99),
+    ],
+)
+def test_ship_cli_draft_refuses_unverified_returned_pr(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    field: str,
+    value: object,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    returned: dict[str, object] = {
+        "number": 42,
+        "state": "OPEN",
+        "isDraft": True,
+        "headRefOid": "a" * 40,
+    }
+    returned[field] = value
+    state["returned"] = returned
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(cmd[:3] == ["gh", "pr", "merge"] for cmd in seen)
+
+
+@pytest.mark.parametrize(("returned_number", "expected_rc"), [(True, 1), (1, 0)])
+def test_ship_cli_draft_pr_one_requires_an_integer_response_number(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    returned_number: object,
+    expected_rc: int,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["resolved_number"] = 1
+    state["returned"] = {
+        "number": returned_number,
+        "state": "OPEN",
+        "isDraft": True,
+        "headRefOid": "a" * 40,
+    }
+    assert _ship_cli(workspace, "--draft") == expected_rc
+    assert not any(cmd[:3] == ["gh", "pr", "merge"] for cmd in seen)
+
+
+def test_ship_cli_draft_cannot_relabel_a_new_head_as_gated(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["head_after_push"] = "b" * 40
+    state["returned"] = {
+        "number": 42,
+        "state": "OPEN",
+        "isDraft": True,
+        "headRefOid": "b" * 40,
+    }
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(
+        cmd[:3] in (["gh", "pr", "create"], ["gh", "pr", "merge"]) for cmd in seen
+    )
+
+
+@pytest.mark.parametrize(
+    ("draft_request", "existing_draft", "expected"),
+    [
+        (True, True, (0, "draft")),
+        (True, False, (1, "already ready")),
+        (False, True, (1, "mark it ready")),
+        (False, False, (0, "AUTO-MERGE enabled")),
+    ],
+)
+def test_ship_cli_existing_pr_keeps_readiness_explicit(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    capsys: pytest.CaptureFixture[str],
+    *,
+    draft_request: bool,
+    existing_draft: bool,
+    expected: tuple[int, str],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    expected_rc, message = expected
+    info = {
+        "number": 42,
+        "state": "OPEN",
+        "isDraft": existing_draft,
+        "headRefOid": "a" * 40,
+    }
+    state["existing"] = info
+    state["returned"] = info
+    assert _ship_cli(workspace, *("--draft",) if draft_request else ()) == expected_rc
+    assert message in capsys.readouterr().out
+    assert not any(
+        cmd[:3] in (["gh", "pr", "create"], ["gh", "pr", "ready"]) for cmd in seen
+    )
+    armed = [cmd for cmd in seen if cmd[:3] == ["gh", "pr", "merge"]]
+    if not draft_request and not existing_draft:
+        assert armed == [
+            [
+                "gh",
+                "pr",
+                "merge",
+                "42",
+                "--auto",
+                "--squash",
+                "--delete-branch",
+                "--match-head-commit",
+                "a" * 40,
+            ]
+        ]
+    else:
+        assert not armed
+    if draft_request:
+        pushed = any(cmd[0] == "fnox" for cmd in seen)
+        assert pushed is existing_draft
+    else:
+        assert not any(cmd[:3] == ["gh", "pr", "list"] for cmd in seen)
+
+
+def test_ship_cli_draft_cannot_push_to_a_ready_pr_with_auto_merge_enabled(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    existing = {
+        "number": 42,
+        "state": "OPEN",
+        "isDraft": False,
+        "headRefOid": "a" * 40,
+        "autoMergeRequest": {"enabledAt": "2026-10-12T00:00:00Z"},
+    }
+    state["existing"] = existing
+    state["returned"] = existing
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(cmd[0] == "fnox" for cmd in seen)
+    assert not any(
+        cmd[:3] in (["gh", "pr", "create"], ["gh", "pr", "merge"]) for cmd in seen
+    )
+
+
+@pytest.mark.parametrize(
+    "listing",
+    [
+        "",
+        "{",
+        "null",
+        "{}",
+        "[null]",
+        "[{}]",
+        '[{"number":42,"state":"OPEN"}]',
+        '[{"number":42,"state":"OPEN","isDraft":null}]',
+        '[{"number":42,"state":"OPEN","isDraft":"true"}]',
+        '[{"number":42,"state":"OPEN","isDraft":1}]',
+        '[{"number":true,"state":"OPEN","isDraft":true}]',
+        '[{"number":0,"state":"OPEN","isDraft":true}]',
+        '[{"number":42,"state":"CLOSED","isDraft":true}]',
+        '[{"number":42,"state":"OPEN","isDraft":true},{"number":43,"state":"OPEN","isDraft":true}]',
+    ],
+)
+def test_ship_cli_draft_unverified_existing_pr_cannot_push(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    capsys: pytest.CaptureFixture[str],
+    listing: str,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["listed_raw"] = listing
+    assert _ship_cli(workspace, "--draft") == 1
+    assert "FAIL  ship:" in capsys.readouterr().out
+    assert not any(cmd[0] == "fnox" for cmd in seen)
+    assert not any(
+        cmd[:3] in (["gh", "pr", "create"], ["gh", "pr", "merge"]) for cmd in seen
+    )
+
+
+def test_ship_cli_draft_failed_lookup_is_not_an_empty_pr_list(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["fail_command"] = [
+        "gh",
+        "pr",
+        "list",
+        "--head",
+        "feat/draft",
+        "--state",
+        "open",
+        "--json",
+        "number,state,isDraft",
+    ]
+    assert _ship_cli(workspace, "--draft") == 1
+    assert "gh pr list rc=23" in capsys.readouterr().out
+    assert not any(cmd[0] == "fnox" for cmd in seen)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ("mise", "run", "lint"),
+        (
+            "uv",
+            "run",
+            "--project",
+            "python",
+            "python",
+            "-m",
+            "dotfiles_setup.pytest_runner",
+            "--label",
+            "ship-pytest",
+            "--",
+            "tests/",
+            "-x",
+        ),
+        ("uv", "run", "--project", "python", "dotfiles-setup", "verify", "run"),
+        ("uv", "run", "--project", "python", "dotfiles-setup", "hook", "selfcheck"),
+        ("mise", "run", "eval"),
+        ("mise", "run", "pin-actions"),
+        ("mise", "run", "lint-docs"),
+        ("mise", "run", "verify-apt-pins"),
+        ("mise", "run", "sync", "--", "--full"),
+    ],
+)
+def test_ship_cli_draft_failed_applicable_gate_cannot_publish_or_arm(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    command: tuple[str, ...],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    paths = ".github/workflows/ci.yml\nAGENTS.md\n"
+    if command[-1] == "verify-apt-pins":
+        paths += ".devcontainer/Dockerfile\n"
+    elif command[-1] == "--full":
+        paths += "python/src/dotfiles_setup/pr.py\n"
+    state["paths"] = paths
+    state["fail_command"] = list(command)
+    assert _ship_cli(workspace, "--draft") == 1
+    assert list(command) in seen
+    assert not any(cmd[0] in ("fnox", "gh") for cmd in seen)
+
+
+def test_ship_cli_draft_cannot_push_a_head_changed_during_gates(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["head_during_gates"] = "b" * 40
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(cmd[0] in ("fnox", "gh") for cmd in seen)
+
+
+@pytest.mark.parametrize("head", ["", "abc123", "z" * 40])
+def test_ship_cli_draft_requires_a_complete_candidate_before_gates(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    head: str,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["head"] = head
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(cmd[0] in ("mise", "uv", "fnox", "gh") for cmd in seen)
+
+
+@pytest.mark.parametrize("returned", ["", "{", "[]", "null", "{}"])
+def test_ship_cli_draft_unreadable_response_fails_without_arming(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    returned: str,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["returned_raw"] = returned
+    assert _ship_cli(workspace, "--draft") == 1
+    assert not any(cmd[:3] == ["gh", "pr", "merge"] for cmd in seen)
+
+
+def test_ship_cli_default_still_creates_and_arms_a_ready_pr(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["returned"] = {
+        "number": 42,
+        "state": "OPEN",
+        "isDraft": False,
+        "headRefOid": "a" * 40,
+    }
+    assert _ship_cli(workspace) == 0
+    assert ["gh", "pr", "create", "--fill"] in seen
+    assert [
+        "gh",
+        "pr",
+        "merge",
+        "42",
+        "--auto",
+        "--squash",
+        "--delete-branch",
+        "--match-head-commit",
+        "a" * 40,
+    ] in seen
+
+
+def test_ship_cli_draft_failed_push_cannot_publish_or_arm(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    state["push_fails"] = True
+    assert _ship_cli(workspace, "--draft") == 1
+    assert any(cmd[0] == "fnox" for cmd in seen)
+    assert all(cmd[:3] == ["gh", "pr", "list"] for cmd in seen if cmd[0] == "gh")
+
+
+@pytest.mark.parametrize("failure", ["candidate", "create", "verify"])
+def test_ship_cli_draft_failed_process_result_cannot_succeed_or_arm(
+    ship_cli_boundary: tuple[Path, list[list[str]], dict[str, object]],
+    failure: str,
+) -> None:
+    workspace, seen, state = ship_cli_boundary
+    commands = {
+        "candidate": ["git", "-C", str(workspace), "rev-parse", "HEAD"],
+        "create": ["gh", "pr", "create", "--fill", "--draft"],
+        "verify": [
+            "gh",
+            "pr",
+            "view",
+            "42",
+            "--json",
+            "number,state,isDraft,headRefOid",
+        ],
+    }
+    state["fail_command"] = commands[failure]
+    assert _ship_cli(workspace, "--draft") == 1
+    assert commands[failure] in seen
+    assert not any(cmd[:3] == ["gh", "pr", "merge"] for cmd in seen)
 
 
 def test_ship_refuses_main(monkeypatch: pytest.MonkeyPatch) -> None:

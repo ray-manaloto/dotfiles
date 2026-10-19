@@ -1,0 +1,7 @@
+============================= test session starts ==============================
+<Dir example>
+  <Dir tests>
+    <Module test_example.py>
+      <Function test_literal[café]>
+      <Function test_other>
+========================== 2 tests collected in 0.01s ===========================

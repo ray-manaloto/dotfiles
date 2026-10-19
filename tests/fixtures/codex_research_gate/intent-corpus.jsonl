@@ -1,0 +1,137 @@
+{"prompt": "Research the latest uv releases and summarize the breaking changes.", "expect": "research", "kind": "imperative"}
+{"prompt": "research how Codex 0.163 loads hooks from config.toml and hooks.json", "expect": "none", "kind": "path-object"}
+{"prompt": "Please research whether mise supports per-task sandboxing yet.", "expect": "research", "kind": "polite"}
+{"prompt": "Can you research the current state of P2996 reflection support in Clang?", "expect": "research", "kind": "polite"}
+{"prompt": "Could you look up the uv changelog for 0.9 online?", "expect": "research", "kind": "polite"}
+{"prompt": "Look up the latest fnox release on GitHub.", "expect": "research", "kind": "imperative"}
+{"prompt": "I need you to find the latest stable version of ruff.", "expect": "research", "kind": "polite"}
+{"prompt": "Find the latest release notes for hk.", "expect": "research", "kind": "imperative"}
+{"prompt": "What is the current version of Node LTS?", "expect": "research", "kind": "question"}
+{"prompt": "What's new in mise 2026.10?", "expect": "research", "kind": "question"}
+{"prompt": "what's new in Python 3.15", "expect": "research", "kind": "question"}
+{"prompt": "Compare the uv and Poetry docs on workspace support.", "expect": "research", "kind": "imperative"}
+{"prompt": "Search the web for reports of Codex Stop hooks firing twice.", "expect": "research", "kind": "imperative"}
+{"prompt": "Search GitHub for issues about hk pre-push hanging on macOS.", "expect": "research", "kind": "imperative"}
+{"prompt": "Go research the newest Codex release.", "expect": "research", "kind": "polite"}
+{"prompt": "Kindly research the latest uv releases.", "expect": "research", "kind": "polite"}
+{"prompt": "Please do some research on the newest mise releases.", "expect": "research", "kind": "noun-form"}
+{"prompt": "Do some research on the latest uv releases", "expect": "research", "kind": "noun-form"}
+{"prompt": "Research: latest mise releases and their breaking changes.", "expect": "research", "kind": "imperative"}
+{"prompt": "Research: uv vs poetry for this repo", "expect": "research", "kind": "imperative"}
+{"prompt": "Check the latest uv release notes", "expect": "research", "kind": "imperative"}
+{"prompt": "'tis urgent; research the latest uv releases, see the users' guide", "expect": "research", "kind": "clause"}
+{"prompt": "Mount note: the 27\" monitor. Research the latest uv releases and \"pin\" them.", "expect": "research", "kind": "clause"}
+{"prompt": "Let's research uv releases this week.", "expect": "research", "kind": "polite"}
+{"prompt": "Before we pin anything:\n\nResearch the newest Clang release and whether it ships P2996.\nThen write up what you find.", "expect": "research", "kind": "multi-line"}
+{"prompt": "Here is our current pin:\n```toml\nuv = \"0.8.0\"\n```\nLook up the latest uv version online and tell me if we are behind.", "expect": "research", "kind": "multi-line"}
+{"prompt": "Hey, quick one: what is the current version of the GitHub CLI?", "expect": "research", "kind": "question"}
+{"prompt": "Search the internet for best practices on Codex hook timeouts.", "expect": "research", "kind": "imperative"}
+{"prompt": "I need you to research how other projects gate research turns in Codex hooks.", "expect": "research", "kind": "polite"}
+{"prompt": "Please look up the Context7 rate limits online.", "expect": "research", "kind": "polite"}
+{"prompt": "Find the latest Exa API pricing.", "expect": "research", "kind": "imperative"}
+{"prompt": "Compare the mise and asdf docs on plugin installation.", "expect": "research", "kind": "imperative"}
+{"prompt": "Could you find the latest version of the actions/checkout action?", "expect": "research", "kind": "polite"}
+{"prompt": "What is the current version of Xcode?", "expect": "research", "kind": "question"}
+{"prompt": "Research the upstream changelog of codex-rs between 0.160 and 0.163.", "expect": "research", "kind": "imperative"}
+{"prompt": "> uv 0.9 drops Python 3.8\n\nIs that true? Research the uv 0.9 release notes and confirm.", "expect": "research", "kind": "multi-line"}
+{"prompt": "Fix nothing yet. Research the newest Firecrawl API limits first.", "expect": "research", "kind": "clause"}
+{"prompt": "Two things: research the latest gitleaks release, then tell me whether our config still parses.", "expect": "research", "kind": "clause"}
+{"prompt": "go look up the ruff 0.14 release notes", "expect": "research", "kind": "polite"}
+{"prompt": "Please search the web for Codex 0.163 hook schema changes.", "expect": "research", "kind": "polite"}
+{"prompt": "Compare uv and Poetry for Python dependency management.", "expect": "research", "kind": "imperative"}
+{"prompt": "Look up the uv changelog.", "expect": "research", "kind": "imperative"}
+{"prompt": "Find the latest fnox version.", "expect": "research", "kind": "imperative"}
+{"prompt": "Research Codex agent workflows.", "expect": "research", "kind": "imperative"}
+{"prompt": "Thanks for the fix.\n\nNext: research what changed in the Codex hooks schema upstream since 0.160 and list anything that affects our gate.", "expect": "research", "kind": "multi-line"}
+{"prompt": "I pasted the error below.\n\n```\nerror: unknown field `sandbox`\n```\n\nSearch the web for that mise error and tell me which release added the field.", "expect": "research", "kind": "multi-line"}
+{"prompt": "Fix the research gate so it ignores fenced blocks.", "expect": "none", "kind": "mention"}
+{"prompt": "Update the research-workflow doc to name the five providers.", "expect": "none", "kind": "docs"}
+{"prompt": "After research, the parser drops empty rows; fix that in parser.py.", "expect": "none", "kind": "mention"}
+{"prompt": "Rename research_fanout.py to fanout.py and update the imports.", "expect": "none", "kind": "coding"}
+{"prompt": "Bump uv to the latest version in mise.toml.", "expect": "none", "kind": "coding"}
+{"prompt": "Write release notes for v2.3 in CHANGELOG.md from the merged PRs.", "expect": "none", "kind": "docs"}
+{"prompt": "Look up the function parse_manifest in foo.py and add type hints.", "expect": "none", "kind": "code-local"}
+{"prompt": "Find the bug in the version comparison and fix it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Find the latest commit in this repo that touched hooks.json.", "expect": "none", "kind": "code-local"}
+{"prompt": "Investigate the failing test in tests/test_currency.py.", "expect": "none", "kind": "code-local"}
+{"prompt": "Look into the crash in the Stop hook when the manifest is empty.", "expect": "none", "kind": "code-local"}
+{"prompt": "Compare the two functions in diff.py and merge them.", "expect": "none", "kind": "code-local"}
+{"prompt": "Search the codebase for callers of strict_five_verdict.", "expect": "none", "kind": "code-local"}
+{"prompt": "Search for TODOs in python/src and list them.", "expect": "none", "kind": "coding"}
+{"prompt": "Add a test that the research record carries the turn id.", "expect": "none", "kind": "coding"}
+{"prompt": "Document best practices for hook timeouts in docs/hooks.md.", "expect": "none", "kind": "docs"}
+{"prompt": "Make the version check compare the latest tag with the pinned version.", "expect": "none", "kind": "coding"}
+{"prompt": "Investigate why the latest release job failed in CI and fix the workflow.", "expect": "none", "kind": "ops"}
+{"prompt": "Check the latest commit message for typos.", "expect": "none", "kind": "code-local"}
+{"prompt": "Look up how we call research_scope.directive in the gate and inline it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Refactor the upstream sync script so it compares versions with packaging.", "expect": "none", "kind": "coding"}
+{"prompt": "Update the changelog entry for the research gate fix.", "expect": "none", "kind": "docs"}
+{"prompt": "The research gate blocks every turn; please fix it.", "expect": "none", "kind": "mention"}
+{"prompt": "Review the diff and compare it with the ticket acceptance criteria.", "expect": "none", "kind": "review"}
+{"prompt": "You are the reviewer. Find the latest changes on this branch and check them against CODING_STANDARDS.md.", "expect": "none", "kind": "review"}
+{"prompt": "Pin the docs version in mkdocs.yml to the latest release we tested.", "expect": "none", "kind": "docs"}
+{"prompt": "Delete the research cache under tests/fixtures before committing.", "expect": "none", "kind": "ops"}
+{"prompt": "Run mise run test and report the failing tests.", "expect": "none", "kind": "ops"}
+{"prompt": "Restart the daemon and look up its PID in the log.", "expect": "none", "kind": "ops"}
+{"prompt": "Search the logs for 'quota exceeded' and count the hits.", "expect": "none", "kind": "code-local"}
+{"prompt": "Find where the latest version string is parsed and add a unit test.", "expect": "none", "kind": "coding"}
+{"prompt": "Explain what research_fanout.py does in two sentences.", "expect": "none", "kind": "docs"}
+{"prompt": "Summarize the research notes in docs/research/ into one paragraph.", "expect": "none", "kind": "docs"}
+{"prompt": "Fix the typo in the README section titled \"Research the latest releases\".", "expect": "none", "kind": "quoted"}
+{"prompt": "Rename the heading \u201cResearch the latest uv releases\u201d to \u201cCurrency checks\u201d.", "expect": "none", "kind": "quoted"}
+{"prompt": "Add a docstring to `research_latest_releases()` in currency.py.", "expect": "none", "kind": "inline-code"}
+{"prompt": "Make `look up the latest version` a constant in strings.py.", "expect": "none", "kind": "inline-code"}
+{"prompt": "Apply this patch:\n```diff\n- Research the latest uv releases\n+ Check pinned versions\n", "expect": "none", "kind": "fenced"}
+{"prompt": "Fix the docs block:\n~~~markdown\nResearch the latest mise releases.\n~~~\nKeep the heading level.", "expect": "none", "kind": "fenced"}
+{"prompt": "Reply to this review comment and fix the nit:\n> Research the newest Clang before landing this.\nWe already pinned clang 22; just fix the nit.", "expect": "none", "kind": "blockquote"}
+{"prompt": "Validate this payload in the schema test:\n{\"task\": \"Research the latest uv releases\", \"scope\": \"research\"}", "expect": "none", "kind": "json"}
+{"prompt": "Add this step to .github/workflows/ci.yml:\n- name: Research the latest release\n  run: ./scripts/check-latest.sh", "expect": "none", "kind": "yaml"}
+{"prompt": "The hook crashed:\nTraceback (most recent call last):\n  File \"gate.py\", line 12, in <module>\n    main()\nValueError: research the latest uv releases failed\nFix it.", "expect": "none", "kind": "log"}
+{"prompt": "CI output:\n2026-10-16T10:00:01Z INFO research: look up latest uv release\n2026-10-16T10:00:02Z ERROR quota exceeded\nWhy does the job fail? Fix the workflow.", "expect": "none", "kind": "log"}
+{"prompt": "Implement this.\nTicket:\nResearch the latest uv releases and pin them in mise.toml.", "expect": "none", "kind": "ticket-marker"}
+{"prompt": "Close the loop on this.\nIssue:\nSearch the web for the newest hk release and bump it.", "expect": "none", "kind": "ticket-marker"}
+{"prompt": "Implement the spec below in research_scope.py.\nSpec:\nFind the latest uv version online; compare the docs.", "expect": "none", "kind": "ticket-marker"}
+{"prompt": "Apply the ticket.\n---\nLook up the latest fnox release on GitHub.\nWhat is the current version of uv?", "expect": "none", "kind": "ticket-marker"}
+{"prompt": "Write the tests.\nAcceptance criteria:\n- Research the latest mise release.\n- What's new in mise 2026.10 is listed.", "expect": "none", "kind": "ticket-marker"}
+{"prompt": "Reword the README line that says: research the latest uv releases weekly.", "expect": "none", "kind": "reported"}
+{"prompt": "Implement CG-12. Ticket title: Research the latest versions of uv and poetry.", "expect": "none", "kind": "quoted"}
+{"prompt": "title: Research the latest versions of uv", "expect": "none", "kind": "yaml"}
+{"prompt": "Write tests that search the web fallback path in research_fanout.py.", "expect": "none", "kind": "mention"}
+{"prompt": "Apply the review: P2 says to research the skip codes; implement it in research_fanout.py.", "expect": "none", "kind": "reported"}
+{"prompt": "Please look into the CI failure on this branch and fix it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Look up the definition of parse_args in src/cli.py and rename it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Do not research anything; just fix the lint error in gate.py.", "expect": "none", "kind": "negation"}
+{"prompt": "No need to look up the docs, just bump the pin to 0.9.1.", "expect": "none", "kind": "negation"}
+{"prompt": "Don't search the web. Fix the failing test with what's in the repo.", "expect": "none", "kind": "negation"}
+{"prompt": "The user asked us to research the latest uv releases; that ticket is closed, so delete the stale fixture.", "expect": "none", "kind": "reported"}
+{"prompt": "Should the gate research the latest releases automatically? Add a TODO in gate.py, nothing else.", "expect": "none", "kind": "mention"}
+{"prompt": "Compare the old and new manifest formats in tests/fixtures and update the reader.", "expect": "none", "kind": "code-local"}
+{"prompt": "Compare the outputs of test_a and test_b.", "expect": "none", "kind": "code-local"}
+{"prompt": "Investigate the upstream merge conflict in python/uv.lock and resolve it.", "expect": "none", "kind": "code-local"}
+{"prompt": "What is the current version of the manifest schema in research_fanout.py?", "expect": "none", "kind": "code-local"}
+{"prompt": "What's new in this branch compared with main?", "expect": "none", "kind": "code-local"}
+{"prompt": "Find the latest test run log under .codex/logs and summarize the failures.", "expect": "none", "kind": "code-local"}
+{"prompt": "Look up the error code in our docs/errors.md table and use it in the message.", "expect": "none", "kind": "code-local"}
+{"prompt": "Make the hint say \"research the latest uv releases\" only when the verb is present.", "expect": "none", "kind": "quoted"}
+{"prompt": "Add `--search-web` handling to research_fanout.py; look up the flag parser in cli.py.", "expect": "none", "kind": "inline-code"}
+{"prompt": "Release v1.4 of the plugin after the tests pass; bump the version in plugin.json.", "expect": "none", "kind": "ops"}
+{"prompt": "Search and replace 'research-scope' with 'research_scope' across python/src.", "expect": "none", "kind": "coding"}
+{"prompt": "Review PR #1860: compare the research gate changes with the r4 report.", "expect": "none", "kind": "review"}
+{"prompt": "You are the implementer for unit cg12.\nTASK: Research the latest versions of uv and poetry\nSPEC FILE: docs/spec.md\nMODE: implement\n\nEdit only the owned paths.", "expect": "none", "kind": "dispatch"}
+{"prompt": "Upgrade ruff to the latest version and fix the new lint findings.", "expect": "none", "kind": "coding"}
+{"prompt": "Look into why `mise run research-fanout` exits 1 locally.", "expect": "none", "kind": "inline-code"}
+{"prompt": "Write a research summary template in docs/templates/research.md.", "expect": "none", "kind": "docs"}
+{"prompt": "Check the latest CI run on this PR and fix whatever failed.", "expect": "none", "kind": "ops"}
+{"prompt": "Find the latest version of the lockfile in git history and restore it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Investigate the failing test and fix it.", "expect": "none", "kind": "code-local"}
+{"prompt": "Bump codex to the newest version of the current tools.", "expect": "none", "kind": "coding"}
+{"prompt": "Compare these two local functions.", "expect": "none", "kind": "coding"}
+{"prompt": "Implement CG-41 test-first.\n\nThe ticket mentions upstream release notes and the latest versions table; none of that needs research.\nKeep the changelog untouched.", "expect": "none", "kind": "multi-line"}
+{"prompt": "Context from the issue thread:\n\n> We should look up the newest uv docs before this lands.\n> Also search GitHub for prior art.\n\nIgnore that thread; fix the parser bug in reader.py.", "expect": "none", "kind": "multi-line"}
+{"prompt": "Link the upstream changelog from docs/currency.md and fix the broken anchor.", "expect": "none", "kind": "docs"}
+{"prompt": "Is the version comparison in currency.py correct for pre-release tags?", "expect": "none", "kind": "review"}
+{"prompt": "Research gate tests fail on main; fix them.", "expect": "none", "kind": "mention"}
+{"prompt": "Research notes in docs/ are stale; delete them.", "expect": "none", "kind": "mention"}
+{"prompt": "Research-scope directives are case-sensitive; add a test for that.", "expect": "none", "kind": "mention"}
+{"prompt": "We should research the latest uv releases before pinning.", "expect": "none", "kind": "suggestion"}
+{"prompt": "Can someone investigate the newest mise release?", "expect": "none", "kind": "suggestion"}

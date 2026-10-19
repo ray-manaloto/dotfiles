@@ -1,0 +1,4 @@
+Implement ticket CG-12 in the lane worktree. Edit only the owned paths and commit.
+
+Ticket:
+{"id": "CG-12", "title": "Research the latest versions of uv and poetry", "body": "Investigate upstream releases and compare the current version pins."}

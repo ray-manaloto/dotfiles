@@ -1,0 +1,7 @@
+Fix the version check described in this ticket. Do not run research providers.
+
+```markdown
+## CG-14: release currency
+Research the latest releases of mise, compare them with the current version, and
+investigate upstream best practices.
+```
