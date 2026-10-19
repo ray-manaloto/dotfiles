@@ -134,6 +134,11 @@ const REQUIRED_FAILED = new RegExp(`^(${SOURCES.join('|')}): (ok|empty_verified|
 const requiredFailed = value => Array.isArray(value) && value.length <= MAX_PROBE_ENTRIES
   ? value.map(entry => typeof entry === 'string' && REQUIRED_FAILED.test(entry) ? entry : 'unrecognised required_failed entry')
   : ['unrecognised required_failed entry']
+const manifestPolicyFailures = m => !Object.hasOwn(m, 'policy_version') || m.policy_version === 'strict-five-v2'
+  ? [] // Historical missing-version probes and explicit v2 retain their contract.
+  : m.policy_version !== 'strict-five-v3-d381' ? ['unsupported receipt policy']
+    : m.disposition !== 'complete' && !requiredFailed(m.required_failed).length
+      ? ['receipt policy disposition incomplete'] : []
 // The mandatory dependency-repo stage (12): every repo the question is about, searched on GitHub.
 // Every one of these must answer (ok / empty_verified) — the probe reads each from the manifest (#1473).
 const DEP_SOURCES = 'github-issues,github-discussions,github-releases'
@@ -186,6 +191,7 @@ const FETCH = u => `mise exec -- firecrawl scrape ${shq(u)} --format markdown --
 
 // Probes (#1514): one workflow-built command, one verbatim line back.
 const PROBE = { type: 'object', required: ['line'], properties: { line: { type: 'string' } } }
+// Probe mode defaults to D381; manifest projections always use the recorded policy.
 const probeCmd = (out, flags) => `mise run research-fanout -- --probe-out ${shq(out)} ${flags.join(' ')}`
 const COPY_LINE = 'Return its LAST stdout line — it starts with `PROBE-JSON ` — VERBATIM as `line`: copy it, never retype, reformat or summarise it, and never print environment values.'
 // Accepted only when it parses AND names the exact manifest this workflow asked for.
@@ -436,7 +442,7 @@ const planPrompt = [
   'Choose only the sources that fit the question: API/library behaviour -> github-* + firecrawl-developer + context7;',
   'recent community sentiment -> last30days + exa; general web -> exa + firecrawl-search. Write 1-3 query variants',
   '(short search terms, not sentences). For each variant run exactly:',
-  `  mise run research-fanout -- '<query>' ${REPO ? `--repo ${REPO} ` : ''}--sources <comma list>`,
+  `  mise run research-fanout -- '<query>' ${REPO ? `--repo ${REPO} ` : ''}--policy-version strict-five-v3-d381 --sources <comma list>`,
   "The query must be ONE single-quoted shell word; write a ' inside it as '\\''.",
   'and record the manifest path it prints and its real exit code.',
   DEP_REPOS.length ? `A separate MANDATORY stage already runs ${DEP_SOURCES} for ${DEP_REPOS.join(', ')} (both directions for related repos); add github-* runs only for query variants it does not cover.` : '',
@@ -463,7 +469,7 @@ const depPrompt = (r, i) => [
   `MANDATORY DEPENDENCY-REPO STAGE for ${r}: it runs whatever any planner chose. QUESTION: ${A.question}`,
   'From the repository root, run each command below exactly, in order, never piped (queries are project NAMES or',
   'short search terms, never owner/repo slugs):',
-  ...depQueries(r).map((q, k) => `  mise run research-fanout -- ${q === null ? "'<2-4 short search terms from the QUESTION>'" : shq(q)} --repo ${r} --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}${RUN_ID ? ` --request-id ${RUN_ID}` : ''}`),
+  ...depQueries(r).map((q, k) => `  mise run research-fanout -- ${q === null ? "'<2-4 short search terms from the QUESTION>'" : shq(q)} --repo ${r} --policy-version strict-five-v3-d381 --sources ${DEP_SOURCES} --out ${shq(depOut(r, k))}${RUN_ID ? ` --request-id ${RUN_ID}` : ''}`),
   "Each query must be ONE single-quoted shell word; write a ' inside it as '\\''.",
   'Then run this probe exactly, never piped — it re-reads those manifests (which query really ran, and whether',
   `${DEP_SOURCES} each answered) and runs the code-search and repository checks itself:`,
@@ -536,7 +542,7 @@ const dependencyRuns = DEP_REPOS.flatMap((r, i) => {
     if (q !== null && ran !== q) mandatoryGaps.push(`dependency-repo stage for ${r}: cross-direction query "${q}" not run (got "${ran}")`)
     if (q === null && ran.startsWith('<')) mandatoryGaps.push(`dependency-repo stage for ${r}: the question-terms placeholder "${ran}" ran verbatim, so ${r} was not searched for the QUESTION`)
     else if (q === null && REPO_NAMES.includes(asName(ran))) mandatoryGaps.push(`dependency-repo stage for ${r}: question-terms query "${ran}" is a repo name, so ${r} was not searched for the QUESTION`)
-    const failed = requiredFailed(m.required_failed)
+    const failed = [...requiredFailed(m.required_failed), ...manifestPolicyFailures(m)]
       .filter(f => !disabled.some(d => f.startsWith(`${d}:`)))
     // #1473: releases answering must not hide an issues search that failed.
     if (failed.length) mandatoryGaps.push(`dependency-repo stage for ${r}: "${ran}" — ${failed.join('; ')}`)
@@ -678,7 +684,7 @@ const indexPrompt = [
 ].join('\n')
 const PLAN_MANIFEST_PROBE = `${FANOUT_DIR}/plan/manifests.json`
 const planManifestPrompt = [
-  'Read the planner manifests to record their provisional credit-exhaustion routes. Run exactly, never piped:',
+  'Project the planner manifests under their recorded policy, including skipped and failed sources. Run exactly, never piped:',
   '  ' + probeCmd(PLAN_MANIFEST_PROBE, planManifests.map(m => `--fanout-manifest ${shq(m)}`)),
   COPY_LINE,
 ].join('\n')
@@ -711,6 +717,14 @@ const manifestProvisional = p => probesOf(p, 'fanout-manifest').flatMap(m => {
   }
   return m.provisional.map(e => `${m.path}: ${e.source}${e.route ? ` via ${e.route}` : ' skipped'} (${e.code ?? 'credits-exhausted'})`)
 })
+for (const m of probesOf(planManifestProbe, 'fanout-manifest')) {
+  if (!m.fresh) mandatoryGaps.push(`${m.path}: planner manifest is stale or request-mismatched`)
+  for (const failure of [...requiredFailed(m.required_failed), ...manifestPolicyFailures(m)]) mandatoryGaps.push(`${m.path}: ${failure}`)
+}
+const policyOutcomes = [planManifestProbe, ...depProbes].flatMap(p => probesOf(p, 'fanout-manifest').map(m => ({
+  path: m.path, policy_version: m.policy_version ?? null, disposition: m.disposition ?? null,
+  skipped_sources: m.skipped_sources ?? [], failed_sources: m.failed_sources ?? [],
+})))
 const provisionalRoutes = [...new Set([
   ...mirror.filter(m => m.provisional && mirrored(m)).map(m => `${m.url}: mirrored via webclaw (credits-exhausted)`),
   ...manifestProvisional(planManifestProbe),
@@ -811,7 +825,11 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   '"Offline mirrors" (link | mirror file | rc | bytes | failure | route | provisional) from MIRRORS. These rows were recorded by',
   'research-fanout probes; cite the manifest paths. Every MIRROR GAP, CODE SEARCH GAP and MANDATORY GAP is a Gap; when',
   'MANDATORY GAPS is non-empty, the Answer must say the sweep is INCOMPLETE and name what did not run.',
-  'Name every PROVISIONAL ROUTE below in the Answer and provenance; credit-skipped or substituted research is provisional.',
+  'Interpret each receipt under its recorded policy. Under strict-five-v3-d381, evidenced exhausted credits/payment/quota',
+  'is nonblocking SKIPPED, never successful evidence or PROVISIONAL by itself. Do not retry or wait for renewal.',
+  'Auth, missing prerequisites and unrunnable routes remain INCOMPLETE. Historical v2 keeps its provisional interpretation.',
+  'Name every validated PROVISIONAL ROUTE below in the Answer and provenance.',
+  `POLICY OUTCOMES:\n${JSON.stringify(policyOutcomes)}`,
   `Return the path and the claims the Answer depends on (at most ${VERIFY_MAX}); mark absence=true on every claim`,
   'that something does NOT exist or does NOT happen — those are the easiest to get wrong.',
   LINKS.length ? `CALLER LINKS (each must be cited or named as unread): ${LINKS.join(' ')}` : '',
@@ -831,7 +849,7 @@ const synth = await run('synthesize', 'synthesize', 'Synthesize', [
   // This node's own row is added by run() only when it is called, i.e. after this prompt is built.
   `ROUTING (so far; add a row for this synthesize node — ${JSON.stringify(ROUTE.synthesize)}):\n${JSON.stringify(routing)}`,
 ].filter(Boolean).join('\n'), { schema: SYNTH })
-const common = { stageGaps, mandatoryGaps, fanoutGaps, plan, triage, failedReads, codeSearch, codeSearchNotes, codeSearchGaps, dependencyRuns, mirror, mirrorGaps, provisionalRoutes }
+const common = { stageGaps, mandatoryGaps, fanoutGaps, plan, triage, failedReads, codeSearch, codeSearchNotes, codeSearchGaps, dependencyRuns, mirror, mirrorGaps, provisionalRoutes, policyOutcomes }
 if (synth === null) return await finish(withStatuses('synth-null', { ...common, claims, routing }))
 
 phase('Verify')
@@ -930,8 +948,8 @@ if (A.advisor) {
 // mirror, code search) did not run or did not succeed — `mandatoryGaps` names each; partial-verify =
 // SOME refuters returned null; links-only / stage-gap = plan, fan-out or triage failed, so the evidence
 // base is the caller links (links-only) or what the mandatory stages produced (stage-gap, no links —
-// never `links-only` with zero links); provisional = a validated credit fallback or credit-skipped
-// manifest source. Early exits: plan-null | no-manifests | triage-null | synth-null.
+// never `links-only` with zero links); provisional = a validated historical v2 fallback or skip.
+// D381 exhaustion alone never adds a provisional or mandatory gap status. Early exits: plan-null | no-manifests | triage-null | synth-null.
 const statuses = [
   verdicts.length && unverified.length === verdicts.length ? 'verify-null' : '',
   !reconciled ? 'reconcile-null' : '',

@@ -17,6 +17,9 @@ from dotfiles_setup.research_fanout import (
     CREDIT_METERED_SOURCES,
     FailureCode,
 )
+from dotfiles_setup.research_fanout import (
+    main as fanout_main,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -195,7 +198,10 @@ const CODE_SEARCH_OK = [
 const PLAN_PROBE_OK = (prompt, rows) => PROBE_LINE(prompt, CS(rows))
 const PLAN_MANIFEST_OK = (prompt, provisional = []) => PROBE_LINE(prompt,
   argsOf(prompt, '--fanout-manifest').map(path => ({ kind: 'fanout-manifest',
-    path, exists: true, fresh: true, sources: {}, required_failed: [], provisional })))
+    path, exists: true, fresh: true, sources: {}, required_failed: [], provisional,
+    policy_version: provisional.length ? 'strict-five-v2' : 'strict-five-v3-d381',
+    disposition: provisional.length ? 'incomplete' : 'complete',
+    skipped_sources: [], failed_sources: [] })))
 const DEPS_QUERIES = (prompt) => prompt.split("mise run research-fanout -- '").slice(1)
   .map((part, k) => {
     const q = shWord("'" + part)
@@ -210,6 +216,11 @@ const DEPS = (prompt, o = {}) => {
     fresh: runs[k].fresh !== false,
     sources: {}, required_failed: runs[k].requiredFailed || [],
     provisional: runs[k].provisional || [],
+    policy_version: runs[k].provisional?.length
+      ? 'strict-five-v2' : 'strict-five-v3-d381',
+    disposition: runs[k].requiredFailed?.length || runs[k].provisional?.length
+      ? 'incomplete' : 'complete',
+    skipped_sources: [], failed_sources: [],
     provisional_invalid: runs[k].provisionalInvalid === true }] : []))
   const control = o.control || { count: 7, rc: 0, rateLimited: false }
   const health = 'health' in o ? o.health
@@ -369,7 +380,7 @@ def _bun_run(source: str, target: Path) -> subprocess.CompletedProcess[str]:
     """Execute generated JavaScript through the repository's Bun pin."""
     target.write_text(_wrapped_source(source), encoding="utf-8")
     return subprocess.run(
-        ["mise", "exec", "--", "bun", "run", str(target)],
+        ["mise", "exec", "--no-deps", "--", "bun", "run", str(target)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -519,7 +530,7 @@ def _bun_run_wrapped(wrapped: str, target: Path) -> subprocess.CompletedProcess[
     """Execute already-wrapped JavaScript through the repository's Bun pin."""
     target.write_text(wrapped, encoding="utf-8")
     return subprocess.run(
-        ["mise", "exec", "--", "bun", "run", str(target)],
+        ["mise", "exec", "--no-deps", "--", "bun", "run", str(target)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -1410,6 +1421,123 @@ def test_research_sweep_primary_routes_remain_complete(tmp_path: Path) -> None:
     assert run_result["statuses"] == []
     assert run_result["status"] == "complete"
     assert "PROVISIONAL ROUTES:" not in _of_kind(payload, "synth-prompt")[0]["prompt"]
+
+
+@pytest.mark.parametrize("stage", ["planner", "dependency"])
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "v3-credit-skip",
+        "auth-failure",
+        "v2-credit-skip",
+        "unknown-policy",
+        "null-policy",
+        "legacy-missing-policy",
+        "v3-incomplete",
+    ],
+)
+def test_d381_research_sweep_preserves_validated_policy_outcomes(
+    tmp_path: Path, stage: str, outcome: str
+) -> None:
+    """Exercise the whole saved JS workflow with the existing fake-agent runtime.
+
+    The probe boundary supplies validated statuses, as the Python probe tests
+    require. These are stubbed probe lines, not live provider/agent evidence.
+    No new projection fields or workflow arguments are needed for D381.
+    """
+    failed = outcome == "auth-failure"
+    historical = outcome == "v2-credit-skip"
+    invalid_policy = outcome in {"unknown-policy", "null-policy"}
+    missing_policy = outcome == "legacy-missing-policy"
+    incomplete = outcome == "v3-incomplete"
+    projection = {
+        "sources": {
+            "exa": "ok" if missing_policy else "error" if failed else "skipped"
+        },
+        "required_failed": ["exa: error (auth-failed)"] if failed else [],
+        "policy_version": None
+        if outcome == "null-policy"
+        else "strict-five-v999"
+        if invalid_policy
+        else "strict-five-v2"
+        if historical
+        else "strict-five-v3-d381",
+        "disposition": "incomplete"
+        if failed or invalid_policy or historical or incomplete
+        else "complete",
+        "skipped_sources": []
+        if failed or invalid_policy or incomplete or missing_policy
+        else ["exa"],
+        "failed_sources": ["exa"] if failed or invalid_policy or incomplete else [],
+        "provisional": (
+            [{"source": "exa", "route": None, "code": "credits-exhausted"}]
+            if historical
+            else []
+        ),
+    }
+    # Reuse the public PROBE-JSON boundary. Keep its path, fresh/query metadata,
+    # dependency controls and other probes exactly as the existing harness emits.
+    base = "PLAN_MANIFEST_OK(_prompt)" if stage == "planner" else "DEPS_OK(_prompt)"
+    probe = (
+        "(() => { const got = " + base + "; "
+        "const data = JSON.parse(got.line.slice('PROBE-JSON '.length)); "
+        "data.probes = data.probes.map(row => row.kind === 'fanout-manifest' "
+        "? { ...row, ..."
+        + json.dumps(projection)
+        + " } : row); "
+        + (
+            "data.probes.forEach(row => { delete row.policy_version; }); "
+            if missing_policy
+            else ""
+        )
+        + "return { line: 'PROBE-JSON ' + JSON.stringify(data) }; })()"
+    )
+    stubs = {"plan_manifests" if stage == "planner" else "deps": probe}
+    payload = _mandatory_run(
+        tmp_path, f"d381-sweep-{stage}-{outcome}.js", {"links": []}, stubs
+    )
+    result = _result(payload)
+    synth = _of_kind(payload, "synth-prompt")[0]["prompt"]
+    assert _of_kind(payload, "reconcile"), "the sweep must reach its final phases"
+    assert _of_kind(payload, "retrospect")
+    assert _of_kind(payload, "save-searches")
+    if failed or invalid_policy or incomplete:
+        assert result["status"] == "mandatory-gap"
+        assert result["statuses"] == ["mandatory-gap"]
+        assert result["provisionalRoutes"] == []
+        expected = (
+            "auth-failed" if failed else "policy" if invalid_policy else "incomplete"
+        )
+        assert any(
+            expected in gap for gap in cast("list[str]", result["mandatoryGaps"])
+        )
+        assert "MANDATORY GAPS:" in synth
+        assert "INCOMPLETE" in synth
+        assert expected in synth
+    elif historical:
+        assert result["status"] == "provisional"
+        assert result["statuses"] == ["provisional"]
+        assert result["mandatoryGaps"] == []
+        assert result["provisionalRoutes"]
+        assert all(
+            "exa skipped (credits-exhausted)" in route
+            for route in cast("list[str]", result["provisionalRoutes"])
+        )
+        assert "PROVISIONAL ROUTES:" in synth
+        assert "exa skipped (credits-exhausted)" in synth
+    else:
+        assert result["status"] == "complete"
+        assert result["statuses"] == []
+        assert result["mandatoryGaps"] == []
+        assert result["fanoutGaps"] == []
+        assert result["provisionalRoutes"] == []
+        assert "PROVISIONAL ROUTES:" not in synth
+        assert "MANDATORY GAPS:" not in synth
+        # These are the instructions actually sent at runtime, not source text
+        # snapshots: synthesis must distinguish the current policy from v2.
+        assert "strict-five-v3-d381" in synth
+        assert "SKIPPED" in synth
+        assert "credit-skipped or substituted research is provisional" not in synth
 
 
 @pytest.mark.parametrize("status", ["complete", "provisional", "mandatory-gap"])
@@ -3195,6 +3323,93 @@ def test_research_sweep_disabled_tracker_is_a_note_not_a_gap(tmp_path: Path) -> 
         assert len(cast("list[str]", run_result["mandatoryGaps"])) == gaps, has
         notes = cast("list[str]", run_result["codeSearchNotes"])
         assert any("has discussions disabled" in n for n in notes) is (not has)
+
+
+@pytest.mark.parametrize("has_discussions", [False, True])
+def test_d381_producer_probe_to_sweep_disabled_tracker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, has_discussions: bool
+) -> None:
+    """F7: real producer/probe bytes retain tracker identity through the sweep."""
+    monkeypatch.setenv("GH_TOKEN", "fixture-key")
+    monkeypatch.setenv("GITHUB_TOKEN", "fixture-key")
+    calls: list[list[str]] = []
+
+    def runner(
+        argv: list[str], *, timeout: float, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        del timeout, env
+        assert argv[:3] == ["gh", "api", "graphql"]
+        calls.append(argv)
+        return subprocess.CompletedProcess(
+            argv, 0, b'{"data":{"search":{"nodes":[]}}}', b""
+        )
+
+    output = tmp_path / "fanout"
+    assert (
+        fanout_main(
+            [
+                "q0",
+                "--repo",
+                "example/repo",
+                "--sources",
+                "github-discussions",
+                "--policy-version",
+                "strict-five-v3-d381",
+                "--out",
+                str(output),
+            ],
+            tmp_path,
+            runner=runner,
+        )
+        == 1
+    )
+    assert len(calls) == 2, "query and empty canary both use the offline boundary"
+    probe = tmp_path / "probe.json"
+    assert (
+        fanout_main(
+            [
+                "--probe-out",
+                str(probe),
+                "--fanout-manifest",
+                str(output / "manifest.json"),
+                "--require",
+                "github-discussions",
+            ],
+            tmp_path,
+            runner=runner,
+        )
+        == 0
+    )
+    projection = json.loads(probe.read_text())["probes"][0]
+    assert projection["policy_version"] == "strict-five-v3-d381"
+    assert projection["disposition"] == "incomplete"
+    assert projection["sources"] == {"github-discussions": "empty_unverified"}
+    assert projection["failed_sources"] == ["github-discussions"]
+    # Only rebind the requested artifact path to the harness's dependency path;
+    # required_failed, policy and disposition are the actual public probe bytes.
+    stub = (
+        "(() => { const got = DEPS(_prompt, { exists: { rc: 0, status: 200, "
+        "fullName: 'example/repo', hasIssues: true, hasDiscussions: "
+        + json.dumps(has_discussions)
+        + " } }); const data = JSON.parse(got.line.slice('PROBE-JSON '.length)); "
+        "data.probes = data.probes.map(row => row.kind === 'fanout-manifest' "
+        "? { ..." + json.dumps(projection) + ", path: row.path } : row); "
+        "return { line: 'PROBE-JSON ' + JSON.stringify(data) }; })()"
+    )
+    result = _result(
+        _mandatory_run(
+            tmp_path, "d381-producer-probe-sweep.js", {"links": []}, {"deps": stub}
+        )
+    )
+    gaps = cast("list[str]", result["mandatoryGaps"])
+    assert result["status"] == ("mandatory-gap" if has_discussions else "complete")
+    assert len(gaps) == int(has_discussions)
+    if has_discussions:
+        assert "github-discussions: empty_unverified (canary-empty)" in gaps[0]
+    notes = cast("list[str]", result["codeSearchNotes"])
+    assert any("has discussions disabled" in note for note in notes) is (
+        not has_discussions
+    )
 
 
 def test_research_sweep_run_id_stamps_and_requires_this_runs_manifests(

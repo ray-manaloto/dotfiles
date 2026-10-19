@@ -1,30 +1,46 @@
 # Research fetcher instructions
 
-For a live research request, use the strict five-provider receipt. Create a
-Last30Days plan whose `subqueries` list names only the active sources relevant
-to the question. Failed sources remain visible as a failed receipt and never
-count as evidence. The exception (D236) is a metered provider (Exa, Context7,
-Firecrawl) that cannot run for a coded reason. The producer records it
-`skipped` with a `skip_reason` from `schemas/research-skip-reason.schema.json`
-(generated `SkipReason`; edit the schema and run `mise run codegen`):
-`credits-exhausted` (HTTP 402, a 429 with quota text, "Insufficient credits"),
-`quota` (other 429, or a CLI exit naming 429 or a rate limit), `auth-failed`
-(401/403), `credential-missing` (no `EXA_API_KEY` in the process),
-`unavailable` (connection, DNS, TLS, timeout, missing `ctx7` or `firecrawl`
-CLI) and `sandbox-denied` (`PermissionError` only). A substituted row keeps
-its code. Each row keeps its evidence: the hashed
-transport envelope (HTTP status, rc, redacted body) or an error-class envelope
-(class name and errno only); `credential-missing` has only the fixed producer
-text. `strict_five_verdict` re-derives every code from that evidence, so a
-relabelled or bare row blocks. Firecrawl search is substituted through
-Serper/SerpApi and the mirror probe's scrape through webclaw. GitHub issues,
-discussions and releases carry strict evidence and are never skipped.
-Last30Days needs strict evidence too, unless firecrawl-search succeeded via
-Serper or SerpApi; then its failed row passes **provisional**. So the receipt
-passes provisional even with every metered provider skipped; report it as
-provisional, not complete.
+For a live research request, select `strict-five-v3-d381` explicitly. All eight
+arms remain required: GitHub issues/discussions/releases, Exa, Context7,
+Firecrawl developer/search and Last30Days. Known exhausted credits/payment/quota
+is evidence-bound `skipped`, nonprovisional and nonblocking for every provider.
+Continue research on admitted remaining routes, excluding exhausted routes from
+retries, top-ups and renewal waits. Skips have no successful evidence items.
+Invalid/missing credentials, missing prerequisites, unavailable,
+sandbox-denied and timeout routes remain `RESEARCH INCOMPLETE:`; substitutes
+cannot erase those failures. Unknown balance and transient rate limits are not
+exhaustion. Material claims still require primary documentation or source.
 
-Run `mise -C <dotfiles-checkout> run research-gate -- QUERY --repo OWNER/REPO --strict-five --request-id TURN_ID --last30days-plan PLAN.json --out OUT_DIR`.
+The receipt binds request identity, eight source identities, raw hashes and
+positive controls for empty results. `strict_five_verdict` re-derives every skip
+from hashed transport evidence. Reasons use finite codes from
+`schemas/research-skip-reason.schema.json`; edit the schema and run
+`mise run codegen` to change the generated enum. New receipts project
+`disposition`, `skipped_sources` and `failed_sources` separately from success.
+
+Optional offline `--preflight-manifest` accepts `research-preflight/v1` JSON:
+`policy_version`, same-turn `request_id`, and `sources` entries containing a
+named `source`, `raw_file` and `raw_sha256`. The hashed input is a balance
+object. Normalized `research-preflight-proof/v1` retains `request_id`, `source`,
+`policy_version` and the admission `input_sha256`; nested `balances` contains
+only `remaining` (nonnegative number or null) and optional `renewal_at`
+(timezone-bearing ISO timestamp or null). Saved validation rechecks those
+bindings against the receipt and rehashes the normalized proof. Known zero
+skips the route; null is unknown and positive is available. Manifest and input
+files must be regular, at most 8 MiB, opened without following symlinks; input
+paths stay beneath the admitted manifest directory. Duplicate sources, wrong
+identity, bad hashes and malformed balances fail admission. Never retain raw
+account responses or read credential stores. Live balance endpoints are
+outside this contract.
+
+Historical `strict-five-v2` receipts retain D236 semantics exactly: evidenced
+metered skips may pass PROVISIONAL, Firecrawl search may use Serper/SerpApi,
+and a successful web substitute may cover failed Last30Days provisionally.
+Use `--policy-version strict-five-v2` intentionally for compatibility. The
+strict CLI default and new Stop invocation select v3. Non-strict library and
+legacy CLI calls retain v2; live sweep commands choose v3 explicitly.
+
+Run `mise -C <dotfiles-checkout> run research-gate -- QUERY --repo OWNER/REPO --strict-five --policy-version strict-five-v3-d381 --request-id TURN_ID --last30days-plan PLAN.json --out OUT_DIR`.
 The wrapper pins native `fnox --config ~/.config/fnox/config.toml --profile
 codex_research --no-defaults --no-daemon --non-interactive exec --` before
 `research-fanout`, propagates `FNOX_PROFILE=codex_research`, and suppresses
@@ -41,12 +57,11 @@ then verify material claims against primary documentation or source. GitHub
 issues, discussions, and releases are separate arms; empty results need their
 same-source control. If a required arm fails, report the exact route and
 `RESEARCH INCOMPLETE:` rather than claiming comprehensive research.
-A provisional pass is not a failure, but the answer must name every
-provisional source and `via <route>` for each substituted source, and say
-`PROVISIONAL`. The Codex Stop hook blocks once if any token is missing or the
-answer is null. It allows an already continued Stop (`stop_hook_active`),
-including a provisional pass after an earlier INCOMPLETE block; that accepted
-limitation can leave a provisional answer unnamed.
+A historical v2 provisional pass must name every provisional source and
+`via <route>` for substitutions, and say `PROVISIONAL`. Accepted v3 exhaustion
+skips require no provisional naming. Stop preserves genuine incomplete routes
+and its honest incomplete escape; historical receipt interpretation is unchanged.
+
 Failed `research-gate` invocations retain a request-bound `outcome` in the
 research submission record: `status: INCOMPLETE`, `coverage_complete: false`, and only
 allowlisted failed route and error-class tokens. A valid outcome permits an

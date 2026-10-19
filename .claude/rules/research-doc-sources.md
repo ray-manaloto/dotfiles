@@ -19,7 +19,11 @@ worked.
    `docs/research/kb/raw/<report-slug>/links/`. A link that will not fetch is a named gap.
    Use the mirror probe (`mise run research-fanout -- --probe-out <p> --mirror-url <u>
    --mirror-path <f>`) for credit-exhaustion fallback: it falls back to webclaw and
-   records the mirror as provisional; a bare `firecrawl scrape` has no fallback.
+   records route provenance. Under `strict-five-v3-d381`, evidenced exhaustion
+   is nonblocking SKIPPED and does not make the mirror provisional. A genuine
+   alternative-route failure remains a gap. Historical v2 keeps provisional
+   fallback semantics. Current policy: `python/src/dotfiles_setup/AGENTS.md`.
+   A bare `firecrawl scrape` has no fallback.
 
 ## The chain
 

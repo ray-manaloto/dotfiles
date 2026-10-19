@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ray-manaloto/dotfiles/schemas/research-skip-reason.schema.json",
   "title": "SkipReason",
-  "description": "Why research-fanout skipped a source instead of reporting an error.",
+  "description": "Finite research skip code; acceptance depends on the recorded policy version.",
   "type": "string",
   "enum": [
     "prerequisite",
@@ -22,5 +22,5 @@
     "UNAVAILABLE",
     "SANDBOX_DENIED"
   ],
-  "$comment": "D236: a metered provider that cannot run for one of these coded reasons is skipped, never a block, and the strict-five receipt passes PROVISIONAL once the code re-derives from the row's hashed evidence (HTTP status, error class or the fixed credential-missing text). prerequisite stays a strict failure. FailureCode must hold every value here (tests/test_research_fanout.py)."
+  "$comment": "strict-five-v3-d381: only evidence-bound exhausted credits/payment/quota is nonprovisional, nonblocking skipped for any of the eight sources; do not retry or wait for renewal. Optional renewal_at must be evidenced. Auth, missing credentials/prerequisites and unrunnable routes remain incomplete. strict-five-v2 retains historical D236 provisional metered skips and fallback interpretation unchanged. FailureCode must hold every value here (tests/test_research_fanout.py)."
 }

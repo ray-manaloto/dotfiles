@@ -22,6 +22,7 @@ class RerunStatus(StrEnum):
     incomplete = "incomplete"
     uncollectable = "uncollectable"
     error = "error"
+    skipped = "skipped"
 
 
 class Kind(StrEnum):

@@ -43,9 +43,12 @@ from dotfiles_setup.generated.saved_search_snapshot import (
 from dotfiles_setup.research_fanout import (
     _GITHUB_QUERY,
     _REAL_TIMING,
+    POLICY_D381,
+    POLICY_V2,
     FanoutRequest,
     ProbeTiming,
     Status,
+    _d381_manifest_errors,
     _gh_env,
     _gh_include,
     _ProbeBoundaries,
@@ -253,7 +256,9 @@ class _Recording:
     skipped: int = 0
 
 
-def _fanout_record(raw: dict[str, object]) -> _Recording:
+def _fanout_record(
+    raw: dict[str, object], *, d381_errors: dict[str, str | None] | None = None
+) -> _Recording:
     query, repo, generated = raw["query"], raw["repo"], raw["generated_at"]
     if not all(isinstance(value, str) for value in (query, generated)) or (
         repo is not None and not isinstance(repo, str)
@@ -281,14 +286,24 @@ def _fanout_record(raw: dict[str, object]) -> _Recording:
         items = row["items"]
         # The rerun's vocabulary, so an unchanged watch never reads as a status change.
         status = _FANOUT_STATUS[Status(row["status"])]
+        if d381_errors is not None:
+            if d381_errors.get(source, "missing source"):
+                status = RerunStatus.error
+            elif row["status"] == Status.SKIPPED.value:
+                status = RerunStatus.skipped
         results.append(
             Result(
                 identifier,
                 cast("str", generated),
                 status=str(status),
                 # a failed fetch has no count; -1, never a 0 that reads as absence
-                count=-1 if status == RerunStatus.error else len(items),
-                urls=[item["url"] for item in items],
+                count=-1
+                if status in {RerunStatus.error, RerunStatus.skipped}
+                else len(items),
+                urls=[]
+                if d381_errors is not None
+                and status in {RerunStatus.error, RerunStatus.skipped}
+                else [item["url"] for item in items],
             )
         )
     return _Recording(tuple(watches), tuple(results), skipped)
@@ -337,7 +352,18 @@ def _manifest_record(path: Path, *, probe: bool) -> _Recording | None:
         raw = json.loads(path.read_bytes())
         if not isinstance(raw, dict):
             return None
-        recorded = _probe_record(raw) if probe else _fanout_record(raw)
+        d381_errors: dict[str, str | None] | None = None
+        if not probe and raw.get("policy_version") == POLICY_D381:
+            d381_errors = _d381_manifest_errors(raw, path)
+        elif (
+            not probe and "policy_version" in raw and raw["policy_version"] != POLICY_V2
+        ):
+            d381_errors = dict.fromkeys(_SOURCE_KINDS, "unsupported policy")
+        recorded = (
+            _probe_record(raw)
+            if probe
+            else _fanout_record(raw, d381_errors=d381_errors)
+        )
         # Constructors do not validate constraints; decode before accepting a manifest.
         checked = codec.decode(
             codec.encode(
@@ -834,16 +860,33 @@ def _run_other(
                 source for source, kind in _SOURCE_KINDS.items() if kind == watch.kind
             )
             result = fan_out(
-                FanoutRequest(query, repo, (source,), _given(watch.limit, 10), timeout),
+                FanoutRequest(
+                    query,
+                    repo,
+                    (source,),
+                    _given(watch.limit, 10),
+                    timeout,
+                    policy_version=POLICY_D381,
+                ),
                 runner=boundaries.runner,
             )[0]
-            status = _FANOUT_STATUS[result.status]
+            status = (
+                RerunStatus.skipped
+                if result.status is Status.SKIPPED
+                else _FANOUT_STATUS[result.status]
+            )
             # a failed or skipped fetch has no count: -1, never a measured 0
-            count = -1 if status == RerunStatus.error else len(result.items)
+            count = (
+                -1
+                if status in {RerunStatus.error, RerunStatus.skipped}
+                else len(result.items)
+            )
             urls = [item.url for item in result.items]
             reason = (
                 None
                 if status in {RerunStatus.ok, RerunStatus.empty_verified}
+                else result.reason
+                if status == RerunStatus.skipped
                 else "fan-out did not verify this search"
             )
         else:

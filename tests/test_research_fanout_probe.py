@@ -330,15 +330,24 @@ def _scrape_json(status: int, markdown: str) -> bytes:
     ).encode()
 
 
+@pytest.mark.parametrize("policy", ["strict-five-v2", None])
 def test_mirror_measures_what_landed_and_never_a_stale_file(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    policy: str | None,
 ) -> None:
     """FAIL arm: drop the unlink and a failed scrape measures the OLD file's bytes."""
     target = tmp_path / "raw/links/1.md"
     runner = Runner([lambda a: _done(a, 0, _scrape_json(200, "# page\n"))])
     _, payload = _probe(
         tmp_path,
-        ["--mirror-url", "https://ex.test/it's", "--mirror-path", "raw/links/1.md"],
+        [
+            "--mirror-url",
+            "https://ex.test/it's",
+            "--mirror-path",
+            "raw/links/1.md",
+            *(["--policy-version", policy] if policy else []),
+        ],
         runner,
         capsys,
     )
@@ -352,6 +361,15 @@ def test_mirror_measures_what_landed_and_never_a_stale_file(
         "--json",
     ]
     assert _only(payload) == {
+        **(
+            {
+                "policy_version": "strict-five-v3-d381",
+                "disposition": "complete",
+                "skipped_sources": [],
+            }
+            if policy is None
+            else {}
+        ),
         "kind": "mirror",
         "url": "https://ex.test/it's",
         "path": str(target),
@@ -572,12 +590,14 @@ def mirror_credit_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("defensive", [False, True])
+@pytest.mark.parametrize("policy", ["strict-five-v2", None])
 def test_mirror_credit_fallback_records_success_and_readme(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     mirror_credit_env: None,
     *,
     defensive: bool,
+    policy: str | None,
 ) -> None:
     del mirror_credit_env
     url = "https://primary.test/doc/"
@@ -614,6 +634,7 @@ def test_mirror_credit_fallback_records_success_and_readme(
     assert (
         main(
             [
+                *(["--policy-version", policy] if policy else []),
                 "--probe-out",
                 str(links / "1.probe.json"),
                 "--mirror-url",
@@ -636,7 +657,7 @@ def test_mirror_credit_fallback_records_success_and_readme(
         row["rc"],
         row["http_status"],
         detail["reason"],
-    ) == ("webclaw", True, 0, 0, "")
+    ) == ("webclaw", policy == "strict-five-v2", 0, 0, "")
     assert (links / "1.md").read_text() == "# mirrored\n"
     assert "Insufficient credits" in str(detail["primary_reason"])
     assert runner.calls[1] == ["webclaw", "-f", "json", url]
@@ -649,14 +670,16 @@ def test_mirror_credit_fallback_records_success_and_readme(
     readme = (links / "README.md").read_text()
     assert "| route |" in readme
     assert "| 0 | 11 |  | webclaw |" in readme
-    assert "provisional" in readme
+    assert "nonprovisional under D381, historical v2 provisional" in readme
 
 
+@pytest.mark.parametrize("policy", ["strict-five-v2", None])
 def test_webclaw_markdown_redacts_credentials_and_caps_primary_reason(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     mirror_credit_env: None,
     capsys: pytest.CaptureFixture[str],
+    policy: str | None,
 ) -> None:
     del mirror_credit_env
     sentinel = "webclaw-credential-sentinel"
@@ -680,12 +703,18 @@ def test_webclaw_markdown_redacts_credentials_and_caps_primary_reason(
     runner = Runner([answer])
     _, payload = _probe(
         tmp_path,
-        ["--mirror-url", url, "--mirror-path", str(tmp_path / "mirror.md")],
+        [
+            "--mirror-url",
+            url,
+            "--mirror-path",
+            str(tmp_path / "mirror.md"),
+            *(["--policy-version", policy] if policy else []),
+        ],
         runner,
         capsys,
     )
     row = _only(payload)
-    assert row["provisional"] is True
+    assert row["provisional"] is (policy == "strict-five-v2")
     disk = json.loads((tmp_path / "out/probe.json").read_text())
     detail = _only(disk)["detail"]
     assert isinstance(detail, dict)
