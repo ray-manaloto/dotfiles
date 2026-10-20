@@ -151,7 +151,7 @@ cargo-binstall = "latest"
 # (`.claude/rules/local-devcontainer-first.md`).
 [bootstrap.packages]
 "apt:build-essential" = "12.12ubuntu2.26.04.2"
-"apt:ca-certificates" = "20260601~26.04.1"
+"apt:ca-certificates" = "20260816ubuntu0.26.04.1"
 "apt:curl" = "8.18.0-1ubuntu2.7"
 "apt:gnupg" = "2.4.8-4ubuntu3.1"
 # graphviz is installed separately below as a pinned GitLab .deb (15.1.0),
