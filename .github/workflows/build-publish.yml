@@ -191,7 +191,7 @@ jobs:
             echo "- Cache ref: \`${cache_ref}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -235,7 +235,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
       - name: Build and push base image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         # PUSH=true (bake reads it into the `PUSH` variable) instead of the
         # `push: true` shorthand: the shorthand injects `--set *.output=type=
         # registry`, and a bake `--set` on output REPLACES the list, dropping
@@ -340,7 +340,7 @@ jobs:
             echo "- Cache ref: \`${cache_ref}\`"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -387,7 +387,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" > /tmp/github_token
       - name: Build and push p2996-cache image
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         # PUSH=true instead of `push: true` — see base-prep step for why (a
         # `--set` output override from the push shorthand would drop the zstd
         # compression flags, #222).
@@ -469,7 +469,7 @@ jobs:
           P2996_REF: ${{ inputs.p2996_ref }}
         run: echo "CLANG_P2996_REF=${P2996_REF}" >> "$GITHUB_ENV"
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -613,7 +613,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -706,7 +706,7 @@ jobs:
       - name: Build and push
         id: bake
         if: steps.probe.outputs.hit != 'true'
-        uses: docker/bake-action@018cb6412ab401ebaa809aa5f85966b74628600f # v7.4.0
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         # PUSH=<publish> feeds the bake `PUSH` variable (target output =
         # type=image,push=${PUSH},...zstd...) instead of the `push:` shorthand,
         # which would inject `--set *.output=type=registry` and REPLACE the
@@ -868,7 +868,7 @@ jobs:
         with:
           install_args: "python uv"
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -1112,7 +1112,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
@@ -1229,7 +1229,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Log in to Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ${{ env.CONTAINER_REGISTRY }}
           username: ${{ github.actor }}
