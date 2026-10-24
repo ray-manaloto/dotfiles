@@ -227,7 +227,7 @@ test-observability = [
 # recorded: `validation` pulls jsonschema-path 0.3.4, which caps referencing
 # <0.37 for the whole lock (0.37.0 -> 0.36.2). Research:
 # docs/research/kb/reports/agents/datamodel-codegen-extras-features-2026-10-01.md
-codegen = ["datamodel-code-generator[all,httpx2,ryaml]==0.83.0"]
+codegen = ["datamodel-code-generator[all,httpx2,ryaml]==0.85.0"]
 
 # Native pytest 9 TOML configuration. Managed callers select this file with
 # `-c python/pyproject.toml --rootdir=.` so pytest selects the marker
