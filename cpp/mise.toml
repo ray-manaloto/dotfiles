@@ -1,0 +1,13 @@
+[env]
+CXX_CLANG = { value = "{{ tools['conda:clangxx'].path }}/bin/clang++", tools = true }
+
+[tasks.configure]
+run = "cmake --preset clang"
+
+[tasks.build]
+depends = ["configure"]
+run = "cmake --build --preset clang"
+
+[tasks.test]
+depends = ["build"]
+run = "ctest --preset clang"

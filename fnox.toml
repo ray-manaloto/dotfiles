@@ -1,0 +1,2 @@
+# Reviewed empty fnox config (secret-guard decision D2). Secrets are added here
+# only as provider references, never as plaintext values.

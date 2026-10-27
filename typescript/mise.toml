@@ -1,0 +1,6 @@
+[tasks.install]
+run = "bun install"
+
+[tasks.test]
+depends = ["install"]
+run = "bun test"

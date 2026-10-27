@@ -1,0 +1,33 @@
+min_version = "2026.10.20"
+monorepo_root = true
+
+[monorepo]
+config_roots = ["typescript", "python", "cpp"]
+lockfile = true
+
+[settings]
+lockfile = true
+minimum_release_age = "0s"
+lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
+
+# One locked toolset for every language root.
+[tools]
+bun = "latest"
+python = "latest"
+uv = "latest"
+cmake = "latest"
+ninja = "latest"
+hk = "latest"
+fnox = "latest"
+# Linux takes clang-23 from apt through [bootstrap.packages] (a later milestone).
+"conda:clangxx" = { version = "latest", os = ["macos"] }
+# clang-scan-deps (C++ module scanning), clang-tidy and clang-format.
+"conda:clang-tools" = { version = "latest", os = ["macos"] }
+
+[tasks.test]
+description = "Run every language root's tests"
+depends = ["//typescript:test", "//python:test", "//cpp:test"]
+run = "echo all tests passed"
+
+[tasks.pre-commit]
+run = "hk run pre-commit"

@@ -1,0 +1,19 @@
+# Allowlist: everything is ignored unless named here, so a stray key or
+# secret file in the checkout is never staged by accident.
+/*
+!/.gitignore
+!/AGENTS.md
+!/fnox.toml
+!/hk.pkl
+!/mise.lock
+!/mise.toml
+!/cpp/
+!/python/
+!/tests/
+!/typescript/
+
+# Build and environment outputs inside the allowed roots.
+/cpp/build/
+/python/.venv/
+/typescript/node_modules/
+__pycache__/

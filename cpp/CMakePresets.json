@@ -1,0 +1,22 @@
+{
+  "version": 10,
+  "configurePresets": [
+    {
+      "name": "clang",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/clang",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "$env{CXX_CLANG}",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [{ "name": "clang", "configurePreset": "clang" }],
+  "testPresets": [
+    {
+      "name": "clang",
+      "configurePreset": "clang",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
