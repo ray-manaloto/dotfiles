@@ -9,5 +9,3 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).
 - `.gitignore` is an allowlist. A new top-level path must be added there on purpose; never
   add keys, `age.txt` or any secret file.
-- `tests/test_secret_guard.py` is the parked secret-guard test set (red until the guard lands;
-  not part of `mise run test`).
