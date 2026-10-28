@@ -4,6 +4,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 
 - Root `mise.toml` declares the monorepo roots and one locked toolset; `mise.lock` covers
   macos-arm64, linux-x64 and linux-arm64.
+- Versions are exact pins, never `latest`: `pin = true` makes `mise use` and `mise upgrade --bump`
+  write the resolved version. Code reads a tool's version from one variable: the pinned version
+  (`mise current`, `mise.lock`) for mise tools, the tool's own version command for native installers.
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).

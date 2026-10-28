@@ -7,6 +7,8 @@ lockfile = true
 
 [settings]
 lockfile = true
+# `mise use` and `mise upgrade --bump` write the resolved version, not the request
+pin = true
 minimum_release_age = "0s"
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
