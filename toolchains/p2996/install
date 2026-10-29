@@ -6,7 +6,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 prefix="$ROOT/$stamp"
 unset DESTDIR CMAKE_INSTALL_MODE CMAKE_INSTALL_PARALLEL_LEVEL
 for dir in "$BUILD" "$BUILD/runtimes/builtins-bins" "$BUILD/runtimes/runtimes-bins"; do
-  cmake --install "$dir" --config Release --prefix "$prefix"
+  cmake --install "$dir" --prefix "$prefix"
 done
 # Default configs: clang reads <triple>.cfg, then arm64-apple-darwin<N>.cfg, then the unversioned name
 # from its own bin dir; only the unversioned names are written, so a macOS bump never shadows them.

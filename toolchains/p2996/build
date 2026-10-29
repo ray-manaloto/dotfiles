@@ -5,11 +5,12 @@
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
 unset CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT
-export P2996_SDK="$(realpath "$(xcrun --show-sdk-path)")"
+P2996_SDK="$(realpath "$(xcrun --show-sdk-path)")"
+export P2996_SDK
 configure=(cmake -S "$SRC/llvm" -B "$BUILD" -G Ninja -C "$HERE/bootstrap.cmake"
   -DCMAKE_C_COMPILER="$(xcrun -f clang)" -DCMAKE_CXX_COMPILER="$(xcrun -f clang++)"
   -DCMAKE_INSTALL_PREFIX="$ROOT/current")
-build=(cmake --build "$BUILD" --parallel 4)
+compile=(cmake --build "$BUILD" --parallel 4)
 # Runs a command under a non-blocking flock on $LOCK (macOS has no flock(1)).
 locked() {
   mkdir -p "$(dirname "$LOCK")"
@@ -19,8 +20,8 @@ locked() {
 }
 if [ "${usage_dry_run:-false}" = true ]; then
   [ -f "$BUILD/CMakeCache.txt" ] || echo "P2996_SDK=$P2996_SDK ${configure[*]}"
-  echo "${build[*]}"
+  echo "${compile[*]}"
   exit 0
 fi
 [ -f "$BUILD/CMakeCache.txt" ] || locked "${configure[@]}"
-NINJA_STATUS="[%f/%t %es] " locked "${build[@]}"
+NINJA_STATUS="[%f/%t %es] " locked "${compile[@]}"
