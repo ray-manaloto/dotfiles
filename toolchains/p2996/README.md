@@ -59,4 +59,5 @@ ROOT/bin/*-p2996, *.cfg -> ../<PIN>/bin/<same name>
 ```
 
 Clang reads `<triple>.cfg`, then `arm64-apple-darwin<N>.cfg`, then `arm64-apple-darwin.cfg` from
-its own resolved bin dir (`ROOT/<PIN>/bin`), so only the unversioned names exist and a macOS bump never shadows them.
+its own resolved bin dir (`ROOT/<PIN>/bin`), so only the unversioned names exist and a macOS
+bump never shadows them.
