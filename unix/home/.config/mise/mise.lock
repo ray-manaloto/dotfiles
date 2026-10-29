@@ -782,10 +782,10 @@ python = "3.14.8"
 uvx = "false"
 
 [[tools."pipx:notebooklm-py"]]
-version = "0.8.5"
+version = "0.8.6"
 backend = "pipx:notebooklm-py"
-specifiers = ["0.8.5"]
-uv = { path = "locks/pipx-notebooklm-py/0.8.5~1d2a47cd", digest = "sha256:ce013b2e94b18053dc07e85829f16360cf0eb4efa1478710f3e9c97ede8ba48b" }
+specifiers = ["0.8.6"]
+uv = { path = "locks/pipx-notebooklm-py/0.8.6~1d2a47cd", digest = "sha256:c5e0ba42292df9fbcdad710d466016d1ab3bb826a3489a5d41fd487164f089fc" }
 
 [tools."pipx:notebooklm-py".options]
 extras = "all"

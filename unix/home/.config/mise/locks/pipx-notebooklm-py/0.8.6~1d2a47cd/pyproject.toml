@@ -2,4 +2,4 @@
 name = "mise-pypi-tool-environment"
 version = "0.0.0"
 requires-python = "==3.14.8"
-dependencies = ["notebooklm-py[all]==0.8.5"]
+dependencies = ["notebooklm-py[all]==0.8.6"]

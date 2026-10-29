@@ -185,7 +185,7 @@ gemini = { version = "0.66.0", allow_builds = ["@github/keytar", "node-pty"], mi
 biome = { version = "2.6.4", minimum_release_age = "0s" }
 yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = "0s" }
 rtk = { version = "1.1.0", minimum_release_age = "0s" }
-"pipx:notebooklm-py" = { version = "0.8.5", extras = ["all"], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
+"pipx:notebooklm-py" = { version = "0.8.6", extras = ["all"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 #"pipx:mcp2cli" = { version = "3.8.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 "npm:@googleworkspace/cli" = { version = "0.22.5", minimum_release_age = "0s" }
 "npm:ctx7" = { version = "0.8.2", minimum_release_age = "0s" }

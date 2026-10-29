@@ -1054,7 +1054,7 @@ dependencies = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "notebooklm-py", extras = ["all"], specifier = "==0.8.5" }]
+requires-dist = [{ name = "notebooklm-py", extras = ["all"], specifier = "==0.8.6" }]
 
 [[package]]
 name = "more-itertools"
@@ -1114,7 +1114,7 @@ wheels = [
 
 [[package]]
 name = "notebooklm-py"
-version = "0.8.5"
+version = "0.8.6"
 source = { registry = "https://pypi.org/simple/" }
 dependencies = [
     { name = "click" },
@@ -1122,10 +1122,11 @@ dependencies = [
     { name = "httpx" },
     { name = "idna" },
     { name = "rich" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/5a/74ed63c67e5478401aef13a678af73c351c5fec820d8006eb637119a5eef/notebooklm_py-0.8.5.tar.gz", hash = "sha256:965e0ad77dfd3f93714b6a304f5c66f70248c88979d5dfbfd9d73a0270b7a46a", size = 8982064, upload-time = "2026-10-13T00:11:08.799Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/5b/6f65c6a1152dc8fabb11bb852de01e30f10f7d400914621b18029fec353b/notebooklm_py-0.8.6.tar.gz", hash = "sha256:51a50a8b4cb942514793ecd27682289db99efce4758d1cb30be22cf52a2e4925", size = 9171295, upload-time = "2026-10-29T04:48:57.762Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/90/86/056e0fb28f2aaefa43c867dd73f5ed36a7d5de8d7db0876e8bc9a37568cc/notebooklm_py-0.8.5-py3-none-any.whl", hash = "sha256:18c96d31ad0ea538c1811f177dcfe86cc9c5319c8bdc4c99e5298c520b86d011", size = 2090188, upload-time = "2026-10-13T00:11:05.694Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/aa/83f99848e8a25e1a8614998ed1b66dc52ef14468487a7c7f07467a65f745/notebooklm_py-0.8.6-py3-none-any.whl", hash = "sha256:85b4c4f2ed13d188b2189430bac8b67be0631c7d3c4d7e7698681d3e52e1f446", size = 2114064, upload-time = "2026-10-29T04:48:55.591Z" },
 ]
 
 [package.optional-dependencies]
