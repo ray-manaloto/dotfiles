@@ -117,7 +117,7 @@ path = [
 # update:mise keeps these minor/patch selections and retains recovery installs.
 python = [{ version = "3.15", minimum_release_age = "0s" }, { version = "3.14.8", minimum_release_age = "0s" }]
 #python = { version = "3.15.2", minimum_release_age = "0s" }
-pipx = { version = "1.18.8", minimum_release_age = "0s" }
+pipx = { version = "1.18.9", minimum_release_age = "0s" }
 npm = { version = "12.2.1", minimum_release_age = "0s" }
 bun = { version = "1.4.4", minimum_release_age = "0s" }
 node = { version = "26.13.0", minimum_release_age = "0s" }
@@ -127,13 +127,13 @@ pixi = { version = "0.83.0", minimum_release_age = "0s" }
 uv = { version = "0.13.6", minimum_release_age = "0s" }
 chezmoi = { version = "2.73.3", minimum_release_age = "0s" }
 pkl = { version = "0.32.2", minimum_release_age = "0s" }
-hk = { version = "2.9.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
+hk = { version = "2.10.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
 fnox = { version = "1.44.0", workflow = "release.yml", minimum_release_age = "0s" }
-pitchfork = { version = "2.32.3", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
+pitchfork = { version = "2.32.4", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 usage = { version = "7.1.3", workflow = "publish-cli.yml", minimum_release_age = "0s" }
 #communique = { version = "1.6.0", workflow = "release.yml@refs/heads/main", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
-communique = { version = "1.7.0", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
+communique = { version = "1.8.0", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 starship = { version = "1.27.0", minimum_release_age = "0s" }
 ripgrep = { version = "15.2.0", minimum_release_age = "0s" }
 fd = { version = "10.5.0", minimum_release_age = "0s" }
@@ -164,7 +164,7 @@ aws-cli = { version = "2.39.1", symlink_bins = "true", minimum_release_age = "0s
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
 "aqua:loft-sh/devpod" = { version = "0.6.15", minimum_release_age = "0s" }
 github-cli = { version = "2.103.3", minimum_release_age = "0s" }
-cloudflared = { version = "2026.10.5", minimum_release_age = "0s" }
+cloudflared = { version = "2026.10.6", minimum_release_age = "0s" }
 pandoc = { version = "3.13", minimum_release_age = "0s" }
 tmux = { version = "3.7c", minimum_release_age = "0s" }
 lefthook = { version = "2.2.2", minimum_release_age = "0s" }
@@ -196,7 +196,7 @@ rtk = { version = "1.1.0", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.7.4", minimum_release_age = "0s" }
 "npm:agent-browser" = { version = "0.41.0", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
-"npm:dev3000" = { version = "0.0.188", minimum_release_age = "0s" }
+"npm:dev3000" = { version = "0.0.189", minimum_release_age = "0s" }
 "npm:portless" = { version = "0.15.12", minimum_release_age = "0s" }
 "npm:opensrc" = { version = "0.7.3", minimum_release_age = "0s" }
 #"pipx:langchain-cli" = { version = "0.0.37", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }

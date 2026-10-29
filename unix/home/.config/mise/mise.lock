@@ -167,15 +167,14 @@ url_api = "https://api.github.com/repos/twpayne/chezmoi/releases/assets/65966586
 provenance = "cosign"
 
 [[tools.cloudflared]]
-version = "2026.10.5"
+version = "2026.10.6"
 backend = "aqua:cloudflare/cloudflared"
-specifiers = ["2026.10.5"]
+specifiers = ["2026.10.6"]
 
 [tools.cloudflared."platforms.macos-arm64"]
-checksum = "sha256:184c7d4f5f977348243a6d7ca8f6cf6073b9b2746cfe8c1fe15aa59e9a522bf0"
-checksum_source = "mise-versions"
-url = "https://github.com/cloudflare/cloudflared/releases/download/2026.10.5/cloudflared-darwin-arm64.tgz"
-url_api = "https://api.github.com/repos/cloudflare/cloudflared/releases/assets/681689374"
+checksum = "sha256:ea1e5105d35bbe16cee5b2f7b4742059ada341fbd35938ed827c24b85efa51c8"
+url = "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-darwin-arm64.tgz"
+url_api = "https://api.github.com/repos/cloudflare/cloudflared/releases/assets/688470940"
 
 [[tools.cmake]]
 version = "4.4.5"
@@ -189,13 +188,13 @@ url = "https://github.com/Kitware/CMake/releases/download/v4.4.5/cmake-4.4.5-mac
 url_api = "https://api.github.com/repos/Kitware/CMake/releases/assets/682699600"
 
 [[tools.communique]]
-version = "1.7.0"
+version = "1.8.0"
 backend = "packslip:github.com/jdx/communique"
-specifiers = ["1.7.0"]
+specifiers = ["1.8.0"]
 
 [tools.communique."platforms.macos-arm64"]
-checksum = "sha256:c9ccb7521fa3c6839e5ac48c9b1add5a501b153552274a3cccaa8848d4647a9b"
-url = "https://github.com/jdx/communique/releases/download/v1.7.0/communique-aarch64-apple-darwin.tar.gz"
+checksum = "sha256:e22c3a05649241fa0e7ffd27d32a436ecde19a23e09f39ff00686ea8d71a5f9b"
+url = "https://github.com/jdx/communique/releases/download/v1.8.0/communique-aarch64-apple-darwin.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/communique/.github/workflows/release.yml"
 repository_ids = { repository = "1155542902" }
 
@@ -436,13 +435,13 @@ url = "https://github.com/herdrdev/herdr/releases/download/v0.9.5/herdr-macos-aa
 url_api = "https://api.github.com/repos/herdrdev/herdr/releases/assets/640898230"
 
 [[tools.hk]]
-version = "2.9.0"
+version = "2.10.0"
 backend = "packslip:github.com/jdx/hk"
-specifiers = ["2.9.0"]
+specifiers = ["2.10.0"]
 
 [tools.hk."platforms.macos-arm64"]
-checksum = "sha256:c7c4d85fd44e88d54b2bf8f9fc38165e278983f54210c095a3e3e8c593e4b720"
-url = "https://github.com/jdx/hk/releases/download/v2.9.0/hk-aarch64-apple-darwin.tar.gz"
+checksum = "sha256:ab54862e724bd4a1ef9180ef535cfeef7f7ff98ace911bd5ea36bb41fa4ebc94"
+url = "https://github.com/jdx/hk/releases/download/v2.10.0/hk-aarch64-apple-darwin.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/hk/.github/workflows/release.yml"
 repository_ids = { repository = "922514152" }
 
@@ -676,9 +675,9 @@ backend = "npm:defuddle"
 specifiers = ["0.19.6"]
 
 [[tools."npm:dev3000"]]
-version = "0.0.188"
+version = "0.0.189"
 backend = "npm:dev3000"
-specifiers = ["0.0.188"]
+specifiers = ["0.0.189"]
 
 [[tools."npm:firecrawl-cli"]]
 version = "1.26.24"
@@ -752,14 +751,14 @@ url_api = "https://api.github.com/repos/jgm/pandoc/releases/assets/679543143"
 provenance = "github-attestations"
 
 [[tools.pipx]]
-version = "1.18.8"
+version = "1.18.9"
 backend = "aqua:pypa/pipx"
-specifiers = ["1.18.8"]
+specifiers = ["1.18.9"]
 
 [tools.pipx."platforms.macos-arm64"]
-checksum = "sha256:32cac6916e60d49307121cdf3e447f0b55696af03a7d7a0e0b43677299b147c2"
-url = "https://github.com/pypa/pipx/releases/download/1.18.8/pipx.pyz"
-url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/687022449"
+checksum = "sha256:93e83447842bc7e41f5bafd8d2fecae10d977d922058e0204929d827b976566a"
+url = "https://github.com/pypa/pipx/releases/download/1.18.9/pipx.pyz"
+url_api = "https://api.github.com/repos/pypa/pipx/releases/assets/687615219"
 
 [[tools."pipx:datamodel-code-generator"]]
 version = "0.87.0"
@@ -792,13 +791,13 @@ extras = "all"
 python = "3.14.8"
 
 [[tools.pitchfork]]
-version = "2.32.3"
+version = "2.32.4"
 backend = "packslip:github.com/jdx/pitchfork"
-specifiers = ["2.32.3"]
+specifiers = ["2.32.4"]
 
 [tools.pitchfork."platforms.macos-arm64"]
-checksum = "sha256:b6028866447330abc03a168ccd046726a8fa9d3373a3df7c26da2c41ae82e52c"
-url = "https://github.com/jdx/pitchfork/releases/download/v2.32.3/pitchfork-aarch64-apple-darwin.tar.gz"
+checksum = "sha256:faacc5c44e25eadc8ea4e4f1e98ee15392434dd810ab310341a7064f554a5dcc"
+url = "https://github.com/jdx/pitchfork/releases/download/v2.32.4/pitchfork-aarch64-apple-darwin.tar.gz"
 signer = "sigstore-oidc:https://github.com/jdx/pitchfork/.github/workflows/release.yml"
 repository_ids = { repository = "899500793" }
 
