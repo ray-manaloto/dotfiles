@@ -74,14 +74,14 @@ url = "https://github.com/loft-sh/devpod/releases/download/v0.6.15/devpod-darwin
 url_api = "https://api.github.com/repos/loft-sh/devpod/releases/assets/236192072"
 
 [[tools.atuin]]
-version = "18.24.2"
+version = "18.24.3"
 backend = "aqua:atuinsh/atuin"
-specifiers = ["18.24.2"]
+specifiers = ["18.24.3"]
 
 [tools.atuin."platforms.macos-arm64"]
-checksum = "sha256:ba155cb61385e424c972ba5cadab68add2c6ad0d4f842365fc958d7a5f5917d5"
-url = "https://github.com/atuinsh/atuin/releases/download/v18.24.2/atuin-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/665441742"
+checksum = "sha256:dd266366b1b00c298d689b0613c1acbe82855f04eb47d3f3f96262b148d8ebb9"
+url = "https://github.com/atuinsh/atuin/releases/download/v18.24.3/atuin-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/atuinsh/atuin/releases/assets/687132647"
 provenance = "github-attestations"
 
 [[tools.aube]]
