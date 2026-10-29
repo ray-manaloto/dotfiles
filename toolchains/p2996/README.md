@@ -5,6 +5,7 @@ What a rebuild needs, moved from the marketplace recipe (DL-754; layout DL-755).
 ```sh
 mise run p2996:source    # fetch the pin into the cache, apply patches/ (idempotent)
 mise run p2996:build     # hours; a rerun resumes the build dir. --dry-run prints the cmake commands
+mise run p2996:review-log -- <log>  # read-only Codex team reports warnings, errors, skipped parts
 mise run p2996:install   # ROOT/<PIN>, ROOT/bin links, default .cfg files
 mise run p2996:verify    # compile and run a reflection sample with clang++-p2996
 ```
@@ -41,12 +42,15 @@ bootstrap compilers and `ROOT/<PIN>` as the configured prefix, and clears inheri
 `CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT`. Key values: Release, arm64, deployment target
 27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
 `clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
-`libunwind;libcxxabi;libcxx;compiler-rt;openmp;flang-rt`; targets `AArch64;X86`; lldb uses Xcode's
-debugserver and links the mise python for scripting (SWIG from `conda:swig`); assertions on; LLVM
+`libc;libunwind;libcxxabi;libcxx;compiler-rt;openmp;flang-rt` (libc is the Darwin overlay); targets
+`AArch64;X86`; lldb uses Xcode's debugserver, with Python and Lua scripting; MLIR Python bindings and
+LLVM's OCaml bindings on (DL-757). Every tool the build needs (SWIG, Lua 5.4, doxygen, opam switch
+`llvm`) and the Python modules (`~/.default-python-packages`) come from the global mise config;
+this repository declares no tools. Assertions on; LLVM
 and Clang dylibs; full install (headers and CMake exports, for IWYU); compile jobs 4, link and
 tablegen jobs 1; tests, docs, examples and the iOS, watchOS, tvOS and visionOS runtimes off;
 zlib, zstd, libxml2, libedit and the compiler-rt runtimes keep LLVM's defaults, whose own checks
-skip Linux-only parts. Not built on macOS: libc, libclc, offload, llvm-libgcc, cross-project-tests.
+skip Linux-only parts. Not built on macOS: libclc, offload, llvm-libgcc, cross-project-tests.
 A Linux build needs its own cache with the Linux choices.
 The runtimes and builtins sub-builds get the same platform values through `RUNTIMES_CMAKE_ARGS` and `BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is
 `clang-p2996;clang++-p2996;clang-cpp-p2996`, so LLVM installs the suffixed driver names itself

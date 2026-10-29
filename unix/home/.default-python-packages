@@ -1,0 +1,8 @@
+# mise installs these into every new mise python (DL-757): LLVM's opt-viewer (pygments, pyyaml)
+# and MLIR Python bindings (llvm mlir/python/requirements.txt; nanobind below 3.0).
+pygments
+pyyaml
+numpy
+nanobind<3
+pybind11
+ml_dtypes

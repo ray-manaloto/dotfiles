@@ -104,6 +104,8 @@ path = [
   "/opt/homebrew/opt/lldb/bin",
   "/opt/homebrew/opt/make/libexec/gnubin",
   "~/.local/state/marketplace-tool-foundation/p2996/suffixed/bin",
+  # DL-757: opam switch "llvm" (OCaml, ocamlfind, ctypes) for LLVM's OCaml bindings.
+  "~/.opam/llvm/bin",
   # DL-687: Orca CLI (orca) ships inside the app bundle.
   "/Applications/Orca.app/Contents/Resources/bin",
 ]
@@ -258,6 +260,16 @@ topgrade = { version = "17.14.1", minimum_release_age = "0s" }
 cmake = { version = "4.4.5", minimum_release_age = "0s" }
 ninja = { version = "1.13.2", minimum_release_age = "0s" }
 sccache = { version = "0.19.0", minimum_release_age = "0s" }
+
+# P2996 build extras (DL-756, DL-757): tools live here, never in a project; conda before brew on the Mac.
+# SWIG generates lldb's Python and Lua bindings; Lua 5.4 is the newest lldb supports (build.rst: 5.3
+# and 5.4); doxygen replaces a version-less shim that broke CMake's doxygen check; opam provides
+# ocamlfind and ctypes for LLVM's OCaml bindings (switch "llvm", on PATH above). The Python modules
+# LLVM uses (opt-viewer, MLIR bindings) are in ~/.default-python-packages.
+"conda:swig" = { version = "4.5.1", minimum_release_age = "0s" }
+"conda:lua" = { version = "5.4.8", minimum_release_age = "0s" }
+"conda:doxygen" = { version = "1.18.0", minimum_release_age = "0s" }
+"github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
 
 # --- webclaw: local browser-enabled build -------------------------------------
 # Added 2026-10-20. The prebuilt release (github:0xMassi/webclaw) is compiled

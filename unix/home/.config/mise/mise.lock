@@ -2,6 +2,14 @@
 
 lockfile_version = 3
 
+[conda-packages.macos-arm64."bzip2-1.0.8-h4e30115_10"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda"
+checksum = "sha256:8ec22f0ba25cbfc2e64d70cf29459eccd7ffdf6436f6a6ff15bbfef799f7d4f6"
+
+[conda-packages.macos-arm64."libcxx-23.1.4-h55c6f16_2"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/libcxx-23.1.4-h55c6f16_2.conda"
+checksum = "sha256:9c390b4f403db32346754ccef6b84b7e5d9b70cb6d76258fd23b05f2db2ab216"
+
 [conda-packages.macos-arm64."libsqlite-3.54.1-h34a968b_101"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/libsqlite-3.54.1-h34a968b_101.conda"
 checksum = "sha256:c49adf700ad17332b938ac627845a3fdc70a0810660d3ec3814de25b156fbf60"
@@ -13,6 +21,10 @@ checksum = "sha256:a18fa5d5bac452401459f966cf0d872224e8080c4ff93c77e168d43ab42ef
 [conda-packages.macos-arm64."ncurses-6.6-he64c551_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.6-he64c551_1.conda"
 checksum = "sha256:7024a48c8c0d0114ed4ab53c76bf9275d50e91ba7cea367a9aead638d3c29c68"
+
+[conda-packages.macos-arm64."pcre2-10.47-he63d830_1"]
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/pcre2-10.47-he63d830_1.conda"
+checksum = "sha256:f8c415329b542e1fca1ff2917b80e687c18302dfa0353530668b90cb225b494f"
 
 [conda-packages.macos-arm64."readline-8.3-h8b90a29_1"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/readline-8.3-h8b90a29_1.conda"
@@ -198,6 +210,56 @@ url = "https://github.com/jdx/communique/releases/download/v1.8.0/communique-aar
 signer = "sigstore-oidc:https://github.com/jdx/communique/.github/workflows/release.yml"
 repository_ids = { repository = "1155542902" }
 
+[[tools."conda:doxygen"]]
+version = "1.18.0"
+backend = "conda:doxygen"
+specifiers = ["1.18.0"]
+
+[tools."conda:doxygen".options]
+channel = "conda-forge"
+
+[tools."conda:doxygen"."platforms.macos-arm64"]
+checksum = "sha256:b7c2aa55df787bea73a0736525d666334f46d3cb60f500cc96f721baed991b26"
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/doxygen-1.18.0-py310h3226bdb_0.conda"
+conda_deps = [
+    "libiconv-1.18-he4c29f2_3",
+    "libcxx-23.1.4-h55c6f16_2",
+]
+
+[[tools."conda:lua"]]
+version = "5.4.8"
+backend = "conda:lua"
+specifiers = ["5.4.8"]
+
+[tools."conda:lua".options]
+channel = "conda-forge"
+
+[tools."conda:lua"."platforms.macos-arm64"]
+checksum = "sha256:e4b10ca29526871fa205faec5d224c10958a0badb315ec9aa1d8258039d32733"
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/lua-5.4.8-h15fa0ee_1.conda"
+conda_deps = [
+    "readline-8.3-h8b90a29_1",
+    "ncurses-6.6-he64c551_1",
+]
+
+[[tools."conda:swig"]]
+version = "4.5.1"
+backend = "conda:swig"
+specifiers = ["4.5.1"]
+
+[tools."conda:swig".options]
+channel = "conda-forge"
+
+[tools."conda:swig"."platforms.macos-arm64"]
+checksum = "sha256:6cfd8517d53bc61831998e009dee6e0a3da44184109102a49c27d33742f631d0"
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/swig-4.5.1-h55aefed_1.conda"
+conda_deps = [
+    "pcre2-10.47-he63d830_1",
+    "libcxx-23.1.4-h55c6f16_2",
+    "libzlib-1.3.2-h8088a28_3",
+    "bzip2-1.0.8-h4e30115_10",
+]
+
 [[tools.delta]]
 version = "0.20.1"
 backend = "aqua:dandavison/delta"
@@ -372,6 +434,16 @@ checksum = "sha256:83cd9872acf5bf59e77c149504431e317eed74537169a27f48d732db6f941
 checksum_source = "mise-versions"
 url = "https://github.com/kenn-io/agentsview/releases/download/v0.46.1/agentsview_0.46.1_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/kenn-io/agentsview/releases/assets/667831247"
+
+[[tools."github:ocaml/opam"]]
+version = "2.6.1"
+backend = "github:ocaml/opam"
+specifiers = ["2.6.1"]
+
+[tools."github:ocaml/opam"."platforms.macos-arm64"]
+checksum = "sha256:3e7f67bda3ba0bf72f597917b17dc337ed5a1bd48224df8b747bb35ce05c569e"
+url = "https://github.com/ocaml/opam/releases/download/2.6.1/opam-2.6.1-arm64-macos"
+url_api = "https://api.github.com/repos/ocaml/opam/releases/assets/618597847"
 
 [[tools."gitlab:graphviz/graphviz"]]
 version = "16.1.0"

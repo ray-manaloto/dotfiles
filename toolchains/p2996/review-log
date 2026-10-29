@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Have a read-only Codex review team report every warning, error and skipped part in a P2996 build log"
+#USAGE arg "<log>" help="Build log to review"
+#USAGE flag "--out <file>" help="Report file (default: <log>.review.md)"
+set -euo pipefail
+. "$(dirname "$0")/common.sh"
+log="$(realpath "$usage_log")"
+out="${usage_out:-$log.review.md}"
+sed -e "s#@LOG@#$log#" -e "s#@SRC@#$SRC#" "$HERE/review-log.md" |
+  codex exec -C "$HERE/../.." -c 'sandbox_mode="read-only"' -o "$out" -
+echo "p2996:review-log: report in $out"

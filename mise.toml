@@ -43,8 +43,6 @@ run = "hk run pre-commit"
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
+"~/.default-python-packages" = { source = "unix/home/.default-python-packages", mode = "symlink" }
 
-[tools]
-betterleaks = "1.9.0"
-# DL-756: SWIG for lldb's Python scripting in p2996:build (latest stable; conda before brew on the Mac).
-"conda:swig" = "4.5.1"
+# No [tools]: every tool is in the global config (DL-757).
