@@ -36,3 +36,4 @@ run = "hk run pre-commit"
 
 [dotfiles]
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
+"~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }

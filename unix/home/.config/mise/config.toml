@@ -194,7 +194,7 @@ rtk = { version = "1.1.0", minimum_release_age = "0s" }
 "npm:@playwright/cli" = { version = "0.1.22", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.7.4", minimum_release_age = "0s" }
-"npm:agent-browser" = { version = "0.40.0", minimum_release_age = "0s" }
+"npm:agent-browser" = { version = "0.41.0", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
 "npm:dev3000" = { version = "0.0.186", minimum_release_age = "0s" }
 "npm:portless" = { version = "0.15.12", minimum_release_age = "0s" }
