@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Fetch the pinned clang-p2996 commit into the cache and apply the macOS patches"
+set -euo pipefail
+. "$(dirname "$0")/common.sh"
+if [ ! -d "$SRC/.git" ]; then
+  mkdir -p "$CACHE"
+  git init -q "$SRC"
+  git -C "$SRC" remote add origin "$REMOTE"
+fi
+if [ "$(git -C "$SRC" rev-parse -q --verify HEAD || true)" != "$PIN" ]; then
+  git -C "$SRC" fetch --depth=1 --no-tags origin "$PIN"
+  git -C "$SRC" -c advice.detachedHead=false checkout --detach FETCH_HEAD
+fi
+[ "$(git -C "$SRC" rev-parse 'HEAD^{tree}')" = "$TREE" ] || { echo "p2996:source: tree differs from $TREE" >&2; exit 1; }
+for p in "$HERE"/patches/*.patch; do
+  if git -C "$SRC" apply --unidiff-zero --reverse --check "$p" 2>/dev/null; then
+    echo "applied already: ${p##*/}"
+  else
+    git -C "$SRC" apply --unidiff-zero "$p"
+    echo "applied: ${p##*/}"
+  fi
+done
+echo "p2996:source: $SRC at $PIN"

@@ -12,6 +12,10 @@ pin = true
 minimum_release_age = "0s"
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
+# File tasks: toolchains/p2996/{source,build,install,verify} become p2996:source and the rest.
+[task_config]
+includes = ["toolchains"]
+
 [tasks.test]
 description = "Run every language root's tests"
 depends = ["//typescript:test", "//python:test", "//cpp:test"]

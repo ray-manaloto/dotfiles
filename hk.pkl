@@ -2,7 +2,8 @@ amends "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Config.pk
 import "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-    ["trailing-whitespace"] = Builtins.trailing_whitespace
+    // A blank context line in a patch is a single space; stripping it would break the patch.
+    ["trailing-whitespace"] = (Builtins.trailing_whitespace) { exclude = "**/*.patch" }
     ["newlines"] = Builtins.newlines
     ["merge-conflicts"] = Builtins.check_merge_conflict
     // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (tasks/privacy/scan.sh).

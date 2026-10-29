@@ -1,0 +1,45 @@
+--- a/clang/lib/Headers/float.h
++++ b/clang/lib/Headers/float.h
+@@ -6,6 +6,15 @@
+  *
+  *===-----------------------------------------------------------------------===
+  */
++
++#ifdef __need_infinity_nan
++/* Handle partial requests even after a normal inclusion of float.h. */
++#  undef INFINITY
++#  undef NAN
++#  define INFINITY (__builtin_inff())
++#  define NAN (__builtin_nanf(""))
++#  undef __need_infinity_nan
++#else
+ 
+ #ifndef __CLANG_FLOAT_H
+ #define __CLANG_FLOAT_H
+@@ -185,3 +194,5 @@
+ 
+ #endif /* __MVS__ */
+ #endif /* __CLANG_FLOAT_H */
++
++#endif /* __need_infinity_nan */
+--- a/libcxx/include/float.h
++++ b/libcxx/include/float.h
+@@ -6,6 +6,12 @@
+ // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+ //
+ //===----------------------------------------------------------------------===//
++
++#ifdef __need_infinity_nan
++#  if __has_include_next(<float.h>)
++#    include_next <float.h>
++#  endif
++#else
+ 
+ #ifndef _LIBCPP_FLOAT_H
+ #define _LIBCPP_FLOAT_H
+@@ -97,3 +103,5 @@
+ #endif   // defined(__cplusplus) && __cplusplus < 201103L && defined(_LIBCPP_USE_FROZEN_CXX03_HEADERS)
+ 
+ #endif // _LIBCPP_FLOAT_H
++
++#endif // __need_infinity_nan

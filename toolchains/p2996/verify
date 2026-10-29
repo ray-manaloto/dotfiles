@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#MISE description="Compile and run a P2996 reflection sample with clang++-p2996"
+set -euo pipefail
+. "$(dirname "$0")/common.sh"
+cxx="$ROOT/suffixed/bin/clang++-p2996"
+case "$(env -u SDKROOT -u CLANG_NO_DEFAULT_CONFIG "$cxx" --version)" in
+  *"Configuration file: "*"/arm64-apple-darwin-clang++.cfg"*) ;;
+  *) echo "p2996:verify: $cxx does not load arm64-apple-darwin-clang++.cfg" >&2; exit 1 ;;
+esac
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cat >"$tmp/reflection.cpp" <<'CPP'
+#include <meta>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+
+struct Record { int value; };
+constexpr auto member = std::meta::nonstatic_data_members_of(
+    ^^Record, std::meta::access_context::current())[0];
+static_assert(std::meta::identifier_of(member) == "value");
+static_assert(std::is_same_v<typename [:std::meta::type_of(member):], int>);
+
+int main() {
+    Record record{42};
+    record.[:member:] += 1;
+    try {  // exercises libc++abi and libunwind from the default config
+        throw std::runtime_error("reflection value=" + std::to_string(record.[:member:]));
+    } catch (const std::exception& error) {
+        std::cout << error.what() << '\n';
+    }
+    return record.value == 43 ? 0 : 1;
+}
+CPP
+env -u SDKROOT -u CLANG_NO_DEFAULT_CONFIG "$cxx" -std=c++26 -freflection "$tmp/reflection.cpp" -o "$tmp/reflection"
+out="$("$tmp/reflection")"
+[ "$out" = "reflection value=43" ] || { echo "p2996:verify: sample printed '$out'" >&2; exit 1; }
+echo "p2996:verify OK: $("$cxx" --version | head -n 1)"

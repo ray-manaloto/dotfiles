@@ -1,0 +1,38 @@
+--- a/compiler-rt/lib/sanitizer_common/sanitizer_procmaps_mac.cpp
++++ b/compiler-rt/lib/sanitizer_common/sanitizer_procmaps_mac.cpp
+@@ -18,0 +19 @@
++#include <mach-o/dyld_images.h>
+@@ -20,0 +22 @@
++#include <stddef.h>
+@@ -126 +128 @@
+-static mach_header *dyld_hdr = 0;
++static const mach_header *dyld_hdr = 0;
+@@ -218,0 +221,22 @@
++static const mach_header *GetDyldImageHeaderViaTaskInfo() {
++  task_dyld_info_data_t info = {};
++  mach_msg_type_number_t count = TASK_DYLD_INFO_COUNT;
++  CHECK_EQ(task_info(mach_task_self(), TASK_DYLD_INFO,
++                     reinterpret_cast<task_info_t>(&info), &count),
++           KERN_SUCCESS);
++  CHECK_EQ(count, TASK_DYLD_INFO_COUNT);
++  CHECK_EQ(info.all_image_info_format, TASK_DYLD_ALL_IMAGE_INFO_64);
++  CHECK(info.all_image_info_addr);
++  CHECK_GE(info.all_image_info_size,
++           offsetof(dyld_all_image_infos, dyldImageLoadAddress) +
++               sizeof(const mach_header *));
++  const auto *images = reinterpret_cast<const dyld_all_image_infos *>(
++      info.all_image_info_addr);
++  CHECK_GE(images->version, 2);
++  const mach_header *header = images->dyldImageLoadAddress;
++  CHECK(header);
++  CHECK_EQ(header->magic, MH_MAGIC_64);
++  CHECK_EQ(header->filetype, MH_DYLINKER);
++  return header;
++}
++
+@@ -223 +247,4 @@
+-    if (GetMacosAlignedVersion() >= MacosVersion(13, 0)) {
++    if (GetMacosAlignedVersion() >= MacosVersion(27, 0)) {
++      // Shared-cache enumeration allocates on macOS 27 during ASan startup.
++      dyld_hdr = GetDyldImageHeaderViaTaskInfo();
++    } else if (GetMacosAlignedVersion() >= MacosVersion(13, 0)) {
