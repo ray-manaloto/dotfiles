@@ -676,9 +676,9 @@ backend = "npm:defuddle"
 specifiers = ["0.19.6"]
 
 [[tools."npm:dev3000"]]
-version = "0.0.186"
+version = "0.0.188"
 backend = "npm:dev3000"
-specifiers = ["0.0.186"]
+specifiers = ["0.0.188"]
 
 [[tools."npm:firecrawl-cli"]]
 version = "1.26.24"

@@ -196,7 +196,7 @@ rtk = { version = "1.1.0", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.7.4", minimum_release_age = "0s" }
 "npm:agent-browser" = { version = "0.41.0", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
-"npm:dev3000" = { version = "0.0.186", minimum_release_age = "0s" }
+"npm:dev3000" = { version = "0.0.188", minimum_release_age = "0s" }
 "npm:portless" = { version = "0.15.12", minimum_release_age = "0s" }
 "npm:opensrc" = { version = "0.7.3", minimum_release_age = "0s" }
 #"pipx:langchain-cli" = { version = "0.0.37", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
