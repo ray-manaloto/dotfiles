@@ -224,7 +224,7 @@ eksctl = { version = "0.231.0", minimum_release_age = "0s" }
 k9s = { version = "0.51.0", minimum_release_age = "0s" }
 kubectx = { version = "0.11.0", minimum_release_age = "0s" }
 stern = { version = "1.35.0", minimum_release_age = "0s" }
-"pipx:graphifyy" = { version = "0.9.97", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", pipx_args = "--pip-args='--constraint {{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt'" }
+"pipx:graphifyy" = { version = "0.9.97", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
 #"pipx:check-jsonschema" = { version = "0.38.2", minimum_release_age = "0s" }

@@ -776,7 +776,6 @@ specifiers = ["0.9.97"]
 
 [tools."pipx:graphifyy".options]
 extras = "all"
-pipx_args = "--pip-args='--constraint ~/.config/mise/python-overrides/graphify/constraints.txt'"
 python = "3.14.8"
 uvx = "false"
 
