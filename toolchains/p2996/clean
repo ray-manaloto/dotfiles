@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Delete the P2996 build folder for a clean build; --source also deletes the checkout"
+#USAGE flag "--source" help="Also delete the source checkout (p2996:source fetches it again)"
+set -euo pipefail
+. "$(dirname "$0")/common.sh"
+rm -rf "$BUILD"
+echo "p2996:clean: removed $BUILD"
+if [ "${usage_source:-false}" = true ]; then
+  rm -rf "$SRC"
+  echo "p2996:clean: removed $SRC"
+fi

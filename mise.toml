@@ -46,3 +46,5 @@ run = "hk run pre-commit"
 
 [tools]
 betterleaks = "1.9.0"
+# DL-756: SWIG for lldb's Python scripting in p2996:build (latest stable; conda before brew on the Mac).
+"conda:swig" = "4.5.1"

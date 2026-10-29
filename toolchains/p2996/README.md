@@ -34,16 +34,21 @@ mise run p2996:verify    # compile and run a reflection sample with clang++-p299
 
 ## CMake
 
-`bootstrap.cmake` is the initial cache (`-C`). Build passes the SDK (`xcrun --show-sdk-path`,
-resolved to the versioned SDK) as `P2996_SDK`, the Command Line Tools `clang`/`clang++` as the
+`bootstrap.cmake` is the initial cache (`-C`); `p2996:build` reconfigures on every run, so an edit
+takes effect on the next build, and `p2996:clean` deletes the build folder (`--source` also the
+checkout). Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as `P2996_SDK`, the Command Line Tools `clang`/`clang++` as the
 bootstrap compilers and `ROOT/<PIN>` as the configured prefix, and clears inherited
 `CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT`. Key values: Release, arm64, deployment target
-27.0, `@loader_path/../lib` rpath; projects `clang;clang-tools-extra`; runtimes
-`libunwind;libcxxabi;libcxx;compiler-rt`; AArch64 only; assertions on; LLVM and Clang dylibs;
-full install (headers and CMake exports, for IWYU); compile jobs 4, link and tablegen jobs 1;
-tests, docs, examples, optional libraries and non-macOS compiler-rt parts off; shared and static
-runtimes, sanitizers and profile on. The runtimes and builtins sub-builds get the same platform
-values through `RUNTIMES_CMAKE_ARGS` and `BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is
+27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
+`clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
+`libunwind;libcxxabi;libcxx;compiler-rt;openmp;flang-rt`; targets `AArch64;X86`; lldb uses Xcode's
+debugserver and links the mise python for scripting (SWIG from `conda:swig`); assertions on; LLVM
+and Clang dylibs; full install (headers and CMake exports, for IWYU); compile jobs 4, link and
+tablegen jobs 1; tests, docs, examples and the iOS, watchOS, tvOS and visionOS runtimes off;
+zlib, zstd, libxml2, libedit and the compiler-rt runtimes keep LLVM's defaults, whose own checks
+skip Linux-only parts. Not built on macOS: libc, libclc, offload, llvm-libgcc, cross-project-tests.
+A Linux build needs its own cache with the Linux choices.
+The runtimes and builtins sub-builds get the same platform values through `RUNTIMES_CMAKE_ARGS` and `BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is
 `clang-p2996;clang++-p2996;clang-cpp-p2996`, so LLVM installs the suffixed driver names itself
 (and no unsuffixed `clang++`, `clang-cl` or `clang-cpp`).
 

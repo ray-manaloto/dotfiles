@@ -9,7 +9,9 @@ P2996_SDK="$(realpath "$(xcrun --show-sdk-path)")"
 export P2996_SDK
 configure=(cmake -S "$SRC/llvm" -B "$BUILD" -G Ninja -C "$HERE/bootstrap.cmake"
   -DCMAKE_C_COMPILER="$(xcrun -f clang)" -DCMAKE_CXX_COMPILER="$(xcrun -f clang++)"
-  -DCMAKE_INSTALL_PREFIX="$PREFIX")
+  -DCMAKE_INSTALL_PREFIX="$PREFIX"
+  # lldb's Python scripting links the mise python on PATH (DL-756); a python upgrade needs a rebuild.
+  -DPython3_EXECUTABLE="$(command -v python3)" -DLLDB_ENABLE_PYTHON=ON)
 compile=(cmake --build "$BUILD" --parallel 4)
 # Runs a command under a non-blocking flock on $LOCK (macOS has no flock(1)).
 locked() {
@@ -19,9 +21,10 @@ locked() {
     system(@ARGV); exit($? & 127 ? 128 + ($? & 127) : $? >> 8)' "$LOCK" "$@"
 }
 if [ "${usage_dry_run:-false}" = true ]; then
-  [ -f "$BUILD/CMakeCache.txt" ] || echo "P2996_SDK=$P2996_SDK ${configure[*]}"
+  echo "P2996_SDK=$P2996_SDK ${configure[*]}"
   echo "${compile[*]}"
   exit 0
 fi
-[ -f "$BUILD/CMakeCache.txt" ] || locked "${configure[@]}"
+# Configure on every run (seconds), so edits to bootstrap.cmake always take effect; the build itself resumes.
+locked "${configure[@]}"
 NINJA_STATUS="[%f/%t %es] " locked "${compile[@]}"
