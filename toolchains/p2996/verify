@@ -2,7 +2,7 @@
 #MISE description="Compile and run a P2996 reflection sample with clang++-p2996"
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
-cxx="$ROOT/suffixed/bin/clang++-p2996"
+cxx="$BIN/clang++-p2996"
 case "$(env -u SDKROOT -u CLANG_NO_DEFAULT_CONFIG "$cxx" --version)" in
   *"Configuration file: "*"/arm64-apple-darwin-clang++.cfg"*) ;;
   *) echo "p2996:verify: $cxx does not load arm64-apple-darwin-clang++.cfg" >&2; exit 1 ;;

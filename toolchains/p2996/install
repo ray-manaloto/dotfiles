@@ -1,33 +1,34 @@
 #!/usr/bin/env bash
-#MISE description="Install the build into a dated prefix, then point current and the -p2996 names at it"
+#MISE description="Install the build into the pinned prefix and link every tool as <name>-p2996 in one bin folder"
 set -euo pipefail
 . "$(dirname "$0")/common.sh"
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-prefix="$ROOT/$stamp"
 unset DESTDIR CMAKE_INSTALL_MODE CMAKE_INSTALL_PARALLEL_LEVEL
 for dir in "$BUILD" "$BUILD/runtimes/builtins-bins" "$BUILD/runtimes/runtimes-bins"; do
-  cmake --install "$dir" --prefix "$prefix"
+  cmake --install "$dir" --prefix "$PREFIX"
 done
 # Default configs: clang reads <triple>.cfg, then arm64-apple-darwin<N>.cfg, then the unversioned name
-# from its own bin dir; only the unversioned names are written, so a macOS bump never shadows them.
-cat >"$prefix/bin/arm64-apple-darwin.cfg" <<CFG
+# from its own (resolved) bin dir; only the unversioned names are written, so a macOS bump never shadows them.
+cat >"$PREFIX/bin/arm64-apple-darwin.cfg" <<CFG
 # P2996 default config for every driver mode on arm64 macOS; the SDK is xcrun's.
 -isysroot $(xcrun --show-sdk-path)
 CFG
-cat >"$prefix/bin/arm64-apple-darwin-clang++.cfg" <<CFG
+cat >"$PREFIX/bin/arm64-apple-darwin-clang++.cfg" <<CFG
 # C++ driver: the SDK, plus the P2996 libc++, libc++abi and libunwind at link time (\$ = link only).
 @arm64-apple-darwin.cfg
-\$-Wl,-L,$ROOT/current/lib
-\$-Wl,-rpath,$ROOT/current/lib
+\$-Wl,-L,$PREFIX/lib
+\$-Wl,-rpath,$PREFIX/lib
 \$-Wl,-lunwind
 CFG
-ln -sfn "$stamp" "$ROOT/current"
-# suffixed/bin: every tool as <name>-p2996 (the cfg files keep their names), all through current.
-rm -rf "$ROOT/suffixed"
-mkdir -p "$ROOT/suffixed/bin"
-for tool in "$prefix"/bin/*; do
+# $BIN: LLVM's own *-p2996 drivers and the cfg files keep their names; every other tool gets -p2996
+# unless LLVM already installed that suffixed name (clang -> clang-p2996).
+rm -rf "$BIN"
+mkdir -p "$BIN"
+for tool in "$PREFIX"/bin/*; do
   name="${tool##*/}"
-  case "$name" in *.cfg) link="$name" ;; *) link="$name-p2996" ;; esac
-  ln -s "../../current/bin/$name" "$ROOT/suffixed/bin/$link"
+  case "$name" in
+    *-p2996 | *.cfg) link="$name" ;;
+    *) [ -e "$tool-p2996" ] && continue; link="$name-p2996" ;;
+  esac
+  ln -s "../$PIN/bin/$name" "$BIN/$link"
 done
-echo "p2996:install: $ROOT/current -> $stamp"
+echo "p2996:install: $PREFIX, links in $BIN"
