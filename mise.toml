@@ -33,3 +33,6 @@ run = "echo all tests passed"
 
 [tasks.pre-commit]
 run = "hk run pre-commit"
+
+[dotfiles]
+"~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
