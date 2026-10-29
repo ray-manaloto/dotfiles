@@ -5,6 +5,11 @@ local linters = new Mapping<String, Step> {
     ["trailing-whitespace"] = Builtins.trailing_whitespace
     ["newlines"] = Builtins.newlines
     ["merge-conflicts"] = Builtins.check_merge_conflict
+    // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (tasks/privacy/scan.sh).
+    ["betterleaks"] = Builtins.betterleaks
+    ["private-paths"] {
+        check = "mise run privacy:scan -- {{files}}"
+    }
 }
 
 hooks {
@@ -12,6 +17,15 @@ hooks {
         fix = true
         stash = "git"
         steps = linters
+    }
+    // Every commit a push would publish, branches and tags alike, never only the pushed range.
+    ["pre-push"] {
+        steps {
+            ["private-paths"] {
+                exclusive = true
+                check = "mise run privacy:scan --outgoing"
+            }
+        }
     }
     ["check"] {
         steps = linters

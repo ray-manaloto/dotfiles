@@ -9,6 +9,7 @@
 !/mise.toml
 !/cpp/
 !/python/
+!/tasks/
 !/tests/
 !/typescript/
 !/unix/
