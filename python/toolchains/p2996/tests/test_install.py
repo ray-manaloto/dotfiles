@@ -22,9 +22,11 @@ def configure_trees(cfg: Config, tmp_path: Path) -> None:
         for name in programs:
             (project / name).write_text("#!/bin/sh\n")
         listed = " ".join(programs)
+        (project / "meta").write_text("// libc++ header stand-in\n")
         (project / "CMakeLists.txt").write_text(
             "cmake_minimum_required(VERSION 3.20)\nproject(tree NONE)\n"
             + (f"install(PROGRAMS {listed} DESTINATION bin)\n" if programs else "")
+            + ("install(FILES meta DESTINATION include/c++/v1)\n" if tree == "." else "")
         )
         subprocess.run(
             ["cmake", "-S", project, "-B", config.build_dir(cfg) / tree, "-G", "Ninja"], check=True, capture_output=True
@@ -70,3 +72,21 @@ def test_reinstall_replaces_stale_links(cfg: Config, installed: Path) -> None:
     install.run(cfg)
     assert not (config.bin_dir(cfg) / "stale-p2996").is_symlink()
     assert (installed / "bin/llvm-ar").is_file()
+
+
+def test_install_makes_root_look_like_the_prefix(cfg: Config, installed: Path) -> None:
+    # clang-scan-deps-p2996 finds headers through ROOT/bin/../include and ../lib (DL-761).
+    root = Path(cfg.root)
+    assert (root / "include").readlink() == Path(f"{installed.name}/include")
+    assert (root / "bin/../include/c++/v1/meta").is_file()
+    assert not (root / "libexec").exists()
+
+
+def test_reinstall_replaces_a_stale_prefix_view(cfg: Config, installed: Path) -> None:
+    root = Path(cfg.root)
+    (root / "include").unlink()
+    (root / "include").symlink_to("gone/include")
+    (root / "share").symlink_to("gone/share")
+    install.run(cfg)
+    assert (root / "include").readlink() == Path(f"{installed.name}/include")
+    assert not (root / "share").is_symlink()

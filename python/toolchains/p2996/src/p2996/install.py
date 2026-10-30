@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 from .config import bin_dir, build_dir, commit, prefix
 from .models import Config
@@ -40,4 +41,11 @@ def run(cfg: Config) -> None:
         else:
             link = f"{name}-p2996"
         (links / link).symlink_to(f"../{sha}/bin/{name}")
+    # Tools that find their headers from their own path, not its resolved target (clang-scan-deps
+    # looks in ROOT/bin/../lib/clang), need ROOT to look like the prefix (DL-761).
+    for name in ("include", "lib", "libexec", "share"):
+        view = Path(cfg.root) / name
+        view.unlink(missing_ok=True)
+        if (pre / name).is_dir():
+            view.symlink_to(f"{sha}/{name}")
     print(f"p2996 install: {pre}, links in {links}")

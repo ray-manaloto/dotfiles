@@ -97,13 +97,12 @@ CXX = "/opt/homebrew/opt/llvm/bin/clang++"
 # Brew formula: https://formulae.brew.sh/formula/llvm (keg-only, needs explicit paths)
 # Prefix is arch-aware: arm64=/opt/homebrew, amd64=/usr/local
 # DL-591: keg-only llvm and lldb need their opt bins; make gnubin gives an unprefixed GNU make;
-# p2996/suffixed is a prefix (bin/<name>-p2996, include, lib, libexec, share) linked through p2996/current,
-# so tools that resolve ../include from argv[0] (clang-scan-deps) still find the P2996 libc++.
+# DL-755: ~/.local/share/p2996/bin holds <name>-p2996 links into the prefix ~/.local/share/p2996/<commit>.
 path = [
   "/opt/homebrew/opt/llvm/bin",
   "/opt/homebrew/opt/lldb/bin",
   "/opt/homebrew/opt/make/libexec/gnubin",
-  "~/.local/state/marketplace-tool-foundation/p2996/suffixed/bin",
+  "~/.local/share/p2996/bin",
   # DL-757: opam switch "llvm" (OCaml, ocamlfind, ctypes) for LLVM's OCaml bindings.
   "~/.opam/llvm/bin",
   # DL-687: Orca CLI (orca) ships inside the app bundle.
@@ -394,11 +393,10 @@ done
 /opt/homebrew/bin/gdb --version | head -n 1
 /opt/homebrew/bin/gmake --version | head -n 1
 /opt/homebrew/opt/pkgconf/bin/pkgconf --version
-p2996="$HOME/.local/state/marketplace-tool-foundation/p2996"
-case "$(/bin/realpath "$p2996/current")" in "$p2996"-configure-*/prefix) ;; *) echo "p2996/current does not resolve to a dated prefix" >&2; exit 1;; esac
-# P2996 default configs: unversioned triple names, versionless SDK equal to xcrun's (replaces the
-# two-file existence loop). Needs $p2996 from the line above.
-cur="$p2996/current/bin" sfx="$p2996/suffixed/bin"
+# P2996 (DL-755): sfx is the PATH folder of -p2996 links, cur the prefix bin dir clang resolves to and
+# reads its default configs from: unversioned triple names, versionless SDK equal to xcrun's.
+sfx="$HOME/.local/share/p2996/bin"
+cur="$(dirname "$(/bin/realpath "$sfx/clang-p2996")")"
 sdk="$(xcrun --show-sdk-path)"
 [ -d "$sdk" ] || { echo "xcrun SDK $sdk does not exist" >&2; exit 1; }
 for cfg in arm64-apple-darwin.cfg arm64-apple-darwin-clang++.cfg; do
