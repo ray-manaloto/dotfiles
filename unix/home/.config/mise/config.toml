@@ -261,15 +261,18 @@ cmake = { version = "4.4.5", minimum_release_age = "0s" }
 ninja = { version = "1.13.2", minimum_release_age = "0s" }
 sccache = { version = "0.19.0", minimum_release_age = "0s" }
 
-# P2996 build extras (DL-756, DL-757): tools live here, never in a project; conda before brew on the Mac.
-# SWIG generates lldb's Python and Lua bindings; Lua 5.4 is the newest lldb supports (build.rst: 5.3
-# and 5.4); doxygen replaces a version-less shim that broke CMake's doxygen check; opam provides
-# ocamlfind and ctypes for LLVM's OCaml bindings (switch "llvm", on PATH above). The Python modules
-# LLVM uses (opt-viewer, MLIR bindings) are in ~/.default-python-packages.
+# P2996 build extras (DL-756, DL-757): tools live here, never in a project; mise registry first, then
+# conda (swig, doxygen and ocaml are not in the mise registry), then brew. SWIG generates lldb's Python
+# and Lua bindings; Lua is the latest mise release (lldb's build.rst names 5.3 and 5.4 only); doxygen
+# replaces a version-less shim that broke CMake's doxygen check; opam provides ocamlfind and ctypes for
+# LLVM's OCaml bindings (switch "llvm", on PATH above). The Python modules LLVM uses (opt-viewer, MLIR
+# bindings) are locked in the p2996 uv project (DL-758). ruff and ty lint that project through hk.
 "conda:swig" = { version = "4.5.1", minimum_release_age = "0s" }
-"conda:lua" = { version = "5.4.8", minimum_release_age = "0s" }
+lua = { version = "5.5.1", minimum_release_age = "0s" }
 "conda:doxygen" = { version = "1.18.0", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
+ruff = { version = "0.17.3", minimum_release_age = "0s" }
+ty = { version = "0.0.95", minimum_release_age = "0s" }
 
 # --- webclaw: local browser-enabled build -------------------------------------
 # Added 2026-10-20. The prebuilt release (github:0xMassi/webclaw) is compiled

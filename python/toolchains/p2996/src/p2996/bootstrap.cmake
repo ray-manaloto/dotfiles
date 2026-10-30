@@ -1,7 +1,7 @@
-# Initial cache for the pinned clang-p2996 build (cmake -C). p2996:build sets P2996_SDK.
+# Initial cache for the clang-p2996 build (cmake -C). p2996 build sets P2996_SDK.
 set(_sdk "$ENV{P2996_SDK}")
 if(NOT IS_DIRECTORY "${_sdk}")
-  message(FATAL_ERROR "Set P2996_SDK to the macOS SDK (run through mise run p2996:build).")
+  message(FATAL_ERROR "Set P2996_SDK to the macOS SDK (run through mise run //p2996:build).")
 endif()
 set(CMAKE_OSX_SYSROOT "${_sdk}" CACHE PATH "" FORCE)
 set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
@@ -16,7 +16,7 @@ set(LLVM_ENABLE_RUNTIMES "libc;libunwind;libcxxabi;libcxx;compiler-rt;openmp;fla
 set(LLVM_TARGETS_TO_BUILD "AArch64;X86" CACHE STRING "" FORCE)
 # lldb uses Xcode's signed debugserver instead of building and code-signing its own.
 set(LLDB_USE_SYSTEM_DEBUGSERVER ON CACHE BOOL "" FORCE)
-# DL-757: MLIR's Python bindings (nanobind, numpy from ~/.default-python-packages). lldb Lua and the
+# DL-757: MLIR's Python bindings (nanobind, numpy from this project's uv lock, DL-758). lldb Lua and the
 # OCaml bindings switch on by themselves once the global Lua and opam switch are on PATH.
 set(MLIR_ENABLE_BINDINGS_PYTHON ON CACHE BOOL "" FORCE)
 set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "Diagnose experimental compiler failures" FORCE)

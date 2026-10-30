@@ -2,8 +2,11 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "cpp"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "cpp"]
 lockfile = true
+
+[monorepo.path_aliases]
+p2996 = "python/toolchains/p2996"
 
 [settings]
 lockfile = true
@@ -11,10 +14,6 @@ lockfile = true
 pin = true
 minimum_release_age = "0s"
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
-
-# File tasks: toolchains/p2996/{source,build,install,verify} become p2996:source and the rest.
-[task_config]
-includes = ["toolchains"]
 
 [tasks.test]
 description = "Run every language root's tests"
@@ -43,6 +42,5 @@ run = "hk run pre-commit"
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
-"~/.default-python-packages" = { source = "unix/home/.default-python-packages", mode = "symlink" }
 
 # No [tools]: every tool is in the global config (DL-757).

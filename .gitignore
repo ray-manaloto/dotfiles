@@ -11,12 +11,13 @@
 !/python/
 !/tasks/
 !/tests/
-!/toolchains/
 !/typescript/
 !/unix/
 
 # Build and environment outputs inside the allowed roots.
 /cpp/build/
 /python/.venv/
+/python/toolchains/p2996/.venv/
 /typescript/node_modules/
 __pycache__/
+.coverage

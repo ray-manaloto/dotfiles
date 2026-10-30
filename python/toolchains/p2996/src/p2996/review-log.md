@@ -4,8 +4,8 @@ delete anything; only read files and write your report as your final message.
 Inputs:
 - Build log: @LOG@
 - LLVM source checkout: @SRC@
-- Initial cache and recipe: toolchains/p2996/bootstrap.cmake, toolchains/p2996/build and
-  toolchains/p2996/README.md in this repository. The README says what the build is meant to
+- Initial cache and recipe: src/p2996/bootstrap.cmake, src/p2996/build.py and README.md in
+  this folder. The README says what the build is meant to
   enable and skip on macOS; check the log against it.
 
 Split the log into three passes. If you can start sub-agents, give each pass to its own agent;

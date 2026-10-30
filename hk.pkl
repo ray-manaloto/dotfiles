@@ -11,6 +11,11 @@ local linters = new Mapping<String, Step> {
     ["private-paths"] {
         check = "mise run privacy:scan -- {{files}}"
     }
+    // DL-758: the p2996 package's ruff, ty, codegen drift and 100% coverage gate, through its mise task.
+    ["p2996"] {
+        glob = List("python/toolchains/p2996/**")
+        check = "mise run //p2996:check"
+    }
 }
 
 hooks {

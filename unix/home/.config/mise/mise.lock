@@ -226,22 +226,6 @@ conda_deps = [
     "libcxx-23.1.4-h55c6f16_2",
 ]
 
-[[tools."conda:lua"]]
-version = "5.4.8"
-backend = "conda:lua"
-specifiers = ["5.4.8"]
-
-[tools."conda:lua".options]
-channel = "conda-forge"
-
-[tools."conda:lua"."platforms.macos-arm64"]
-checksum = "sha256:e4b10ca29526871fa205faec5d224c10958a0badb315ec9aa1d8258039d32733"
-url = "https://conda.anaconda.org/conda-forge/osx-arm64/lua-5.4.8-h15fa0ee_1.conda"
-conda_deps = [
-    "readline-8.3-h8b90a29_1",
-    "ncurses-6.6-he64c551_1",
-]
-
 [[tools."conda:swig"]]
 version = "4.5.1"
 backend = "conda:swig"
@@ -616,6 +600,15 @@ checksum_source = "mise-versions"
 url = "https://github.com/lsd-rs/lsd/releases/download/v1.2.0/lsd-v1.2.0-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/lsd-rs/lsd/releases/assets/303319340"
 
+[[tools.lua]]
+version = "5.5.1"
+backend = "vfox:jdx/vfox-lua"
+specifiers = ["5.5.1"]
+
+[tools.lua."platforms.macos-arm64"]
+checksum = "sha256:1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce"
+url = "https://www.lua.org/ftp/lua-5.5.1.tar.gz"
+
 [[tools.micromamba]]
 version = "2.10.0-0"
 backend = "github:mamba-org/micromamba-releases"
@@ -953,6 +946,17 @@ checksum_source = "mise-versions"
 url = "https://github.com/rtk-ai/rtk/releases/download/v1.1.0/rtk-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/rtk-ai/rtk/releases/assets/675762802"
 
+[[tools.ruff]]
+version = "0.17.3"
+backend = "aqua:astral-sh/ruff"
+specifiers = ["0.17.3"]
+
+[tools.ruff."platforms.macos-arm64"]
+checksum = "sha256:118f7121aa838785672bf612487f755a89108bb5f44e0f3df96c5967a72614f9"
+url = "https://github.com/astral-sh/ruff/releases/download/0.17.3/ruff-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/679956403"
+provenance = "github-attestations"
+
 [[tools.rumdl]]
 version = "0.3.2"
 backend = "aqua:rvben/rumdl"
@@ -1073,6 +1077,17 @@ specifiers = ["17.14.1"]
 checksum = "sha256:c9552341e53a9e6a2ec1f2c270d8a14d8154f352ee384ba68e065550da08ca72"
 url = "https://github.com/topgrade-rs/topgrade/releases/download/v17.14.1/topgrade-v17.14.1-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/topgrade-rs/topgrade/releases/assets/660332275"
+provenance = "github-attestations"
+
+[[tools.ty]]
+version = "0.0.95"
+backend = "aqua:astral-sh/ty"
+specifiers = ["0.0.95"]
+
+[tools.ty."platforms.macos-arm64"]
+checksum = "sha256:379d341e8fb12d949e92fa7142f864cde835be5b2c1378d24c264a928c551857"
+url = "https://github.com/astral-sh/ty/releases/download/0.0.95/ty-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ty/releases/assets/689647546"
 provenance = "github-attestations"
 
 [[tools.typos]]

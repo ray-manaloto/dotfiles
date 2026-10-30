@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "p2996",
+  "description": "Types of the p2996 recipe; mise run //p2996:codegen writes src/p2996/models.py from this file.",
+  "$defs": {
+    "Config": {
+      "description": "The recipe's settings: field <name> comes from P2996_<NAME> in this project's mise.toml [env].",
+      "type": "object",
+      "properties": {
+        "remote": { "type": "string", "description": "Upstream clang-p2996 git URL" },
+        "branch": { "type": "string", "description": "Branch whose newest commit p2996 source builds" },
+        "root": { "type": "string", "format": "path", "description": "Install root: ROOT/<commit> is the prefix, ROOT/bin goes on PATH" },
+        "cache": { "type": "string", "format": "path", "description": "Holds the source checkout and the build dir" },
+        "lock": { "type": "string", "format": "path", "description": "Heavy-build gate, one heavy build at a time" }
+      },
+      "required": ["remote", "branch", "root", "cache", "lock"],
+      "additionalProperties": false
+    },
+    "Command": {
+      "description": "The p2996 subcommands, one per mise task.",
+      "type": "string",
+      "enum": ["source", "build", "install", "verify", "clean", "review-log"]
+    }
+  }
+}
