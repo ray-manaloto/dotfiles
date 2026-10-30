@@ -3,6 +3,8 @@
 # From the repository root the tasks are //p2996:<task>.
 
 [env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
 P2996_REMOTE = "https://github.com/bloomberg/clang-p2996.git"
 # p2996 source builds the newest commit of this branch unless --commit names one.
 P2996_BRANCH = "p2996"
