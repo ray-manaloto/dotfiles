@@ -64,10 +64,7 @@ show_env = true
 # login-shell sourcing). Authoritative rationale + repro + suspected root
 # causes are tracked in:
 #   https://github.com/ray-manaloto/macos-development-environment/issues/75
-# Secrets env loading is now handled by `fnox activate zsh` in
-# home/dot_zshrc.d/50-mde-secrets.zsh, which installs chpwd/precmd hooks
-# that decrypt the age-encrypted sync cache into the shell environment.
-# See docs/secrets-workflow.md for the full architecture.
+# Shells hold no secrets; commands get them through `fnox exec`.
 
 
 [env]
