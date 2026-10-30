@@ -646,3 +646,37 @@ content = '''
 "brew-cask:stablyai/orca/orca" = { os = "macos", adopt = true }
 
 # DL-591: gcc/g++ wrappers retired; use the Homebrew gcc-16 and g++-16 names.
+
+# gh auth, for every project on this Mac: `mise doctor project`.
+[doctor.checks.gh-env-token]
+description = "No stale GH_TOKEN or GITHUB_TOKEN overrides the gh login"
+run = '[ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || gh api user --silent'
+hint = "A bad env token beats the keyring with no fallback. Unset it or restart this process; pass tokens only through fnox exec."
+timeout = "15s"
+
+[doctor.checks.gh-keyring]
+description = "The stored gh login works without env tokens"
+run = "env -u GH_TOKEN -u GITHUB_TOKEN gh api user --silent"
+hint = "Run `gh auth login`. Sandboxed agents without keychain access use dev/github-env.sh."
+timeout = "15s"
+
+[doctor.checks.gh-scopes]
+description = "The stored gh login has repo, workflow and read:org"
+run = """s=$(env -u GH_TOKEN -u GITHUB_TOKEN gh api -i user | awk 'tolower($1) == "x-oauth-scopes:"')
+case "$s" in *repo*) ;; *) exit 1;; esac
+case "$s" in *workflow*) ;; *) exit 1;; esac
+case "$s" in *read:org*) ;; *) exit 1;; esac"""
+hint = "Run `gh auth refresh -s repo,workflow,read:org`."
+timeout = "15s"
+depends = "gh-keyring"
+
+[doctor.checks.gh-hosts-file]
+description = "gh keeps its token in the keyring, not in hosts.yml"
+run = "! grep -q oauth_token ~/.config/gh/hosts.yml"
+hint = "Run `gh auth logout`, then `gh auth login` so the token moves to the keyring."
+
+[doctor.checks.gh-ssh]
+description = "SSH to GitHub authenticates"
+run = "ssh -T -o BatchMode=yes -o ConnectTimeout=8 git@github.com 2>&1 | grep -q 'successfully authenticated'"
+hint = "Check your SSH key in the agent and on GitHub."
+timeout = "15s"

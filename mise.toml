@@ -61,6 +61,12 @@ grep -qx 'VERDICT: PASS' "$out"
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
 "~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
+# Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
+"~/.gitconfig/gh-doctor" = { block = '''
+[hook "gh-doctor-pre-push"]
+	command = test "${HK:-1}" = "0" || ~/.local/share/mise/shims/mise doctor project
+	event = pre-push
+''' }
 "~/.config/mise/agentsview-native/fnox.toml" = { source = "unix/home/.config/mise/agentsview-native/fnox.toml", mode = "symlink" }
 
 # No [tools]: every tool is in the global config (DL-757).
