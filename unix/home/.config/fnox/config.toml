@@ -1,0 +1,19 @@
+#:schema https://fnox.jdx.dev/schema.json
+# Global fnox config: one secret, the read-only Doppler service token for
+# dotfiles/dev_personal. Everything else is a Doppler reference in a project fnox.toml.
+# Replace the token with `fnox set DOPPLER_TOKEN --global --provider age`, then keep env = false.
+
+[providers.keychain]
+type = "keychain"
+service = "mde-fnox"
+
+[providers.age]
+type = "age"
+recipients = ["age16djrq9gc4kgdaxve0lua75q97qed6g858ec4s830hpry6nx8qalqns0x8d"]
+identity = { provider = "keychain", value = "AGE_PRIVATE_KEY" }
+
+[providers.doppler_dotfiles_dev_personal]
+type = "doppler"
+project = "dotfiles"
+config = "dev_personal"
+token = { secret = "DOPPLER_TOKEN" }
