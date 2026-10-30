@@ -40,6 +40,7 @@ run = "hk run pre-commit"
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
+"~/.config/mise/agentsview-native/fnox.toml" = { source = "unix/home/.config/mise/agentsview-native/fnox.toml", mode = "symlink" }
 
 [tools]
 betterleaks = "1.9.0"
