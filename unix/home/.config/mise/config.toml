@@ -10,6 +10,7 @@
 # Plan: ray-manaloto/dotfiles/docs/specs/mise-native-dotfiles-plan.md
 # Add the include below by array merge; never replace the actual global config.
 [settings]
+github.credential_command = "gh auth token"
 experimental = true
 #verbose = true
 activate_aggressive = true

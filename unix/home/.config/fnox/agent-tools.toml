@@ -1,0 +1,7 @@
+#:schema https://fnox.jdx.dev/schema.json
+# Keys Codex and OpenCode read at launch for their MCP servers; see ~/.zshrc.d/60-agent-tools.zsh.
+root = true
+
+[secrets]
+CONTEXT7_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "CONTEXT7_API_KEY", env = "exec", if_missing = "warn" }
+EXA_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = "exec", if_missing = "warn" }
