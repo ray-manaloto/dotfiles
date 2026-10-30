@@ -1,7 +1,6 @@
-"""The p2996 command: argv[0] names a generated Command, its generated model parses the rest (DL-762).
+"""The p2996 command: argv[0] names a generated Command, its generated model parses the rest (DL-762)."""
 
-mise.toml exposes each command as a task with a usage spec; tests/test_usage.py keeps the two in step.
-"""
+# mise.toml exposes each command as a task with a usage spec; tests/test_usage.py keeps the two in step.
 
 import shutil
 import subprocess
@@ -41,8 +40,8 @@ def parse(argv: Sequence[str]) -> tuple[Command, BaseModel]:
         raise P2996Error(msg)
     command = Command(argv[0])
     model = COMMANDS[command][0]
-    # CliApp.run documents BaseModel input; CliSettingsSource's annotation says BaseSettings only.
     cli = CliSettingsSource(
+        # CliApp.run documents BaseModel input; CliSettingsSource's annotation says BaseSettings only.
         model,  # ty: ignore[invalid-argument-type]
         cli_prog_name=f"p2996 {command}",
         cli_kebab_case=True,

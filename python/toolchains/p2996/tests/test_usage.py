@@ -1,10 +1,9 @@
-"""The mise task usage specs and the generated CLI models stay in step (DL-762).
+"""The mise task usage specs and the generated CLI models stay in step (DL-762)."""
 
-For every command: build an argv that sets every flag and arg of its task's usage spec, let the
-real usage CLI bind it (the usage_* variables mise exports), expand the task's real run line with
-bash, and parse what reaches p2996 with the real CLI parser. A spec flag the model lacks, a model
-field the spec lacks, or a run line that drops a variable fails here.
-"""
+# For every command: build an argv that sets every flag and arg of its task's usage spec, let the
+# real usage CLI bind it (the usage_* variables mise exports), expand the task's real run line with
+# bash, and parse what reaches p2996 with the real CLI parser. A spec flag the model lacks, a model
+# field the spec lacks, or a run line that drops a variable fails here.
 
 import json
 import subprocess

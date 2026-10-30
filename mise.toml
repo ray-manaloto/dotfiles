@@ -38,6 +38,22 @@ run = "bash tasks/privacy/scan.sh"
 [tasks.pre-commit]
 run = "hk run pre-commit"
 
+# Run before committing a Python unit; fix or answer every finding, then rerun until PASS.
+[tasks."review:python"]
+description = "A read-only Codex reviewer checks the uncommitted changes against CODING_STANDARDS.md"
+usage = '''
+arg "[path]" default="python" help="Directory whose uncommitted changes are reviewed"
+flag "--commit <sha>" help="Review this commit instead of the uncommitted changes"
+flag "--out <file>" help="Report file (default .git/review-python.md, never tracked)"
+'''
+run = '''
+out="${usage_out:-.git/review-python.md}"
+{ cat tasks/review/python.md; printf 'Path: %s\nCommit: %s\n' "$usage_path" "${usage_commit:-none}"; } |
+  codex exec -C . -c 'sandbox_mode="read-only"' -o "$out" -
+printf "%s\n" "$(tail -n 1 "$out")"
+grep -qx 'VERDICT: PASS' "$out"
+'''
+
 [dotfiles]
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
