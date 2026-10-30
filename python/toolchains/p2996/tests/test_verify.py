@@ -1,16 +1,18 @@
 import re
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from p2996 import config, verify
-from p2996.models import Config
+from p2996 import config, proc, verify
+from p2996.log import P2996Error
+from p2996.models import Config, Verify
 
-from .conftest import executable
+from .conftest import events, executable
 
-# Stands in for clang++-p2996 until the real build exists: it reports the default config the way
-# clang --version does, and compiles with the real Apple clang (which has no -freflection).
+pytestmark = pytest.mark.anyio
+
+# Stands in for clang++-p2996 in tests (a real one takes hours to build): it reports the default
+# config the way clang --version does, and compiles with the real Apple clang (no -freflection).
 STAND_IN = """\
 import os, subprocess, sys
 args = sys.argv[1:]
@@ -33,24 +35,25 @@ def sample(tmp_path: Path) -> Path:
     return path
 
 
-def test_verify_compiles_and_runs_the_sample(cfg: Config, sample: Path, capsys: pytest.CaptureFixture[str]) -> None:
+async def test_verify_compiles_and_runs_the_sample(cfg: Config, sample: Path, logs: pytest.CaptureFixture[str]) -> None:
     executable(config.bin_dir(cfg) / "clang++-p2996", STAND_IN)
-    verify.run(cfg, sample)
-    assert capsys.readouterr().out == "p2996 verify OK: clang version 23.0.0 (p2996 stand-in)\n"
+    await verify.run(cfg, Verify(), sample)
+    [ok] = events(logs)[0]
+    assert (ok["event"], ok["compiler"]) == ("verify ok", "clang version 23.0.0 (p2996 stand-in)")
 
 
-def test_verify_refuses_a_compiler_without_the_default_config(cfg: Config, sample: Path) -> None:
-    apple = subprocess.run(["xcrun", "-f", "clang++"], check=True, capture_output=True, text=True).stdout.strip()
+async def test_verify_refuses_a_compiler_without_the_default_config(cfg: Config, sample: Path) -> None:
+    apple = await proc.output("xcrun", "-f", "clang++")
     config.bin_dir(cfg).mkdir(parents=True)
     (config.bin_dir(cfg) / "clang++-p2996").symlink_to(apple)
-    with pytest.raises(SystemExit, match=re.escape("does not load arm64-apple-darwin-clang++.cfg")):
-        verify.run(cfg, sample)
+    with pytest.raises(P2996Error, match=re.escape("does not load arm64-apple-darwin-clang++.cfg")):
+        await verify.run(cfg, Verify(), sample)
 
 
-def test_verify_refuses_a_wrong_answer(cfg: Config, sample: Path) -> None:
+async def test_verify_refuses_a_wrong_answer(cfg: Config, sample: Path) -> None:
     executable(config.bin_dir(cfg) / "clang++-p2996", STAND_IN)
-    with pytest.raises(SystemExit, match="sample printed 'reflection value=43'"):
-        verify.run(cfg, sample, expect="reflection value=44")
+    with pytest.raises(P2996Error, match="sample printed 'reflection value=43'"):
+        await verify.run(cfg, Verify(), sample, expect="reflection value=44")
 
 
 def test_the_shipped_sample_uses_reflection() -> None:

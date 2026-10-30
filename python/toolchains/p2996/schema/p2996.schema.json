@@ -1,6 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "p2996",
+  "type": "object",
+  "additionalProperties": false,
   "description": "Types of the p2996 recipe; mise run //p2996:codegen writes src/p2996/models.py from this file.",
   "$defs": {
     "Config": {
@@ -20,6 +22,50 @@
       "description": "The p2996 subcommands, one per mise task.",
       "type": "string",
       "enum": ["source", "build", "install", "verify", "clean", "review-log"]
+    },
+    "Source": {
+      "description": "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches.",
+      "type": "object",
+      "properties": {
+        "commit": { "type": ["string", "null"], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" }
+      },
+      "additionalProperties": false
+    },
+    "Build": {
+      "description": "Configure and build clang-p2996; a rerun resumes the same build dir.",
+      "type": "object",
+      "properties": {
+        "dry_run": { "type": "boolean", "default": false, "description": "Print the cmake commands only" }
+      },
+      "additionalProperties": false
+    },
+    "Install": {
+      "description": "Install the build into ROOT/<commit> and link every tool as <name>-p2996 in ROOT/bin.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Verify": {
+      "description": "Compile and run reflection.cpp with clang++-p2996.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "Clean": {
+      "description": "Delete the build folder; --source also deletes the checkout.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "boolean", "default": false, "description": "Also delete the source checkout" }
+      },
+      "additionalProperties": false
+    },
+    "ReviewLog": {
+      "description": "Have a read-only Codex review team report every warning, error and skipped part in a build log.",
+      "type": "object",
+      "properties": {
+        "log": { "type": "string", "format": "path", "description": "Build log to review" },
+        "out": { "type": ["string", "null"], "format": "path", "default": null, "description": "Report file (default: <log>.review.md)" }
+      },
+      "required": ["log"],
+      "additionalProperties": false
     }
   }
 }

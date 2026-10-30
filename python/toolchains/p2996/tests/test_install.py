@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from p2996 import config, install, source
-from p2996.models import Config
+from p2996 import config, install, proc, source
+from p2996.models import Config, Install, Source
+
+pytestmark = pytest.mark.anyio
 
 # One install tree per build dir p2996 install reads: the main build and the two runtime sub-builds.
 TREES = {
@@ -34,15 +36,15 @@ def configure_trees(cfg: Config, tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def installed(cfg: Config, patches: Path, tmp_path: Path) -> Path:
-    source.run(cfg, None, patches)
+async def installed(cfg: Config, patches: Path, tmp_path: Path) -> Path:
+    await source.run(cfg, Source(), patches)
     configure_trees(cfg, tmp_path)
-    install.run(cfg)
-    return config.prefix(cfg)
+    await install.run(cfg, Install())
+    return await config.prefix(cfg)
 
 
-def test_install_writes_the_default_configs(installed: Path) -> None:
-    sdk = subprocess.run(["xcrun", "--show-sdk-path"], check=True, capture_output=True, text=True).stdout.strip()
+async def test_install_writes_the_default_configs(installed: Path) -> None:
+    sdk = await proc.output("xcrun", "--show-sdk-path")
     assert (installed / "bin/arm64-apple-darwin.cfg").read_text().endswith(f"-isysroot {sdk}\n")
     cxx = (installed / "bin/arm64-apple-darwin-clang++.cfg").read_text().splitlines()
     assert cxx[1:] == [
@@ -53,7 +55,7 @@ def test_install_writes_the_default_configs(installed: Path) -> None:
     ]
 
 
-def test_install_links_every_tool_once_with_the_p2996_suffix(cfg: Config, installed: Path) -> None:
+async def test_install_links_every_tool_once_with_the_p2996_suffix(cfg: Config, installed: Path) -> None:
     links = {link.name: link.readlink() for link in config.bin_dir(cfg).iterdir()}
     sha = installed.name
     assert links == {
@@ -67,26 +69,26 @@ def test_install_links_every_tool_once_with_the_p2996_suffix(cfg: Config, instal
     assert all((config.bin_dir(cfg) / name).exists() for name in links)
 
 
-def test_reinstall_replaces_stale_links(cfg: Config, installed: Path) -> None:
+async def test_reinstall_replaces_stale_links(cfg: Config, installed: Path) -> None:
     (config.bin_dir(cfg) / "stale-p2996").symlink_to("../gone/bin/stale")
-    install.run(cfg)
+    await install.run(cfg, Install())
     assert not (config.bin_dir(cfg) / "stale-p2996").is_symlink()
     assert (installed / "bin/llvm-ar").is_file()
 
 
-def test_install_makes_root_look_like_the_prefix(cfg: Config, installed: Path) -> None:
+async def test_install_makes_root_look_like_the_prefix(cfg: Config, installed: Path) -> None:
     # clang-scan-deps-p2996 finds headers through ROOT/bin/../include and ../lib (DL-761).
-    root = Path(cfg.root)
+    root = cfg.root
     assert (root / "include").readlink() == Path(f"{installed.name}/include")
     assert (root / "bin/../include/c++/v1/meta").is_file()
     assert not (root / "libexec").exists()
 
 
-def test_reinstall_replaces_a_stale_prefix_view(cfg: Config, installed: Path) -> None:
-    root = Path(cfg.root)
+async def test_reinstall_replaces_a_stale_prefix_view(cfg: Config, installed: Path) -> None:
+    root = cfg.root
     (root / "include").unlink()
     (root / "include").symlink_to("gone/include")
     (root / "share").symlink_to("gone/share")
-    install.run(cfg)
+    await install.run(cfg, Install())
     assert (root / "include").readlink() == Path(f"{installed.name}/include")
     assert not (root / "share").is_symlink()

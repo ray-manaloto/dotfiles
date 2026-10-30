@@ -1,45 +1,66 @@
-"""The p2996 command; mise.toml exposes each subcommand as a task with a usage spec."""
+"""The p2996 command: argv[0] names a generated Command, its generated model parses the rest (DL-762).
 
-import argparse
+mise.toml exposes each command as a task with a usage spec; tests/test_usage.py keeps the two in step.
+"""
+
 import shutil
-from collections.abc import Callable, Sequence
-from pathlib import Path
+import subprocess
+import sys
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
+
+import anyio
+from pydantic import BaseModel
+from pydantic_settings import CliApp, CliSettingsSource
 
 from . import build, config, install, review, source, verify
-from .models import Command, Config
+from .log import P2996Error, configure, log
+from .models import Build, Clean, Command, Config, Install, ReviewLog, Source, Verify
 
 
-def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="p2996")
-    sub = top.add_subparsers(dest="command", required=True)
-    sub.add_parser(Command.source).add_argument("--commit", help="build this commit, not the newest on P2996_BRANCH")
-    sub.add_parser(Command.build).add_argument("--dry-run", action="store_true", help="print the cmake commands only")
-    sub.add_parser(Command.install)
-    sub.add_parser(Command.verify)
-    sub.add_parser(Command.clean).add_argument("--source", action="store_true", help="also delete the checkout")
-    review_log = sub.add_parser(Command.review_log)
-    review_log.add_argument("log", type=Path)
-    review_log.add_argument("--out", type=Path)
-    return top
-
-
-def clean(cfg: Config, *, with_source: bool) -> None:
-    for path in (config.build_dir(cfg), config.src(cfg)) if with_source else (config.build_dir(cfg),):
+async def clean(cfg: Config, args: Clean) -> None:
+    for path in (config.build_dir(cfg), config.src(cfg)) if args.source else (config.build_dir(cfg),):
         shutil.rmtree(path, ignore_errors=True)
-        print(f"p2996 clean: removed {path}")
+        log.info("removed", path=str(path))
 
 
 # One entry per generated Command; test_cli checks none is missing.
-RUN: dict[Command, Callable[[Config, argparse.Namespace], None]] = {
-    Command.source: lambda cfg, args: source.run(cfg, args.commit),
-    Command.build: lambda cfg, args: build.run(cfg, dry_run=args.dry_run),
-    Command.install: lambda cfg, _: install.run(cfg),
-    Command.verify: lambda cfg, _: verify.run(cfg),
-    Command.clean: lambda cfg, args: clean(cfg, with_source=args.source),
-    Command.review_log: lambda cfg, args: review.run(cfg, args.log, args.out),
+COMMANDS: dict[Command, tuple[type[BaseModel], Callable[[Config, Any], Awaitable[None]]]] = {
+    Command.source: (Source, source.run),
+    Command.build: (Build, build.run),
+    Command.install: (Install, install.run),
+    Command.verify: (Verify, verify.run),
+    Command.clean: (Clean, clean),
+    Command.review_log: (ReviewLog, review.run),
 }
 
 
+def parse(argv: Sequence[str]) -> tuple[Command, BaseModel]:
+    if not argv or argv[0] not in set(Command):
+        msg = f"p2996: the first argument is one of {', '.join(Command)}"
+        raise P2996Error(msg)
+    command = Command(argv[0])
+    model = COMMANDS[command][0]
+    # CliApp.run documents BaseModel input; CliSettingsSource's annotation says BaseSettings only.
+    cli = CliSettingsSource(
+        model,  # ty: ignore[invalid-argument-type]
+        cli_prog_name=f"p2996 {command}",
+        cli_kebab_case=True,
+        cli_implicit_flags=True,
+        cli_exit_on_error=False,
+    )
+    return command, CliApp.run(model, cli_args=list(argv[1:]), cli_settings_source=cli)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
-    args = parser().parse_args(argv)
-    RUN[Command(args.command)](config.load(), args)
+    configure()
+    try:
+        command, args = parse(sys.argv[1:] if argv is None else argv)
+        anyio.run(COMMANDS[command][1], config.load(), args)
+    except subprocess.CalledProcessError as error:
+        stderr = error.stderr.decode().strip() if error.stderr else None
+        log.error("command failed", command=[str(part) for part in error.cmd], code=error.returncode, stderr=stderr)
+        raise SystemExit(1) from None
+    except (P2996Error, ValueError) as error:  # ValueError: pydantic's parse and validation errors
+        log.error(str(error))
+        raise SystemExit(1) from None

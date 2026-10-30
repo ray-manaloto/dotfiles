@@ -2,25 +2,26 @@
 
 import os
 import shutil
-import subprocess
-from pathlib import Path
 
-from .config import bin_dir, build_dir, commit, prefix
-from .models import Config
+from . import proc
+from .config import bin_dir, build_dir, commit
+from .log import log
+from .models import Config, Install
 
 
-def run(cfg: Config) -> None:
-    sha, pre, links, build = commit(cfg), prefix(cfg), bin_dir(cfg), build_dir(cfg)
+async def run(cfg: Config, _: Install) -> None:
+    sha, links, build = await commit(cfg), bin_dir(cfg), build_dir(cfg)
+    pre = cfg.root / sha
     env = {
         k: v
         for k, v in os.environ.items()
         if k not in ("DESTDIR", "CMAKE_INSTALL_MODE", "CMAKE_INSTALL_PARALLEL_LEVEL")
     }
     for tree in (build, build / "runtimes/builtins-bins", build / "runtimes/runtimes-bins"):
-        subprocess.run(["cmake", "--install", str(tree), "--prefix", str(pre)], check=True, env=env)
+        await proc.run("cmake", "--install", tree, "--prefix", pre, env=env, capture=False)
     # Clang reads <triple>.cfg, then arm64-apple-darwin<N>.cfg, then the unversioned name from its own
     # resolved bin dir; only the unversioned names are written, so a macOS bump never shadows them.
-    sdk = subprocess.run(["xcrun", "--show-sdk-path"], check=True, capture_output=True, text=True).stdout.strip()
+    sdk = await proc.output("xcrun", "--show-sdk-path")
     (pre / "bin/arm64-apple-darwin.cfg").write_text(
         f"# P2996 default config for every driver mode on arm64 macOS; the SDK is xcrun's.\n-isysroot {sdk}\n"
     )
@@ -44,8 +45,8 @@ def run(cfg: Config) -> None:
     # Tools that find their headers from their own path, not its resolved target (clang-scan-deps
     # looks in ROOT/bin/../lib/clang), need ROOT to look like the prefix (DL-761).
     for name in ("include", "lib", "libexec", "share"):
-        view = Path(cfg.root) / name
+        view = cfg.root / name
         view.unlink(missing_ok=True)
         if (pre / name).is_dir():
             view.symlink_to(f"{sha}/{name}")
-    print(f"p2996 install: {pre}, links in {links}")
+    log.info("installed", prefix=str(pre), links=str(links))

@@ -1,21 +1,18 @@
 """p2996 review-log: a read-only Codex team reports every warning, error and skipped part of a build log."""
 
-import subprocess
-from pathlib import Path
-
+from . import proc
 from .config import PROJECT, RESOURCES, src
-from .models import Config
+from .log import log
+from .models import Config, ReviewLog
 
 
-def run(cfg: Config, log: Path, out: Path | None) -> None:
-    log = log.resolve()
-    out = out or log.with_name(log.name + ".review.md")
-    prompt = (RESOURCES / "review-log.md").read_text().replace("@LOG@", str(log)).replace("@SRC@", str(src(cfg)))
+async def run(cfg: Config, args: ReviewLog) -> None:
+    build_log = args.log.resolve()
+    out = args.out or build_log.with_name(build_log.name + ".review.md")
+    prompt = (RESOURCES / "review-log.md").read_text()
+    prompt = prompt.replace("@LOG@", str(build_log)).replace("@SRC@", str(src(cfg)))
     # Never -s, --ephemeral or --dangerously-bypass-hook-trust: the sandbox comes from the config key.
-    subprocess.run(
-        ["codex", "exec", "-C", str(PROJECT), "-c", 'sandbox_mode="read-only"', "-o", str(out), "-"],
-        input=prompt,
-        text=True,
-        check=True,
+    await proc.run(
+        "codex", "exec", "-C", PROJECT, "-c", 'sandbox_mode="read-only"', "-o", out, "-", stdin=prompt, capture=False
     )
-    print(f"p2996 review-log: report in {out}")
+    log.info("review written", report=str(out))

@@ -6,8 +6,11 @@ requires-python = ">=3.15"
 # What LLVM's configure looks for in the Python it is given: opt-viewer (pygments, pyyaml) and the
 # MLIR Python bindings (mlir/python/requirements.txt). Uncapped: the latest of every dependency
 # (DL-758); the only exception is in [tool.uv] constraint-dependencies below.
-# p2996 build hands CMake this project's venv python.
-dependencies = ["pygments", "pyyaml", "numpy", "nanobind", "pybind11", "ml_dtypes"]
+# p2996 build hands CMake this project's venv python. The rest is the package stack (DL-762).
+dependencies = [
+  "pygments", "pyyaml", "numpy", "nanobind", "pybind11", "ml_dtypes",
+  "anyio", "structlog", "pydantic", "pydantic-settings",
+]
 
 [tool.uv]
 # DL-759, the one exception to latest: MLIR asks find_package(nanobind 2.4 CONFIG) and nanobind's
@@ -16,21 +19,22 @@ dependencies = ["pygments", "pyyaml", "numpy", "nanobind", "pybind11", "ml_dtype
 constraint-dependencies = ["nanobind<3"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov", "pytest-reportlog"]
+dev = ["pytest", "pytest-cov", "pytest-reportlog", "pytest-xdist"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
 select = ["ALL"]
-# D: one-line module docstrings only. CPY001: no copyright headers. TC001/TC003: annotations are
+# D: one-line module docstrings only. CPY001: no copyright headers. TC001-TC003: annotations are
 # lazy (Python 3.14+), so a TYPE_CHECKING block buys nothing. S603/S607: the recipe runs git, cmake,
-# xcrun and codex by name. T201: the tasks report with print. COM812: conflicts with ruff format.
-ignore = ["D", "CPY001", "TC001", "TC003", "COM812", "S603", "S607", "T201"]
+# xcrun and codex by name. COM812: conflicts with ruff format.
+ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "PLR2004"]
-"src/p2996/models.py" = ["ALL"]
+# Generated (DL-762): datamodel-codegen orders its imports its own way; every other rule applies.
+"src/p2996/models.py" = ["I001"]
 
 [tool.pytest.ini_options]
 addopts = "--cov=p2996 --cov-branch --cov-report=term-missing --cov-fail-under=100"

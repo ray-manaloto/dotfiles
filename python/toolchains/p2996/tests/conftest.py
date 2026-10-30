@@ -5,6 +5,7 @@ cannot run in a test (the hours-long clang-p2996 itself, a paid Codex session) a
 small executables that do the same observable job.
 """
 
+import json
 import stat
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from p2996.log import configure
 from p2996.models import Config
 
 TINY_CMAKE = """\
@@ -57,6 +59,24 @@ class Upstream:
 
 
 @pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def logs(capsys: pytest.CaptureFixture[str]) -> pytest.CaptureFixture[str]:
+    """The real JSON logging, pointed at pytest's captured streams."""
+    configure()
+    return capsys
+
+
+def events(capsys: pytest.CaptureFixture[str]) -> tuple[list[dict], list[dict]]:
+    """The JSON events logged so far: (stdout, stderr)."""
+    out, err = capsys.readouterr()
+    return [json.loads(line) for line in out.splitlines()], [json.loads(line) for line in err.splitlines()]
+
+
+@pytest.fixture
 def upstream(tmp_path: Path) -> Upstream:
     return Upstream(tmp_path / "upstream")
 
@@ -66,9 +86,9 @@ def cfg(tmp_path: Path, upstream: Upstream) -> Config:
     return Config(
         remote=upstream.url,
         branch="p2996",
-        root=str(tmp_path / "root"),
-        cache=str(tmp_path / "cache"),
-        lock=str(tmp_path / "state/heavy-gate.lock"),
+        root=tmp_path / "root",
+        cache=tmp_path / "cache",
+        lock=tmp_path / "state/heavy-gate.lock",
     )
 
 
@@ -90,8 +110,8 @@ def patches(tmp_path: Path) -> Path:
 @pytest.fixture
 def env(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     """The P2996_* variables mise.toml would set, for tests that go through the CLI."""
-    for name, value in vars(cfg).items():
-        monkeypatch.setenv(f"P2996_{name.upper()}", value)
+    for name, value in cfg.model_dump().items():
+        monkeypatch.setenv(f"P2996_{name.upper()}", str(value))
     return cfg
 
 

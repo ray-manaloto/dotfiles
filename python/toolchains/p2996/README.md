@@ -12,11 +12,22 @@ mise run //p2996:verify      # compile and run src/p2996/reflection.cpp with cla
 mise doctor project          # (in this folder) SDK, cmake, ninja, SWIG, Lua, doxygen, ocamlfind, venv, codex
 ```
 
+Every step reports as JSON lines (structlog through stdlib handlers): info on stdout, errors on
+stderr, exit 1 on failure; nothing prints. Child processes run through AnyIO. The stack is DL-762:
+
+- `schema/p2996.schema.json` holds `Config`, the `Command` enum and one model per command;
+  `codegen` writes them to `src/p2996/models.py` as frozen pydantic v2 models.
+- `p2996 <command>` parses the rest of argv into that command's model with pydantic-settings
+  `CliApp` (kebab-case flags, `--flag/--no-flag` booleans).
+- Each task's `usage` spec in `mise.toml` is checked against its model by `tests/test_usage.py`: the
+  real `usage explain` binds a full argv, bash expands the task's `run` line, and the CLI must parse
+  every value into the model.
+
 Development: `mise run //p2996:check` runs `lint` (ruff check, ruff format --check, ty, and
-`models.py` matching the schema) and `test` (pytest, 100% line and branch coverage, real git, cmake,
-ninja and Apple clang; stand-in executables only for clang++-p2996 and codex). `codegen` writes
-`src/p2996/models.py` from `schema/p2996.schema.json`; `lock` re-resolves every dependency to its
-latest release; `sync` installs the lock. uv runs only through these tasks.
+`models.py` matching the schema) and `test` (pytest with the AnyIO plugin, 100% line and branch
+coverage, real git, cmake, ninja, mise, usage and Apple clang; stand-in executables only for
+clang++-p2996 and codex). `lock` re-resolves every dependency to its latest release; `sync` installs
+the lock. uv runs only through these tasks, with this folder's `.venv` (`_.python.venv`).
 
 ## Settings
 

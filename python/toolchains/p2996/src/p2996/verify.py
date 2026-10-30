@@ -1,26 +1,30 @@
 """p2996 verify: clang++-p2996 loads its default config, then compiles and runs reflection.cpp."""
 
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 
+import anyio
+
+from . import proc
 from .config import RESOURCES, bin_dir
-from .models import Config
+from .log import P2996Error, log
+from .models import Config, Verify
 
 
-def run(cfg: Config, sample: Path = RESOURCES / "reflection.cpp", expect: str = "reflection value=43") -> None:
-    cxx = str(bin_dir(cfg) / "clang++-p2996")
+async def run(
+    cfg: Config, _: Verify, sample: Path = RESOURCES / "reflection.cpp", expect: str = "reflection value=43"
+) -> None:
+    cxx = bin_dir(cfg) / "clang++-p2996"
     env = {k: v for k, v in os.environ.items() if k not in ("SDKROOT", "CLANG_NO_DEFAULT_CONFIG")}
-    version = subprocess.run([cxx, "--version"], check=True, capture_output=True, text=True, env=env).stdout
+    version = await proc.output(cxx, "--version", env=env)
     if "/arm64-apple-darwin-clang++.cfg" not in version:
         msg = f"p2996 verify: {cxx} does not load arm64-apple-darwin-clang++.cfg"
-        raise SystemExit(msg)
-    with tempfile.TemporaryDirectory() as tmp:
+        raise P2996Error(msg)
+    async with anyio.TemporaryDirectory() as tmp:
         exe = Path(tmp) / "reflection"
-        subprocess.run([cxx, "-std=c++26", "-freflection", str(sample), "-o", str(exe)], check=True, env=env)
-        out = subprocess.run([exe], check=True, capture_output=True, text=True).stdout.strip()
+        await proc.run(cxx, "-std=c++26", "-freflection", sample, "-o", exe, env=env)
+        out = await proc.output(exe)
     if out != expect:
         msg = f"p2996 verify: sample printed {out!r}"
-        raise SystemExit(msg)
-    print(f"p2996 verify OK: {version.splitlines()[0]}")
+        raise P2996Error(msg)
+    log.info("verify ok", compiler=version.splitlines()[0])
