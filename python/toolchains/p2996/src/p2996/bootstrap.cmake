@@ -22,8 +22,10 @@ set(MLIR_ENABLE_BINDINGS_PYTHON ON CACHE BOOL "" FORCE)
 set(LLVM_ENABLE_ASSERTIONS ON CACHE BOOL "Diagnose experimental compiler failures" FORCE)
 set(LLVM_BUILD_LLVM_DYLIB ON CACHE BOOL "" FORCE)
 set(LLVM_LINK_LLVM_DYLIB ON CACHE BOOL "" FORCE)
-# LLVM installs the suffixed driver names itself (replaces the default clang++;clang-cl;clang-cpp).
-set(CLANG_LINKS_TO_CREATE "clang-p2996;clang++-p2996;clang-cpp-p2996" CACHE STRING "" FORCE)
+# LLVM installs the suffixed driver names itself (the default list is clang++;clang-cl;clang-cpp).
+# clang++ and clang-cpp stay too: the runtimes sub-build compiles with build/bin/clang++ (DL-760);
+# p2996 install links only the -p2996 names into ROOT/bin, so PATH never sees an unsuffixed driver.
+set(CLANG_LINKS_TO_CREATE "clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996" CACHE STRING "" FORCE)
 set(CLANG_LINK_CLANG_DYLIB ON CACHE BOOL "Shared Clang libraries for IWYU" FORCE)
 set(LLVM_INSTALL_TOOLCHAIN_ONLY OFF CACHE BOOL "Keep headers and CMake exports for IWYU" FORCE)
 set(LLVM_PARALLEL_COMPILE_JOBS 4 CACHE STRING "" FORCE)

@@ -69,8 +69,9 @@ zlib, zstd, libxml2, libedit and the compiler-rt runtimes keep LLVM's defaults, 
 skip Linux-only parts. Not built on macOS: libclc, offload, llvm-libgcc, cross-project-tests.
 A Linux build needs its own cache with the Linux choices.
 The runtimes and builtins sub-builds get the same platform values through `RUNTIMES_CMAKE_ARGS` and `BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is
-`clang-p2996;clang++-p2996;clang-cpp-p2996`, so LLVM installs the suffixed driver names itself
-(and no unsuffixed `clang++`, `clang-cl` or `clang-cpp`).
+`clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996`: LLVM installs the suffixed driver
+names itself, and keeps `clang++` and `clang-cpp` because the runtimes sub-build compiles with
+`build/bin/clang++` (DL-760); `install` links only the `-p2996` names into `ROOT/bin`.
 
 ## Prefix layout
 

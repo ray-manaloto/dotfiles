@@ -8,7 +8,8 @@ from p2996.models import Config
 
 # One install tree per build dir p2996 install reads: the main build and the two runtime sub-builds.
 TREES = {
-    ".": ["clang", "clang-p2996", "clang++-p2996", "llvm-ar"],
+    # clang and clang++ are kept for the runtimes sub-build (DL-760) but must not reach ROOT/bin.
+    ".": ["clang", "clang++", "clang-p2996", "clang++-p2996", "llvm-ar"],
     "runtimes/builtins-bins": [],
     "runtimes/runtimes-bins": ["runtime-tool"],
 }
