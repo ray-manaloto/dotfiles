@@ -13,6 +13,7 @@
 min_version = "2026.10.19"
 
 [settings]
+github.credential_command = "gh auth token"
 experimental = true
 #verbose = true
 activate_aggressive = true
