@@ -46,7 +46,7 @@ endforeach()
 set(DARWIN_osx_ARCHS arm64 CACHE STRING "" FORCE)
 set(DARWIN_osx_BUILTIN_ARCHS arm64 CACHE STRING "" FORCE)
 set(DARWIN_macosx_CACHED_SYSROOT "${_sdk}" CACHE STRING "" FORCE)
-# The runtimes and builtins sub-builds get the same platform values explicitly.
-set(_runtime_args "-DCMAKE_OSX_ARCHITECTURES=arm64;-DCMAKE_OSX_DEPLOYMENT_TARGET=27.0;-DCMAKE_OSX_SYSROOT=${_sdk};-DCMAKE_INSTALL_RPATH=@loader_path/../lib")
+# The runtimes and builtins sub-builds get the same platform values and docs-off explicitly.
+set(_runtime_args "-DLLVM_INCLUDE_DOCS=OFF;-DCMAKE_OSX_ARCHITECTURES=arm64;-DCMAKE_OSX_DEPLOYMENT_TARGET=27.0;-DCMAKE_OSX_SYSROOT=${_sdk};-DCMAKE_INSTALL_RPATH=@loader_path/../lib")
 set(RUNTIMES_CMAKE_ARGS "${_runtime_args}" CACHE STRING "" FORCE)
 set(BUILTINS_CMAKE_ARGS "${_runtime_args}" CACHE STRING "" FORCE)
