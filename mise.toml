@@ -64,7 +64,7 @@ grep -qx 'VERDICT: PASS' "$out"
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
-	command = test "${HK:-1}" = "0" || ~/.local/share/mise/shims/mise doctor project
+	command = test "${HK:-1}" = "0" || sh -c '~/.local/share/mise/shims/mise doctor project'
 	event = pre-push
 ''' }
 "~/.config/mise/agentsview-native/fnox.toml" = { source = "unix/home/.config/mise/agentsview-native/fnox.toml", mode = "symlink" }
