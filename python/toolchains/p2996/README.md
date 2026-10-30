@@ -44,6 +44,10 @@ delete it (upstream fixed it) or rebase it.
   `__need_infinity_nan` include, which the macOS 27 SDK headers make (2 files).
 - `asan-macos27-dyld.patch`: on macOS 27, ASan startup finds the dyld header through
   `TASK_DYLD_INFO` instead of shared-cache enumeration, which allocates too early.
+- `lldb-base-specifier-derived.patch` (DL-759): P2996 replaced `CXXBaseSpecifier`'s base-of-class
+  flag with the derived record, and lldb's `TypeSystemClang` no longer compiled; the specifier now
+  starts without one and `TransferBaseClasses` sets it, as Sema does. Upstream PR
+  bloomberg/clang-p2996#242 (closed unmerged) passed the base class instead.
 
 ## CMake
 

@@ -1,0 +1,20 @@
+diff --git a/lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.cpp b/lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.cpp
+index 82e07bb8e..7d18f6b0d 100644
+--- a/lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.cpp
++++ b/lldb/source/Plugins/TypeSystem/Clang/TypeSystemClang.cpp
+@@ -7861,0 +7862,3 @@ TypeSystemClang::CreateBaseClassSpecifier(lldb::opaque_compiler_type_t type,
++  // P2996 replaced the base_of_class flag with the derived record, which
++  // TransferBaseClasses sets; isBaseOfClass() now reads it from there.
++  (void)base_of_class;
+@@ -7863 +7866 @@ TypeSystemClang::CreateBaseClassSpecifier(lldb::opaque_compiler_type_t type,
+-      clang::SourceRange(), is_virtual, base_of_class,
++      clang::SourceRange(), is_virtual,
+@@ -7866 +7869 @@ TypeSystemClang::CreateBaseClassSpecifier(lldb::opaque_compiler_type_t type,
+-      clang::SourceLocation());
++      /*D=*/nullptr, clang::SourceLocation());
+@@ -7882 +7885,2 @@ bool TypeSystemClang::TransferBaseClasses(
+-  for (auto &b : bases)
++  for (auto &b : bases) {
++    b->setDerived(cxx_record_decl);
+@@ -7883,0 +7888 @@ bool TypeSystemClang::TransferBaseClasses(
++  }

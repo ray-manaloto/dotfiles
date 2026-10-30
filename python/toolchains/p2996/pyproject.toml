@@ -5,12 +5,18 @@ description = "Fetch, build, install and check clang-p2996 (C++26 reflection) on
 requires-python = ">=3.15"
 # What LLVM's configure looks for in the Python it is given: opt-viewer (pygments, pyyaml) and the
 # MLIR Python bindings (mlir/python/requirements.txt). Uncapped: the latest of every dependency
-# (DL-758), although that file caps each at the versions upstream tested (nanobind below 3).
+# (DL-758); the only exception is in [tool.uv] constraint-dependencies below.
 # p2996 build hands CMake this project's venv python.
 dependencies = ["pygments", "pyyaml", "numpy", "nanobind", "pybind11", "ml_dtypes"]
 
+[tool.uv]
+# DL-759, the one exception to latest: MLIR asks find_package(nanobind 2.4 CONFIG) and nanobind's
+# version file accepts only its own major (3.1.0 refused, MLIRDetectPythonEnv.cmake:57). Delete
+# this line once the p2996 branch asks for nanobind 3.
+constraint-dependencies = ["nanobind<3"]
+
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-reportlog"]
 
 [tool.ruff]
 line-length = 120

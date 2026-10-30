@@ -77,7 +77,8 @@ run = [
 [tasks.test]
 description = "Real tests (no mocking library) at 100% line and branch coverage"
 depends = ["sync"]
-run = "uv run --locked pytest"
+usage = 'flag "--report-log <file>" help="Also write a pytest report log (the visual plan reads it)"'
+run = 'uv run --locked pytest ${usage_report_log:+--report-log "$usage_report_log"}'
 
 [tasks.check]
 description = "lint and test"

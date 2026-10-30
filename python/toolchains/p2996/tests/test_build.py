@@ -1,4 +1,5 @@
 import fcntl
+import subprocess
 import sys
 from pathlib import Path
 
@@ -14,6 +15,9 @@ def test_dry_run_prints_both_cmake_commands(cfg: Config, patches: Path, capsys: 
     build.run(cfg, dry_run=True)
     configure, compile_ = capsys.readouterr().out.splitlines()
     assert configure.startswith("P2996_SDK=/")
+    lua = subprocess.run(["mise", "where", "lua"], check=True, capture_output=True, text=True).stdout.strip()
+    assert f" LUA_DIR={lua} " in configure
+    assert (Path(lua) / "include/lua.h").is_file()
     assert f"-C {config.RESOURCES / 'bootstrap.cmake'}" in configure
     assert f"-DCMAKE_INSTALL_PREFIX={config.prefix(cfg)}" in configure
     assert f"-DPython3_EXECUTABLE={sys.executable}" in configure

@@ -21,6 +21,9 @@ def run(cfg: Config, *, dry_run: bool, bootstrap: Path = RESOURCES / "bootstrap.
     env = {k: v for k, v in os.environ.items() if k not in _CLEARED}
     env["P2996_SDK"] = str(Path(_xcrun("--show-sdk-path")).resolve())
     env["NINJA_STATUS"] = "[%f/%t %es] "
+    # lua is on PATH through the mise shims, whose prefix has no headers; FindLua honours LUA_DIR.
+    lua = subprocess.run(["mise", "where", "lua"], check=True, capture_output=True, text=True)
+    env["LUA_DIR"] = lua.stdout.strip()
     configure = [
         "cmake",
         "-S",
@@ -41,7 +44,7 @@ def run(cfg: Config, *, dry_run: bool, bootstrap: Path = RESOURCES / "bootstrap.
     ]
     compile_ = ["cmake", "--build", str(build_dir(cfg)), "--parallel", "4"]
     if dry_run:
-        print(f"P2996_SDK={env['P2996_SDK']} {shlex.join(configure)}\n{shlex.join(compile_)}")
+        print(f"P2996_SDK={env['P2996_SDK']} LUA_DIR={env['LUA_DIR']} {shlex.join(configure)}\n{shlex.join(compile_)}")
         return
     # One heavy build at a time: the gate the legacy host_lock.py takes, held without waiting.
     lock_path = Path(cfg.lock)
