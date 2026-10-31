@@ -44,6 +44,13 @@ prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfil
 `bootstrap.cmake`, `build.py` and the Python version. No lock: each id has its own folders; two runs
 of one id at once are not supported.
 
+The same `[env]` holds `SCCACHE_DIR` (`~/.cache/dotfiles/sccache`), `SCCACHE_CACHE_SIZE` and
+`SCCACHE_IDLE_TIMEOUT`. Build compiles the main tree through sccache: `bootstrap.cmake` sets the CMake
+launchers from `P2996_LAUNCHER`, and build sets `SCCACHE_BASEDIRS` to this id's source and build folders,
+so a new id still hits the cache, then restarts the server, which reads these only when it starts. The
+runtimes sub-builds do not use it: they compile with the clang just built. `sccache --show-stats` reports
+the hits. A cached object can carry the path of the id that first compiled it in `__FILE__` text.
+
 ## Source
 
 Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/clang-p2996.git`

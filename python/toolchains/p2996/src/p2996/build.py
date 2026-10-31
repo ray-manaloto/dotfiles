@@ -39,6 +39,10 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     env["NINJA_STATUS"] = "[%f/%t %es] "
     # lua is on PATH through the mise shims, whose prefix has no headers; FindLua honours LUA_DIR.
     env["LUA_DIR"] = await proc.output("mise", "where", "lua")
+    # The real binary, not the mise shim, which would add 0.4 s to every compile.
+    sccache = env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
+    # Each id has its own folders; without these every id would miss the whole cache.
+    env["SCCACHE_BASEDIRS"] = f"{tree}:{built}"
     configure = [
         "cmake",
         "-S",
@@ -63,12 +67,14 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
             "build dry run",
             P2996_SDK=env["P2996_SDK"],
             LUA_DIR=env["LUA_DIR"],
+            SCCACHE_BASEDIRS=env["SCCACHE_BASEDIRS"],
             configure=shlex.join(configure),
             compile=shlex.join(compile_),
         )
         return
     built.mkdir(parents=True, exist_ok=True)
     link(started_build(cfg), name)
+    await proc.run(sccache, "--stop-server", env=env, check=False)  # The server reads SCCACHE_* when it starts.
     await proc.run(*configure, env=env, capture=False)
     await proc.run(*compile_, env=env, capture=False)
     temporary = built / f".number.{uuid4().hex}"

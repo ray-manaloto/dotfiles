@@ -11,6 +11,11 @@ P2996_BRANCH = "p2996"
 # Install root: ROOT/<id> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
 P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
+# sccache: one store that outlives every id. p2996 build adds SCCACHE_BASEDIRS and the launcher path.
+SCCACHE_DIR = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/sccache"
+SCCACHE_CACHE_SIZE = "60G"
+# Linking at the end of a build can pass the default 10 idle minutes; build restarts the server itself.
+SCCACHE_IDLE_TIMEOUT = "0"
 
 [tasks.source]
 description = "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches"

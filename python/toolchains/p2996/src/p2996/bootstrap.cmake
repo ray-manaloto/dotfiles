@@ -1,9 +1,12 @@
-# Initial cache for the clang-p2996 build (cmake -C). p2996 build sets P2996_SDK.
+# Initial cache for the clang-p2996 build (cmake -C). p2996 build sets P2996_SDK and P2996_LAUNCHER.
 set(_sdk "$ENV{P2996_SDK}")
 if(NOT IS_DIRECTORY "${_sdk}")
   message(FATAL_ERROR "Set P2996_SDK to the macOS SDK (run through mise run //p2996:build).")
 endif()
 set(CMAKE_OSX_SYSROOT "${_sdk}" CACHE PATH "" FORCE)
+# sccache for the main build; the runtimes sub-builds compile with the clang just built, which is new each time.
+set(CMAKE_C_COMPILER_LAUNCHER "$ENV{P2996_LAUNCHER}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_COMPILER_LAUNCHER "$ENV{P2996_LAUNCHER}" CACHE STRING "" FORCE)
 set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "" FORCE)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 27.0 CACHE STRING "" FORCE)

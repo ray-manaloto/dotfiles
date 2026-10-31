@@ -19,6 +19,20 @@ def option(command: str, name: str) -> str:
     return parts[parts.index(name) + 1]
 
 
+async def test_build_compiles_through_sccache_with_this_ids_folders_as_basedirs(
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    name = config.identity(commit, patches)
+    cache = (config.build_tree(cfg, name) / "CMakeCache.txt").read_text()
+    sccache = await proc.output("mise", "which", "sccache")
+    assert f"CMAKE_C_COMPILER_LAUNCHER:STRING={sccache}\n" in cache
+    assert f"CMAKE_CXX_COMPILER_LAUNCHER:STRING={sccache}\n" in cache
+    await build.run(cfg, Build(commit=commit, dry_run=True), patches)
+    dry = events(logs)[0][-1]
+    assert dry["SCCACHE_BASEDIRS"] == f"{config.checkout(cfg, name)}:{config.build_tree(cfg, name)}"
+
+
 async def test_dry_run_logs_both_cmake_commands(
     cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
 ) -> None:
