@@ -1,4 +1,4 @@
-"""p2996 build: configure (every run, so bootstrap.cmake edits apply) and build; a rerun resumes."""
+"""p2996 build: prepare the source, configure and build; a rerun resumes."""
 
 import os
 import shlex

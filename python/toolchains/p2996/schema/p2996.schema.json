@@ -11,8 +11,8 @@
       "properties": {
         "remote": { "type": "string", "description": "Upstream clang-p2996 git URL" },
         "branch": { "type": "string", "description": "Branch whose newest commit p2996 source builds" },
-        "root": { "type": "string", "format": "path", "description": "Install root: ROOT/<commit> is the prefix, ROOT/bin goes on PATH" },
-        "cache": { "type": "string", "format": "path", "description": "Holds one source tree and one build tree per commit" }
+        "root": { "type": "string", "format": "path", "description": "Install root: ROOT/<id> is the prefix, ROOT/bin goes on PATH" },
+        "cache": { "type": "string", "format": "path", "description": "Holds one source tree and one build tree per id" }
       },
       "required": ["remote", "branch", "root", "cache"],
       "additionalProperties": false

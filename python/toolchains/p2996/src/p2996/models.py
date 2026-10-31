@@ -35,11 +35,11 @@ class Config(BaseModel):
     """
     root: Path
     """
-    Install root: ROOT/<commit> is the prefix, ROOT/bin goes on PATH
+    Install root: ROOT/<id> is the prefix, ROOT/bin goes on PATH
     """
     cache: Path
     """
-    Holds one source tree and one build tree per commit
+    Holds one source tree and one build tree per id
     """
 
 

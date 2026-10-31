@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -28,6 +29,9 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
 
 def identity(commit: str, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> str:
     """The commit and a digest of its recipe, so a changed patch or bootstrap.cmake gets new folders."""
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        msg = f"p2996: {commit} is not a full commit id"
+        raise P2996Error(msg)
     digest = hashlib.sha256()
     for file in (*sorted(patches.glob("*.patch")), bootstrap):
         digest.update(file.name.encode())

@@ -41,18 +41,20 @@ async def test_dry_run_logs_both_cmake_commands(
 
 
 async def test_build_configures_with_the_real_bootstrap_cache_and_compiles(
-    cfg: Config, recipe: Recipe, upstream: Upstream
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
 ) -> None:
     head = git(upstream.path, "rev-parse", "HEAD")
     await recipe.source(head)
     built = Path((await recipe.build(head))["build"])
     cache = (built / "CMakeCache.txt").read_text()
     assert "CMAKE_OSX_DEPLOYMENT_TARGET:STRING=27.0" in cache
-    assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / head}" in cache
+    assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / config.identity(head, patches)}\n" in cache
     assert (built / "tiny").is_file()
 
 
-async def test_two_commits_build_in_separate_trees(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+async def test_two_commits_build_in_separate_trees(
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
+) -> None:
     old = upstream.release("v1")
     head = upstream.release("v2")
     old_checkout = (await recipe.source(old))["checkout"]
@@ -70,8 +72,10 @@ async def test_two_commits_build_in_separate_trees(cfg: Config, recipe: Recipe, 
     assert (old_done.get("commit"), head_done.get("commit")) == (old, head)
     assert f"CMAKE_HOME_DIRECTORY:INTERNAL={old_checkout}/llvm" in (old_tree / "CMakeCache.txt").read_text()
     assert f"CMAKE_HOME_DIRECTORY:INTERNAL={head_checkout}/llvm" in (head_tree / "CMakeCache.txt").read_text()
-    assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / old}" in (old_tree / "CMakeCache.txt").read_text()
-    assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / head}" in (head_tree / "CMakeCache.txt").read_text()
+    prefix = cfg.root / config.identity(old, patches)
+    assert f"CMAKE_INSTALL_PREFIX:PATH={prefix}\n" in (old_tree / "CMakeCache.txt").read_text()
+    prefix = cfg.root / config.identity(head, patches)
+    assert f"CMAKE_INSTALL_PREFIX:PATH={prefix}\n" in (head_tree / "CMakeCache.txt").read_text()
 
 
 async def test_build_prepares_the_commit_it_is_given(recipe: Recipe, upstream: Upstream) -> None:

@@ -8,7 +8,7 @@ _.python.venv = { path = ".venv" }
 P2996_REMOTE = "https://github.com/bloomberg/clang-p2996.git"
 # p2996 source builds the newest commit of this branch unless --commit names one.
 P2996_BRANCH = "p2996"
-# Install root: ROOT/<commit> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
+# Install root: ROOT/<id> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
 P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
 

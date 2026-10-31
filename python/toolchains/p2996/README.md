@@ -52,7 +52,7 @@ and `share` are fixed links through it.
 
 ## Patches (`src/p2996/patches/`, applied with `git apply --unidiff-zero`)
 
-An already-applied patch is skipped; one that no longer applies stops `source` with its name, so
+A patch that no longer applies stops `source` with its name, so
 delete it (upstream fixed it) or rebase it.
 
 - `sdk-rdf-comparator.patch`: the macOS 27 SDK libc++ that compiles LLVM rejects the stateful

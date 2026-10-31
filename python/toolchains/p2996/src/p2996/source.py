@@ -1,7 +1,6 @@
 """p2996 source: check out the newest commit of P2996_BRANCH (or --commit) and apply the patches."""
 
 import contextlib
-import re
 from pathlib import Path
 
 import anyio
@@ -19,9 +18,6 @@ async def latest(cfg: Config) -> str:
 
 async def run(cfg: Config, args: Source, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
     commit = args.commit or await latest(cfg)
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        msg = f"p2996 source: {commit} is not a full commit id"
-        raise P2996Error(msg)
     name = identity(commit, patches, bootstrap)
     tree = checkout(cfg, name)
     if not await anyio.Path(tree).is_dir():
