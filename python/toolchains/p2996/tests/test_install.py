@@ -178,6 +178,39 @@ async def test_a_rebuild_of_the_active_id_reaches_root(
     assert versions(Path(done["previous"]))["lib"] == "v1"
 
 
+async def test_a_rebuild_after_the_cache_is_gone_gets_its_own_prefix(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    first = (await recipe.install())["prefix"]
+    shutil.rmtree(cfg.cache)
+    await recipe.ship(commit)
+    done = await recipe.install()
+    assert done["prefix"] != first
+    assert done.get("previous") == f"{first}/view"
+    assert (cfg.root / "bin/clang++-p2996").resolve().is_relative_to(done["prefix"])
+
+
+async def test_an_interrupted_finish_keeps_the_installed_build(
+    recipe: Recipe, upstream: Upstream, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    first = (await recipe.install())["prefix"]
+
+    real = Path.replace
+
+    def interrupted(self: Path, target: Path) -> Path:
+        if target.name == "number":
+            raise OSError
+        return real(self, target)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "replace", interrupted)
+        with pytest.raises(OSError):  # noqa: PT011
+            await recipe.build(commit)
+    assert (await recipe.install())["prefix"] == first
+
+
 async def test_a_changed_recipe_for_the_active_commit_reaches_root(
     cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
 ) -> None:

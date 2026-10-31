@@ -63,16 +63,21 @@ def last_build(cfg: Config) -> Path:
     return build_dir(cfg) / "last"
 
 
-def finished(cfg: Config, name: str) -> Path:
-    """How many builds of an id finished; outside build_dir, so clean does not reuse a prefix."""
-    return cfg.cache / "finished" / name
+def next_number(cfg: Config, name: str) -> int:
+    """One past the prefixes of an id in ROOT, which outlive the cache: ROOT/<name> is 1, ROOT/<name>.<n> is n."""
+    return 1 + max((int(path.suffix[1:] or 1) for path in cfg.root.glob(f"{name}*")), default=0)
+
+
+def build_number(cfg: Config, name: str) -> Path:
+    """The number a finished build installs under; a tree with none is the first."""
+    return build_tree(cfg, name) / "number"
 
 
 def prefix_name(cfg: Config, name: str) -> str:
-    """ROOT/<name> for the first finished build of an id, ROOT/<name>.<n> for the nth."""
-    file = finished(cfg, name)
-    count = int(file.read_text()) if file.exists() else 1
-    return name if count == 1 else f"{name}.{count}"
+    """ROOT/<name> for build 1 of an id, ROOT/<name>.<n> for build n."""
+    file = build_number(cfg, name)
+    number = int(file.read_text()) if file.exists() else 1
+    return name if number == 1 else f"{name}.{number}"
 
 
 def started_build(cfg: Config) -> Path:

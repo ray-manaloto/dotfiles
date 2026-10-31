@@ -4,11 +4,23 @@ import os
 import shlex
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 import anyio
 
 from . import proc, source
-from .config import BOOTSTRAP, PATCHES, build_tree, checkout, finished, identity, last_build, link, started_build
+from .config import (
+    BOOTSTRAP,
+    PATCHES,
+    build_number,
+    build_tree,
+    checkout,
+    identity,
+    last_build,
+    link,
+    next_number,
+    started_build,
+)
 from .log import log
 from .models import Build, Config, Source
 
@@ -59,8 +71,8 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     link(started_build(cfg), name)
     await proc.run(*configure, env=env, capture=False)
     await proc.run(*compile_, env=env, capture=False)
-    done = finished(cfg, name)
-    done.parent.mkdir(exist_ok=True)
-    done.write_text(f"{int(done.read_text()) + 1 if done.exists() else 1}\n")
+    temporary = built / f".number.{uuid4().hex}"
+    temporary.write_text(f"{next_number(cfg, name)}\n")
+    temporary.replace(build_number(cfg, name))
     link(last_build(cfg), name)
     log.info("build done", build=str(built), commit=commit)
