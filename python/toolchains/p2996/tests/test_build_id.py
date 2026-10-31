@@ -32,6 +32,25 @@ configure()
 anyio.run(build.run, config.load(), Build(commit=sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]))
 """
 
+EXTERNAL_MAIN = """\
+cmake_minimum_required(VERSION 3.20)
+project(toy NONE)
+include(ExternalProject)
+ExternalProject_Add(sub
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/sub
+  BINARY_DIR ${CMAKE_BINARY_DIR}/runtimes/@FOLDER@
+  CMAKE_ARGS ${RUNTIMES_CMAKE_ARGS}
+  BUILD_COMMAND ""
+  INSTALL_COMMAND "")
+"""
+
+EXTERNAL_SUB = """\
+cmake_minimum_required(VERSION 3.20)
+project(sub NONE)
+set(TOY_ABI stable CACHE STRING "")
+file(WRITE ${CMAKE_BINARY_DIR}/abi "${TOY_ABI}\\n")
+"""
+
 RECORD_COMPILE = 'add_custom_target(record ALL COMMAND sh -c "echo x >> ${CMAKE_BINARY_DIR}/compiled" VERBATIM)\n'
 
 
@@ -243,3 +262,123 @@ async def test_an_sdk_file_replaced_in_place_changes_the_id(
     before = await ids.id(commit)
     (sdk / name).write_text("two\n")
     assert await ids.id(commit) != before
+
+
+@pytest.mark.parametrize("folder", ["builtins-bins", "runtimes-bins"])
+async def test_a_removed_runtime_setting_does_not_survive_in_the_sub_build(
+    cfg: Config, ids: Ids, upstream: Upstream, folder: str
+) -> None:
+    # A separate CMake cache, as LLVM's runtimes have; add_subdirectory in the toy cannot show this.
+    commit = upstream.commit(
+        {
+            "llvm/CMakeLists.txt": EXTERNAL_MAIN.replace("@FOLDER@", folder),
+            "llvm/sub/CMakeLists.txt": EXTERNAL_SUB,
+        }
+    )
+    plain = ids.bootstrap.read_text()
+    ids.add('set(RUNTIMES_CMAKE_ARGS "-DTOY_ABI=unstable" CACHE STRING "" FORCE)')
+    await ids.id(commit)
+    abi = cfg.cache / f"build/work/runtimes/{folder}/abi"
+    assert abi.read_text() == "unstable\n"
+    ids.bootstrap.write_text(plain)
+    ids.add('set(RUNTIMES_CMAKE_ARGS "" CACHE STRING "" FORCE)')
+    await ids.id(commit)
+    assert abi.read_text() == "stable\n"
+
+
+async def test_an_unchanged_runtime_setting_stays_in_the_sub_build(cfg: Config, ids: Ids, upstream: Upstream) -> None:
+    # The sub-build's arguments stay the same, so its removed cache must still be written again from them.
+    commit = upstream.commit(
+        {
+            "llvm/CMakeLists.txt": EXTERNAL_MAIN.replace("@FOLDER@", "runtimes-bins"),
+            "llvm/sub/CMakeLists.txt": EXTERNAL_SUB,
+        }
+    )
+    ids.add('set(RUNTIMES_CMAKE_ARGS "-DTOY_ABI=unstable" CACHE STRING "" FORCE)')
+    await ids.id(commit)
+    await ids.id(commit)
+    sub_build = cfg.cache / "build/work/runtimes/runtimes-bins"
+    assert (sub_build / "abi").read_text() == "unstable\n"
+    assert "TOY_ABI:STRING=unstable" in (sub_build / "CMakeCache.txt").read_text()
+
+
+@pytest.mark.parametrize("changed", ["lib/libpython3.15.dylib", "include/python3.15/Python.h"])
+async def test_python_linked_library_or_header_replaced_in_place_changes_the_id(
+    ids: Ids, tmp_path: Path, changed: str
+) -> None:
+    # The two records FindPython writes for what lldb links and includes; the interpreter stays the same.
+    home = tmp_path / "python"
+    for name in ("lib/libpython3.15.dylib", "include/python3.15/Python.h"):
+        (home / name).parent.mkdir(parents=True, exist_ok=True)
+        (home / name).write_text("one\n")
+    ids.add(f'set(_Python3_LIBRARY_RELEASE "{home}/lib/libpython3.15.dylib" CACHE INTERNAL "" FORCE)')
+    ids.add(f'set(_Python3_INCLUDE_DIR "{home}/include/python3.15" CACHE INTERNAL "" FORCE)')
+    before = await ids.id()
+    (home / changed).write_text("two\n")
+    assert await ids.id() != before
+
+
+def linked_python(home: Path) -> str:
+    """The cache record for an include folder whose header and subfolder are links into another folder."""
+    include = home / "include/python3.15"
+    include.mkdir(parents=True)
+    (home / "store/internal").mkdir(parents=True)
+    for name in ("Python.h", "internal/core.h"):
+        (home / "store" / name).write_text("one\n")
+    (include / "Python.h").symlink_to(home / "store/Python.h")
+    (include / "internal").symlink_to(home / "store/internal")
+    return f'set(_Python3_INCLUDE_DIR "{include}" CACHE INTERNAL "" FORCE)'
+
+
+@pytest.mark.parametrize("changed", ["Python.h", "internal/core.h"])
+async def test_a_python_header_behind_a_link_changes_the_id(ids: Ids, tmp_path: Path, changed: str) -> None:
+    ids.add(linked_python(tmp_path / "python"))
+    before = await ids.id()
+    (tmp_path / "python/store" / changed).write_text("two\n")
+    assert await ids.id() != before
+
+
+async def test_a_link_back_up_the_include_folder_ends_and_a_broken_link_counts(ids: Ids, tmp_path: Path) -> None:
+    ids.add(linked_python(tmp_path / "python"))
+    include = tmp_path / "python/include/python3.15"
+    (include / "self").symlink_to(include)
+    (include / "broken").symlink_to("gone.h")
+    before = await ids.id()
+    (include / "broken").unlink()
+    (include / "broken").symlink_to("elsewhere.h")
+    assert await ids.id() != before
+
+
+async def test_removing_a_link_back_up_changes_the_id(ids: Ids, tmp_path: Path) -> None:
+    ids.add(linked_python(tmp_path / "python"))
+    include = tmp_path / "python/include/python3.15"
+    (include / "self").symlink_to(include)
+    before = await ids.id()
+    (include / "self").unlink()
+    assert await ids.id() != before
+
+
+async def test_pointing_a_link_at_another_folder_above_changes_the_id(ids: Ids, tmp_path: Path) -> None:
+    ids.add(linked_python(tmp_path / "python"))
+    include = tmp_path / "python/include/python3.15"
+    (include / "nested").mkdir()
+    (include / "nested/up").symlink_to(include)
+    before = await ids.id()
+    (include / "nested/up").unlink()
+    (include / "nested/up").symlink_to(include / "nested")
+    assert await ids.id() != before
+
+
+async def test_a_link_back_up_keeps_the_id_when_the_folder_moves(ids: Ids, tmp_path: Path) -> None:
+    plain = ids.bootstrap.read_text()
+    found = []
+    for home in (tmp_path / "one", tmp_path / "two"):
+        ids.bootstrap.write_text(plain)
+        ids.add(linked_python(home))
+        include = home / "include/python3.15"
+        (include / "Python.h").unlink()
+        (include / "internal").unlink()
+        (include / "Python.h").write_text("one\n")
+        (include / "self").symlink_to(include)
+        found.append(await ids.id())
+    assert found[0] == found[1]

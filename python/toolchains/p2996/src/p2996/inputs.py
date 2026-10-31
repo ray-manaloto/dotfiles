@@ -17,8 +17,10 @@ _VOLATILE = (
     "LLVM_PARALLEL_LINK_JOBS",
     "LLVM_PARALLEL_TABLEGEN_JOBS",
 )
-# FindPython's own records hold a signature of the venv path; the resolved interpreter is hashed instead.
+# FindPython's own records hold a signature of the venv path; the resolved interpreter is hashed instead,
+# with what lldb links and includes.
 _PYTHON_RECORDS = "_Python3_"
+_PYTHON_LINKED = ("_Python3_LIBRARY_RELEASE", "_Python3_INCLUDE_DIR")
 
 
 def sha(path: Path) -> str:
@@ -26,13 +28,33 @@ def sha(path: Path) -> str:
 
 
 def tree_sha(top: Path) -> str:
-    """Every file under top by relative path and content; a link counts by where it points."""
+    """Every file under top by relative path and content, through links; a broken link counts by where it points."""
     digest = hashlib.sha256()
-    for here, _, names in sorted(top.walk()):
-        for path in (here / name for name in sorted(names)):
+
+    def add(folder: Path, above: tuple[Path, ...]) -> None:
+        real = folder.resolve()
+        if real in above:  # A link back up counts by how far up it points, which a moved folder keeps.
+            digest.update(f"{folder.relative_to(top)} up {len(above) - above.index(real)}".encode())
+            return
+        for path in sorted(folder.iterdir()):
+            if path.is_dir():
+                add(path, (*above, real))
+                continue
             digest.update(str(path.relative_to(top)).encode())
-            digest.update(str(path.readlink()).encode() if path.is_symlink() else path.read_bytes())
+            digest.update(path.read_bytes() if path.exists() else str(path.readlink()).encode())
+
+    add(top, ())
     return digest.hexdigest()
+
+
+def forget_sub_builds(built: Path) -> None:
+    """Remove every sub-build's cache: --fresh resets only the top one, and a sub-build keeps old settings."""
+    for cache in built.rglob("CMakeCache.txt"):
+        if cache.parent != built:
+            cache.unlink()
+    # Without its configure stamp a sub-build writes the cache again from its arguments.
+    for stamp in built.rglob("*-stamp*/*-configure"):
+        stamp.unlink()
 
 
 def query(built: Path) -> None:
@@ -76,12 +98,14 @@ def write(cfg: Config, commit: str, patches: Path, bootstrap: Path, sdk: Path) -
         # bootstrap.cmake counts through the values it set, so a comment in it changes nothing.
         if item.get("isExternal") and not item.get("isCMake") and path.is_file() and path != bootstrap:
             by_content(path)
+    linked = {e["name"]: Path(e["value"]) for e in found["cache"]["entries"] if e["name"] in _PYTHON_LINKED}
     inputs = {
         "commit": commit,
         "patches": {file.name: sha(file) for file in sorted(patches.glob("*.patch"))},
         "uv_lock": sha(config.PROJECT / "uv.lock"),
         "cmake": cmake,
         "python": sha(Path(sys.executable).resolve()),
+        "python_linked": {name: tree_sha(path) if path.is_dir() else sha(path) for name, path in linked.items()},
         # Compiles read SDK headers that configure never named, so the file API cannot cover them.
         "sdk": tree_sha(sdk),
         "compilers": {

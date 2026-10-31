@@ -58,6 +58,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
             compile=shlex.join(compile_),
         )
         return
+    await anyio.to_thread.run_sync(inputs.forget_sub_builds, built)
     inputs.query(built)
     await proc.run(*configure, env=env, capture=False)
     # Hashing every SDK file takes seconds, so it runs off the event loop.
