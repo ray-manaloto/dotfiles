@@ -52,12 +52,16 @@ flag "--out <file>" help="Report file (default review-python.md in the git dir, 
 '''
 run = '''
 out="${usage_out:-$(git rev-parse --git-path review-python.md)}"
+# Taken before Codex reads, so anything staged during the review stays unapproved.
+staged="$(git ls-files -s -- python | git hash-object --stdin)"
 { cat tasks/review/python.md; printf 'Path: %s\nCommit: %s\n' "$usage_path" "${usage_commit:-none}"; } |
   codex exec -C . -c 'sandbox_mode="read-only"' -o "$out" -
 printf "%s\n" "$(tail -n 1 "$out")"
 grep -qx 'VERDICT: PASS' "$out"
-if [ "$usage_path" = python ] && [ -z "${usage_commit:-}" ]; then
-  git ls-files -s -- python | git hash-object --stdin > "$(git rev-parse --git-path review-python.approved)"
+# The reviewer also reads unstaged files, so a PASS approves the index only when they match it.
+if [ "$usage_path" = python ] && [ -z "${usage_commit:-}" ] && git diff --quiet -- python &&
+  [ -z "$(git ls-files -o --exclude-standard -- python)" ]; then
+  printf '%s\n' "$staged" > "$(git rev-parse --git-path review-python.approved)"
 fi
 '''
 
