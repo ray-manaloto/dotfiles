@@ -65,7 +65,8 @@ def last_build(cfg: Config) -> Path:
 
 def next_number(cfg: Config, name: str) -> int:
     """One past the prefixes of an id in ROOT, which outlive the cache: ROOT/<name> is 1, ROOT/<name>.<n> is n."""
-    return 1 + max((int(path.suffix[1:] or 1) for path in cfg.root.glob(f"{name}*")), default=0)
+    found = (re.fullmatch(rf"{re.escape(name)}(?:\.([1-9][0-9]*))?", path.name) for path in cfg.root.glob(f"{name}*"))
+    return 1 + max((int(match[1] or 1) for match in found if match), default=0)
 
 
 def build_number(cfg: Config, name: str) -> Path:

@@ -63,3 +63,10 @@ def test_identity_follows_the_build_script_and_python(tmp_path: Path, monkeypatc
     assert second != first
     monkeypatch.setattr(sys, "version", "another python")
     assert config.identity("a" * 40, patches, bootstrap, script) != second
+
+
+def test_next_number_counts_only_real_prefixes(tmp_path: Path) -> None:
+    cfg = Config(remote="file:///x", branch="p2996", root=tmp_path / "root", cache=tmp_path / "cache")
+    for name in ("abc", "abc.2", "abc.backup", "abc.2.old", "abc.0", "abc.07", "abcd.9"):
+        (cfg.root / name).mkdir(parents=True)
+    assert config.next_number(cfg, "abc") == 3
