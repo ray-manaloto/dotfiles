@@ -18,11 +18,16 @@ async def run(cfg: Config, _: Install) -> None:
     if not last.is_symlink():
         msg = "p2996 install: no successful build; run p2996 build"
         raise P2996Error(msg)
-    name = last.readlink().name
-    root, view, current = cfg.root, f"{name}/view", cfg.root / "current"
+    root = cfg.root
+    if bin_dir(cfg).is_dir() and not bin_dir(cfg).is_symlink():
+        msg = f"p2996 install: {bin_dir(cfg)} is a real folder, the old layout; move ROOT aside and install again"
+        raise P2996Error(msg)
+    built = last.readlink().name
+    name = config.prefix_name(cfg, built)
+    view, current = f"{name}/view", root / "current"
     active = str(current.readlink()) if current.is_symlink() else None
     if active != view:
-        await assemble(cfg, name)
+        await assemble(cfg, built, name)
         await verify.check(root / view / "bin/clang++-p2996")
         if active:
             config.link(root / "previous", active)
@@ -31,8 +36,6 @@ async def run(cfg: Config, _: Install) -> None:
         await write_configs(root / name)  # The SDK can move under a build that is otherwise current.
     for part in ENTRIES:
         entry = root / part
-        if not entry.is_symlink() and entry.is_dir():
-            shutil.rmtree(entry)  # The real ROOT/bin of the layout before this one.
         if not entry.is_symlink() or str(entry.readlink()) != f"current/{part}":
             config.link(entry, f"current/{part}")
     back = root / "previous"
@@ -58,9 +61,9 @@ async def write_configs(pre: Path) -> None:
     )
 
 
-async def assemble(cfg: Config, name: str) -> None:
-    """Install into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
-    pre, build = cfg.root / name, build_tree(cfg, name)
+async def assemble(cfg: Config, built: str, name: str) -> None:
+    """Install build <built> into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
+    pre, build = cfg.root / name, build_tree(cfg, built)
     env = {
         k: v
         for k, v in os.environ.items()

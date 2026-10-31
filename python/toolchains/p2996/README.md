@@ -53,8 +53,11 @@ into a temporary folder, patches applied there, then one rename to `source/<id>`
 changes after that, and a commit whose patch failed has no tree. Any change to the recipe
 means a new id, so a full rebuild and a normal install. A reinstall of the active id only rewrites the
 `.cfg` files, which is the repair after an SDK move. `build/last` links to the newest
-successful build, which is what install takes; `build/started` links to the newest build that began,
-which is the source tree review-log names. Install verifies the new version, keeps the old one
+successful build, which is what install takes. `build/started` links to the newest build that began:
+review-log names the tree a log's own paths point at, else that build's. `finished/<id>` in the cache
+counts finished builds of an id, so the second one installs to `ROOT/<id>.2` and goes through the same
+verify and swap, even after `clean`. Install refuses a real `ROOT/bin` folder, the layout before this
+one, and changes nothing. Install verifies the new version, keeps the old one
 as `ROOT/previous`, and swaps `ROOT/current` in one rename; `ROOT/bin`, `include`, `lib`, `libexec`
 and `share` are fixed links through it.
 

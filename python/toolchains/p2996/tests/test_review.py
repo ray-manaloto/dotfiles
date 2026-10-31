@@ -67,3 +67,16 @@ async def test_review_of_a_failed_build_names_the_tree_that_build_used(
     log.write_text("error\n")
     await review.run(cfg, ReviewLog(log=log))
     assert f"- LLVM source checkout: {tree}\n" in (tmp_path / "build.log.review.md").read_text()
+
+
+async def test_review_of_an_older_log_names_the_tree_that_log_came_from(
+    cfg: Config, recipe: Recipe, upstream: Upstream, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    older = (await recipe.source(upstream.release("v1")))["checkout"]
+    await recipe.ship(upstream.release("v2"))
+    executable(tmp_path / "fake-bin/codex", CODEX)
+    monkeypatch.setenv("PATH", f"{tmp_path / 'fake-bin'}:{os.environ['PATH']}")
+    log = tmp_path / "older.log"
+    log.write_text(f"{older}/llvm/main.c:1:1: warning: x\n")
+    await review.run(cfg, ReviewLog(log=log))
+    assert f"- LLVM source checkout: {older}\n" in (tmp_path / "older.log.review.md").read_text()

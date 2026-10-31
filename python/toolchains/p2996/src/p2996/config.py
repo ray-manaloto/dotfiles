@@ -63,6 +63,18 @@ def last_build(cfg: Config) -> Path:
     return build_dir(cfg) / "last"
 
 
+def finished(cfg: Config, name: str) -> Path:
+    """How many builds of an id finished; outside build_dir, so clean does not reuse a prefix."""
+    return cfg.cache / "finished" / name
+
+
+def prefix_name(cfg: Config, name: str) -> str:
+    """ROOT/<name> for the first finished build of an id, ROOT/<name>.<n> for the nth."""
+    file = finished(cfg, name)
+    count = int(file.read_text()) if file.exists() else 1
+    return name if count == 1 else f"{name}.{count}"
+
+
 def started_build(cfg: Config) -> Path:
     """Link to the newest build that started, failed ones too; review-log reads its source tree from it."""
     return build_dir(cfg) / "started"

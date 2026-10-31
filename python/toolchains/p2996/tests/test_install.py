@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -9,7 +10,7 @@ from p2996 import config, install, proc
 from p2996.log import P2996Error
 from p2996.models import Config, Install
 
-from .conftest import LINKS, Recipe, Upstream, tools, versions, whole
+from .conftest import LINKS, Recipe, Upstream, tools, tree, versions, whole
 
 pytestmark = pytest.mark.anyio
 
@@ -133,11 +134,8 @@ async def test_one_rename_swaps_the_whole_version(
     assert views[flip][0] in ("rename", "replace")
 
 
-async def test_install_takes_over_the_layout_the_old_install_left(
-    cfg: Config, recipe: Recipe, upstream: Upstream
-) -> None:
-    # What every machine has today: ROOT/bin is a real directory of links, the rest links to one prefix.
-    root, old = cfg.root, "0" * 40
+def old_layout(root: Path, old: str) -> None:
+    """What the install before this layout left: ROOT/bin is a real directory of links, the rest links to one prefix."""
     (root / old / "bin").mkdir(parents=True)
     (root / old / "include").mkdir()
     (root / old / "lib").mkdir()
@@ -150,13 +148,34 @@ async def test_install_takes_over_the_layout_the_old_install_left(
     for name in ("include", "lib", "share"):
         (root / name).symlink_to(f"{old}/{name}")
 
-    await recipe.ship(upstream.release("v2"))
-    await recipe.install()
 
-    assert versions(root) == whole("v2")
-    assert tools(root) == set(LINKS)
-    assert not (root / "share/old-marker").exists()
-    assert (root / old / "bin/clang++-p2996").is_file()
+async def test_install_refuses_the_old_layout_and_leaves_it_working(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    root = cfg.root
+    old_layout(root, "0" * 40)
+    await recipe.ship(upstream.release("v2"))
+    before = tree(root)
+    with pytest.raises(P2996Error, match="old layout"):
+        await install.run(cfg, Install())
+    assert tree(root) == before
+
+
+@pytest.mark.parametrize("cleaned", [False, True])
+async def test_a_rebuild_of_the_active_id_reaches_root(
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, *, cleaned: bool
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    await recipe.install()
+    # Stands for an input the id does not cover, such as the SDK: same id, different output.
+    tree_ = config.checkout(cfg, config.identity(commit, patches))
+    (tree_ / "llvm/tools/libc++.txt").write_text("version=rebuilt\n")
+    if cleaned:
+        shutil.rmtree(config.build_dir(cfg))
+    await recipe.ship(commit)
+    done = await recipe.install()
+    assert versions(cfg.root)["lib"] == "rebuilt"
+    assert versions(Path(done["previous"]))["lib"] == "v1"
 
 
 async def test_a_changed_recipe_for_the_active_commit_reaches_root(
