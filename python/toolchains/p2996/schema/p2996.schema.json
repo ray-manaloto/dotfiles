@@ -12,10 +12,9 @@
         "remote": { "type": "string", "description": "Upstream clang-p2996 git URL" },
         "branch": { "type": "string", "description": "Branch whose newest commit p2996 source builds" },
         "root": { "type": "string", "format": "path", "description": "Install root: ROOT/<commit> is the prefix, ROOT/bin goes on PATH" },
-        "cache": { "type": "string", "format": "path", "description": "Holds the source checkout and the build dir" },
-        "lock": { "type": "string", "format": "path", "description": "Heavy-build gate, one heavy build at a time" }
+        "cache": { "type": "string", "format": "path", "description": "Holds one source tree and one build tree per commit" }
       },
-      "required": ["remote", "branch", "root", "cache", "lock"],
+      "required": ["remote", "branch", "root", "cache"],
       "additionalProperties": false
     },
     "Command": {
@@ -32,15 +31,16 @@
       "additionalProperties": false
     },
     "Build": {
-      "description": "Configure and build clang-p2996; a rerun resumes the same build dir.",
+      "description": "Configure and build one commit in its own tree; a rerun resumes it.",
       "type": "object",
       "properties": {
+        "commit": { "type": ["string", "null"], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" },
         "dry_run": { "type": "boolean", "default": false, "description": "Print the cmake commands only" }
       },
       "additionalProperties": false
     },
     "Install": {
-      "description": "Install the build into ROOT/<commit> and link every tool as <name>-p2996 in ROOT/bin.",
+      "description": "Install the last successful build, verify it, then make it active in one rename.",
       "type": "object",
       "additionalProperties": false
     },
@@ -50,7 +50,7 @@
       "additionalProperties": false
     },
     "Clean": {
-      "description": "Delete the build folder; --source also deletes the checkout.",
+      "description": "Delete the build trees; --source also deletes the source trees.",
       "type": "object",
       "properties": {
         "source": { "type": "boolean", "default": false, "description": "Also delete the source checkout" }

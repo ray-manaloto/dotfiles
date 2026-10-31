@@ -39,11 +39,7 @@ class Config(BaseModel):
     """
     cache: Path
     """
-    Holds the source checkout and the build dir
-    """
-    lock: Path
-    """
-    Heavy-build gate, one heavy build at a time
+    Holds one source tree and one build tree per commit
     """
 
 
@@ -77,13 +73,17 @@ class Source(BaseModel):
 
 class Build(BaseModel):
     """
-    Configure and build clang-p2996; a rerun resumes the same build dir.
+    Configure and build one commit in its own tree; a rerun resumes it.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
+    commit: str | None = None
+    """
+    Build this commit instead of the newest on P2996_BRANCH
+    """
     dry_run: bool = False
     """
     Print the cmake commands only
@@ -92,7 +92,7 @@ class Build(BaseModel):
 
 class Install(BaseModel):
     """
-    Install the build into ROOT/<commit> and link every tool as <name>-p2996 in ROOT/bin.
+    Install the last successful build, verify it, then make it active in one rename.
     """
 
     model_config = ConfigDict(
@@ -114,7 +114,7 @@ class Verify(BaseModel):
 
 class Clean(BaseModel):
     """
-    Delete the build folder; --source also deletes the checkout.
+    Delete the build trees; --source also deletes the source trees.
     """
 
     model_config = ConfigDict(

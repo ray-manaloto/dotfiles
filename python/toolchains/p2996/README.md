@@ -33,16 +33,19 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 
 `mise.toml` `[env]` holds every value the package reads (the generated `Config`, field `<name>` from
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
-prefix `ROOT/<commit>`, only `ROOT/bin` on PATH), `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
-`source` and `build`) and `P2996_LOCK` (the heavy-build gate the legacy `host_lock.py` uses; build
-takes it without waiting, so one heavy build runs at a time).
+prefix `ROOT/<commit>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
+`source/<commit>` and `build/<commit>`). No lock: each commit has its own folders.
 
 ## Source
 
 Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/clang-p2996.git`
 (`git ls-remote` on each `source` run), unless `--commit` names one; build and install read the
-commit checked out in the cache, so a new upstream commit means a new prefix and a full rebuild.
-Shallow fetch of that commit; a commit change force-checks-out over the previous patches.
+tree of that commit, so a new upstream commit means a new prefix and a full rebuild. Shallow fetch
+into a temporary folder, patches applied there, then one rename to `source/<commit>`: a tree never
+changes after that, and a commit whose patch failed has no tree. `build/last` links to the newest
+successful build, which is what install takes. Install verifies the new version, keeps the old one
+as `ROOT/previous`, and swaps `ROOT/current` in one rename; `ROOT/bin`, `include`, `lib`, `libexec`
+and `share` are fixed links through it.
 
 ## Patches (`src/p2996/patches/`, applied with `git apply --unidiff-zero`)
 

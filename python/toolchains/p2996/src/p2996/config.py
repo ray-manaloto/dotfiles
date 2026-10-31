@@ -3,6 +3,7 @@
 import os
 from collections.abc import Mapping
 from pathlib import Path
+from uuid import uuid4
 
 from . import proc
 from .log import P2996Error
@@ -26,21 +27,33 @@ def src(cfg: Config) -> Path:
     return cfg.cache / "source"
 
 
+def checkout(cfg: Config, commit: str) -> Path:
+    """One prepared tree per commit; it appears whole, by rename, and never changes after that."""
+    return src(cfg) / commit
+
+
 def build_dir(cfg: Config) -> Path:
     return cfg.cache / "build"
+
+
+def build_tree(cfg: Config, commit: str) -> Path:
+    return build_dir(cfg) / commit
+
+
+def last_build(cfg: Config) -> Path:
+    """Link to the newest successful build; clean removes it with the rest of build_dir."""
+    return build_dir(cfg) / "last"
 
 
 def bin_dir(cfg: Config) -> Path:
     return cfg.root / "bin"
 
 
-async def commit(cfg: Config) -> str:
-    """The commit checked out in the cache; build and install use it, never a fresh lookup."""
-    return await git(src(cfg), "rev-parse", "HEAD")
-
-
-async def prefix(cfg: Config) -> Path:
-    return cfg.root / await commit(cfg)
+def link(path: Path, target: str) -> None:
+    """Point path at target in one rename, whatever link was there."""
+    new = path.with_name(f".{path.name}.{uuid4().hex}")
+    new.symlink_to(target)
+    new.replace(path)
 
 
 async def git(repo: Path, *args: str) -> str:

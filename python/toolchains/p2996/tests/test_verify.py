@@ -5,7 +5,7 @@ import pytest
 
 from p2996 import config, proc, verify
 from p2996.log import P2996Error
-from p2996.models import Config, Verify
+from p2996.models import Config
 
 from .conftest import events, executable
 
@@ -37,7 +37,7 @@ def sample(tmp_path: Path) -> Path:
 
 async def test_verify_compiles_and_runs_the_sample(cfg: Config, sample: Path, logs: pytest.CaptureFixture[str]) -> None:
     executable(config.bin_dir(cfg) / "clang++-p2996", STAND_IN)
-    await verify.run(cfg, Verify(), sample)
+    await verify.check(config.bin_dir(cfg) / "clang++-p2996", sample)
     [ok] = events(logs)[0]
     assert (ok["event"], ok["compiler"]) == ("verify ok", "clang version 23.0.0 (p2996 stand-in)")
 
@@ -47,13 +47,13 @@ async def test_verify_refuses_a_compiler_without_the_default_config(cfg: Config,
     config.bin_dir(cfg).mkdir(parents=True)
     (config.bin_dir(cfg) / "clang++-p2996").symlink_to(apple)
     with pytest.raises(P2996Error, match=re.escape("does not load arm64-apple-darwin-clang++.cfg")):
-        await verify.run(cfg, Verify(), sample)
+        await verify.check(config.bin_dir(cfg) / "clang++-p2996", sample)
 
 
 async def test_verify_refuses_a_wrong_answer(cfg: Config, sample: Path) -> None:
     executable(config.bin_dir(cfg) / "clang++-p2996", STAND_IN)
     with pytest.raises(P2996Error, match="sample printed 'reflection value=43'"):
-        await verify.run(cfg, Verify(), sample, expect="reflection value=44")
+        await verify.check(config.bin_dir(cfg) / "clang++-p2996", sample, expect="reflection value=44")
 
 
 def test_the_shipped_sample_uses_reflection() -> None:

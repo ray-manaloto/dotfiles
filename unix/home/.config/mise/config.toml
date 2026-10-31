@@ -380,6 +380,20 @@ mise run toolchain:verify
 description = "Render conf.d/toolchain.toml from [vars], install from it, then verify (DL-770)"
 # mise reads its config before [bootstrap.files] writes the fragment, so the second run installs from it.
 run = [
+  # DL-786: bootstrap skips an exact version it cannot install, so refuse before changing anything.
+  '''
+{% if os() == "macos" %}
+missing=""
+for want in gcc:{{ vars.gcc }} llvm:{{ vars.llvm }} lld:{{ vars.llvm }} lldb:{{ vars.llvm }}; do
+  name="${want%%:*}" version="${want#*:}"
+  case " $(brew list --versions "$name" 2>/dev/null) " in
+    *" $version "*) ;;
+    *) echo "bootstrap:toolchain: brew package $name $version is not installed" >&2; missing=1 ;;
+  esac
+done
+[ -z "$missing" ]
+{% endif %}
+''',
   "mise bootstrap --only files,packages --yes",
   "mise bootstrap --only files,packages --yes",
   "mise run toolchain:verify",
