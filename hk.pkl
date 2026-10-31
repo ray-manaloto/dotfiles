@@ -22,7 +22,13 @@ hooks {
     ["pre-commit"] {
         fix = true
         stash = "git"
-        steps = linters
+        steps = (linters) {
+            // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
+            ["python-review"] {
+                glob = List("python/**")
+                check = "mise run review:python:approved"
+            }
+        }
     }
     // Every commit a push would publish, branches and tags alike, never only the pushed range.
     ["pre-push"] {

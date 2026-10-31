@@ -38,20 +38,38 @@ run = "bash tasks/privacy/scan.sh"
 [tasks.pre-commit]
 run = "hk run pre-commit"
 
-# Run before committing a Python unit; fix or answer every finding, then rerun until PASS.
+# Run after staging a Python unit; fix or answer every finding, then rerun until PASS. A full PASS
+# records a fingerprint of the staged python/ files, which the pre-commit hook compares.
+# Pattern: jazzsequence/jazz-nextjs@9c427f84 .githooks/lib/approval.sh:48-64 (index fingerprint from
+# `git ls-files -s`, so a later `git add` voids the approval); Open-BFME/Open-BFME-1@5a6f78cf
+# .githooks/pre-commit:411,640 does it with `git write-tree`. Marketplace saved searches review-gate-*.
 [tasks."review:python"]
 description = "A read-only Codex reviewer checks the uncommitted changes against CODING_STANDARDS.md"
 usage = '''
 arg "[path]" default="python" help="Directory whose uncommitted changes are reviewed"
 flag "--commit <sha>" help="Review this commit instead of the uncommitted changes"
-flag "--out <file>" help="Report file (default .git/review-python.md, never tracked)"
+flag "--out <file>" help="Report file (default review-python.md in the git dir, never tracked)"
 '''
 run = '''
-out="${usage_out:-.git/review-python.md}"
+out="${usage_out:-$(git rev-parse --git-path review-python.md)}"
 { cat tasks/review/python.md; printf 'Path: %s\nCommit: %s\n' "$usage_path" "${usage_commit:-none}"; } |
   codex exec -C . -c 'sandbox_mode="read-only"' -o "$out" -
 printf "%s\n" "$(tail -n 1 "$out")"
 grep -qx 'VERDICT: PASS' "$out"
+if [ "$usage_path" = python ] && [ -z "${usage_commit:-}" ]; then
+  git ls-files -s -- python | git hash-object --stdin > "$(git rev-parse --git-path review-python.approved)"
+fi
+'''
+
+[tasks."review:python:approved"]
+description = "Refuse unless review:python passed on exactly the staged python/ files"
+run = '''
+approved="$(git rev-parse --git-path review-python.approved)"
+staged="$(git ls-files -s -- python | git hash-object --stdin)"
+if [ "$staged" != "$(cat "$approved" 2>/dev/null)" ]; then
+  echo "review:python has not passed on the staged python/ files; stage them, then mise run review:python" >&2
+  exit 1
+fi
 '''
 
 [dotfiles]
