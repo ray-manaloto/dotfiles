@@ -1,14 +1,13 @@
 import os
 import shutil
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
-from p2996 import config, install, proc
+from p2996 import build, config, install, proc
 from p2996.log import P2996Error
-from p2996.models import Config, Install
+from p2996.models import Build, Config, Install
 
 from .conftest import LINKS, Recipe, Upstream, tools, tree, versions, whole
 
@@ -48,24 +47,10 @@ async def test_install_makes_root_look_like_the_prefix(cfg: Config, installed: P
     assert not (root / "libexec").exists()
 
 
-async def test_a_failed_build_leaves_the_last_successful_one_on_record(
-    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
-) -> None:
-    good = await recipe.ship(upstream.release("v1"))
-    broken = upstream.release("v2", fail=True)
-    await recipe.source(broken)
-    with pytest.raises(subprocess.CalledProcessError):
-        await recipe.build(broken)
-    done = await recipe.install()
-    assert done["prefix"] == str(cfg.root / config.identity(good, patches))
-    assert done.get("commit") == good
-    assert versions(cfg.root) == whole("v1")
-
-
 async def test_install_refuses_when_no_build_succeeded(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
     commit = upstream.release("v1", fail=True)
     await recipe.source(commit)
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(P2996Error, match="failed to compile"):
         await recipe.build(commit)
     with pytest.raises(P2996Error, match="successful build"):
         await install.run(cfg, Install())
@@ -161,54 +146,28 @@ async def test_install_refuses_the_old_layout_and_leaves_it_working(
     assert tree(root) == before
 
 
-@pytest.mark.parametrize("cleaned", [False, True])
-async def test_a_rebuild_of_the_active_id_reaches_root(
-    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, *, cleaned: bool
-) -> None:
-    commit = await recipe.ship(upstream.release("v1"))
-    await recipe.install()
-    # Stands for an input the id does not cover, such as the SDK: same id, different output.
-    tree_ = config.checkout(cfg, config.identity(commit, patches))
-    (tree_ / "llvm/tools/libc++.txt").write_text("version=rebuilt\n")
-    if cleaned:
-        shutil.rmtree(config.build_dir(cfg))
-    await recipe.ship(commit)
-    done = await recipe.install()
-    assert versions(cfg.root)["lib"] == "rebuilt"
-    assert versions(Path(done["previous"]))["lib"] == "v1"
-
-
-async def test_a_rebuild_after_the_cache_is_gone_gets_its_own_prefix(
+async def test_a_rebuild_after_the_cache_is_gone_finds_its_install(
     cfg: Config, recipe: Recipe, upstream: Upstream
 ) -> None:
     commit = await recipe.ship(upstream.release("v1"))
     first = (await recipe.install())["prefix"]
     shutil.rmtree(cfg.cache)
-    await recipe.ship(commit)
-    done = await recipe.install()
-    assert done["prefix"] != first
-    assert done.get("previous") == f"{first}/view"
-    assert (cfg.root / "bin/clang++-p2996").resolve().is_relative_to(done["prefix"])
-
-
-async def test_an_interrupted_finish_keeps_the_installed_build(
-    recipe: Recipe, upstream: Upstream, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    commit = await recipe.ship(upstream.release("v1"))
-    first = (await recipe.install())["prefix"]
-
-    real = Path.replace
-
-    def interrupted(self: Path, target: Path) -> Path:
-        if target.name == "number":
-            raise OSError
-        return real(self, target)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(Path, "replace", interrupted)
-        with pytest.raises(OSError):  # noqa: PT011
-            await recipe.build(commit)
+    await recipe.source(commit)
+    await build.run(cfg, Build(commit=commit), recipe.patches)
+    assert recipe.logged("build skipped").get("commit") == commit
     assert (await recipe.install())["prefix"] == first
+
+
+async def test_a_skipped_build_of_an_older_id_makes_it_active_again(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    old = await recipe.ship(upstream.release("v1"))
+    first = (await recipe.install())["prefix"]
+    await recipe.ship(upstream.release("v2"))
+    await recipe.install()
+    await build.run(cfg, Build(commit=old), recipe.patches)
+    assert (await recipe.install())["prefix"] == first
+    assert versions(cfg.root) == whole("v1")
 
 
 async def test_a_changed_recipe_for_the_active_commit_reaches_root(
@@ -231,3 +190,37 @@ async def test_reinstalling_rewrites_the_default_configs(cfg: Config, installed:
     file.write_text("-isysroot /gone\n")
     await install.run(cfg, Install())
     assert file.read_text() == good
+
+
+async def crashed_install(cfg: Config, recipe: Recipe, commit: str) -> None:
+    """Leave what a crash partway through assembly leaves: a view with parts missing, no mark, nothing active."""
+    prefix = Path((await recipe.install())["prefix"])
+    (prefix / "installed").unlink()
+    (prefix / "view/include").unlink()
+    (prefix / "view/bin/llvm-ar-p2996").unlink()
+    (cfg.root / "current").unlink()
+    assert prefix.name.startswith(commit)
+
+
+async def test_an_interrupted_install_is_assembled_again(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    await crashed_install(cfg, recipe, await recipe.ship(upstream.release("v1")))
+    await recipe.install()
+    assert tools(cfg.root) == set(LINKS)
+    assert versions(cfg.root) == whole("v1")
+
+
+async def test_an_interrupted_install_does_not_skip_the_next_build(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    await crashed_install(cfg, recipe, commit)
+    assert (await recipe.build(commit)).get("commit") == commit
+
+
+async def test_an_install_that_failed_verify_does_not_skip_the_next_build(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    commit = await recipe.ship(upstream.release("v1", answer=44))
+    with pytest.raises(P2996Error):
+        await install.run(cfg, Install())
+    assert (await recipe.build(commit)).get("commit") == commit

@@ -11,10 +11,11 @@ P2996_BRANCH = "p2996"
 # Install root: ROOT/<id> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
 P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
-# sccache: one store that outlives every id. p2996 build adds SCCACHE_BASEDIRS and the launcher path.
+# sccache: one store that outlives every id. p2996 build adds the launcher path.
+# Eviction is size LRU only, with no age limit (sccache docs/Local.md), so this size is the only cleanup.
 SCCACHE_DIR = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/sccache"
 SCCACHE_CACHE_SIZE = "60G"
-# Linking at the end of a build can pass the default 10 idle minutes; build restarts the server itself.
+# Linking at the end of a build can pass the default 10 idle minutes.
 SCCACHE_IDLE_TIMEOUT = "0"
 
 [tasks.source]
@@ -23,7 +24,7 @@ usage = 'flag "--commit <sha>" help="Build this commit instead of the newest on 
 run = 'uv run --locked p2996 source ${usage_commit:+--commit "$usage_commit"}'
 
 [tasks.build]
-description = "Prepare, configure and build one commit (hours) in its own tree; a rerun resumes it"
+description = "Prepare, configure and build one commit (hours), skipping an installed id; a rerun resumes it"
 usage = '''
 flag "--commit <sha>" help="Build this commit instead of the newest on P2996_BRANCH"
 flag "--dry-run" help="Print the cmake commands only"
@@ -39,7 +40,7 @@ description = "Compile and run reflection.cpp with clang++-p2996"
 run = "uv run --locked p2996 verify"
 
 [tasks.clean]
-description = "Delete the build trees for a clean build; --source also deletes the source trees"
+description = "Delete the build tree for a clean build; --source also deletes the source tree"
 usage = 'flag "--source" help="Also delete the source checkout (source fetches it again)"'
 run = 'uv run --locked p2996 clean ${usage_source:+--source}'
 

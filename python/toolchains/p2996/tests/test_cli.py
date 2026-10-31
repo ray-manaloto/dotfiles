@@ -3,7 +3,7 @@ from pathlib import Path
 import anyio
 import pytest
 
-from p2996 import cli, config, source
+from p2996 import build, cli, config
 from p2996.models import Build, Command, Config, ReviewLog
 
 from .conftest import Upstream, events, executable, fails, versions, whole
@@ -56,12 +56,9 @@ def test_source_build_install_verify_through_the_cli(
     # The shipped LLVM patches name files the toy upstream lacks: source stops with the first one's
     # name, as it would after an upstream rewrite, so the test's patch prepares the commit instead.
     assert f"asan-macos27-dyld.patch no longer applies to {head}" in fails(["source", "--commit", head], logs)["event"]
-    tree = config.checkout(env, config.identity(head))
-    tree.mkdir(parents=True)
-    anyio.run(source.prepare, tree, env, head, patches)
     logs.readouterr()
     cli.main(["build", "--commit", head, "--dry-run"])
-    cli.main(["build", "--commit", head])
+    anyio.run(build.run, env, Build(commit=head), patches)  # The test's patch; the CLI builds with the shipped ones.
     cli.main(["install"])
     cli.main(["verify"])
     out, err = events(logs)
@@ -104,4 +101,4 @@ def test_review_log_through_the_cli(env: Config, tmp_path: Path, monkeypatch: py
     log = tmp_path / "build.log"
     log.write_text("")
     cli.main(["review-log", "--log", str(log), "--out", str(tmp_path / "r.md")])
-    assert f"- LLVM source checkout: {config.src(env)}" in (tmp_path / "r.md").read_text()
+    assert f"- LLVM source checkout: {config.checkout(env)}" in (tmp_path / "r.md").read_text()

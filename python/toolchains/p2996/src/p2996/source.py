@@ -1,12 +1,12 @@
-"""p2996 source: check out the newest commit of P2996_BRANCH (or --commit) and apply the patches."""
+"""p2996 source: reset the one source tree to the newest commit of P2996_BRANCH (or --commit) and patch it."""
 
-import contextlib
+import re
 from pathlib import Path
 
 import anyio
 
 from . import proc
-from .config import BOOTSTRAP, PATCHES, checkout, git, identity, src
+from .config import PATCHES, checkout, git, last_build
 from .log import P2996Error, log
 from .models import Config, Source
 
@@ -16,27 +16,24 @@ async def latest(cfg: Config) -> str:
     return out.split()[0]
 
 
-async def run(cfg: Config, args: Source, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
+async def run(cfg: Config, args: Source, patches: Path = PATCHES) -> None:
     commit = args.commit or await latest(cfg)
-    name = identity(commit, patches, bootstrap)
-    tree = checkout(cfg, name)
-    if not await anyio.Path(tree).is_dir():
-        src(cfg).mkdir(parents=True, exist_ok=True)
-        async with anyio.TemporaryDirectory(dir=str(src(cfg)), prefix=".new-") as tmp:
-            new = Path(tmp) / name
-            new.mkdir()
-            await prepare(new, cfg, commit, patches)
-            # A second run of this commit may have got there first; its tree is just as good.
-            with contextlib.suppress(OSError):
-                new.rename(tree)
-            await git(tree, "rev-parse", "HEAD")  # Any other rename failure left no tree; stop here.
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        msg = f"p2996: {commit} is not a full commit id"
+        raise P2996Error(msg)
+    # The tree is about to change, so nothing in it can be installed until a build succeeds on it.
+    last_build(cfg).unlink(missing_ok=True)
+    tree = checkout(cfg)
+    tree.mkdir(parents=True, exist_ok=True)
+    await prepare(tree, cfg, commit, patches)
     log.info("source ready", checkout=str(tree), commit=commit)
 
 
 async def prepare(tree: Path, cfg: Config, commit: str, patches: Path) -> None:
     await git(tree, "init", "-q")
     await git(tree, "fetch", "--depth=1", "--no-tags", cfg.remote, commit)
-    await git(tree, "-c", "advice.detachedHead=false", "checkout", "--detach", "FETCH_HEAD")
+    await git(tree, "-c", "advice.detachedHead=false", "checkout", "--force", "--detach", "FETCH_HEAD")
+    await git(tree, "clean", "-ffdxq")
     for patch in sorted([p async for p in anyio.Path(patches).glob("*.patch")]):
         if (await proc.run("git", "-C", tree, "apply", "--unidiff-zero", patch, check=False)).returncode != 0:
             msg = (

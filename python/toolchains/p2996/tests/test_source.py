@@ -1,13 +1,12 @@
 from pathlib import Path
 
-import anyio
 import pytest
 
 from p2996 import build, config, source
 from p2996.log import P2996Error
 from p2996.models import Build, Config, Source
 
-from .conftest import Recipe, Upstream, events, git, tree
+from .conftest import Recipe, Upstream, events, git
 
 pytestmark = pytest.mark.anyio
 
@@ -34,35 +33,17 @@ async def test_first_run_checks_out_the_newest_commit_and_patches_it(
     assert not err
 
 
-async def test_a_new_upstream_commit_gets_its_own_tree_and_leaves_the_old_one_untouched(
-    recipe: Recipe, upstream: Upstream
-) -> None:
+async def test_a_new_commit_replaces_the_tree_in_place(recipe: Recipe, upstream: Upstream) -> None:
     old = git(upstream.path, "rev-parse", "HEAD")
     first = Path((await recipe.source(old))["checkout"])
-    before = tree(first)
     head = upstream.write("llvm/new.txt", "new\n")
-    second = Path((await recipe.source(head))["checkout"])
-    assert second != first
-    assert tree(first) == before
-    assert git(second, "rev-parse", "HEAD") == head
-    assert (second / "llvm/new.txt").is_file()
-    assert (second / "notes.txt").read_text() == PATCHED
-    # Going back finds the old tree as it was: nothing to fetch or rebuild.
-    assert (await recipe.source(old))["checkout"] == str(first)
-    assert tree(first) == before
-
-
-async def test_the_same_commit_prepared_twice_at_once_gives_one_complete_tree(
-    cfg: Config, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
-) -> None:
-    head = git(upstream.path, "rev-parse", "HEAD")
-    async with anyio.create_task_group() as running:
-        running.start_soon(source.run, cfg, Source(commit=head), patches)
-        running.start_soon(source.run, cfg, Source(commit=head), patches)
-    ready = [e["checkout"] for e in events(logs)[0] if e["event"] == "source ready"]
-    assert len(ready) == 2
-    assert ready[0] == ready[1]
-    assert (Path(ready[0]) / "notes.txt").read_text() == PATCHED
+    assert Path((await recipe.source(head))["checkout"]) == first
+    assert git(first, "rev-parse", "HEAD") == head
+    assert (first / "llvm/new.txt").is_file()
+    assert (first / "notes.txt").read_text() == PATCHED
+    await recipe.source(old)
+    assert not (first / "llvm/new.txt").exists()
+    assert (first / "notes.txt").read_text() == PATCHED
 
 
 async def test_a_patch_upstream_broke_stops_with_its_name(cfg: Config, upstream: Upstream, patches: Path) -> None:
@@ -73,16 +54,13 @@ async def test_a_patch_upstream_broke_stops_with_its_name(cfg: Config, upstream:
         await build.run(cfg, Build(commit=head))
 
 
-async def test_a_changed_patch_gets_its_own_tree(recipe: Recipe, upstream: Upstream, patches: Path) -> None:
+async def test_a_changed_patch_replaces_the_old_one(recipe: Recipe, upstream: Upstream, patches: Path) -> None:
     head = upstream.write("a.txt", "x\n")
-    first = Path((await recipe.source(head))["checkout"])
-    before = tree(first)
+    tree = Path((await recipe.source(head))["checkout"])
     patch = patches / "notes.patch"
     patch.write_text(patch.read_text().replace("TWO", "Two"))
-    second = Path((await recipe.source(head))["checkout"])
-    assert second != first
-    assert (second / "notes.txt").read_text() == "one\nTwo\nthree\n"
-    assert tree(first) == before
+    await recipe.source(head)
+    assert (tree / "notes.txt").read_text() == "one\nTwo\nthree\n"
 
 
 async def test_a_commit_that_is_not_a_full_sha_is_refused(cfg: Config) -> None:

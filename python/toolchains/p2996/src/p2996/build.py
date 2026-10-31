@@ -1,27 +1,16 @@
-"""p2996 build: prepare the source, configure and build; a rerun resumes."""
+"""p2996 build: prepare the source, configure, and compile unless that id is already installed."""
 
 import os
 import shlex
+import subprocess
 import sys
 from pathlib import Path
-from uuid import uuid4
 
 import anyio
 
-from . import proc, source
-from .config import (
-    BOOTSTRAP,
-    PATCHES,
-    build_number,
-    build_tree,
-    checkout,
-    identity,
-    last_build,
-    link,
-    next_number,
-    started_build,
-)
-from .log import log
+from . import inputs, proc, source
+from .config import BOOTSTRAP, PATCHES, build_tree, checkout, configured_prefix, installed_mark, last_build, link
+from .log import P2996Error, log
 from .models import Build, Config, Source
 
 _CLEARED = ("CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "SDKROOT")
@@ -30,21 +19,19 @@ _CLEARED = ("CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "SDKROOT")
 async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
     commit = args.commit or await source.latest(cfg)
     if not args.dry_run:
-        await source.run(cfg, Source(commit=commit), patches, bootstrap)
-    name = identity(commit, patches, bootstrap)
-    tree = checkout(cfg, name)
-    built = build_tree(cfg, name)
+        await source.run(cfg, Source(commit=commit), patches)
+    tree, built = checkout(cfg), build_tree(cfg)
     env = {k: v for k, v in os.environ.items() if k not in _CLEARED}
     env["P2996_SDK"] = str(await anyio.Path(await proc.output("xcrun", "--show-sdk-path")).resolve())
     env["NINJA_STATUS"] = "[%f/%t %es] "
     # lua is on PATH through the mise shims, whose prefix has no headers; FindLua honours LUA_DIR.
     env["LUA_DIR"] = await proc.output("mise", "where", "lua")
     # The real binary, not the mise shim, which would add 0.4 s to every compile.
-    sccache = env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
-    # Each id has its own folders; without these every id would miss the whole cache.
-    env["SCCACHE_BASEDIRS"] = f"{tree}:{built}"
+    env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
     configure = [
         "cmake",
+        # A fresh cache: the id must not depend on what an earlier commit left in this folder.
+        "--fresh",
         "-S",
         str(tree / "llvm"),
         "-B",
@@ -55,7 +42,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
         str(bootstrap),
         f"-DCMAKE_C_COMPILER={await proc.output('xcrun', '-f', 'clang')}",
         f"-DCMAKE_CXX_COMPILER={await proc.output('xcrun', '-f', 'clang++')}",
-        f"-DCMAKE_INSTALL_PREFIX={cfg.root / name}",
+        f"-DCMAKE_INSTALL_PREFIX={configured_prefix(cfg)}",
         # This project's venv: the locked opt-viewer and MLIR modules. lldb links its base python,
         # so a python upgrade needs a rebuild.
         f"-DPython3_EXECUTABLE={sys.executable}",
@@ -67,18 +54,22 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
             "build dry run",
             P2996_SDK=env["P2996_SDK"],
             LUA_DIR=env["LUA_DIR"],
-            SCCACHE_BASEDIRS=env["SCCACHE_BASEDIRS"],
             configure=shlex.join(configure),
             compile=shlex.join(compile_),
         )
         return
-    built.mkdir(parents=True, exist_ok=True)
-    link(started_build(cfg), name)
-    await proc.run(sccache, "--stop-server", env=env, check=False)  # The server reads SCCACHE_* when it starts.
+    inputs.query(built)
     await proc.run(*configure, env=env, capture=False)
-    await proc.run(*compile_, env=env, capture=False)
-    temporary = built / f".number.{uuid4().hex}"
-    temporary.write_text(f"{next_number(cfg, name)}\n")
-    temporary.replace(build_number(cfg, name))
+    # Hashing every SDK file takes seconds, so it runs off the event loop.
+    name = await anyio.to_thread.run_sync(inputs.write, cfg, commit, patches, bootstrap, Path(env["P2996_SDK"]))
+    if installed_mark(cfg, name).exists():
+        link(last_build(cfg), name)
+        log.info("build skipped", id=name, commit=commit)
+        return
+    try:
+        await proc.run(*compile_, env=env, capture=False)
+    except subprocess.CalledProcessError as error:
+        msg = f"p2996 build: {commit} failed to compile; the previous install stays active"
+        raise P2996Error(msg) from error
     link(last_build(cfg), name)
-    log.info("build done", build=str(built), commit=commit)
+    log.info("build done", id=name, build=str(built), commit=commit)

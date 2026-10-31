@@ -1,9 +1,6 @@
 """The generated Config, loaded from the [env] of this project's mise.toml, and the paths it implies."""
 
-import hashlib
 import os
-import re
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -17,7 +14,6 @@ RESOURCES = Path(__file__).parent
 PROJECT = RESOURCES.parents[1]
 PATCHES = RESOURCES / "patches"
 BOOTSTRAP = RESOURCES / "bootstrap.cmake"
-BUILD = RESOURCES / "build.py"
 
 
 def load(environ: Mapping[str, str] = os.environ) -> Config:
@@ -29,61 +25,42 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
     return Config.model_validate({field: environ[name] for field, name in names.items()})
 
 
-def identity(commit: str, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP, script: Path = BUILD) -> str:
-    """The commit and a digest of its recipe, so a changed patch, script or python gets new folders."""
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        msg = f"p2996: {commit} is not a full commit id"
-        raise P2996Error(msg)
-    digest = hashlib.sha256(sys.version.encode())
-    for file in (*sorted(patches.glob("*.patch")), bootstrap, script):
-        digest.update(file.name.encode())
-        digest.update(file.read_bytes())
-    return f"{commit}-{digest.hexdigest()[:12]}"
-
-
 def src(cfg: Config) -> Path:
     return cfg.cache / "source"
 
 
-def checkout(cfg: Config, name: str) -> Path:
-    """One prepared tree per identity; it appears whole, by rename, and never changes after that."""
-    return src(cfg) / name
+def checkout(cfg: Config) -> Path:
+    """The one source tree: each build resets it to its commit and patches."""
+    return src(cfg) / "work"
 
 
 def build_dir(cfg: Config) -> Path:
     return cfg.cache / "build"
 
 
-def build_tree(cfg: Config, name: str) -> Path:
-    return build_dir(cfg) / name
+def build_tree(cfg: Config) -> Path:
+    """The one build tree: fixed paths let sccache and ninja reuse work across commits."""
+    return build_dir(cfg) / "work"
+
+
+def inputs_file(cfg: Config) -> Path:
+    """What the build found; the id is a digest of this file."""
+    return build_tree(cfg) / "p2996-inputs.json"
 
 
 def last_build(cfg: Config) -> Path:
-    """Link to the newest successful build; clean removes it with the rest of build_dir."""
+    """Link named for the id the build tree holds; it exists only after a successful build."""
     return build_dir(cfg) / "last"
 
 
-def next_number(cfg: Config, name: str) -> int:
-    """One past the prefixes of an id in ROOT, which outlive the cache: ROOT/<name> is 1, ROOT/<name>.<n> is n."""
-    found = (re.fullmatch(rf"{re.escape(name)}(?:\.([1-9][0-9]*))?", path.name) for path in cfg.root.glob(f"{name}*"))
-    return 1 + max((int(match[1] or 1) for match in found if match), default=0)
+def installed_mark(cfg: Config, name: str) -> Path:
+    """Exists once ROOT/<name> is whole and verified; a prefix without it is assembled again."""
+    return cfg.root / name / "installed"
 
 
-def build_number(cfg: Config, name: str) -> Path:
-    """The number a finished build installs under; a tree with none is the first."""
-    return build_tree(cfg, name) / "number"
-
-
-def prefix_name(cfg: Config, name: str) -> str:
-    """ROOT/<name> for build 1 of an id, ROOT/<name>.<n> for build n."""
-    file = build_number(cfg, name)
-    number = int(file.read_text()) if file.exists() else 1
-    return name if number == 1 else f"{name}.{number}"
-
-
-def started_build(cfg: Config) -> Path:
-    """Link to the newest build that started, failed ones too; review-log reads its source tree from it."""
-    return build_dir(cfg) / "started"
+def configured_prefix(cfg: Config) -> Path:
+    """One prefix for every commit, or a new prefix would rebuild everything; install names the real one."""
+    return cfg.root / "current"
 
 
 def bin_dir(cfg: Config) -> Path:

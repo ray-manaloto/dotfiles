@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import pytest
@@ -35,38 +34,3 @@ def test_paths_follow_root_and_cache(cfg: Config) -> None:
     assert config.src(cfg) == cfg.cache / "source"
     assert config.build_dir(cfg) == cfg.cache / "build"
     assert config.bin_dir(cfg) == cfg.root / "bin"
-
-
-def test_identity_follows_the_commit_and_the_recipe(tmp_path: Path) -> None:
-    patches, bootstrap = tmp_path / "patches", tmp_path / "bootstrap.cmake"
-    patches.mkdir()
-    (patches / "a.patch").write_text("one\n")
-    bootstrap.write_text("set(A 1)\n")
-    first = config.identity("a" * 40, patches, bootstrap)
-    assert first.startswith("a" * 40 + "-")
-    assert config.identity("a" * 40, patches, bootstrap) == first
-    assert config.identity("b" * 40, patches, bootstrap) != first
-    (patches / "a.patch").write_text("two\n")
-    second = config.identity("a" * 40, patches, bootstrap)
-    assert second != first
-    bootstrap.write_text("set(A 2)\n")
-    assert config.identity("a" * 40, patches, bootstrap) != second
-
-
-def test_identity_follows_the_build_script_and_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    patches, bootstrap, script = tmp_path, tmp_path / "bootstrap.cmake", tmp_path / "build.py"
-    bootstrap.write_text("set(A 1)\n")
-    script.write_text("one\n")
-    first = config.identity("a" * 40, patches, bootstrap, script)
-    script.write_text("two\n")
-    second = config.identity("a" * 40, patches, bootstrap, script)
-    assert second != first
-    monkeypatch.setattr(sys, "version", "another python")
-    assert config.identity("a" * 40, patches, bootstrap, script) != second
-
-
-def test_next_number_counts_only_real_prefixes(tmp_path: Path) -> None:
-    cfg = Config(remote="file:///x", branch="p2996", root=tmp_path / "root", cache=tmp_path / "cache")
-    for name in ("abc", "abc.2", "abc.backup", "abc.2.old", "abc.0", "abc.07", "abcd.9"):
-        (cfg.root / name).mkdir(parents=True)
-    assert config.next_number(cfg, "abc") == 3

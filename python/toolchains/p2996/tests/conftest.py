@@ -188,7 +188,7 @@ def isolated_git() -> Iterator[None]:
             patch.delenv(name)
         patch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
         patch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-        # Build tests stop the sccache server: this worker gets its own, never a real build's.
+        # This worker gets its own sccache server, never a real build's.
         patch.setenv("SCCACHE_SERVER_PORT", str(20000 + os.getpid() % 20000))
         patch.setenv("SCCACHE_DIR", tempfile.mkdtemp(prefix="p2996-sccache-"))
         patch.setenv("SCCACHE_IDLE_TIMEOUT", "5")

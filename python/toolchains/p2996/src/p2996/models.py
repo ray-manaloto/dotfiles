@@ -39,7 +39,7 @@ class Config(BaseModel):
     """
     cache: Path
     """
-    Holds one source tree and one build tree per id
+    Holds the one source tree and the one build tree
     """
 
 
@@ -73,7 +73,7 @@ class Source(BaseModel):
 
 class Build(BaseModel):
     """
-    Configure and build one commit in its own tree; a rerun resumes it.
+    Configure one commit, then build it unless that id is installed; a rerun resumes it.
     """
 
     model_config = ConfigDict(
@@ -114,7 +114,7 @@ class Verify(BaseModel):
 
 class Clean(BaseModel):
     """
-    Delete the build trees; --source also deletes the source trees.
+    Delete the build tree; --source also deletes the source tree.
     """
 
     model_config = ConfigDict(

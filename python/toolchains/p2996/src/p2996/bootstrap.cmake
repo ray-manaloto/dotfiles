@@ -5,6 +5,10 @@ if(NOT IS_DIRECTORY "${_sdk}")
 endif()
 set(CMAKE_OSX_SYSROOT "${_sdk}" CACHE PATH "" FORCE)
 # sccache for the main build; the runtimes sub-builds compile with the clang just built, which is new each time.
+# Same shape as LLVM's macOS premerge (.ci/monolithic-macos.sh), which passes neither launcher to runtimes.
+# sccache cannot cache precompiled headers (mozilla/sccache#615, #2562). LLVM main turns them off for
+# sccache, but the P2996 fork is older and does not, so they must be turned off here.
+set(CMAKE_DISABLE_PRECOMPILE_HEADERS ON CACHE BOOL "" FORCE)
 set(CMAKE_C_COMPILER_LAUNCHER "$ENV{P2996_LAUNCHER}" CACHE STRING "" FORCE)
 set(CMAKE_CXX_COMPILER_LAUNCHER "$ENV{P2996_LAUNCHER}" CACHE STRING "" FORCE)
 set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)

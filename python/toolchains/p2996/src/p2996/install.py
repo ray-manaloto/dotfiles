@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from . import config, proc, verify
-from .config import bin_dir, build_tree, last_build
+from .config import bin_dir, build_tree, installed_mark, last_build
 from .log import P2996Error, log
 from .models import Config, Install
 
@@ -22,13 +22,14 @@ async def run(cfg: Config, _: Install) -> None:
     if bin_dir(cfg).is_dir() and not bin_dir(cfg).is_symlink():
         msg = f"p2996 install: {bin_dir(cfg)} is a real folder, the old layout; move ROOT aside and install again"
         raise P2996Error(msg)
-    built = last.readlink().name
-    name = config.prefix_name(cfg, built)
+    name = last.readlink().name
     view, current = f"{name}/view", root / "current"
     active = str(current.readlink()) if current.is_symlink() else None
     if active != view:
-        await assemble(cfg, built, name)
+        if not installed_mark(cfg, name).exists():  # Otherwise a skipped build: this id is already installed.
+            await assemble(cfg, name)
         await verify.check(root / view / "bin/clang++-p2996")
+        installed_mark(cfg, name).touch()
         if active:
             config.link(root / "previous", active)
         config.link(current, view)
@@ -61,9 +62,9 @@ async def write_configs(pre: Path) -> None:
     )
 
 
-async def assemble(cfg: Config, built: str, name: str) -> None:
-    """Install build <built> into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
-    pre, build = cfg.root / name, build_tree(cfg, built)
+async def assemble(cfg: Config, name: str) -> None:
+    """Install the build tree into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
+    pre, build = cfg.root / name, build_tree(cfg)
     env = {
         k: v
         for k, v in os.environ.items()

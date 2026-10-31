@@ -40,30 +40,29 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 `mise.toml` `[env]` holds every value the package reads (the generated `Config`, field `<name>` from
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
 prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
-`source/<id>` and `build/<id>`). `<id>` is `<commit>-<recipe digest>`, the digest covering the patches,
-`bootstrap.cmake`, `build.py` and the Python version. No lock: each id has its own folders; two runs
-of one id at once are not supported.
+one `source/work` and one `build/work`). `<id>` is `<commit>-<12 hex>`, the hex being a digest of
+`build/work/p2996-inputs.json`: what CMake found after configure, read from its file API (DL-809,
+DL-811). That file holds the commit, patches, `uv.lock`, CMake version, compilers, the resolved Python
+the digest of every file in the SDK, and every cache entry, with outside files named by their content. It leaves out the launchers, job
+counts and values inside the source, build or project folders, so a worktree does not change the id.
+No lock: two builds at once are not supported.
 
 The same `[env]` holds `SCCACHE_DIR` (`~/.cache/dotfiles/sccache`), `SCCACHE_CACHE_SIZE` and
 `SCCACHE_IDLE_TIMEOUT`. Build compiles the main tree through sccache: `bootstrap.cmake` sets the CMake
-launchers from `P2996_LAUNCHER`, and build sets `SCCACHE_BASEDIRS` to this id's source and build folders,
-so a new id still hits the cache, then restarts the server, which reads these only when it starts. The
-runtimes sub-builds do not use it: they compile with the clang just built. `sccache --show-stats` reports
-the hits. A cached object can carry the path of the id that first compiled it in `__FILE__` text.
+launchers from `P2996_LAUNCHER` and turns precompiled headers off. The fixed folders let a new commit
+reuse the cache without `SCCACHE_BASEDIRS`. The runtimes sub-builds do not use it: they compile with
+the clang just built. `sccache --show-stats` reports the hits.
 
 ## Source
 
 Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/clang-p2996.git`
 (`git ls-remote` on each `source` run), unless `--commit` names one; build and install read the
-tree of that commit, so a new upstream commit means a new prefix and a full rebuild. Shallow fetch
-into a temporary folder, patches applied there, then one rename to `source/<id>`: a tree never
-changes after that, and a commit whose patch failed has no tree. Any change to the recipe
-means a new id, so a full rebuild and a normal install. A reinstall of the active id only rewrites the
-`.cfg` files, which is the repair after an SDK move. `build/last` links to the newest
-successful build, which is what install takes. `build/started` links to the newest build that began:
-review-log names the tree a log's own paths point at, else that build's. A finished build numbers
-itself one past the prefixes of its id in ROOT, in one rename, so a rebuild installs to `ROOT/<id>.2`
-and goes through the same verify and swap, even after the cache is gone. Install refuses a real `ROOT/bin` folder, the layout before this
+tree of that commit. Shallow fetch into `source/work`, reset and cleaned, then the patches. Build
+configures from a fresh cache, computes the id and skips the compile when `ROOT/<id>/installed` exists.
+Install writes that mark after verify, so an interrupted or failed install is assembled again.
+`build/last` names the id the build tree holds and exists only after a successful build; `source`
+removes it, so a failed build or a changed tree cannot be installed. A reinstall of the active id only rewrites the `.cfg` files, which is the
+repair after an SDK move. Install of an id already in ROOT reuses that prefix. Install refuses a real `ROOT/bin` folder, the layout before this
 one, and changes nothing. Install verifies the new version, keeps the old one
 as `ROOT/previous`, and swaps `ROOT/current` in one rename; `ROOT/bin`, `include`, `lib`, `libexec`
 and `share` are fixed links through it.
@@ -86,10 +85,9 @@ delete it (upstream fixed it) or rebase it.
 
 ## CMake
 
-`src/p2996/bootstrap.cmake` is the initial cache (`-C`); an edit changes the id, so it takes effect
-as a new build. Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as
+`src/p2996/bootstrap.cmake` is the initial cache (`-C`); a changed value changes the id. Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as
 `P2996_SDK`, the Command Line Tools `clang`/`clang++` as the bootstrap compilers, this project's venv
-python as `Python3_EXECUTABLE` and `ROOT/<id>` as the configured prefix, and clears inherited
+python as `Python3_EXECUTABLE` and `ROOT/current` as the configured prefix, and clears inherited
 `CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT`. Key values: Release, arm64, deployment target
 27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
 `clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
