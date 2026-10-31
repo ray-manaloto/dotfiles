@@ -1,6 +1,11 @@
 # clang-p2996 (C++26 reflection) for arm64 macOS
 
-A uv Python package (`src/p2996/`, DL-758) run through this folder's mise tasks; layout DL-755.
+The goal: this Mac always has a working C++26 reflection compiler beside its default LLVM. Every tool
+from Bloomberg's clang-p2996 fork is on PATH with a `-p2996` suffix (`clang++-p2996`), so it never
+replaces the default `clang++`. A new compiler goes live in one rename, only after it has verified,
+and the one before it stays on disk as `ROOT/previous`.
+
+A uv Python package (`src/p2996/`, DL-758) does this through this folder's mise tasks; layout DL-755.
 From the repository root the tasks are `//p2996:<task>` (a `[monorepo.path_aliases]` entry):
 
 ```sh
@@ -9,6 +14,7 @@ mise run //p2996:build       # prepares source, then hours; a rerun resumes. --d
 mise run //p2996:review-log -- <log>  # read-only Codex team reports warnings, errors, skipped parts
 mise run //p2996:install     # ROOT/<id>, verify, one rename to activate; default .cfg files
 mise run //p2996:verify      # compile and run src/p2996/reflection.cpp with clang++-p2996
+mise run //p2996:clean       # delete the build trees; --source also the source trees
 mise doctor project          # (in this folder) SDK, cmake, ninja, SWIG, Lua, doxygen, ocamlfind, venv, codex
 ```
 
@@ -35,7 +41,8 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
 prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
 `source/<id>` and `build/<id>`). `<id>` is `<commit>-<recipe digest>`, the digest covering the patches,
-`bootstrap.cmake`, `build.py` and the Python version. No lock: each id has its own folders; two runs of one id at once are not supported.
+`bootstrap.cmake`, `build.py` and the Python version. No lock: each id has its own folders; two runs
+of one id at once are not supported.
 
 ## Source
 
@@ -70,9 +77,9 @@ delete it (upstream fixed it) or rebase it.
 ## CMake
 
 `src/p2996/bootstrap.cmake` is the initial cache (`-C`); an edit changes the id, so it takes effect
-as a new build, and `clean` deletes the build folder (`--source` also the
-checkout). Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as `P2996_SDK`, the Command Line Tools `clang`/`clang++` as the
-bootstrap compilers, this project's venv python as `Python3_EXECUTABLE` and `ROOT/<id>` as the configured prefix, and clears inherited
+as a new build. Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as
+`P2996_SDK`, the Command Line Tools `clang`/`clang++` as the bootstrap compilers, this project's venv
+python as `Python3_EXECUTABLE` and `ROOT/<id>` as the configured prefix, and clears inherited
 `CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT`. Key values: Release, arm64, deployment target
 27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
 `clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
@@ -86,10 +93,11 @@ tablegen jobs 1; tests, docs, examples and the iOS, watchOS, tvOS and visionOS r
 zlib, zstd, libxml2, libedit and the compiler-rt runtimes keep LLVM's defaults, whose own checks
 skip Linux-only parts. Not built on macOS: libclc, offload, llvm-libgcc, cross-project-tests.
 A Linux build needs its own cache with the Linux choices.
-The runtimes and builtins sub-builds get the same platform values through `RUNTIMES_CMAKE_ARGS` and `BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is
-`clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996`: LLVM installs the suffixed driver
+The runtimes and builtins sub-builds get the same platform values through `RUNTIMES_CMAKE_ARGS` and
+`BUILTINS_CMAKE_ARGS`. `CLANG_LINKS_TO_CREATE` is `clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996`: LLVM installs the suffixed driver
 names itself, and keeps `clang++` and `clang-cpp` because the runtimes sub-build compiles with
-`build/bin/clang++` (DL-760); `install` links only the `-p2996` names into `ROOT/bin`.
+`build/bin/clang++` (DL-760); `install` links only the `-p2996` names into `ROOT/<id>/view/bin`, which
+`ROOT/bin` reaches through `ROOT/current`.
 
 ## Prefix layout
 
