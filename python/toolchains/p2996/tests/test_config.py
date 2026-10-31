@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -50,3 +51,15 @@ def test_identity_follows_the_commit_and_the_recipe(tmp_path: Path) -> None:
     assert second != first
     bootstrap.write_text("set(A 2)\n")
     assert config.identity("a" * 40, patches, bootstrap) != second
+
+
+def test_identity_follows_the_build_script_and_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    patches, bootstrap, script = tmp_path, tmp_path / "bootstrap.cmake", tmp_path / "build.py"
+    bootstrap.write_text("set(A 1)\n")
+    script.write_text("one\n")
+    first = config.identity("a" * 40, patches, bootstrap, script)
+    script.write_text("two\n")
+    second = config.identity("a" * 40, patches, bootstrap, script)
+    assert second != first
+    monkeypatch.setattr(sys, "version", "another python")
+    assert config.identity("a" * 40, patches, bootstrap, script) != second

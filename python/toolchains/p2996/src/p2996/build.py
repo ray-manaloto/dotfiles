@@ -8,7 +8,7 @@ from pathlib import Path
 import anyio
 
 from . import proc, source
-from .config import BOOTSTRAP, PATCHES, build_tree, checkout, identity, last_build, link
+from .config import BOOTSTRAP, PATCHES, build_tree, checkout, identity, last_build, link, started_build
 from .log import log
 from .models import Build, Config, Source
 
@@ -55,6 +55,8 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
             compile=shlex.join(compile_),
         )
         return
+    built.mkdir(parents=True, exist_ok=True)
+    link(started_build(cfg), name)
     await proc.run(*configure, env=env, capture=False)
     await proc.run(*compile_, env=env, capture=False)
     link(last_build(cfg), name)

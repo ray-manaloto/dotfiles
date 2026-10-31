@@ -3,6 +3,7 @@
 import hashlib
 import os
 import re
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
@@ -16,6 +17,7 @@ RESOURCES = Path(__file__).parent
 PROJECT = RESOURCES.parents[1]
 PATCHES = RESOURCES / "patches"
 BOOTSTRAP = RESOURCES / "bootstrap.cmake"
+BUILD = RESOURCES / "build.py"
 
 
 def load(environ: Mapping[str, str] = os.environ) -> Config:
@@ -27,13 +29,13 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
     return Config.model_validate({field: environ[name] for field, name in names.items()})
 
 
-def identity(commit: str, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> str:
-    """The commit and a digest of its recipe, so a changed patch or bootstrap.cmake gets new folders."""
+def identity(commit: str, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP, script: Path = BUILD) -> str:
+    """The commit and a digest of its recipe, so a changed patch, script or python gets new folders."""
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         msg = f"p2996: {commit} is not a full commit id"
         raise P2996Error(msg)
-    digest = hashlib.sha256()
-    for file in (*sorted(patches.glob("*.patch")), bootstrap):
+    digest = hashlib.sha256(sys.version.encode())
+    for file in (*sorted(patches.glob("*.patch")), bootstrap, script):
         digest.update(file.name.encode())
         digest.update(file.read_bytes())
     return f"{commit}-{digest.hexdigest()[:12]}"
@@ -59,6 +61,11 @@ def build_tree(cfg: Config, name: str) -> Path:
 def last_build(cfg: Config) -> Path:
     """Link to the newest successful build; clean removes it with the rest of build_dir."""
     return build_dir(cfg) / "last"
+
+
+def started_build(cfg: Config) -> Path:
+    """Link to the newest build that started, failed ones too; review-log reads its source tree from it."""
+    return build_dir(cfg) / "started"
 
 
 def bin_dir(cfg: Config) -> Path:

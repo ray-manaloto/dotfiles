@@ -34,8 +34,8 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 `mise.toml` `[env]` holds every value the package reads (the generated `Config`, field `<name>` from
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
 prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
-`source/<id>` and `build/<id>`). `<id>` is `<commit>-<recipe digest>`, the digest covering the patches
-and `bootstrap.cmake`. No lock: each id has its own folders; two runs of one id at once are not supported.
+`source/<id>` and `build/<id>`). `<id>` is `<commit>-<recipe digest>`, the digest covering the patches,
+`bootstrap.cmake`, `build.py` and the Python version. No lock: each id has its own folders; two runs of one id at once are not supported.
 
 ## Source
 
@@ -43,10 +43,11 @@ Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/
 (`git ls-remote` on each `source` run), unless `--commit` names one; build and install read the
 tree of that commit, so a new upstream commit means a new prefix and a full rebuild. Shallow fetch
 into a temporary folder, patches applied there, then one rename to `source/<id>`: a tree never
-changes after that, and a commit whose patch failed has no tree. A changed patch or `bootstrap.cmake`
+changes after that, and a commit whose patch failed has no tree. Any change to the recipe
 means a new id, so a full rebuild and a normal install. A reinstall of the active id only rewrites the
 `.cfg` files, which is the repair after an SDK move. `build/last` links to the newest
-successful build, which is what install takes. Install verifies the new version, keeps the old one
+successful build, which is what install takes; `build/started` links to the newest build that began,
+which is the source tree review-log names. Install verifies the new version, keeps the old one
 as `ROOT/previous`, and swaps `ROOT/current` in one rename; `ROOT/bin`, `include`, `lib`, `libexec`
 and `share` are fixed links through it.
 
