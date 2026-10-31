@@ -5,6 +5,3 @@ root = true
 [profiles.agentsview_recall.secrets]
 OPENROUTER_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "OPENROUTER_API_KEY", env = true, if_missing = "error" }
 AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", value = "AGENTSVIEW_RECALL_PROXY_KEY", env = true, if_missing = "error" }
-
-[profiles.agentsview_recall_opencode.secrets]
-AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", value = "AGENTSVIEW_RECALL_PROXY_KEY", env = true, if_missing = "error" }

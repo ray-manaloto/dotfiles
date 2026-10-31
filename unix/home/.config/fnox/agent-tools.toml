@@ -1,5 +1,5 @@
 #:schema https://fnox.jdx.dev/schema.json
-# Keys Codex and OpenCode read at launch for their MCP servers; see ~/.zshrc.d/60-agent-tools.zsh.
+# Keys Codex reads at launch for its MCP servers; see ~/.zshrc.d/60-agent-tools.zsh.
 root = true
 
 [secrets]
