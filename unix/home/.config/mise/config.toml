@@ -641,6 +641,8 @@ content = '''
 # mise evaluates a third-party-tap cask with Ruby 3+ on PATH; macOS ships 2.6 ([bootstrap.hooks.pre-packages]).
 "brew:ruby" = { os = "macos" }
 "brew-cask:stablyai/orca/orca" = { os = "macos", adopt = true }
+# A current git instead of the one bundled with the Xcode Command Line Tools.
+"brew:git" = { os = "macos" }
 
 # DL-591: gcc/g++ wrappers retired; use the Homebrew gcc-16 and g++-16 names.
 
