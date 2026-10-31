@@ -104,7 +104,7 @@ CXX = "{% if os() == 'macos' %}{{ system_brew_prefix }}/opt/llvm/bin/clang++{% e
 # Brew formula: https://formulae.brew.sh/formula/llvm (keg-only, needs explicit paths)
 # Prefix is arch-aware: arm64=/opt/homebrew, amd64=/usr/local
 # DL-591: keg-only llvm and lldb need their opt bins; make gnubin gives an unprefixed GNU make;
-# DL-755: ~/.local/share/p2996/bin holds <name>-p2996 links into the prefix ~/.local/share/p2996/<commit>.
+# DL-755: ~/.local/share/p2996/bin holds <name>-p2996 links into the prefix ~/.local/share/p2996/<id>.
 path = [
   "$HOMEBREW_PREFIX/opt/llvm/bin",
   "$HOMEBREW_PREFIX/opt/lldb/bin",
@@ -380,6 +380,20 @@ mise run toolchain:verify
 description = "Render conf.d/toolchain.toml from [vars], install from it, then verify (DL-770)"
 # mise reads its config before [bootstrap.files] writes the fragment, so the second run installs from it.
 run = [
+  # DL-786: bootstrap skips an exact version it cannot install, so refuse before changing anything.
+  '''
+{% if os() == "macos" %}
+missing=""
+for want in gcc:{{ vars.gcc }} llvm:{{ vars.llvm }} lld:{{ vars.llvm }} lldb:{{ vars.llvm }}; do
+  name="${want%%:*}" version="${want#*:}"
+  case " $(brew list --versions "$name" 2>/dev/null) " in
+    *" $version "*) ;;
+    *) echo "bootstrap:toolchain: brew package $name $version is not installed" >&2; missing=1 ;;
+  esac
+done
+[ -z "$missing" ]
+{% endif %}
+''',
   "mise bootstrap --only files,packages --yes",
   "mise bootstrap --only files,packages --yes",
   "mise run toolchain:verify",

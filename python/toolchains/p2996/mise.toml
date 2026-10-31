@@ -8,11 +8,9 @@ _.python.venv = { path = ".venv" }
 P2996_REMOTE = "https://github.com/bloomberg/clang-p2996.git"
 # p2996 source builds the newest commit of this branch unless --commit names one.
 P2996_BRANCH = "p2996"
-# Install root: ROOT/<commit> is the prefix, ROOT/bin the one folder on PATH.
+# Install root: ROOT/<id> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
 P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
-# The heavy-build gate the legacy host_lock.py takes, so one heavy build runs at a time.
-P2996_LOCK = "{{ env.HOME }}/.local/state/dotfiles/heavy-gate.lock"
 
 [tasks.source]
 description = "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches"
@@ -20,13 +18,15 @@ usage = 'flag "--commit <sha>" help="Build this commit instead of the newest on 
 run = 'uv run --locked p2996 source ${usage_commit:+--commit "$usage_commit"}'
 
 [tasks.build]
-description = "Configure and build clang-p2996 (hours); a rerun resumes the same build dir"
-depends = ["source"]
-usage = 'flag "--dry-run" help="Print the cmake commands only"'
-run = 'uv run --locked p2996 build ${usage_dry_run:+--dry-run}'
+description = "Prepare, configure and build one commit (hours) in its own tree; a rerun resumes it"
+usage = '''
+flag "--commit <sha>" help="Build this commit instead of the newest on P2996_BRANCH"
+flag "--dry-run" help="Print the cmake commands only"
+'''
+run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${usage_dry_run:+--dry-run}'
 
 [tasks.install]
-description = "Install the build into ROOT/<commit> and link every tool as <name>-p2996 in ROOT/bin"
+description = "Install the last successful build, verify it, then make it active in one rename"
 run = "uv run --locked p2996 install"
 
 [tasks.verify]
@@ -34,7 +34,7 @@ description = "Compile and run reflection.cpp with clang++-p2996"
 run = "uv run --locked p2996 verify"
 
 [tasks.clean]
-description = "Delete the build folder for a clean build; --source also deletes the checkout"
+description = "Delete the build trees for a clean build; --source also deletes the source trees"
 usage = 'flag "--source" help="Also delete the source checkout (source fetches it again)"'
 run = 'uv run --locked p2996 clean ${usage_source:+--source}'
 

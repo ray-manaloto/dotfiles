@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -6,31 +7,27 @@ from p2996 import config
 from p2996.log import P2996Error
 from p2996.models import Config
 
-from .conftest import Upstream, git
-
-pytestmark = pytest.mark.anyio
+ENVIRON = {
+    "P2996_REMOTE": "https://example.invalid/p2996.git",
+    "P2996_BRANCH": "p2996",
+    "P2996_ROOT": "/opt/p2996",
+    "P2996_CACHE": "/var/cache/p2996",
+}
 
 
 def test_load_reads_one_variable_per_field() -> None:
-    environ = {
-        "P2996_REMOTE": "https://example.invalid/p2996.git",
-        "P2996_BRANCH": "p2996",
-        "P2996_ROOT": "/opt/p2996",
-        "P2996_CACHE": "/var/cache/p2996",
-        "P2996_LOCK": "/var/lock/heavy",
-        "UNRELATED": "ignored",
-    }
-    assert config.load(environ) == Config(
-        remote="https://example.invalid/p2996.git",
-        branch="p2996",
-        root=Path("/opt/p2996"),
-        cache=Path("/var/cache/p2996"),
-        lock=Path("/var/lock/heavy"),
+    assert config.load({**ENVIRON, "UNRELATED": "ignored"}) == Config.model_validate(
+        {
+            "remote": "https://example.invalid/p2996.git",
+            "branch": "p2996",
+            "root": Path("/opt/p2996"),
+            "cache": Path("/var/cache/p2996"),
+        }
     )
 
 
 def test_load_names_every_missing_variable() -> None:
-    with pytest.raises(P2996Error, match="P2996_ROOT, P2996_CACHE, P2996_LOCK unset"):
+    with pytest.raises(P2996Error, match=r"p2996: P2996_ROOT, P2996_CACHE unset"):
         config.load({"P2996_REMOTE": "r", "P2996_BRANCH": "b"})
 
 
@@ -40,9 +37,29 @@ def test_paths_follow_root_and_cache(cfg: Config) -> None:
     assert config.bin_dir(cfg) == cfg.root / "bin"
 
 
-async def test_prefix_is_named_after_the_checked_out_commit(cfg: Config, upstream: Upstream) -> None:
-    head = git(upstream.path, "rev-parse", "HEAD")
-    cfg.cache.mkdir(parents=True)
-    git(cfg.cache, "clone", "-q", upstream.url, "source")
-    assert await config.commit(cfg) == head
-    assert await config.prefix(cfg) == cfg.root / head
+def test_identity_follows_the_commit_and_the_recipe(tmp_path: Path) -> None:
+    patches, bootstrap = tmp_path / "patches", tmp_path / "bootstrap.cmake"
+    patches.mkdir()
+    (patches / "a.patch").write_text("one\n")
+    bootstrap.write_text("set(A 1)\n")
+    first = config.identity("a" * 40, patches, bootstrap)
+    assert first.startswith("a" * 40 + "-")
+    assert config.identity("a" * 40, patches, bootstrap) == first
+    assert config.identity("b" * 40, patches, bootstrap) != first
+    (patches / "a.patch").write_text("two\n")
+    second = config.identity("a" * 40, patches, bootstrap)
+    assert second != first
+    bootstrap.write_text("set(A 2)\n")
+    assert config.identity("a" * 40, patches, bootstrap) != second
+
+
+def test_identity_follows_the_build_script_and_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    patches, bootstrap, script = tmp_path, tmp_path / "bootstrap.cmake", tmp_path / "build.py"
+    bootstrap.write_text("set(A 1)\n")
+    script.write_text("one\n")
+    first = config.identity("a" * 40, patches, bootstrap, script)
+    script.write_text("two\n")
+    second = config.identity("a" * 40, patches, bootstrap, script)
+    assert second != first
+    monkeypatch.setattr(sys, "version", "another python")
+    assert config.identity("a" * 40, patches, bootstrap, script) != second

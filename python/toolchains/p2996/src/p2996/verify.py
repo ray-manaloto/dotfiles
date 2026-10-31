@@ -11,10 +11,11 @@ from .log import P2996Error, log
 from .models import Config, Verify
 
 
-async def run(
-    cfg: Config, _: Verify, sample: Path = RESOURCES / "reflection.cpp", expect: str = "reflection value=43"
-) -> None:
-    cxx = bin_dir(cfg) / "clang++-p2996"
+async def run(cfg: Config, _: Verify) -> None:
+    await check(bin_dir(cfg) / "clang++-p2996")
+
+
+async def check(cxx: Path, sample: Path = RESOURCES / "reflection.cpp", expect: str = "reflection value=43") -> None:
     env = {k: v for k, v in os.environ.items() if k not in ("SDKROOT", "CLANG_NO_DEFAULT_CONFIG")}
     version = await proc.output(cxx, "--version", env=env)
     if "/arm64-apple-darwin-clang++.cfg" not in version:

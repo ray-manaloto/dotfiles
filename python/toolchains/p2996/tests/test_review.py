@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -5,7 +7,7 @@ import pytest
 from p2996 import config, review
 from p2996.models import Config, ReviewLog
 
-from .conftest import executable
+from .conftest import Recipe, Upstream, executable
 
 pytestmark = pytest.mark.anyio
 
@@ -32,11 +34,13 @@ async def test_review_fills_the_prompt_and_writes_beside_the_log(cfg: Config, tm
     log = tmp_path / "logs/build.log"
     log.parent.mkdir()
     log.write_text("CMake Warning: x\n")
+    config.build_dir(cfg).mkdir(parents=True)
+    config.link(config.started_build(cfg), "abc")
     await review.run(cfg, ReviewLog(log=log))
     report = (tmp_path / "logs/build.log.review.md").read_text()
     assert report.startswith(f"cwd {config.PROJECT}\n")
     assert f"- Build log: {log}\n" in report
-    assert f"- LLVM source checkout: {config.src(cfg)}\n" in report
+    assert f"- LLVM source checkout: {config.checkout(cfg, 'abc')}\n" in report
     assert "@" not in report.replace("@loader_path", "")
 
 
@@ -47,3 +51,19 @@ async def test_review_honours_out(cfg: Config, tmp_path: Path) -> None:
     await review.run(cfg, ReviewLog(log=log, out=tmp_path / "report.md"))
     assert (tmp_path / "report.md").is_file()
     assert not (tmp_path / "build.log.review.md").exists()
+
+
+async def test_review_of_a_failed_build_names_the_tree_that_build_used(
+    cfg: Config, recipe: Recipe, upstream: Upstream, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await recipe.ship(upstream.release("v1"))
+    broken = upstream.release("v2", fail=True)
+    tree = (await recipe.source(broken))["checkout"]
+    with pytest.raises(subprocess.CalledProcessError):
+        await recipe.build(broken)
+    executable(tmp_path / "fake-bin/codex", CODEX)
+    monkeypatch.setenv("PATH", f"{tmp_path / 'fake-bin'}:{os.environ['PATH']}")
+    log = tmp_path / "build.log"
+    log.write_text("error\n")
+    await review.run(cfg, ReviewLog(log=log))
+    assert f"- LLVM source checkout: {tree}\n" in (tmp_path / "build.log.review.md").read_text()

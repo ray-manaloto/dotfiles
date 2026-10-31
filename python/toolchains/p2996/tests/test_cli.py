@@ -1,25 +1,14 @@
 from pathlib import Path
 
+import anyio
 import pytest
 
-from p2996 import cli, config
+from p2996 import cli, config, source
 from p2996.models import Build, Command, Config, ReviewLog
 
-from .conftest import Upstream, events, executable, git
-from .test_install import configure_trees
+from .conftest import Upstream, events, executable, fails, versions, whole
 from .test_review import CODEX
 from .test_verify import STAND_IN
-
-
-def fails(argv: list[str], logs: pytest.CaptureFixture[str]) -> dict:
-    """Run the CLI, expect exit 1, and return its one error event."""
-    with pytest.raises(SystemExit) as exit_:
-        cli.main(argv)
-    assert exit_.value.code == 1
-    out, [error] = events(logs)
-    assert error["level"] == "error"
-    assert all(e["level"] == "info" for e in out)
-    return error
 
 
 def test_every_generated_command_has_a_model_runner_and_help(capsys: pytest.CaptureFixture[str]) -> None:
@@ -55,32 +44,42 @@ def test_bad_arguments_log_one_error_and_exit_1(
 def test_cli_without_mise_env_names_the_variables(
     monkeypatch: pytest.MonkeyPatch, logs: pytest.CaptureFixture[str]
 ) -> None:
-    for name in ("REMOTE", "BRANCH", "ROOT", "CACHE", "LOCK"):
+    for name in ("REMOTE", "BRANCH", "ROOT", "CACHE"):
         monkeypatch.delenv(f"P2996_{name}", raising=False)
     assert "P2996_REMOTE" in fails(["clean"], logs)["event"]
 
 
 def test_source_build_install_verify_through_the_cli(
-    env: Config, upstream: Upstream, tmp_path: Path, logs: pytest.CaptureFixture[str]
+    env: Config, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
 ) -> None:
-    old = git(upstream.path, "rev-parse", "HEAD")
-    head = upstream.write("llvm/new.txt", "new\n")
-    # The shipped LLVM patches name files the toy upstream lacks: the checkout happens, then the
-    # first patch stops the task with its name, as it would after an upstream rewrite.
-    assert f"asan-macos27-dyld.patch no longer applies to {old}" in fails(["source", "--commit", old], logs)["event"]
-    assert git(config.src(env), "rev-parse", "HEAD") == old
-    assert f"no longer applies to {head}" in fails(["source"], logs)["event"]
-    assert git(config.src(env), "rev-parse", "HEAD") == head
-    cli.main(["build", "--dry-run"])
-    cli.main(["build"])
-    assert (config.build_dir(env) / "tiny").is_file()
-    cli.main(["clean"])  # the install trees below are other CMake projects
-    configure_trees(env, tmp_path)
-    cli.main(["install"])
-    executable(env.root / head / "bin/clang++-p2996", STAND_IN)
+    head = upstream.release("v1")
+    # The shipped LLVM patches name files the toy upstream lacks: source stops with the first one's
+    # name, as it would after an upstream rewrite, so the test's patch prepares the commit instead.
+    assert f"asan-macos27-dyld.patch no longer applies to {head}" in fails(["source", "--commit", head], logs)["event"]
+    tree = config.checkout(env, config.identity(head))
+    tree.mkdir(parents=True)
+    anyio.run(source.prepare, tree, env, head, patches)
     logs.readouterr()
+    cli.main(["build", "--commit", head, "--dry-run"])
+    cli.main(["build", "--commit", head])
+    cli.main(["install"])
+    cli.main(["verify"])
+    out, err = events(logs)
+    assert [e["event"] for e in out if e["event"].split()[0] in ("build", "installed", "verify")] == [
+        "build dry run",
+        "build done",
+        "verify ok",
+        "installed",
+        "verify ok",
+    ]
+    assert not err
+    assert versions(env.root) == whole("v1")
+
+
+def test_a_failing_tool_reports_its_command_code_and_stderr(env: Config, logs: pytest.CaptureFixture[str]) -> None:
     # The stand-in compiles with Apple clang, which has no <meta>: the compile step fails, and the
     # error event carries the command, its exit code and clang's stderr.
+    executable(config.bin_dir(env) / "clang++-p2996", STAND_IN)
     error = fails(["verify"], logs)
     assert error["event"] == "command failed"
     assert error["command"][0] == str(config.bin_dir(env) / "clang++-p2996")
