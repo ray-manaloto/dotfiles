@@ -1,5 +1,6 @@
 """The generated Config, loaded from the [env] of this project's mise.toml, and the paths it implies."""
 
+import hashlib
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -12,6 +13,8 @@ from .models import Config
 # bootstrap.cmake, patches/, reflection.cpp and review-log.md sit beside the modules.
 RESOURCES = Path(__file__).parent
 PROJECT = RESOURCES.parents[1]
+PATCHES = RESOURCES / "patches"
+BOOTSTRAP = RESOURCES / "bootstrap.cmake"
 
 
 def load(environ: Mapping[str, str] = os.environ) -> Config:
@@ -23,21 +26,30 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
     return Config.model_validate({field: environ[name] for field, name in names.items()})
 
 
+def identity(commit: str, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> str:
+    """The commit and a digest of its recipe, so a changed patch or bootstrap.cmake gets new folders."""
+    digest = hashlib.sha256()
+    for file in (*sorted(patches.glob("*.patch")), bootstrap):
+        digest.update(file.name.encode())
+        digest.update(file.read_bytes())
+    return f"{commit}-{digest.hexdigest()[:12]}"
+
+
 def src(cfg: Config) -> Path:
     return cfg.cache / "source"
 
 
-def checkout(cfg: Config, commit: str) -> Path:
-    """One prepared tree per commit; it appears whole, by rename, and never changes after that."""
-    return src(cfg) / commit
+def checkout(cfg: Config, name: str) -> Path:
+    """One prepared tree per identity; it appears whole, by rename, and never changes after that."""
+    return src(cfg) / name
 
 
 def build_dir(cfg: Config) -> Path:
     return cfg.cache / "build"
 
 
-def build_tree(cfg: Config, commit: str) -> Path:
-    return build_dir(cfg) / commit
+def build_tree(cfg: Config, name: str) -> Path:
+    return build_dir(cfg) / name
 
 
 def last_build(cfg: Config) -> Path:

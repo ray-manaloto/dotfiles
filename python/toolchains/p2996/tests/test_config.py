@@ -34,3 +34,19 @@ def test_paths_follow_root_and_cache(cfg: Config) -> None:
     assert config.src(cfg) == cfg.cache / "source"
     assert config.build_dir(cfg) == cfg.cache / "build"
     assert config.bin_dir(cfg) == cfg.root / "bin"
+
+
+def test_identity_follows_the_commit_and_the_recipe(tmp_path: Path) -> None:
+    patches, bootstrap = tmp_path / "patches", tmp_path / "bootstrap.cmake"
+    patches.mkdir()
+    (patches / "a.patch").write_text("one\n")
+    bootstrap.write_text("set(A 1)\n")
+    first = config.identity("a" * 40, patches, bootstrap)
+    assert first.startswith("a" * 40 + "-")
+    assert config.identity("a" * 40, patches, bootstrap) == first
+    assert config.identity("b" * 40, patches, bootstrap) != first
+    (patches / "a.patch").write_text("two\n")
+    second = config.identity("a" * 40, patches, bootstrap)
+    assert second != first
+    bootstrap.write_text("set(A 2)\n")
+    assert config.identity("a" * 40, patches, bootstrap) != second

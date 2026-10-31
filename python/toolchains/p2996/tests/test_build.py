@@ -20,11 +20,11 @@ def option(command: str, name: str) -> str:
 
 
 async def test_dry_run_logs_both_cmake_commands(
-    cfg: Config, recipe: Recipe, upstream: Upstream, logs: pytest.CaptureFixture[str]
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
 ) -> None:
     head = git(upstream.path, "rev-parse", "HEAD")
     checkout = (await recipe.source(head))["checkout"]
-    await build.run(cfg, Build(dry_run=True))
+    await build.run(cfg, Build(dry_run=True), patches)
     [dry] = events(logs)[0]
     assert dry["event"] == "build dry run"
     assert dry["P2996_SDK"].startswith("/")
@@ -33,7 +33,7 @@ async def test_dry_run_logs_both_cmake_commands(
     assert (Path(lua) / "include/lua.h").is_file()
     assert f"-C {config.RESOURCES / 'bootstrap.cmake'}" in dry["configure"]
     assert option(dry["configure"], "-S") == f"{checkout}/llvm"
-    assert f"-DCMAKE_INSTALL_PREFIX={cfg.root / head}" in dry["configure"]
+    assert f"-DCMAKE_INSTALL_PREFIX={cfg.root / config.identity(head, patches)}" in dry["configure"]
     assert f"-DPython3_EXECUTABLE={sys.executable}" in dry["configure"]
     built = option(dry["configure"], "-B")
     assert dry["compile"] == f"cmake --build {built} --parallel 4"
@@ -72,3 +72,9 @@ async def test_two_commits_build_in_separate_trees(cfg: Config, recipe: Recipe, 
     assert f"CMAKE_HOME_DIRECTORY:INTERNAL={head_checkout}/llvm" in (head_tree / "CMakeCache.txt").read_text()
     assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / old}" in (old_tree / "CMakeCache.txt").read_text()
     assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / head}" in (head_tree / "CMakeCache.txt").read_text()
+
+
+async def test_build_prepares_the_commit_it_is_given(recipe: Recipe, upstream: Upstream) -> None:
+    old = upstream.write("a.txt", "old\n")
+    upstream.write("a.txt", "new\n")
+    assert (await recipe.build(old))["commit"] == old

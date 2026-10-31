@@ -1,12 +1,13 @@
 """p2996 source: check out the newest commit of P2996_BRANCH (or --commit) and apply the patches."""
 
 import contextlib
+import re
 from pathlib import Path
 
 import anyio
 
 from . import proc
-from .config import RESOURCES, checkout, git, src
+from .config import BOOTSTRAP, PATCHES, checkout, git, identity, src
 from .log import P2996Error, log
 from .models import Config, Source
 
@@ -16,18 +17,23 @@ async def latest(cfg: Config) -> str:
     return out.split()[0]
 
 
-async def run(cfg: Config, args: Source, patches: Path = RESOURCES / "patches") -> None:
+async def run(cfg: Config, args: Source, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
     commit = args.commit or await latest(cfg)
-    tree = checkout(cfg, commit)
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        msg = f"p2996 source: {commit} is not a full commit id"
+        raise P2996Error(msg)
+    name = identity(commit, patches, bootstrap)
+    tree = checkout(cfg, name)
     if not await anyio.Path(tree).is_dir():
         src(cfg).mkdir(parents=True, exist_ok=True)
         async with anyio.TemporaryDirectory(dir=str(src(cfg)), prefix=".new-") as tmp:
-            new = Path(tmp) / commit
+            new = Path(tmp) / name
             new.mkdir()
             await prepare(new, cfg, commit, patches)
             # A second run of this commit may have got there first; its tree is just as good.
             with contextlib.suppress(OSError):
                 new.rename(tree)
+            await git(tree, "rev-parse", "HEAD")  # Any other rename failure left no tree; stop here.
     log.info("source ready", checkout=str(tree), commit=commit)
 
 

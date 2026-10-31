@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from pathlib import Path
 
 from . import config, proc, verify
 from .config import bin_dir, build_tree, last_build
@@ -17,45 +18,34 @@ async def run(cfg: Config, _: Install) -> None:
     if not last.is_symlink():
         msg = "p2996 install: no successful build; run p2996 build"
         raise P2996Error(msg)
-    sha = last.readlink().name
-    root, view, current = cfg.root, f"{sha}/view", cfg.root / "current"
+    name = last.readlink().name
+    root, view, current = cfg.root, f"{name}/view", cfg.root / "current"
     active = str(current.readlink()) if current.is_symlink() else None
     if active != view:
-        await assemble(cfg, sha)
+        await assemble(cfg, name)
         await verify.check(root / view / "bin/clang++-p2996")
         if active:
             config.link(root / "previous", active)
         config.link(current, view)
-    for name in ENTRIES:
-        entry = root / name
+    else:
+        await write_configs(root / name)  # The SDK can move under a build that is otherwise current.
+    for part in ENTRIES:
+        entry = root / part
         if not entry.is_symlink() and entry.is_dir():
             shutil.rmtree(entry)  # The real ROOT/bin of the layout before this one.
-        if not entry.is_symlink() or str(entry.readlink()) != f"current/{name}":
-            config.link(entry, f"current/{name}")
+        if not entry.is_symlink() or str(entry.readlink()) != f"current/{part}":
+            config.link(entry, f"current/{part}")
     back = root / "previous"
     log.info(
         "installed",
-        prefix=str(root / sha),
-        commit=sha,
+        prefix=str(root / name),
+        commit=name.partition("-")[0],
         links=str(bin_dir(cfg)),
         previous=str(root / back.readlink()) if back.is_symlink() else None,
     )
 
 
-async def assemble(cfg: Config, sha: str) -> None:
-    """Install into ROOT/<commit> and lay out ROOT/<commit>/view; nothing active changes."""
-    pre, build = cfg.root / sha, build_tree(cfg, sha)
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in ("DESTDIR", "CMAKE_INSTALL_MODE", "CMAKE_INSTALL_PARALLEL_LEVEL")
-    }
-    for tree in (build, build / "runtimes/builtins-bins", build / "runtimes/runtimes-bins"):
-        await proc.run("cmake", "--install", tree, "--prefix", pre, env=env, capture=False)
-    for part in ("bin", "include", "lib"):
-        if not (pre / part).is_dir():
-            msg = f"p2996 install: {sha} has no {part}"
-            raise P2996Error(msg)
+async def write_configs(pre: Path) -> None:
     # Clang reads <triple>.cfg, then arm64-apple-darwin<N>.cfg, then the unversioned name from its own
     # resolved bin dir; only the unversioned names are written, so a macOS bump never shadows them.
     sdk = await proc.output("xcrun", "--show-sdk-path")
@@ -66,6 +56,23 @@ async def assemble(cfg: Config, sha: str) -> None:
         "# C++ driver: the SDK, plus the P2996 libc++, libc++abi and libunwind at link time ($ = link only).\n"
         f"@arm64-apple-darwin.cfg\n$-Wl,-L,{pre}/lib\n$-Wl,-rpath,{pre}/lib\n$-Wl,-lunwind\n"
     )
+
+
+async def assemble(cfg: Config, name: str) -> None:
+    """Install into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
+    pre, build = cfg.root / name, build_tree(cfg, name)
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("DESTDIR", "CMAKE_INSTALL_MODE", "CMAKE_INSTALL_PARALLEL_LEVEL")
+    }
+    for tree in (build, build / "runtimes/builtins-bins", build / "runtimes/runtimes-bins"):
+        await proc.run("cmake", "--install", tree, "--prefix", pre, env=env, capture=False)
+    for part in ("bin", "include", "lib"):
+        if not (pre / part).is_dir():
+            msg = f"p2996 install: {name} has no {part}"
+            raise P2996Error(msg)
+    await write_configs(pre)
     view = pre / "view"
     shutil.rmtree(view, ignore_errors=True)
     (view / "bin").mkdir(parents=True)

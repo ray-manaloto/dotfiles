@@ -81,3 +81,8 @@ def test_only_the_required_args_parse_to_the_defaults(command: Command) -> None:
     for name, field in model_cls.model_fields.items():
         if not field.is_required():
             assert getattr(model, name) == field.default, name
+
+
+def test_build_needs_no_separate_source_task() -> None:
+    # A dependency would run without --commit, so a pinned build would prepare the newest commit.
+    assert "depends" not in TASKS["build"]

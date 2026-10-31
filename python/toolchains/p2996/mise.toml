@@ -18,8 +18,7 @@ usage = 'flag "--commit <sha>" help="Build this commit instead of the newest on 
 run = 'uv run --locked p2996 source ${usage_commit:+--commit "$usage_commit"}'
 
 [tasks.build]
-description = "Configure and build one commit (hours) in its own tree; a rerun resumes it"
-depends = ["source"]
+description = "Prepare, configure and build one commit (hours) in its own tree; a rerun resumes it"
 usage = '''
 flag "--commit <sha>" help="Build this commit instead of the newest on P2996_BRANCH"
 flag "--dry-run" help="Print the cmake commands only"

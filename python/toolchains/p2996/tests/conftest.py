@@ -232,7 +232,7 @@ class Recipe:
         return self.logged("source ready")
 
     async def build(self, commit: str) -> dict:
-        await build.run(self.cfg, Build(commit=commit))
+        await build.run(self.cfg, Build(commit=commit), self.patches)
         return self.logged("build done")
 
     async def ship(self, commit: str) -> str:

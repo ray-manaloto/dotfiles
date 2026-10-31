@@ -4,10 +4,10 @@ A uv Python package (`src/p2996/`, DL-758) run through this folder's mise tasks;
 From the repository root the tasks are `//p2996:<task>` (a `[monorepo.path_aliases]` entry):
 
 ```sh
-mise run //p2996:source      # newest commit of P2996_BRANCH (or --commit <sha>), patches applied (idempotent)
-mise run //p2996:build       # hours; a rerun resumes the build dir. --dry-run prints the cmake commands
+mise run //p2996:source      # newest commit of P2996_BRANCH (or --commit <sha>), patches applied
+mise run //p2996:build       # prepares source, then hours; a rerun resumes. --dry-run prints the cmake commands
 mise run //p2996:review-log -- <log>  # read-only Codex team reports warnings, errors, skipped parts
-mise run //p2996:install     # ROOT/<commit>, ROOT/bin links, default .cfg files
+mise run //p2996:install     # ROOT/<id>, verify, one rename to activate; default .cfg files
 mise run //p2996:verify      # compile and run src/p2996/reflection.cpp with clang++-p2996
 mise doctor project          # (in this folder) SDK, cmake, ninja, SWIG, Lua, doxygen, ocamlfind, venv, codex
 ```
@@ -33,16 +33,19 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 
 `mise.toml` `[env]` holds every value the package reads (the generated `Config`, field `<name>` from
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
-prefix `ROOT/<commit>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
-`source/<commit>` and `build/<commit>`). No lock: each commit has its own folders.
+prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
+`source/<id>` and `build/<id>`). `<id>` is `<commit>-<recipe digest>`, the digest covering the patches
+and `bootstrap.cmake`. No lock: each id has its own folders; two runs of one id at once are not supported.
 
 ## Source
 
 Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/clang-p2996.git`
 (`git ls-remote` on each `source` run), unless `--commit` names one; build and install read the
 tree of that commit, so a new upstream commit means a new prefix and a full rebuild. Shallow fetch
-into a temporary folder, patches applied there, then one rename to `source/<commit>`: a tree never
-changes after that, and a commit whose patch failed has no tree. `build/last` links to the newest
+into a temporary folder, patches applied there, then one rename to `source/<id>`: a tree never
+changes after that, and a commit whose patch failed has no tree. A changed patch or `bootstrap.cmake`
+means a new id, so a full rebuild and a normal install. A reinstall of the active id only rewrites the
+`.cfg` files, which is the repair after an SDK move. `build/last` links to the newest
 successful build, which is what install takes. Install verifies the new version, keeps the old one
 as `ROOT/previous`, and swaps `ROOT/current` in one rename; `ROOT/bin`, `include`, `lib`, `libexec`
 and `share` are fixed links through it.
@@ -65,10 +68,10 @@ delete it (upstream fixed it) or rebase it.
 
 ## CMake
 
-`src/p2996/bootstrap.cmake` is the initial cache (`-C`); `build` reconfigures on every run, so an edit
-takes effect on the next build, and `clean` deletes the build folder (`--source` also the
+`src/p2996/bootstrap.cmake` is the initial cache (`-C`); an edit changes the id, so it takes effect
+as a new build, and `clean` deletes the build folder (`--source` also the
 checkout). Build passes the SDK (`xcrun --show-sdk-path`, resolved to the versioned SDK) as `P2996_SDK`, the Command Line Tools `clang`/`clang++` as the
-bootstrap compilers, this project's venv python as `Python3_EXECUTABLE` and `ROOT/<commit>` as the configured prefix, and clears inherited
+bootstrap compilers, this project's venv python as `Python3_EXECUTABLE` and `ROOT/<id>` as the configured prefix, and clears inherited
 `CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS SDKROOT`. Key values: Release, arm64, deployment target
 27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
 `clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
@@ -90,14 +93,17 @@ names itself, and keeps `clang++` and `clang-cpp` because the runtimes sub-build
 ## Prefix layout
 
 ```text
-ROOT/<commit>/                   cmake --install of build, runtimes/builtins-bins, runtimes/runtimes-bins
-ROOT/<commit>/bin/arm64-apple-darwin.cfg           -isysroot <xcrun SDK>
-ROOT/<commit>/bin/arm64-apple-darwin-clang++.cfg   @arm64-apple-darwin.cfg plus link-only
-                              -L and -rpath ROOT/<commit>/lib and -lunwind
-ROOT/bin/<tool>-p2996 -> ../<commit>/bin/<tool>     every other tool; skipped when LLVM made <tool>-p2996
-ROOT/bin/*-p2996, *.cfg -> ../<commit>/bin/<same name>
+ROOT/<id>/                       cmake --install of build, runtimes/builtins-bins, runtimes/runtimes-bins
+ROOT/<id>/bin/arm64-apple-darwin.cfg           -isysroot <xcrun SDK>
+ROOT/<id>/bin/arm64-apple-darwin-clang++.cfg   @arm64-apple-darwin.cfg plus link-only
+                              -L and -rpath ROOT/<id>/lib and -lunwind
+ROOT/<id>/view/bin/<tool>-p2996 -> ../../bin/<tool>   every other tool; skipped when LLVM made <tool>-p2996
+ROOT/<id>/view/bin/*-p2996, *.cfg -> ../../bin/<same name>
+ROOT/<id>/view/{include,lib,libexec,share} -> ../<same name>
+ROOT/current -> <id>/view        ROOT/previous -> the view before it
+ROOT/{bin,include,lib,libexec,share} -> current/<same name>
 ```
 
 Clang reads `<triple>.cfg`, then `arm64-apple-darwin<N>.cfg`, then `arm64-apple-darwin.cfg` from
-its own resolved bin dir (`ROOT/<commit>/bin`), so only the unversioned names exist and a macOS
+its own resolved bin dir (`ROOT/<id>/bin`), so only the unversioned names exist and a macOS
 bump never shadows them.

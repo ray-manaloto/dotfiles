@@ -48,7 +48,7 @@ async def test_install_makes_root_look_like_the_prefix(cfg: Config, installed: P
 
 
 async def test_a_failed_build_leaves_the_last_successful_one_on_record(
-    cfg: Config, recipe: Recipe, upstream: Upstream
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
 ) -> None:
     good = await recipe.ship(upstream.release("v1"))
     broken = upstream.release("v2", fail=True)
@@ -56,7 +56,7 @@ async def test_a_failed_build_leaves_the_last_successful_one_on_record(
     with pytest.raises(subprocess.CalledProcessError):
         await recipe.build(broken)
     done = await recipe.install()
-    assert done["prefix"] == str(cfg.root / good)
+    assert done["prefix"] == str(cfg.root / config.identity(good, patches))
     assert done.get("commit") == good
     assert versions(cfg.root) == whole("v1")
 
@@ -157,3 +157,25 @@ async def test_install_takes_over_the_layout_the_old_install_left(
     assert tools(root) == set(LINKS)
     assert not (root / "share/old-marker").exists()
     assert (root / old / "bin/clang++-p2996").is_file()
+
+
+async def test_a_changed_recipe_for_the_active_commit_reaches_root(
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path
+) -> None:
+    commit = await recipe.ship(upstream.release("v1"))
+    first = (await recipe.install())["prefix"]
+    patch = patches / "notes.patch"
+    patch.write_text(patch.read_text().replace("TWO", "Two"))
+    await recipe.ship(commit)
+    done = await recipe.install()
+    assert done["prefix"] != first
+    assert done.get("previous") == f"{first}/view"
+    assert (cfg.root / "bin/clang++-p2996").resolve().is_relative_to(done["prefix"])
+
+
+async def test_reinstalling_rewrites_the_default_configs(cfg: Config, installed: Path) -> None:
+    file = installed / "bin/arm64-apple-darwin.cfg"
+    good = file.read_text()
+    file.write_text("-isysroot /gone\n")
+    await install.run(cfg, Install())
+    assert file.read_text() == good

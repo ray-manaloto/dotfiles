@@ -4,7 +4,7 @@ import anyio
 import pytest
 
 from p2996 import cli, config, source
-from p2996.models import Build, Command, Config, ReviewLog, Source
+from p2996.models import Build, Command, Config, ReviewLog
 
 from .conftest import Upstream, events, executable, fails, versions, whole
 from .test_review import CODEX
@@ -56,7 +56,9 @@ def test_source_build_install_verify_through_the_cli(
     # The shipped LLVM patches name files the toy upstream lacks: source stops with the first one's
     # name, as it would after an upstream rewrite, so the test's patch prepares the commit instead.
     assert f"asan-macos27-dyld.patch no longer applies to {head}" in fails(["source", "--commit", head], logs)["event"]
-    anyio.run(source.run, env, Source(commit=head), patches)
+    tree = config.checkout(env, config.identity(head))
+    tree.mkdir(parents=True)
+    anyio.run(source.prepare, tree, env, head, patches)
     logs.readouterr()
     cli.main(["build", "--commit", head, "--dry-run"])
     cli.main(["build", "--commit", head])

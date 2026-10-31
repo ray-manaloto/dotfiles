@@ -32,11 +32,13 @@ async def test_review_fills_the_prompt_and_writes_beside_the_log(cfg: Config, tm
     log = tmp_path / "logs/build.log"
     log.parent.mkdir()
     log.write_text("CMake Warning: x\n")
+    config.build_dir(cfg).mkdir(parents=True)
+    config.link(config.last_build(cfg), "abc")
     await review.run(cfg, ReviewLog(log=log))
     report = (tmp_path / "logs/build.log.review.md").read_text()
     assert report.startswith(f"cwd {config.PROJECT}\n")
     assert f"- Build log: {log}\n" in report
-    assert f"- LLVM source checkout: {config.src(cfg)}\n" in report
+    assert f"- LLVM source checkout: {config.checkout(cfg, 'abc')}\n" in report
     assert "@" not in report.replace("@loader_path", "")
 
 

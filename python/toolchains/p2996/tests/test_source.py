@@ -3,7 +3,7 @@ from pathlib import Path
 import anyio
 import pytest
 
-from p2996 import build, source
+from p2996 import build, config, source
 from p2996.log import P2996Error
 from p2996.models import Build, Config, Source
 
@@ -71,3 +71,21 @@ async def test_a_patch_upstream_broke_stops_with_its_name(cfg: Config, upstream:
         await source.run(cfg, Source(), patches)
     with pytest.raises(P2996Error, match=head):
         await build.run(cfg, Build(commit=head))
+
+
+async def test_a_changed_patch_gets_its_own_tree(recipe: Recipe, upstream: Upstream, patches: Path) -> None:
+    head = upstream.write("a.txt", "x\n")
+    first = Path((await recipe.source(head))["checkout"])
+    before = tree(first)
+    patch = patches / "notes.patch"
+    patch.write_text(patch.read_text().replace("TWO", "Two"))
+    second = Path((await recipe.source(head))["checkout"])
+    assert second != first
+    assert (second / "notes.txt").read_text() == "one\nTwo\nthree\n"
+    assert tree(first) == before
+
+
+async def test_a_commit_that_is_not_a_full_sha_is_refused(cfg: Config) -> None:
+    with pytest.raises(P2996Error, match="full commit"):
+        await source.run(cfg, Source(commit="p2996"))
+    assert not config.src(cfg).exists()
