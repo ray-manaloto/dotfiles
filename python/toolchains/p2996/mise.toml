@@ -58,6 +58,11 @@ flag "--out <file>" help="Report file (default: <log>.review.md)"
 '''
 run = 'uv run --locked p2996 review-log --log "$usage_log" ${usage_out:+--out "$usage_out"}'
 
+[tasks.projects]
+description = "Compile glaze and simdjson with clang-p2996 through the toolchain file, running nothing"
+usage = 'flag "--manifest <file>" help="Manifest file (default: the shipped projects.json)"'
+run = 'uv run --locked p2996 projects ${usage_manifest:+--manifest "$usage_manifest"}'
+
 # Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
 [tasks.sync]
 description = "Install the locked dependencies into .venv"

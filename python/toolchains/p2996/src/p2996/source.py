@@ -26,11 +26,15 @@ async def run(cfg: Config, args: Source, patches: Path = PATCHES) -> None:
     log.info("source ready", checkout=str(tree), commit=commit)
 
 
-async def prepare(tree: Path, cfg: Config, commit: str, patches: Path) -> None:
+async def fetch(tree: Path, remote: str, commit: str) -> None:
     await git(tree, "init", "-q")
-    await git(tree, "fetch", "--depth=1", "--no-tags", cfg.remote, commit)
+    await git(tree, "fetch", "--depth=1", "--no-tags", remote, commit)
     await git(tree, "-c", "advice.detachedHead=false", "checkout", "--force", "--detach", "FETCH_HEAD")
     await git(tree, "clean", "-ffdxq")
+
+
+async def prepare(tree: Path, cfg: Config, commit: str, patches: Path) -> None:
+    await fetch(tree, cfg.remote, commit)
     for patch in sorted([p async for p in anyio.Path(patches).glob("*.patch")]):
         if (await proc.run("git", "-C", tree, "apply", "--unidiff-zero", patch, check=False)).returncode != 0:
             msg = (

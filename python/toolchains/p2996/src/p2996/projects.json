@@ -1,0 +1,99 @@
+{
+  "projects": [
+    {
+      "name": "glaze",
+      "remote": "https://github.com/stephenberry/glaze.git",
+      "commit": "01efb29f98b9969fe22bd89186e78f083b83eb81",
+      "pin": "DL-819: the commit these results were recorded on; move it only by compiling a newer commit and recording its results",
+      "options": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-Dglaze_ENABLE_REFLECTION26=ON"
+      ],
+      "targets": [],
+      "known_failures": [
+        {
+          "source": "inplace_vector_test.dir/inplace_vector_test.cpp",
+          "reason": "trying to emit a call to an immediate function"
+        },
+        {
+          "source": "inplace_vector_test_noexceptions.dir/inplace_vector_test.cpp",
+          "reason": "trying to emit a call to an immediate function"
+        },
+        {
+          "source": "http_client_pool_test.dir/http_client_pool_test.cpp",
+          "reason": "depends on itself"
+        }
+      ]
+    },
+    {
+      "name": "simdjson",
+      "remote": "https://github.com/simdjson/simdjson.git",
+      "commit": "11184110aa765dfd730d80629d07b6f78cff4a86",
+      "pin": "DL-819: the commit these results were recorded on; move it only by compiling a newer commit and recording its results",
+      "options": [
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DSIMDJSON_STATIC_REFLECTION_MODE=ON",
+        "-DSIMDJSON_DEVELOPER_MODE=ON"
+      ],
+      "targets": [
+        "reflection_autodetect_tests",
+        "static_reflection_custom_tests",
+        "static_reflection_builder_tests",
+        "static_reflection_comprehensive_tests",
+        "static_reflection_edge_cases_tests",
+        "static_reflection_enum_tests",
+        "static_reflection_fractured_json_tests",
+        "static_reflection_annotations_tests",
+        "static_reflection_annotations_ordered_tests",
+        "basic_compile_time_tests",
+        "compile_time_json_tests"
+      ],
+      "known_failures": [
+        {
+          "source": "reflection_autodetect_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_custom_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_builder_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_comprehensive_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_edge_cases_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_enum_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_fractured_json_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_annotations_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "static_reflection_annotations_ordered_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "basic_compile_time_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        },
+        {
+          "source": "compile_time_json_tests.cpp",
+          "reason": "no member named 'exception' in namespace 'std::meta'"
+        }
+      ]
+    }
+  ]
+}

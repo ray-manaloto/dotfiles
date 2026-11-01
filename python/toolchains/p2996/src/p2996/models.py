@@ -65,6 +65,7 @@ class Command(StrEnum):
     verify = "verify"
     clean = "clean"
     review_log = "review-log"
+    projects = "projects"
 
 
 class Source(BaseModel):
@@ -162,4 +163,89 @@ class ReviewLog(BaseModel):
     out: Path | None = None
     """
     Report file (default: <log>.review.md)
+    """
+
+
+class Projects(BaseModel):
+    """
+    Compile the real reflection projects with clang-p2996, without running them.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    manifest: Path | None = None
+    """
+    Manifest file (default: the shipped projects.json)
+    """
+
+
+class KnownFailure(BaseModel):
+    """
+    One object that does not compile yet, and the diagnostic it fails with.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    source: Annotated[str, Field(min_length=1)]
+    """
+    End of the object's path, without .o
+    """
+    reason: Annotated[str, Field(min_length=1)]
+    """
+    Text the failure must print
+    """
+
+
+class Project(BaseModel):
+    """
+    One real project, pinned to a commit, with what it is known to fail on.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    name: Annotated[str, Field(pattern="^[a-z0-9_-]+$")]
+    """
+    Folder name in the cache
+    """
+    remote: str
+    """
+    Git URL
+    """
+    commit: CommitId
+    pin: Annotated[str, Field(min_length=1)]
+    """
+    Why this commit: its decision id and what moves it
+    """
+    options: list[str]
+    """
+    cmake configure arguments
+    """
+    targets: list[str]
+    """
+    Targets to compile; empty means all
+    """
+    known_failures: list[KnownFailure]
+    """
+    Failures recorded until the fork changes
+    """
+
+
+class Manifest(BaseModel):
+    """
+    The projects p2996 projects compiles.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    projects: list[Project]
+    """
+    Compiled in this order
     """

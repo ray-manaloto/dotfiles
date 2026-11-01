@@ -26,7 +26,7 @@
     "Command": {
       "description": "The p2996 subcommands, one per mise task.",
       "type": "string",
-      "enum": ["source", "build", "install", "verify", "clean", "review-log"]
+      "enum": ["source", "build", "install", "verify", "clean", "review-log", "projects"]
     },
     "Source": {
       "description": "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches.",
@@ -73,6 +73,48 @@
         "out": { "type": ["string", "null"], "format": "path", "default": null, "description": "Report file (default: <log>.review.md)" }
       },
       "required": ["log"],
+      "additionalProperties": false
+    },
+    "Projects": {
+      "description": "Compile the real reflection projects with clang-p2996, without running them.",
+      "type": "object",
+      "properties": {
+        "manifest": { "type": ["string", "null"], "format": "path", "default": null, "description": "Manifest file (default: the shipped projects.json)" }
+      },
+      "additionalProperties": false
+    },
+    "KnownFailure": {
+      "description": "One object that does not compile yet, and the diagnostic it fails with.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "minLength": 1, "description": "End of the object's path, without .o" },
+        "reason": { "type": "string", "minLength": 1, "description": "Text the failure must print" }
+      },
+      "required": ["source", "reason"],
+      "additionalProperties": false
+    },
+    "Project": {
+      "description": "One real project, pinned to a commit, with what it is known to fail on.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9_-]+$", "description": "Folder name in the cache" },
+        "remote": { "type": "string", "description": "Git URL" },
+        "commit": { "$ref": "#/$defs/CommitId" },
+        "pin": { "type": "string", "minLength": 1, "description": "Why this commit: its decision id and what moves it" },
+        "options": { "type": "array", "items": { "type": "string" }, "description": "cmake configure arguments" },
+        "targets": { "type": "array", "items": { "type": "string" }, "description": "Targets to compile; empty means all" },
+        "known_failures": { "type": "array", "items": { "$ref": "#/$defs/KnownFailure" }, "description": "Failures recorded until the fork changes" }
+      },
+      "required": ["name", "remote", "commit", "pin", "options", "targets", "known_failures"],
+      "additionalProperties": false
+    },
+    "Manifest": {
+      "description": "The projects p2996 projects compiles.",
+      "type": "object",
+      "properties": {
+        "projects": { "type": "array", "items": { "$ref": "#/$defs/Project" }, "description": "Compiled in this order" }
+      },
+      "required": ["projects"],
       "additionalProperties": false
     }
   }

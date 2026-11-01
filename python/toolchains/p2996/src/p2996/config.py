@@ -14,6 +14,8 @@ RESOURCES = Path(__file__).parent
 PROJECT = RESOURCES.parents[1]
 PATCHES = RESOURCES / "patches"
 BOOTSTRAP = RESOURCES / "bootstrap.cmake"
+MANIFEST = RESOURCES / "projects.json"
+TOOLCHAIN = PROJECT.parents[2] / "cmake/toolchains/clang-p2996.toolchain.cmake"
 
 
 def load(environ: Mapping[str, str] = os.environ) -> Config:
@@ -23,6 +25,11 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
         msg = f"p2996: {', '.join(missing)} unset; run the p2996 tasks through mise"
         raise P2996Error(msg)
     return Config.model_validate({field: environ[name] for field, name in names.items()})
+
+
+def compiler_env() -> dict[str, str]:
+    """The environment clang++-p2996 needs to load its default config."""
+    return {k: v for k, v in os.environ.items() if k not in ("SDKROOT", "CLANG_NO_DEFAULT_CONFIG")}
 
 
 def src(cfg: Config) -> Path:
@@ -70,6 +77,10 @@ def configured_prefix(cfg: Config) -> Path:
 
 def bin_dir(cfg: Config) -> Path:
     return cfg.root / "bin"
+
+
+def project_dir(cfg: Config, name: str) -> Path:
+    return cfg.cache / "projects" / name
 
 
 def link(path: Path, target: str) -> None:

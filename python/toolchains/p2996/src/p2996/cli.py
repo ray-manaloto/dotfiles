@@ -14,9 +14,9 @@ import anyio
 from pydantic import BaseModel
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import build, config, install, proc, review, source, verify
+from . import build, config, install, proc, projects, review, source, verify
 from .log import P2996Error, configure, log
-from .models import Build, Clean, Command, Config, Install, ReviewLog, Source, Verify
+from .models import Build, Clean, Command, Config, Install, Projects, ReviewLog, Source, Verify
 
 
 async def clean(cfg: Config, args: Clean) -> None:
@@ -42,6 +42,7 @@ COMMANDS: dict[Command, tuple[type[BaseModel], Callable[[Config, Any], Awaitable
     Command.verify: (Verify, verify.run),
     Command.clean: (Clean, clean),
     Command.review_log: (ReviewLog, review.run),
+    Command.projects: (Projects, projects.run),
 }
 
 
