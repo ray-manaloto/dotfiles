@@ -44,8 +44,27 @@ async def test_dry_run_logs_both_cmake_commands(
     assert f"-DCMAKE_INSTALL_PREFIX={cfg.root / 'current'}" in dry["configure"]
     assert f"-DPython3_EXECUTABLE={sys.executable}" in dry["configure"]
     built = option(dry["configure"], "-B")
-    assert dry["compile"] == f"cmake --build {built} --parallel 4"
+    assert dry["compile"] == f"cmake --build {built} --parallel {cfg.jobs}"
     assert not await anyio.Path(built).exists()
+
+
+async def test_the_job_count_reaches_the_compile_pool(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    await recipe.ship(upstream.release("v1"))
+    cache = (config.build_tree(cfg) / "CMakeCache.txt").read_text()
+    assert f"LLVM_PARALLEL_COMPILE_JOBS:STRING={cfg.jobs}\n" in cache
+
+
+async def test_zstd_is_linked_statically_from_the_managed_tool(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    await recipe.ship(upstream.release("v1"))
+    cache = (config.build_tree(cfg) / "CMakeCache.txt").read_text()
+    managed = Path(await proc.output("mise", "where", "conda:zstd-static"))
+    assert "LLVM_ENABLE_ZSTD:STRING=FORCE_ON\n" in cache
+    assert "LLVM_USE_STATIC_ZSTD:BOOL=ON\n" in cache
+    assert f"zstd_LIBRARY:FILEPATH={managed}/lib/libzstd.a\n" in cache
+    assert f"zstd_STATIC_LIBRARY:FILEPATH={managed}/lib/libzstd.a\n" in cache
+    assert f"zstd_INCLUDE_DIR:PATH={managed}/include\n" in cache
+    assert (managed / "lib/libzstd.a").is_file()
+    assert (managed / "include/zstd.h").is_file()
 
 
 async def test_build_configures_with_the_real_bootstrap_cache_and_compiles(

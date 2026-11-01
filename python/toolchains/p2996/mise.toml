@@ -11,8 +11,10 @@ P2996_BRANCH = "p2996"
 # Install root: ROOT/<id> is the prefix, ROOT/current the active one, ROOT/bin on PATH follows it.
 P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
+# Compile jobs: not part of the build id.
+P2996_JOBS = "{{ num_cpus() }}"
 # sccache: one store that outlives every id. p2996 build adds the launcher path.
-# Eviction is size LRU only, with no age limit (sccache docs/Local.md), so this size is the only cleanup.
+# Eviction is size LRU only, with no age limit (sccache docs/Local.md); p2996 clean --sccache empties it by hand.
 SCCACHE_DIR = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/sccache"
 SCCACHE_CACHE_SIZE = "60G"
 # Linking at the end of a build can pass the default 10 idle minutes.
@@ -28,8 +30,9 @@ description = "Prepare, configure and build one commit (hours), skipping an inst
 usage = '''
 flag "--commit <sha>" help="Build this commit instead of the newest on P2996_BRANCH"
 flag "--dry-run" help="Print the cmake commands only"
+flag "--force" help="Recompile past sccache even when the id is installed; install then replaces it"
 '''
-run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${usage_dry_run:+--dry-run}'
+run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${usage_dry_run:+--dry-run} ${usage_force:+--force}'
 
 [tasks.install]
 description = "Install the last successful build, verify it, then make it active in one rename"
@@ -41,8 +44,11 @@ run = "uv run --locked p2996 verify"
 
 [tasks.clean]
 description = "Delete the build tree for a clean build; --source also deletes the source tree"
-usage = 'flag "--source" help="Also delete the source checkout (source fetches it again)"'
-run = 'uv run --locked p2996 clean ${usage_source:+--source}'
+usage = '''
+flag "--source" help="Also delete the source checkout (source fetches it again)"
+flag "--sccache" help="Instead stop sccache and delete only its store"
+'''
+run = 'uv run --locked p2996 clean ${usage_source:+--source} ${usage_sccache:+--sccache}'
 
 [tasks.review-log]
 description = "Have a read-only Codex review team report every warning, error and skipped part in a build log"
@@ -99,6 +105,11 @@ depends = ["lint", "test"]
 description = "Command Line Tools give an SDK and the bootstrap clang"
 run = "xcrun --show-sdk-path && xcrun -f clang++"
 hint = "Run `xcode-select --install`."
+
+[doctor.checks.zstd]
+description = "The managed static zstd the build links"
+run = 'test -f "$(mise where conda:zstd-static)/lib/libzstd.a"'
+hint = "Run `mise install` with the global config (conda:zstd-static)."
 
 [doctor.checks.build-tools]
 description = "cmake and ninja are on PATH"

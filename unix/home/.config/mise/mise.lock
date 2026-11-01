@@ -46,6 +46,10 @@ checksum = "sha256:16e5bee11686028d60a495004f99a10c613ada44cc27e330bee18a1b67fb1
 url = "https://conda.anaconda.org/conda-forge/linux-aarch64/readline-8.3-ha7194a6_1.conda"
 checksum = "sha256:80167dcf73a96b6d0c1bb2298d7b8b9bc21b27cc5bf56979f9c548b49a4d1722"
 
+[conda-packages.linux-arm64."zstd-1.5.7-h9d15635_7"]
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-1.5.7-h9d15635_7.conda"
+checksum = "sha256:427fd14bcb3b8659796fecc682716617409350fb5a98e5b7b47558a10d1a2fc7"
+
 [conda-packages.linux-x64."_openmp_mutex-4.5-20_gnu"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda"
 checksum = "sha256:1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb3c9"
@@ -89,6 +93,10 @@ checksum = "sha256:9ebb10a4eb3be51ae67d85c679f5a7a50cb040ed25c783e6331a225ea0999
 [conda-packages.linux-x64."readline-8.3-hd6e31c0_1"]
 url = "https://conda.anaconda.org/conda-forge/linux-64/readline-8.3-hd6e31c0_1.conda"
 checksum = "sha256:01b3fe073a66e321970d09e04b388708f8cbdca5cdfbfcb7c9eeb470ad10383d"
+
+[conda-packages.linux-x64."zstd-1.5.7-hb78ec9c_7"]
+url = "https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_7.conda"
+checksum = "sha256:47d682b9f6d6ec9eb1a6e6c3e75ea6273e899e78fb7fc59f81d39745009fbc60"
 
 [conda-packages.macos-arm64."bzip2-1.0.8-h4e30115_10"]
 url = "https://conda.anaconda.org/conda-forge/osx-arm64/bzip2-1.0.8-h4e30115_10.conda"
@@ -562,6 +570,38 @@ conda_deps = [
     "libcxx-23.1.4-h55c6f16_2",
     "libzlib-1.3.2-h8088a28_3",
     "bzip2-1.0.8-h4e30115_10",
+]
+
+[[tools."conda:zstd-static"]]
+version = "1.5.7"
+backend = "conda:zstd-static"
+specifiers = ["1.5.7"]
+
+[tools."conda:zstd-static".options]
+channel = "conda-forge"
+
+[tools."conda:zstd-static"."platforms.linux-arm64"]
+checksum = "sha256:394d2b63a38a0d17341d56209c2be9ba0c7b9146456d78e8d55149733a666521"
+url = "https://conda.anaconda.org/conda-forge/linux-aarch64/zstd-static-1.5.7-h5b12997_7.conda"
+conda_deps = [
+    "zstd-1.5.7-h9d15635_7",
+    "libzlib-1.3.2-hdc9db2a_3",
+]
+
+[tools."conda:zstd-static"."platforms.linux-x64"]
+checksum = "sha256:62e9e4b9274c2c7028e0bcdf80c254ee95499d4860e7c13d8926485d03b0d27b"
+url = "https://conda.anaconda.org/conda-forge/linux-64/zstd-static-1.5.7-hb72f32e_7.conda"
+conda_deps = [
+    "zstd-1.5.7-hb78ec9c_7",
+    "libzlib-1.3.2-h25fd6f3_3",
+]
+
+[tools."conda:zstd-static"."platforms.macos-arm64"]
+checksum = "sha256:e817ff246bdf44ec470071a69abba0a961ee001413aa74276798135925163870"
+url = "https://conda.anaconda.org/conda-forge/osx-arm64/zstd-static-1.5.7-hfbe9180_7.conda"
+conda_deps = [
+    "zstd-1.5.7-hf451053_7",
+    "libzlib-1.3.2-h8088a28_3",
 ]
 
 [[tools.delta]]

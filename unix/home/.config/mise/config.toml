@@ -276,6 +276,7 @@ sccache = { version = "0.19.0", minimum_release_age = "0s" }
 "conda:swig" = { version = "4.5.1", minimum_release_age = "0s" }
 lua = { version = "5.5.1", minimum_release_age = "0s" }
 "conda:doxygen" = { version = "1.18.0", minimum_release_age = "0s" }
+"conda:zstd-static" = { version = "1.5.7", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
 ruff = { version = "0.17.3", minimum_release_age = "0s" }
 ty = { version = "0.0.95", minimum_release_age = "0s" }

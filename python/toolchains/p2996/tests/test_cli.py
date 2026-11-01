@@ -95,6 +95,38 @@ def test_clean_removes_the_build_and_optionally_the_checkout(env: Config, logs: 
     assert [e["path"] for e in events(logs)[0]] == [str(config.build_dir(env))] * 2 + [str(config.src(env))]
 
 
+def test_clean_sccache_stops_the_server_and_removes_only_the_store(
+    env: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = tmp_path / "sccache-calls"
+    executable(
+        tmp_path / "fake-bin/sccache",
+        f"""
+        import sys
+        from pathlib import Path
+        Path({str(calls)!r}).write_text(" ".join(sys.argv[1:]))
+        sys.exit(2)
+        """,
+    )
+    monkeypatch.setenv("PATH", f"{tmp_path / 'fake-bin'}:/usr/bin:/bin")
+    store = tmp_path / "store"
+    (store / "a").mkdir(parents=True)
+    monkeypatch.setenv("SCCACHE_DIR", str(store))
+    config.build_dir(env).mkdir(parents=True)
+    cli.main(["clean", "--sccache"])
+    assert calls.read_text() == "--stop-server"
+    assert not store.exists()
+    assert config.build_dir(env).exists()
+
+
+@pytest.mark.usefixtures("env")
+def test_clean_sccache_refuses_without_a_store_to_name(
+    monkeypatch: pytest.MonkeyPatch, logs: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("SCCACHE_DIR", raising=False)
+    assert "SCCACHE_DIR" in fails(["clean", "--sccache"], logs)["event"]
+
+
 def test_review_log_through_the_cli(env: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     executable(tmp_path / "fake-bin/codex", CODEX)
     monkeypatch.setenv("PATH", f"{tmp_path / 'fake-bin'}:/usr/bin:/bin")

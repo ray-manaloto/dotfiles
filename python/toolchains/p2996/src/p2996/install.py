@@ -25,12 +25,13 @@ async def run(cfg: Config, _: Install) -> None:
     name = last.readlink().name
     view, current = f"{name}/view", root / "current"
     active = str(current.readlink()) if current.is_symlink() else None
-    if active != view:
-        if not installed_mark(cfg, name).exists():  # Otherwise a skipped build: this id is already installed.
+    unmarked = not installed_mark(cfg, name).exists()  # Marked: a skipped build, this id is already installed.
+    if active != view or unmarked:
+        if unmarked:
             await assemble(cfg, name)
         await verify.check(root / view / "bin/clang++-p2996")
         installed_mark(cfg, name).touch()
-        if active:
+        if active and active != view:
             config.link(root / "previous", active)
         config.link(current, view)
     else:

@@ -1,4 +1,4 @@
-# Initial cache for the clang-p2996 build (cmake -C). p2996 build sets P2996_SDK and P2996_LAUNCHER.
+# Initial cache for the clang-p2996 build (cmake -C). p2996 build sets P2996_SDK, P2996_LAUNCHER and P2996_JOBS.
 set(_sdk "$ENV{P2996_SDK}")
 if(NOT IS_DIRECTORY "${_sdk}")
   message(FATAL_ERROR "Set P2996_SDK to the macOS SDK (run through mise run //p2996:build).")
@@ -35,10 +35,18 @@ set(LLVM_LINK_LLVM_DYLIB ON CACHE BOOL "" FORCE)
 set(CLANG_LINKS_TO_CREATE "clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996" CACHE STRING "" FORCE)
 set(CLANG_LINK_CLANG_DYLIB ON CACHE BOOL "Shared Clang libraries for IWYU" FORCE)
 set(LLVM_INSTALL_TOOLCHAIN_ONLY OFF CACHE BOOL "Keep headers and CMake exports for IWYU" FORCE)
-set(LLVM_PARALLEL_COMPILE_JOBS 4 CACHE STRING "" FORCE)
+set(LLVM_PARALLEL_COMPILE_JOBS "$ENV{P2996_JOBS}" CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_LINK_JOBS 1 CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_TABLEGEN_JOBS 1 CACHE STRING "" FORCE)
-# macOS only (DL-756). zlib, zstd, libxml2, libedit and the fuzzer, xray and orc runtimes keep LLVM's
+# zstd from the managed tool, linked statically as LLVM's own Release.cmake does, so no library leaves
+# the install pointing at Homebrew. p2996 build sets P2996_ZSTD.
+set(_zstd "$ENV{P2996_ZSTD}")
+set(LLVM_ENABLE_ZSTD FORCE_ON CACHE STRING "" FORCE)
+set(LLVM_USE_STATIC_ZSTD ON CACHE BOOL "" FORCE)
+set(zstd_LIBRARY "${_zstd}/lib/libzstd.a" CACHE FILEPATH "" FORCE)
+set(zstd_STATIC_LIBRARY "${_zstd}/lib/libzstd.a" CACHE FILEPATH "" FORCE)
+set(zstd_INCLUDE_DIR "${_zstd}/include" CACHE PATH "" FORCE)
+# macOS only (DL-756). zlib, libxml2, libedit and the fuzzer, xray and orc runtimes keep LLVM's
 # defaults, whose own platform checks skip the Linux-only parts.
 foreach(_name LLVM_INCLUDE_TESTS LLVM_INCLUDE_BENCHMARKS LLVM_INCLUDE_EXAMPLES LLVM_INCLUDE_DOCS
     LIBCXX_INCLUDE_TESTS LIBCXXABI_INCLUDE_TESTS LIBUNWIND_INCLUDE_TESTS COMPILER_RT_INCLUDE_TESTS

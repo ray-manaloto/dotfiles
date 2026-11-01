@@ -9,7 +9,17 @@ from pathlib import Path
 import anyio
 
 from . import inputs, proc, source
-from .config import BOOTSTRAP, PATCHES, build_tree, checkout, configured_prefix, installed_mark, last_build, link
+from .config import (
+    BOOTSTRAP,
+    PATCHES,
+    build_tree,
+    checkout,
+    configured_prefix,
+    installed_mark,
+    last_build,
+    link,
+    sccache_stats,
+)
 from .log import P2996Error, log
 from .models import Build, Config, Source
 
@@ -27,7 +37,9 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     # lua is on PATH through the mise shims, whose prefix has no headers; FindLua honours LUA_DIR.
     env["LUA_DIR"] = await proc.output("mise", "where", "lua")
     # The real binary, not the mise shim, which would add 0.4 s to every compile.
-    env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
+    launcher = env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
+    env["P2996_JOBS"] = str(cfg.jobs)
+    env["P2996_ZSTD"] = await proc.output("mise", "where", "conda:zstd-static")
     configure = [
         "cmake",
         # A fresh cache: the id must not depend on what an earlier commit left in this folder.
@@ -48,7 +60,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
         f"-DPython3_EXECUTABLE={sys.executable}",
         "-DLLDB_ENABLE_PYTHON=ON",
     ]
-    compile_ = ["cmake", "--build", str(built), "--parallel", "4"]
+    compile_ = ["cmake", "--build", str(built), "--parallel", env["P2996_JOBS"]]
     if args.dry_run:
         log.info(
             "build dry run",
@@ -63,14 +75,23 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     await proc.run(*configure, env=env, capture=False)
     # Hashing every SDK file takes seconds, so it runs off the event loop.
     name = await anyio.to_thread.run_sync(inputs.write, cfg, commit, patches, bootstrap, Path(env["P2996_SDK"]))
-    if installed_mark(cfg, name).exists():
+    mark = installed_mark(cfg, name)
+    if args.force:
+        # Install replaces an id without its mark; sccache recompiles and overwrites what it holds.
+        mark.unlink(missing_ok=True)
+        env["SCCACHE_RECACHE"] = "1"
+    elif mark.exists():
         link(last_build(cfg), name)
         log.info("build skipped", id=name, commit=commit)
         return
+    await proc.run(launcher, "--zero-stats", env=env)
     try:
         await proc.run(*compile_, env=env, capture=False)
     except subprocess.CalledProcessError as error:
         msg = f"p2996 build: {commit} failed to compile; the previous install stays active"
         raise P2996Error(msg) from error
+    finally:
+        stats = await proc.output(launcher, "--show-adv-stats", "--stats-format=json", env=env)
+        sccache_stats(cfg).write_text(stats)
     link(last_build(cfg), name)
     log.info("build done", id=name, build=str(built), commit=commit)

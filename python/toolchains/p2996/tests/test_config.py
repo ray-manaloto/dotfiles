@@ -11,6 +11,7 @@ ENVIRON = {
     "P2996_BRANCH": "p2996",
     "P2996_ROOT": "/opt/p2996",
     "P2996_CACHE": "/var/cache/p2996",
+    "P2996_JOBS": "8",
 }
 
 
@@ -21,12 +22,13 @@ def test_load_reads_one_variable_per_field() -> None:
             "branch": "p2996",
             "root": Path("/opt/p2996"),
             "cache": Path("/var/cache/p2996"),
+            "jobs": 8,
         }
     )
 
 
 def test_load_names_every_missing_variable() -> None:
-    with pytest.raises(P2996Error, match=r"p2996: P2996_ROOT, P2996_CACHE unset"):
+    with pytest.raises(P2996Error, match=r"p2996: P2996_ROOT, P2996_CACHE, P2996_JOBS unset"):
         config.load({"P2996_REMOTE": "r", "P2996_BRANCH": "b"})
 
 

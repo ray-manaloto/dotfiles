@@ -52,6 +52,10 @@ file(WRITE ${CMAKE_BINARY_DIR}/abi "${TOY_ABI}\\n")
 """
 
 RECORD_COMPILE = 'add_custom_target(record ALL COMMAND sh -c "echo x >> ${CMAKE_BINARY_DIR}/compiled" VERBATIM)\n'
+RECORD_RECACHE = (
+    "add_custom_target(recache ALL COMMAND sh -c "
+    '"printenv SCCACHE_RECACHE >> ${CMAKE_BINARY_DIR}/recache || echo none >> ${CMAKE_BINARY_DIR}/recache" VERBATIM)\n'
+)
 
 
 @pytest.fixture
@@ -200,6 +204,57 @@ async def test_an_installed_id_skips_the_compile(cfg: Config, ids: Ids, upstream
     assert again["event"] == "build skipped"
     assert again["id"] == name
     assert compiled.read_text() == "x\n"
+
+
+async def test_force_recompiles_an_installed_id_past_the_cache_and_install_replaces_it(
+    cfg: Config, ids: Ids, upstream: Upstream, patches: Path, bootstrap: Path
+) -> None:
+    upstream.release("v1")
+    toy = (upstream.path / "llvm/CMakeLists.txt").read_text()
+    commit = upstream.write("llvm/CMakeLists.txt", toy + RECORD_RECACHE)
+    recache = cfg.cache / "build/work/recache"
+    name = await ids.id(commit)
+    await install.run(cfg, Install())
+    assert recache.read_text() == "none\n"
+    (cfg.root / name / "bin/llvm-ar").unlink()
+    await build.run(cfg, Build(commit=commit, force=True), patches, bootstrap)
+    assert recache.read_text() == "none\n1\n"
+    await install.run(cfg, Install())
+    assert (cfg.root / name / "bin/llvm-ar").exists()
+    assert (cfg.root / "current").readlink() == Path(f"{name}/view")
+    assert (await ids.event(commit))["event"] == "build skipped"
+
+
+def compile_requests(cfg: Config) -> int:
+    return json.loads(stats_file(cfg).read_text())["stats"]["compile_requests"]
+
+
+def stats_file(cfg: Config) -> Path:
+    return config.build_tree(cfg) / "p2996-sccache-stats.json"
+
+
+async def test_each_build_saves_the_sccache_stats_of_that_build(cfg: Config, ids: Ids, upstream: Upstream) -> None:
+    await ids.id()
+    first = compile_requests(cfg)
+    assert first > 0
+    await ids.id(upstream.write("llvm/main.c", "int main(void) { return 1; }\n"))
+    assert compile_requests(cfg) == first
+
+
+async def test_a_failed_compile_still_saves_the_sccache_stats(cfg: Config, ids: Ids, upstream: Upstream) -> None:
+    commit = upstream.release("v1", fail=True)
+    with pytest.raises(P2996Error):
+        await ids.id(commit)
+    assert "compile_requests" in stats_file(cfg).read_text()
+
+
+async def test_a_skipped_build_leaves_the_sccache_stats_alone(cfg: Config, ids: Ids, upstream: Upstream) -> None:
+    commit = upstream.release("v1")
+    await ids.id(commit)
+    await install.run(cfg, Install())
+    saved = stats_file(cfg).read_text()
+    assert (await ids.event(commit))["event"] == "build skipped"
+    assert stats_file(cfg).read_text() == saved
 
 
 async def test_a_stray_file_in_the_source_folder_does_not_survive_a_build(cfg: Config, ids: Ids) -> None:

@@ -265,6 +265,7 @@ def cfg(tmp_path: Path, upstream: Upstream) -> Config:
             "P2996_BRANCH": "p2996",
             "P2996_ROOT": str(tmp_path / "root"),
             "P2996_CACHE": str(tmp_path / "cache"),
+            "P2996_JOBS": "3",
             "P2996_LOCK": str(tmp_path / "state/heavy-gate.lock"),
         }
     )

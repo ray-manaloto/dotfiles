@@ -48,6 +48,11 @@ def inputs_file(cfg: Config) -> Path:
     return build_tree(cfg) / "p2996-inputs.json"
 
 
+def sccache_stats(cfg: Config) -> Path:
+    """sccache's advanced stats for the last compile alone."""
+    return build_tree(cfg) / "p2996-sccache-stats.json"
+
+
 def last_build(cfg: Config) -> Path:
     """Link named for the id the build tree holds; it exists only after a successful build."""
     return build_dir(cfg) / "last"
