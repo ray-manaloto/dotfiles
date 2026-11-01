@@ -4,6 +4,7 @@
 !/.gitignore
 !/AGENTS.md
 !/CODING_STANDARDS.md
+!/cmake/
 !/fnox.toml
 !/hk.pkl
 !/mise.lock
