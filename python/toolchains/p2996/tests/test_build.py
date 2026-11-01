@@ -67,6 +67,11 @@ async def test_zstd_is_linked_statically_from_the_managed_tool(cfg: Config, reci
     assert (managed / "include/zstd.h").is_file()
 
 
+async def test_version_names_the_remote_the_source_came_from(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    await recipe.ship(upstream.release("v1"))
+    assert f"CLANG_REPOSITORY_STRING:STRING={cfg.remote}\n" in (config.build_tree(cfg) / "CMakeCache.txt").read_text()
+
+
 async def test_build_configures_with_the_real_bootstrap_cache_and_compiles(
     cfg: Config, recipe: Recipe, upstream: Upstream
 ) -> None:

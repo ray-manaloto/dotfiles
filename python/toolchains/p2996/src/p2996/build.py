@@ -39,6 +39,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     # The real binary, not the mise shim, which would add 0.4 s to every compile.
     launcher = env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
     env["P2996_JOBS"] = str(cfg.jobs)
+    env["P2996_REMOTE"] = cfg.remote
     env["P2996_ZSTD"] = await proc.output("mise", "where", "conda:zstd-static")
     configure = [
         "cmake",
