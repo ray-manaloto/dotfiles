@@ -1,26 +1,23 @@
 """p2996 source: reset the one source tree to the newest commit of P2996_BRANCH (or --commit) and patch it."""
 
-import re
 from pathlib import Path
 
 import anyio
+from pydantic import TypeAdapter
 
 from . import proc
 from .config import PATCHES, checkout, git, last_build
 from .log import P2996Error, log
-from .models import Config, Source
+from .models import CommitId, Config, Source
 
 
 async def latest(cfg: Config) -> str:
     out = await proc.output("git", "ls-remote", "--exit-code", cfg.remote, f"refs/heads/{cfg.branch}")
-    return out.split()[0]
+    return TypeAdapter(CommitId).validate_python(out.split()[0])
 
 
 async def run(cfg: Config, args: Source, patches: Path = PATCHES) -> None:
     commit = args.commit or await latest(cfg)
-    if not re.fullmatch(r"[0-9a-f]{40}", commit):
-        msg = f"p2996: {commit} is not a full commit id"
-        raise P2996Error(msg)
     # The tree is about to change, so nothing in it can be installed until a build succeeds on it.
     last_build(cfg).unlink(missing_ok=True)
     tree = checkout(cfg)

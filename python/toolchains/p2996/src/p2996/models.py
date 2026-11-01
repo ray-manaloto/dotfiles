@@ -48,6 +48,12 @@ class Config(BaseModel):
     """
 
 
+type CommitId = Annotated[str, Field(pattern="^[0-9a-f]{40}$")]
+"""
+A full 40-digit git commit id.
+"""
+
+
 class Command(StrEnum):
     """
     The p2996 subcommands, one per mise task.
@@ -70,7 +76,7 @@ class Source(BaseModel):
         extra="forbid",
         frozen=True,
     )
-    commit: str | None = None
+    commit: CommitId | None = None
     """
     Build this commit instead of the newest on P2996_BRANCH
     """
@@ -85,7 +91,7 @@ class Build(BaseModel):
         extra="forbid",
         frozen=True,
     )
-    commit: str | None = None
+    commit: CommitId | None = None
     """
     Build this commit instead of the newest on P2996_BRANCH
     """

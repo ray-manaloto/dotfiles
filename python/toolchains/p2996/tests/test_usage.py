@@ -6,15 +6,23 @@
 # field the spec lacks, or a run line that drops a variable fails here.
 
 import json
+import os
+import shutil
 import subprocess
 import tomllib
+from pathlib import Path
 
 import pytest
 
 from p2996 import cli, config
-from p2996.models import Command
+from p2996.models import Command, Config
+
+from .conftest import Upstream, git
 
 TASKS = tomllib.loads((config.PROJECT / "mise.toml").read_text())["tasks"]
+
+# A value the model accepts for a flag that has a pattern; every other flag takes sample-<name>.
+SAMPLES = {"commit": "0" * 40}
 
 # uv run --locked p2996 <argv>: drop "run --locked", then print the argv p2996 would get.
 SHIMS = 'uv() { shift 2; "$@"; }; p2996() { printf "%s\\0" "$@"; }; '
@@ -36,7 +44,8 @@ def sample(command: Command) -> list[str]:
     cmd = spec(command)
     argv = [f"sample-{arg['name']}" for arg in cmd["args"]]
     for flag in cmd["flags"]:
-        argv += [f"--{flag['name']}", f"sample-{flag['name']}"] if "<" in flag["usage"] else [f"--{flag['name']}"]
+        name = flag["name"]
+        argv += [f"--{name}", SAMPLES.get(name, f"sample-{name}")] if "<" in flag["usage"] else [f"--{name}"]
     return argv
 
 
@@ -83,6 +92,36 @@ def test_only_the_required_args_parse_to_the_defaults(command: Command) -> None:
             assert getattr(model, name) == field.default, name
 
 
-def test_build_needs_no_separate_source_task() -> None:
-    # A dependency would run without --commit, so a pinned build would prepare the newest commit.
-    assert "depends" not in TASKS["build"]
+def project_copy(top: Path, cfg: Config) -> Path:
+    """This project with the toy recipe's values: mise.toml's [env] wins over what a caller exports."""
+    copy = top / "project"
+    junk = shutil.ignore_patterns(".venv", ".*_cache", "__pycache__", "*.patch")
+    shutil.copytree(config.PROJECT, copy, ignore=junk)
+    values = {f"P2996_{name.upper()}": value for name, value in cfg.model_dump().items()}
+    values |= {name: os.environ[name] for name in ("SCCACHE_DIR", "SCCACHE_IDLE_TIMEOUT")}
+    lines = (copy / "mise.toml").read_text().splitlines()
+    for at, line in enumerate(lines):
+        name = line.partition(" = ")[0]
+        if name in values:
+            lines[at] = f'{name} = "{values[name]}"'
+    (copy / "mise.toml").write_text("\n".join(lines) + "\n")
+    return copy
+
+
+def test_a_pinned_build_task_prepares_and_builds_that_commit(cfg: Config, upstream: Upstream, tmp_path: Path) -> None:
+    pinned = upstream.release("v1")
+    upstream.release("v2")  # The branch has moved on, so anything that ignores --commit gets this one.
+    done = subprocess.run(
+        ["mise", "run", "--raw", "build", "--commit", pinned],
+        cwd=project_copy(tmp_path, cfg),
+        env=os.environ | {"MISE_TRUSTED_CONFIG_PATHS": str(tmp_path)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    events = [json.loads(line) for line in done.stdout.splitlines() if line.startswith("{")]
+    # Only the pinned commit is ever prepared: a task dependency would fetch the branch tip first.
+    [ready] = [event for event in events if event["event"] == "source ready"]
+    [built] = [event for event in events if event["event"] == "build done"]
+    assert (ready["commit"], built["commit"]) == (pinned, pinned)
+    assert git(Path(ready["checkout"]), "rev-parse", "HEAD") == pinned

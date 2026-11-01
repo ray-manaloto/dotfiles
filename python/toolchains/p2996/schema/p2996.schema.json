@@ -18,6 +18,11 @@
       "required": ["remote", "branch", "root", "cache", "jobs"],
       "additionalProperties": false
     },
+    "CommitId": {
+      "description": "A full 40-digit git commit id.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
     "Command": {
       "description": "The p2996 subcommands, one per mise task.",
       "type": "string",
@@ -27,7 +32,7 @@
       "description": "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches.",
       "type": "object",
       "properties": {
-        "commit": { "type": ["string", "null"], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" }
+        "commit": { "anyOf": [{ "$ref": "#/$defs/CommitId" }, { "type": "null" }], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" }
       },
       "additionalProperties": false
     },
@@ -35,7 +40,7 @@
       "description": "Configure one commit, then build it unless that id is installed; a rerun resumes it.",
       "type": "object",
       "properties": {
-        "commit": { "type": ["string", "null"], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" },
+        "commit": { "anyOf": [{ "$ref": "#/$defs/CommitId" }, { "type": "null" }], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" },
         "dry_run": { "type": "boolean", "default": false, "description": "Print the cmake commands only" },
         "force": { "type": "boolean", "default": false, "description": "Recompile past sccache even when the id is installed; install then replaces it" }
       },

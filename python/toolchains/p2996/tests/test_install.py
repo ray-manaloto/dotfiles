@@ -1,8 +1,8 @@
-import os
 import shutil
-from collections.abc import Callable
+import threading
 from pathlib import Path
 
+import anyio
 import pytest
 
 from p2996 import build, config, install, proc
@@ -18,6 +18,23 @@ pytestmark = pytest.mark.anyio
 async def installed(recipe: Recipe, upstream: Upstream) -> Path:
     await recipe.ship(upstream.release("v1"))
     return Path((await recipe.install())["prefix"])
+
+
+def entries(root: Path) -> dict[str, tuple[str, int, int]]:
+    """Each fixed link in ROOT with its target, inode and mtime: equal snapshots mean no link was rewritten."""
+    found = {}
+    for part in install.ENTRIES:
+        info = (root / part).lstat()
+        found[part] = (str((root / part).readlink()), info.st_ino, info.st_mtime_ns)
+    return found
+
+
+def read(link: Path) -> str | None:
+    """Where link points, None while it is missing."""
+    try:
+        return str(link.readlink())
+    except FileNotFoundError:
+        return None
 
 
 async def test_install_writes_the_default_configs(installed: Path) -> None:
@@ -91,32 +108,37 @@ async def test_a_bad_version_is_never_activated(
     assert versions(cfg.root) == whole("v1")
 
 
-async def test_one_rename_swaps_the_whole_version(
-    cfg: Config, recipe: Recipe, upstream: Upstream, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_one_rename_swaps_the_whole_version(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    root, current = cfg.root, cfg.root / "current"
     await recipe.ship(upstream.release("v1"))
     await recipe.install()
     await recipe.ship(upstream.release("v2"))
-    views: list[tuple[str, dict]] = []
+    before = entries(root)
+    seen = [read(current)]
+    started, done = threading.Event(), threading.Event()
 
-    def watched(name: str) -> Callable:
-        real = getattr(os, name)
+    def watch() -> None:
+        while True:
+            last = done.is_set()  # Taken before the read, so the final read follows the whole install.
+            target = read(current)
+            if target != seen[-1]:
+                seen.append(target)
+            started.set()
+            if last:
+                return
 
-        def step(*args: object, **kwargs: object) -> None:
-            real(*args, **kwargs)
-            views.append((name, versions(cfg.root)))
+    async with anyio.create_task_group() as group:
+        group.start_soon(anyio.to_thread.run_sync, watch)
+        try:
+            assert await anyio.to_thread.run_sync(started.wait, 10)
+            await recipe.install()
+        finally:
+            done.set()
 
-        return step
-
-    for name in ("remove", "rename", "replace", "symlink", "unlink"):
-        monkeypatch.setattr(os, name, watched(name))
-    await recipe.install()
-
-    assert [view for _, view in views if view not in (whole("v1"), whole("v2"))] == []
-    assert views[-1][1] == whole("v2")
-    flip = next(i for i, (_, view) in enumerate(views) if view == whole("v2"))
-    assert all(view == whole("v2") for _, view in views[flip:])
-    assert views[flip][0] in ("rename", "replace")
+    assert seen == [seen[0], read(current)]  # Never missing, and it moved once.
+    assert seen[0] != seen[1]
+    assert entries(root) == before  # Every other entry stayed the same link, so that one move changed them all.
+    assert versions(root) == whole("v2")
 
 
 def old_layout(root: Path, old: str) -> None:

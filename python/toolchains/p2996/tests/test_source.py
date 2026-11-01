@@ -1,12 +1,13 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from p2996 import build, config, source
 from p2996.log import P2996Error
 from p2996.models import Build, Config, Source
 
-from .conftest import Recipe, Upstream, events, git
+from .conftest import Recipe, Upstream, events, fails, git
 
 pytestmark = pytest.mark.anyio
 
@@ -63,7 +64,18 @@ async def test_a_changed_patch_replaces_the_old_one(recipe: Recipe, upstream: Up
     assert (tree / "notes.txt").read_text() == "one\nTwo\nthree\n"
 
 
-async def test_a_commit_that_is_not_a_full_sha_is_refused(cfg: Config) -> None:
-    with pytest.raises(P2996Error, match="full commit"):
-        await source.run(cfg, Source(commit="p2996"))
+def test_a_commit_that_is_not_a_full_sha_is_refused(env: Config, logs: pytest.CaptureFixture[str]) -> None:
+    assert "commit" in fails(["source", "--commit", "p2996"], logs)["event"]
+    assert not config.src(env).exists()
+
+
+async def test_a_resolved_commit_that_is_not_a_full_sha_is_refused(cfg: Config, tmp_path: Path) -> None:
+    # A SHA-256 repository: the branch tip is a real 64-digit id, not the 40 digits a build id expects.
+    longer = tmp_path / "sha256"
+    longer.mkdir()
+    git(longer, "init", "-q", "-b", cfg.branch, "--object-format=sha256")
+    who = ("-c", "user.email=test@example.invalid", "-c", "user.name=test")
+    git(longer, *who, "commit", "-q", "--allow-empty", "-m", "x")
+    with pytest.raises(ValidationError):
+        await source.run(cfg.model_copy(update={"remote": longer.as_uri()}), Source())
     assert not config.src(cfg).exists()
