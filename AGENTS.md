@@ -10,6 +10,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   (`mise current`, `mise.lock`) for mise tools, the tool's own version command for native installers.
 - Before building a new mechanism from scratch, even a small one, find real projects already doing
   it and quote their working configuration (repo, file, line); docs alone are not enough.
+- Never guess how a tool behaves. Read its source offline at the installed version and explain the
+  behaviour from `file:line`; docs are a lead, not proof. Map a setting's blast radius from the AST
+  (tree-sitter, ast-grep, `graphify update`) and LSP (clangd with a compile database,
+  `codebase-memory-mcp`), then confirm it with a real run. Say what stays unexplained and keep digging.
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).
