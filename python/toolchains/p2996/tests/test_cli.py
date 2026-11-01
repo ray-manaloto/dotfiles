@@ -1,9 +1,10 @@
+from functools import partial
 from pathlib import Path
 
 import anyio
 import pytest
 
-from p2996 import build, cli, config
+from p2996 import build, cli, config, proc
 from p2996.models import Build, Command, Config, ReviewLog
 
 from .conftest import Upstream, events, executable, fails, versions, whole
@@ -98,23 +99,17 @@ def test_clean_removes_the_build_and_optionally_the_checkout(env: Config, logs: 
 def test_clean_sccache_stops_the_server_and_removes_only_the_store(
     env: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    calls = tmp_path / "sccache-calls"
-    executable(
-        tmp_path / "fake-bin/sccache",
-        f"""
-        import sys
-        from pathlib import Path
-        Path({str(calls)!r}).write_text(" ".join(sys.argv[1:]))
-        sys.exit(2)
-        """,
-    )
-    monkeypatch.setenv("PATH", f"{tmp_path / 'fake-bin'}:/usr/bin:/bin")
+    def sccache(flag: str) -> int:
+        return anyio.run(partial(proc.run, "sccache", flag, check=False)).returncode
+
     store = tmp_path / "store"
     (store / "a").mkdir(parents=True)
     monkeypatch.setenv("SCCACHE_DIR", str(store))
     config.build_dir(env).mkdir(parents=True)
+    sccache("--stop-server")  # An earlier test on this worker may have left one running.
+    assert sccache("--start-server") == 0
     cli.main(["clean", "--sccache"])
-    assert calls.read_text() == "--stop-server"
+    assert sccache("--stop-server") != 0  # Nothing left to stop.
     assert not store.exists()
     assert config.build_dir(env).exists()
 

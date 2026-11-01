@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Awaitable, Callable, Sequence
+from functools import partial
 from typing import Any
 
 import anyio
@@ -25,11 +26,11 @@ async def clean(cfg: Config, args: Clean) -> None:
             msg = "p2996 clean: SCCACHE_DIR unset; run the p2996 tasks through mise"
             raise P2996Error(msg)
         await proc.run("sccache", "--stop-server", check=False)  # It may not be running.
-        shutil.rmtree(store, ignore_errors=True)
+        await anyio.to_thread.run_sync(partial(shutil.rmtree, store, ignore_errors=True))
         log.info("removed", path=store)
         return
     for path in (config.build_dir(cfg), config.src(cfg)) if args.source else (config.build_dir(cfg),):
-        shutil.rmtree(path, ignore_errors=True)
+        await anyio.to_thread.run_sync(partial(shutil.rmtree, path, ignore_errors=True))
         log.info("removed", path=str(path))
 
 
