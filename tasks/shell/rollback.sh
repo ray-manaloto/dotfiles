@@ -24,3 +24,6 @@ for path in $SHELL_BACKUP_PATHS; do
     cp -Rp "$pre_apply/$path" "$HOME/$path"
   fi
 done
+
+# Last, so a failed run above keeps pre-apply and can be rerun. The next apply then records afresh.
+mv "$pre_apply" "$backups/replaced-$(/bin/date +%Y%m%dT%H%M%S.%N%z)"

@@ -56,7 +56,7 @@ if [ -n "$pending" ]; then
   copy_live "$scratch/now"
   diff -r --no-dereference "$fresh" "$scratch/now" >/dev/null || refuse "a live file changed during the run"
 
-  # Renamed after every check, so pre-apply is only ever a whole backup, and written once.
+  # Renamed after every check, so pre-apply is only ever a whole backup. Only a rollback frees the name.
   if [ -e "$backups/pre-apply" ]; then
     mv "$fresh" "$backups/replaced-$(/bin/date +%Y%m%dT%H%M%S.%N%z)"
   else

@@ -29,6 +29,8 @@ RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode|mde)(?:/|$)", re.MULT
 VENV_BIN = "~/.venv/bin"
 KEG_BIN = "~/homebrew/opt/llvm/bin"
 TOOL_PATH = f"{VENV_BIN}:{KEG_BIN}:{INHERITED_PATH}"
+# What a bare spawn inherits: nothing put first, only the system folders.
+SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 # The shims hold both too, which is how they shadow a venv and a keg.
 SHIMS = "~/.local/share/mise/shims"
 FAKE_TOOLS = (
@@ -157,10 +159,16 @@ class ShellStartupTest(unittest.TestCase):
         lines = self.zsh(("-c",), command, path=TOOL_PATH)[1].splitlines()
         self.assertEqual(lines[:2], [f"{VENV_BIN}/python3", f"{KEG_BIN}/clang"])
         entries = lines[2:]
-        inherited = [VENV_BIN, KEG_BIN, "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-        self.assertEqual(entries[: len(inherited)], inherited)
+        self.assertEqual(entries[:2], [VENV_BIN, KEG_BIN])
         for entry in (*LOGIN_FIRST, *LOGIN_LAST):
             self.assertIn(entry, entries)
+
+    def test_a_bare_system_path_gets_the_shims_ahead_of_usr_bin(self) -> None:
+        path = self.zsh(("-c",), "print -rl -- $path", path=SYSTEM_PATH)[1]
+        entries = path.splitlines()
+        ahead = entries[: entries.index("/usr/bin")]
+        self.assertIn(SHIMS, ahead)
+        self.assertIn("~/.local/bin", ahead)
 
     def test_startup_is_silent(self) -> None:
         for mode in MODES:

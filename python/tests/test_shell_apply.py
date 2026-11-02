@@ -133,6 +133,8 @@ class ShellApplyTest(unittest.TestCase):
         unreadable.chmod(0)
         self.assertNotEqual(self.spawn(MISE, "run", "shell:apply").returncode, 0)
         self.assertFalse(self.pre_apply.exists())
+        # pathlib's * also matches dot names, so a leftover temporary folder shows here.
+        self.assertEqual(list(self.backups.glob("*")), [])
         rollback = self.spawn(MISE, "run", "shell:rollback")
         self.assertNotEqual(rollback.returncode, 0, rollback.stdout + rollback.stderr)
         unreadable.chmod(0o600)
@@ -199,11 +201,44 @@ class ShellApplyTest(unittest.TestCase):
         (self.home / ".zshrc.d/70-later.zsh").write_text("# added after apply\n")
         current = snapshot(self.home)
         self.run_ok("shell:rollback")
+        # The live files and the used pre-apply.
         replaced = list(self.backups.glob("replaced-*"))
-        self.assertEqual(len(replaced), 1)
-        self.assertTrue(REPLACED_NAME.fullmatch(replaced[0].name), replaced[0].name)
+        self.assertEqual(len(replaced), 2)
+        for folder in replaced:
+            self.assertTrue(REPLACED_NAME.fullmatch(folder.name), folder.name)
         # Links and the later drop-in alike: nothing the rollback replaced is destroyed.
-        self.assertEqual(snapshot(replaced[0]), current)
+        self.assertIn(current, [snapshot(folder) for folder in replaced])
+        self.assertEqual(snapshot(self.home), live)
+
+    def test_a_completed_rollback_lets_the_next_apply_capture_fresh(self) -> None:
+        first = snapshot(self.home)
+        self.run_ok("shell:apply")
+        self.run_ok("shell:rollback")
+        (self.home / ".zshrc").write_text("# live .zshrc\n# edited after rollback\n")
+        (self.home / ".zshrc.d/70-later.zsh").write_text("# added after rollback\n")
+        edited = snapshot(self.home)
+        self.run_ok("shell:apply")
+        self.run_ok("shell:rollback")
+        self.assertEqual(snapshot(self.home), edited)
+        # Each used backup took a replaced-<time> name: not reused, and not lost.
+        self.assertFalse(self.pre_apply.exists())
+        folders = list(self.backups.iterdir())
+        for folder in folders:
+            self.assertTrue(REPLACED_NAME.fullmatch(folder.name), folder.name)
+        kept = [snapshot(folder) for folder in folders]
+        self.assertIn(first, kept)
+        self.assertIn(edited, kept)
+
+    def test_a_failed_rollback_keeps_pre_apply_and_can_be_rerun(self) -> None:
+        live = snapshot(self.home)
+        self.run_ok("shell:apply")
+        # A file the restore cannot read stops it partway through the paths.
+        saved = self.pre_apply / ".zshrc"
+        saved.chmod(0)
+        self.assertNotEqual(self.spawn(MISE, "run", "shell:rollback").returncode, 0)
+        self.assertTrue(self.pre_apply.is_dir())
+        saved.chmod(live[".zshrc"][0])
+        self.run_ok("shell:rollback")
         self.assertEqual(snapshot(self.home), live)
 
     def test_retry_after_a_partial_link_keeps_the_originals_for_rollback(self) -> None:
