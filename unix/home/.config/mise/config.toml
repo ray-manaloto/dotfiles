@@ -40,6 +40,9 @@ auto = true
 check_duration = "1h"
 
 #minimum_release_age_excludes = ["pipx:langgraph-cli", "pipx:specify-cli", "npm:oh-my-codex", "npm:skills", "npm:renovate", "rumdl", "opencode", "docker-cli", "gemini", "npm:agent-browser", "npm:portless", "github:DopplerHQ/cli", "github:docker/docker-agent", "bats", "pipx:datamodel-code-generator", "pipx:notebooklm-py", "herdr"]
+[settings.go]
+set_gobin = false
+
 [settings.npm]
 package_manager = "bun"
 
