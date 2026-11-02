@@ -16,8 +16,6 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `codebase-memory-mcp`), then confirm it with a real run. Say what stays unexplained and keep digging.
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
-- Start Codex under hc with `hc run --bg --name <name> codex-hc "<task>"`: `hc run codex` has no keys
-  and no `--no-daemon`. Herdr.app's own launcher reads `~/.config/herdr-app/programs.json`.
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).
 - Python (DL-758): uv only through mise tasks; ruff, ruff format and ty clean; 100% line and branch
   coverage from real tests (real git, cmake, compilers; no mocking library); every model, type and

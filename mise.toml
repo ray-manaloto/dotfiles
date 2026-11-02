@@ -109,6 +109,13 @@ fi
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
+# Both files are not this repo's, so only this block is managed. Other repos get the rule from here.
+"~/.codex/AGENTS.md/hc-codex" = { block = '''
+Start Codex under hc with `hc run --bg --name <name> codex-hc "<task>"`: `hc run codex` has no keys and no `--no-daemon`.
+''' }
+"~/.claude/CLAUDE.md/hc-codex" = { block = '''
+Start Codex under hc with `hc run --bg --name <name> codex-hc "<task>"`: `hc run codex` has no keys and no `--no-daemon`.
+''' }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
