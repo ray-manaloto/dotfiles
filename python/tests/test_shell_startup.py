@@ -1,0 +1,170 @@
+"""Shell startup: real zsh in a temporary HOME, through the four ways a shell starts."""
+
+import re
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+UNIX_HOME = Path(__file__).resolve().parents[2] / "unix/home"
+STARTUP_FILES = (
+    ".zshenv",
+    ".zprofile",
+    ".zshrc",
+    ".zshrc.d/10-zsh.zsh",
+    ".zshrc.d/90-mise.zsh",
+    ".config/zsh/path.zsh",
+)
+
+# The macOS zsh reads the real /etc/zprofile (path_helper) and /etc/zshrc (HISTFILE).
+ZSH = "/bin/zsh"
+MODES = (("-c",), ("-l", "-c"), ("-i", "-c"), ("-l", "-i", "-c"))
+INTERACTIVE = MODES[2:]
+
+RETIRED_PATH = "~/.opencode/bin:~/.cache/oh-my-opencode/bin:~/.local/share/mde/bin"
+INHERITED_PATH = f"{RETIRED_PATH}:/usr/bin:/bin:/usr/sbin:/sbin:{RETIRED_PATH}"
+RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode|mde)(?:/|$)", re.MULTILINE)
+RETIRED_NAME = re.compile(
+    r"^(?:GOBIN|FNOX_CONFIG_DIR|FNOX_AGE_KEY_FILE|SOPS_AGE_KEY_FILE|UV_CACHE_DIR"
+    r"|XDG_RUNTIME_DIR|MDE_.*)$",
+    re.MULTILINE,
+)
+# `brew` as a traced command word: `[[ -x /opt/homebrew/bin/brew ]]` spawns nothing.
+BREW_COMMAND = re.compile(
+    r"\+\S*> (?:(?:command|exec|noglob|(?:\S*/)?env) )*(?:\S*/)?brew(?: |$)",
+    re.MULTILINE,
+)
+
+# Records each call, then runs the real mise. Its hooks call the real binary directly.
+REAL_MISE = shutil.which("mise")
+MISE = """\
+#!/bin/sh
+printf '%s %s\\n' "${MISE_ENV_CACHE:-unset}" "$*" >> "$HOME/mise-calls"
+"""
+# MISE_SHELL is exported by the activate output, so an unevaluated one is caught.
+MISE_STATE = "print -r -- ${MISE_ENV_CACHE-unset} ${MISE_SHELL-unset}"
+
+
+class ShellStartupTest(unittest.TestCase):
+    def zsh(
+        self,
+        mode: tuple[str, ...],
+        command: str = "true",
+        *,
+        mise: bool = True,
+    ) -> tuple[int, str, str, list[str]]:
+        """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp).resolve()
+            for name in STARTUP_FILES:
+                self.assertTrue((UNIX_HOME / name).is_file(), f"missing {name}")
+                (home / name).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(UNIX_HOME / name, home / name)
+            (home / ".zshrc.d/50-drop-in.zsh").write_text("export DROP_IN=1\n")
+            (home / ".local/share/mise/shims").mkdir(parents=True)
+            (home / ".local/bin").mkdir()
+            if mise:
+                (home / ".local/bin/mise").write_text(
+                    f'{MISE}exec "{REAL_MISE}" "$@"\n'
+                )
+                (home / ".local/bin/mise").chmod(0o755)
+            done = subprocess.run(
+                [ZSH, *mode, command],
+                env={
+                    "HOME": str(home),
+                    "PATH": INHERITED_PATH.replace("~", str(home)),
+                    "TERM": "xterm-256color",
+                },
+                cwd=home,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            calls = home / "mise-calls"
+            return (
+                done.returncode,
+                done.stdout.replace(str(home), "~"),
+                done.stderr,
+                calls.read_text().splitlines() if calls.exists() else [],
+            )
+
+    def test_path_order(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                path = self.zsh(mode, "print -rl -- $path")[1]
+                entries = path.splitlines()
+                # Real activate may put tool paths and the system shims among these.
+                order = [
+                    entries.index(entry)
+                    for entry in (
+                        "~/.local/share/mise/shims",
+                        "~/.local/bin",
+                        "/opt/homebrew/bin",
+                    )
+                ]
+                self.assertEqual(order, sorted(order))
+                self.assertEqual(RETIRED_ENTRY.findall(path), [])
+
+    def test_startup_is_silent(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertEqual(self.zsh(mode, "print -r -- ok")[:3], (0, "ok\n", ""))
+
+    def test_mise_activates_once_in_interactive_shells(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                _, out, _, calls = self.zsh(mode, MISE_STATE)
+                activations = [c for c in calls if "activate" in c]
+                if mode in INTERACTIVE:
+                    self.assertEqual(activations, ["1 activate zsh"])
+                    self.assertEqual(out, "1 zsh\n")
+                else:
+                    self.assertEqual(activations, [])
+                    self.assertEqual(out, "unset unset\n")
+                missing = self.zsh(mode, MISE_STATE, mise=False)[1]
+                self.assertEqual(missing, "unset unset\n")
+
+    def test_retired_names_stay_unset_and_brew_never_runs(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                names = self.zsh(mode, "print -rl -- ${(k)parameters}")[1]
+                self.assertEqual(RETIRED_NAME.findall(names), [])
+                self.assertEqual(BREW_COMMAND.findall(self.zsh(("-x", *mode))[2]), [])
+
+    def test_interactive_fpath_holds_homebrew_site_functions(self) -> None:
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                fpath = self.zsh(mode, "print -rl -- $fpath")[1].splitlines()
+                self.assertIn("/opt/homebrew/share/zsh/site-functions", fpath)
+
+    def test_interactive_histfile_survives_etc_zshrc(self) -> None:
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                histfile = self.zsh(mode, 'print -r -- "$HISTFILE"')[1]
+                self.assertEqual(histfile, "~/.local/state/zsh/history\n")
+
+    def test_optional_tools(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                bare = self.zsh(mode, mise=False)
+                self.assertEqual(bare[:3], (0, "", ""))
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                plugins = self.zsh(mode, "print -r -- $plugins", mise=False)[1]
+                self.assertEqual(plugins, "git gh\n")
+
+    def test_drop_ins_load_and_no_claude_mem_alias(self) -> None:
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                self.assertEqual(self.zsh(mode, "print -r -- $DROP_IN")[1], "1\n")
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                aliases = self.zsh(mode, "print -rl -- ${(k)aliases}")[1].splitlines()
+                self.assertNotIn("claude-mem", aliases)
+
+
+if __name__ == "__main__":
+    unittest.main()
