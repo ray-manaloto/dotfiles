@@ -26,7 +26,7 @@ run = "echo all tests passed"
 private_home = "{{ env.HOME }}"
 private_user = "{{ env.USER }}"
 # What shell:apply backs up and shell:rollback restores, relative to $HOME.
-shell_backup_paths = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d"
+shell_backup_paths = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d .config/zsh"
 
 [tasks."privacy:scan"]
 description = "Refuse this machine's home path in tracked files, given files, or outgoing commits"
@@ -43,7 +43,7 @@ env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
 run = "bash tasks/shell/apply.sh"
 
 [tasks."shell:rollback"]
-description = "Restore the zsh files from the newest shell:apply backup"
+description = "Restore the zsh files from the pre-apply backup"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
 run = "bash tasks/shell/rollback.sh"
 

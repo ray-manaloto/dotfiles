@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Link the zsh startup files into $HOME through mise's [dotfiles], after a private backup of what they replace.
-# A repeat with nothing to change makes no backup, so tasks/shell/rollback.sh still reaches the pre-apply files.
+# The first run that links keeps it as pre-apply for tasks/shell/rollback.sh; a later one as replaced-<time>.
+# A repeat with nothing to change makes neither.
 set -euo pipefail
 : "${SHELL_BACKUP_PATHS:?run this through: mise run shell:apply}"
 # Named, because a whole-config apply would also repoint ~/.zshrc.d/60-agent-tools.zsh at this checkout.
@@ -14,12 +15,14 @@ link() { mise dot apply --force --yes "$@" "${targets[@]}"; }
 
 copy_live() {
   for path in $SHELL_BACKUP_PATHS; do
-    if [ -e "$HOME/$path" ] || [ -L "$HOME/$path" ]; then cp -Rp "$HOME/$path" "$1/"; fi
+    if [ -e "$HOME/$path" ] || [ -L "$HOME/$path" ]; then
+      mkdir -p "$1/$(dirname "$path")"
+      cp -Rp "$HOME/$path" "$1/$path"
+    fi
   done
 }
 
 refuse() {
-  rm -rf "$backup"
   echo "shell:apply: $1; nothing changed" >&2
   exit 1
 }
@@ -30,16 +33,18 @@ if [ -f .git ]; then
   exit 1
 fi
 
-pending="$(link --dry-run; ls "${retired[@]}" 2>/dev/null || true)"
+# Its own statement: only a plain assignment passes the dry run's failure to set -e.
+pending="$(link --dry-run)"
+pending+="$(ls "${retired[@]}" 2>/dev/null || true)"
 if [ -n "$pending" ]; then
-  scratch="$(mktemp -d)"
-  trap 'rm -rf "$scratch"' EXIT
   backups="$state/dotfiles/shell-backup"
-  backup="$backups/$(date +%Y%m%dT%H%M%S)"
   mkdir -p "$backups"
   chmod 700 "$backups"
-  mkdir -m 700 "$backup"
-  copy_live "$backup"
+  fresh="$backups/.incoming.$$"
+  scratch="$(mktemp -d)"
+  trap 'rm -rf "$fresh" "$scratch"' EXIT
+  mkdir -m 700 "$fresh"
+  copy_live "$fresh"
 
   # A clean start prints the one word. env -i keeps the shell's XDG paths inside the scratch folder.
   mkdir "$scratch/home" "$scratch/now"
@@ -49,8 +54,14 @@ if [ -n "$pending" ]; then
 
   # Compared as two folders: Apple diff fails on a dangling link or an absent path named on its command line.
   copy_live "$scratch/now"
-  diff -r --no-dereference "$backup" "$scratch/now" >/dev/null || refuse "a live file changed during the run"
+  diff -r --no-dereference "$fresh" "$scratch/now" >/dev/null || refuse "a live file changed during the run"
 
+  # Renamed after every check, so pre-apply is only ever a whole backup, and written once.
+  if [ -e "$backups/pre-apply" ]; then
+    mv "$fresh" "$backups/replaced-$(/bin/date +%Y%m%dT%H%M%S.%N%z)"
+  else
+    mv "$fresh" "$backups/pre-apply"
+  fi
   link
   rm -f "${retired[@]}"
 fi

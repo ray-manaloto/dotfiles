@@ -25,6 +25,36 @@ INTERACTIVE = MODES[2:]
 RETIRED_PATH = "~/.opencode/bin:~/.cache/oh-my-opencode/bin:~/.local/share/mde/bin"
 INHERITED_PATH = f"{RETIRED_PATH}:/usr/bin:/bin:/usr/sbin:/sbin:{RETIRED_PATH}"
 RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode|mde)(?:/|$)", re.MULTILINE)
+# What `mise run` and an activated venv leave first on PATH for the commands they start.
+VENV_BIN = "~/.venv/bin"
+KEG_BIN = "~/homebrew/opt/llvm/bin"
+TOOL_PATH = f"{VENV_BIN}:{KEG_BIN}:{INHERITED_PATH}"
+# The shims hold both too, which is how they shadow a venv and a keg.
+SHIMS = "~/.local/share/mise/shims"
+FAKE_TOOLS = (
+    f"{VENV_BIN}/python3",
+    f"{KEG_BIN}/clang",
+    f"{SHIMS}/python3",
+    f"{SHIMS}/clang",
+)
+# path.zsh's declared order: a login shell has these around whatever else it inherited.
+LOGIN_FIRST = [
+    "~/.local/share/mise/shims",
+    "~/.local/bin",
+    "/usr/local/share/mise/shims",
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+]
+LOGIN_LAST = [
+    "~/.docker/bin",
+    "~/Library/Application Support/JetBrains/Toolbox/scripts",
+    "/Applications/Obsidian.app/Contents/MacOS",
+    "~/.antigravity-ide/antigravity-ide/bin",
+]
 RETIRED_NAME = re.compile(
     r"^(?:GOBIN|FNOX_CONFIG_DIR|FNOX_AGE_KEY_FILE|SOPS_AGE_KEY_FILE|UV_CACHE_DIR"
     r"|XDG_RUNTIME_DIR|MDE_.*)$",
@@ -53,6 +83,7 @@ class ShellStartupTest(unittest.TestCase):
         command: str = "true",
         *,
         mise: bool = True,
+        path: str = INHERITED_PATH,
     ) -> tuple[int, str, str, list[str]]:
         """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
         with tempfile.TemporaryDirectory() as temp:
@@ -69,11 +100,19 @@ class ShellStartupTest(unittest.TestCase):
                     f'{MISE}exec "{REAL_MISE}" "$@"\n'
                 )
                 (home / ".local/bin/mise").chmod(0o755)
+            for tool in FAKE_TOOLS:
+                fake = Path(tool.replace("~", str(home)))
+                fake.parent.mkdir(parents=True, exist_ok=True)
+                fake.symlink_to(shutil.which(fake.name, path="/usr/bin:/bin"))
             done = subprocess.run(
                 [ZSH, *mode, command],
                 env={
                     "HOME": str(home),
-                    "PATH": INHERITED_PATH.replace("~", str(home)),
+                    "XDG_CONFIG_HOME": str(home / ".config"),
+                    "XDG_DATA_HOME": str(home / ".local/share"),
+                    "XDG_STATE_HOME": str(home / ".local/state"),
+                    "XDG_CACHE_HOME": str(home / ".cache"),
+                    "PATH": path.replace("~", str(home)),
                     "TERM": "xterm-256color",
                 },
                 cwd=home,
@@ -107,6 +146,21 @@ class ShellStartupTest(unittest.TestCase):
                 ]
                 self.assertEqual(order, sorted(order))
                 self.assertEqual(RETIRED_ENTRY.findall(path), [])
+
+    def test_login_shells_reorder_and_others_keep_inherited_tools_first(self) -> None:
+        print_path = "print -rl -- $path"
+        login = self.zsh(("-l", "-c"), print_path, path=TOOL_PATH)[1].splitlines()
+        self.assertEqual(login[: len(LOGIN_FIRST)], LOGIN_FIRST)
+        self.assertEqual(login[-len(LOGIN_LAST) :], LOGIN_LAST)
+
+        command = f"whence -p python3 clang; {print_path}"
+        lines = self.zsh(("-c",), command, path=TOOL_PATH)[1].splitlines()
+        self.assertEqual(lines[:2], [f"{VENV_BIN}/python3", f"{KEG_BIN}/clang"])
+        entries = lines[2:]
+        inherited = [VENV_BIN, KEG_BIN, "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        self.assertEqual(entries[: len(inherited)], inherited)
+        for entry in (*LOGIN_FIRST, *LOGIN_LAST):
+            self.assertIn(entry, entries)
 
     def test_startup_is_silent(self) -> None:
         for mode in MODES:

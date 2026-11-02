@@ -1,6 +1,7 @@
 """shell:apply and shell:rollback: real mise and zsh, a repo copy, a temporary HOME."""
 
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -16,12 +17,14 @@ MISE = Path(shutil.which("mise") or "mise").resolve()
 STARTUP = (".zshenv", ".zprofile", ".zshrc")
 DROP_INS = (".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh")
 DEPLOYED = (*STARTUP, *DROP_INS, ".config/zsh/path.zsh")
-BACKED_UP = (*STARTUP, ".zprofile.d", ".zshrc.d")
+BACKED_UP = (*STARTUP, ".zprofile.d", ".zshrc.d", ".config/zsh")
 RETIRED = (".zprofile.d/macos-dev-env.zsh", ".zshrc.d/50-mde-secrets.zsh")
 AGENT_TOOLS = ".zshrc.d/60-agent-tools.zsh"
 HISTORY = b": 1:0;echo before\n"
 GROWN = HISTORY + b": 2:0;echo after\n"
 WRITER = ("/bin/sh", "-c", "while :; do echo '# installer' >> .zshrc; done")
+# /bin/date +%Y%m%dT%H%M%S.%N%z
+REPLACED_NAME = re.compile(r"replaced-\d{8}T\d{6}\.\d{9}[+-]\d{4}")
 
 
 def snapshot(home: Path) -> dict[str, tuple[int, bytes]]:
@@ -44,12 +47,16 @@ class ShellApplyTest(unittest.TestCase):
         self.home, self.repo = root / "home", root / "repo"
         self.state, self.cache = root / "state", root / "cache"
         self.history = self.state / "zsh/history"
+        self.backups = self.state / "dotfiles/shell-backup"
+        self.pre_apply = self.backups / "pre-apply"
         # From the checkout mise climbs to the real ~/.config/mise as a project config.
         shutil.copytree(REPO, self.repo, ignore=IGNORE)
         self.env = {
             "HOME": str(self.home),
             "USER": os.environ["USER"],  # the root mise.toml renders env.USER
             "PATH": f"{MISE.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "XDG_CONFIG_HOME": str(root / "config"),
+            "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(self.state),
             "XDG_CACHE_HOME": str(self.cache),
             "MISE_TRUSTED_CONFIG_PATHS": str(self.repo),
@@ -87,16 +94,49 @@ class ShellApplyTest(unittest.TestCase):
         self.assertFalse((self.home / ".config/zsh/path.zsh").exists())
         self.assertFalse(self.history.exists())
         self.assertFalse((self.cache / "zsh/completions/_mise").exists())
+        self.assertFalse(self.pre_apply.exists())
+        # pathlib's * also matches dot names; a dry run refuses before the folder exists.
+        self.assertEqual(list(self.backups.glob("*")), [])
 
     def test_apply_backs_up_the_live_files_first_in_a_private_folder(self) -> None:
         live = snapshot(self.home)
         self.run_ok("shell:apply")
-        backups = self.state / "dotfiles/shell-backup"
-        folders = list(backups.glob("[0-9]" * 8 + "T" + "[0-9]" * 6 + "*"))
-        self.assertEqual(len(folders), 1)
-        self.assertEqual(snapshot(folders[0]), live)
-        for folder in (backups, folders[0]):
+        # The one name left: no timestamped folder, and the temporary name was renamed away.
+        self.assertEqual([path.name for path in self.backups.iterdir()], ["pre-apply"])
+        self.assertEqual(snapshot(self.pre_apply), live)
+        for folder in (self.backups, self.pre_apply):
             self.assertEqual(stat.S_IMODE(folder.stat().st_mode), 0o700)
+
+    def test_a_later_apply_never_overwrites_pre_apply(self) -> None:
+        live = snapshot(self.home)
+        self.run_ok("shell:apply")
+        # An installer replaced a link, so the next apply has real work to do.
+        (self.home / ".zshrc").unlink()
+        (self.home / ".zshrc").write_text("# installer\n")
+        self.run_ok("shell:apply")
+        self.assertEqual(snapshot(self.pre_apply), live)
+
+    def test_a_later_apply_keeps_a_changed_live_file_aside(self) -> None:
+        self.run_ok("shell:apply")
+        (self.home / ".zshrc").unlink()
+        (self.home / ".zshrc").write_text("# live\n# installer\n")
+        self.run_ok("shell:apply")
+        replaced = list(self.backups.glob("replaced-*"))
+        self.assertEqual(len(replaced), 1)
+        self.assertEqual((replaced[0] / ".zshrc").read_text(), "# live\n# installer\n")
+
+    def test_a_failed_backup_leaves_no_pre_apply_and_rollback_refuses(self) -> None:
+        unreadable = self.home / ".zshrc.d/70-unreadable.zsh"
+        unreadable.write_text("# live\n")
+        unreadable.chmod(0o600)
+        live = snapshot(self.home)
+        unreadable.chmod(0)
+        self.assertNotEqual(self.spawn(MISE, "run", "shell:apply").returncode, 0)
+        self.assertFalse(self.pre_apply.exists())
+        rollback = self.spawn(MISE, "run", "shell:rollback")
+        self.assertNotEqual(rollback.returncode, 0, rollback.stdout + rollback.stderr)
+        unreadable.chmod(0o600)
+        self.assertEqual(snapshot(self.home), live)
 
     def test_apply_links_the_six_files_and_removes_the_retired_drop_ins(self) -> None:
         self.run_ok("shell:apply")
@@ -144,6 +184,48 @@ class ShellApplyTest(unittest.TestCase):
         self.run_ok("shell:rollback")
         self.assertEqual(snapshot(self.home), live)
         self.assertEqual(self.history.read_bytes(), GROWN)
+
+    def test_rollback_restores_a_path_zsh_that_was_there_before(self) -> None:
+        (self.home / ".config/zsh").mkdir(parents=True)
+        (self.home / ".config/zsh/path.zsh").write_text("# live path.zsh\n")
+        live = snapshot(self.home)
+        self.run_ok("shell:apply")
+        self.run_ok("shell:rollback")
+        self.assertEqual(snapshot(self.home), live)
+
+    def test_rollback_moves_the_current_files_aside_first(self) -> None:
+        live = snapshot(self.home)
+        self.run_ok("shell:apply")
+        (self.home / ".zshrc.d/70-later.zsh").write_text("# added after apply\n")
+        current = snapshot(self.home)
+        self.run_ok("shell:rollback")
+        replaced = list(self.backups.glob("replaced-*"))
+        self.assertEqual(len(replaced), 1)
+        self.assertTrue(REPLACED_NAME.fullmatch(replaced[0].name), replaced[0].name)
+        # Links and the later drop-in alike: nothing the rollback replaced is destroyed.
+        self.assertEqual(snapshot(replaced[0]), current)
+        self.assertEqual(snapshot(self.home), live)
+
+    def test_retry_after_a_partial_link_keeps_the_originals_for_rollback(self) -> None:
+        # A file where the last link needs a folder: mise links the other five, then fails.
+        blocker = self.home / ".config/zsh"
+        blocker.parent.mkdir()
+        blocker.write_text("# live file\n")
+        live = snapshot(self.home)
+        self.assertNotEqual(self.spawn(MISE, "run", "shell:apply").returncode, 0)
+        linked = [name for name in DEPLOYED if (self.home / name).is_symlink()]
+        self.assertEqual(linked, [*STARTUP, *DROP_INS])
+        blocker.unlink()
+        self.run_ok("shell:apply")
+        self.run_ok("shell:rollback")
+        self.assertEqual(snapshot(self.home), live)
+
+    def test_a_failed_dry_run_stops_the_apply(self) -> None:
+        # With no retired file left, only the dry run can say there is work to do.
+        for name in RETIRED:
+            (self.home / name).unlink()
+        (self.repo / "unix/home/.zshrc.d/10-zsh.zsh").unlink()
+        self.assert_refused(snapshot(self.home))
 
     def test_apply_refuses_and_changes_nothing(self) -> None:
         drop_in = self.repo / "unix/home/.zshrc.d/90-mise.zsh"
