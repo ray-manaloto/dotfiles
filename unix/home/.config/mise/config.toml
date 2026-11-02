@@ -656,6 +656,9 @@ content = '''
 # mise evaluates a third-party-tap cask with Ruby 3+ on PATH; macOS ships 2.6 ([bootstrap.hooks.pre-packages]).
 "brew:ruby" = { os = "macos" }
 "brew-cask:stablyai/orca/orca" = { os = "macos", adopt = true }
+# Herdr self-updates, so the cask adopts the app. No package ships herdr-core: the app's first-run
+# setup runs Herdr's installer, which also adds hc.
+"brew-cask:herdr-app" = { os = "macos", adopt = true, appdir = "~/Applications" }
 # A current git instead of the one bundled with the Xcode Command Line Tools.
 "brew:git" = { os = "macos" }
 
