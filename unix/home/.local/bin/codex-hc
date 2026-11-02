@@ -1,5 +1,5 @@
 #!/bin/sh
 # Codex for `hc run`, which starts programs without a shell and so never sees the codex function
-# in ~/.zshrc.d/60-agent-tools.zsh. hc needs Codex's own --no-daemon to keep its commands in hc;
-# the --no-daemon before exec is fnox's. Usage: hc run --bg --name fix codex-hc "task"
-exec fnox --config "$HOME/.config/fnox/agent-tools.toml" --no-daemon --non-interactive exec -- codex --no-daemon "$@"
+# in ~/.zshrc.d/60-agent-tools.zsh. hc needs --no-daemon to keep Codex's commands in hc.
+# Usage: hc run --bg --name fix codex-hc "task"
+exec "${0%/*}/codex-fnox" --no-daemon "$@"
