@@ -6,7 +6,6 @@ set -euo pipefail
 : "${SHELL_BACKUP_PATHS:?run this through: mise run shell:apply}"
 # Named, because a whole-config apply would also repoint ~/.zshrc.d/60-agent-tools.zsh at this checkout.
 targets=('~/.zshenv' '~/.zprofile' '~/.zshrc' '~/.zshrc.d/10-zsh.zsh' '~/.zshrc.d/90-mise.zsh' '~/.config/zsh/path.zsh')
-retired=("$HOME/.zprofile.d/macos-dev-env.zsh" "$HOME/.zshrc.d/50-mde-secrets.zsh")
 state="${XDG_STATE_HOME:-$HOME/.local/state}"
 cache="${XDG_CACHE_HOME:-$HOME/.cache}"
 
@@ -35,7 +34,6 @@ fi
 
 # Its own statement: only a plain assignment passes the dry run's failure to set -e.
 pending="$(link --dry-run)"
-pending+="$(ls "${retired[@]}" 2>/dev/null || true)"
 if [ -n "$pending" ]; then
   backups="$state/dotfiles/shell-backup"
   mkdir -p "$backups"
@@ -63,7 +61,6 @@ if [ -n "$pending" ]; then
     mv "$fresh" "$backups/pre-apply"
   fi
   link
-  rm -f "${retired[@]}"
 fi
 
 history="$state/zsh/history"

@@ -18,7 +18,6 @@ STARTUP = (".zshenv", ".zprofile", ".zshrc")
 DROP_INS = (".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh")
 DEPLOYED = (*STARTUP, *DROP_INS, ".config/zsh/path.zsh")
 BACKED_UP = (*STARTUP, ".zprofile.d", ".zshrc.d", ".config/zsh")
-RETIRED = (".zprofile.d/macos-dev-env.zsh", ".zshrc.d/50-mde-secrets.zsh")
 AGENT_TOOLS = ".zshrc.d/60-agent-tools.zsh"
 HISTORY = b": 1:0;echo before\n"
 GROWN = HISTORY + b": 2:0;echo after\n"
@@ -61,10 +60,11 @@ class ShellApplyTest(unittest.TestCase):
             "XDG_CACHE_HOME": str(self.cache),
             "MISE_TRUSTED_CONFIG_PATHS": str(self.repo),
         }
-        for name in (*STARTUP, *RETIRED):
+        for name in STARTUP:
             (self.home / name).parent.mkdir(parents=True, exist_ok=True)
             (self.home / name).write_text(f"# live {name}\n")
         # A link into a checkout on this Mac; apply has no reason to repoint it.
+        (self.home / AGENT_TOOLS).parent.mkdir()
         (self.home / AGENT_TOOLS).symlink_to(UNIX_HOME / AGENT_TOOLS)
         (self.home / ".zsh_history").write_bytes(HISTORY)
         (self.home / ".zsh_history").chmod(0o600)
@@ -140,7 +140,7 @@ class ShellApplyTest(unittest.TestCase):
         unreadable.chmod(0o600)
         self.assertEqual(snapshot(self.home), live)
 
-    def test_apply_links_the_six_files_and_removes_the_retired_drop_ins(self) -> None:
+    def test_apply_links_the_six_files(self) -> None:
         self.run_ok("shell:apply")
         for name in DEPLOYED:
             self.assertTrue((self.home / name).is_symlink(), name)
@@ -149,8 +149,6 @@ class ShellApplyTest(unittest.TestCase):
             self.assertEqual(resolved, self.repo / "unix/home" / name, name)
         # Six entries, never a linked folder: the drop-ins beside them stay put.
         self.assertFalse((self.home / ".zshrc.d").is_symlink())
-        for name in RETIRED:
-            self.assertFalse((self.home / name).exists())
         self.assertEqual((self.home / AGENT_TOOLS).readlink(), UNIX_HOME / AGENT_TOOLS)
 
     def test_history_is_copied_once_and_never_overwritten(self) -> None:
@@ -256,9 +254,6 @@ class ShellApplyTest(unittest.TestCase):
         self.assertEqual(snapshot(self.home), live)
 
     def test_a_failed_dry_run_stops_the_apply(self) -> None:
-        # With no retired file left, only the dry run can say there is work to do.
-        for name in RETIRED:
-            (self.home / name).unlink()
         (self.repo / "unix/home/.zshrc.d/10-zsh.zsh").unlink()
         self.assert_refused(snapshot(self.home))
 

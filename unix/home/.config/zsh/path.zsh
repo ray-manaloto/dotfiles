@@ -1,7 +1,6 @@
 # Reapply after macOS /etc/zprofile runs path_helper. No external commands.
 typeset -U path
 # Remove retired managers and ambient Homebrew build-tool paths.
-path=("${(@)path:#$HOME/.local/share/mde/bin}")
 path=("${(@)path:#$HOME/.cache/oh-my-opencode/bin}")
 path=("${(@)path:#$HOME/.opencode/bin}")
 path=("${(@)path:#/usr/local/Homebrew/*}")

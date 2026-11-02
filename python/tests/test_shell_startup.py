@@ -22,9 +22,9 @@ ZSH = "/bin/zsh"
 MODES = (("-c",), ("-l", "-c"), ("-i", "-c"), ("-l", "-i", "-c"))
 INTERACTIVE = MODES[2:]
 
-RETIRED_PATH = "~/.opencode/bin:~/.cache/oh-my-opencode/bin:~/.local/share/mde/bin"
+RETIRED_PATH = "~/.opencode/bin:~/.cache/oh-my-opencode/bin"
 INHERITED_PATH = f"{RETIRED_PATH}:/usr/bin:/bin:/usr/sbin:/sbin:{RETIRED_PATH}"
-RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode|mde)(?:/|$)", re.MULTILINE)
+RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode)(?:/|$)", re.MULTILINE)
 # What `mise run` and an activated venv leave first on PATH for the commands they start.
 VENV_BIN = "~/.venv/bin"
 KEG_BIN = "~/homebrew/opt/llvm/bin"
@@ -59,7 +59,7 @@ LOGIN_LAST = [
 ]
 RETIRED_NAME = re.compile(
     r"^(?:GOBIN|FNOX_CONFIG_DIR|FNOX_AGE_KEY_FILE|SOPS_AGE_KEY_FILE|UV_CACHE_DIR"
-    r"|XDG_RUNTIME_DIR|MDE_.*)$",
+    r"|XDG_RUNTIME_DIR)$",
     re.MULTILINE,
 )
 # `brew` as a traced command word: `[[ -x /opt/homebrew/bin/brew ]]` spawns nothing.

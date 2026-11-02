@@ -64,9 +64,7 @@ show_env = true
 # mise-env-fnox is intentionally disabled. Empirical reproduction on
 # 2026-04-09 showed that enabling it spawns runaway `fnox config-files`
 # subprocesses (10+ concurrent at 100% CPU each, shell hangs during
-# login-shell sourcing). Authoritative rationale + repro + suspected root
-# causes are tracked in:
-#   https://github.com/ray-manaloto/macos-development-environment/issues/75
+# login-shell sourcing).
 # Shells hold no secrets; commands get them through `fnox exec`.
 
 
