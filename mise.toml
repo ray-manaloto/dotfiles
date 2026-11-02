@@ -106,6 +106,8 @@ fi
 "~/.zshrc.d/10-zsh.zsh" = { source = "unix/home/.zshrc.d/10-zsh.zsh", mode = "symlink" }
 "~/.zshrc.d/90-mise.zsh" = { source = "unix/home/.zshrc.d/90-mise.zsh", mode = "symlink" }
 "~/.config/zsh/path.zsh" = { source = "unix/home/.config/zsh/path.zsh", mode = "symlink" }
+"~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
+"~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
