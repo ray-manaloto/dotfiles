@@ -76,22 +76,6 @@ CONDA_SUBDIR = "osx-arm64"
 GIT_TERMINAL_PROMPT = "0"
 # NotebookLM auth: standardize paths so agents find credentials consistently
 NOTEBOOKLM_HOME = "~/.notebooklm"
-# MDE path variables below locate data used by existing workflows. They do
-# not define the source of this global mise config.
-# Layer 2: mise expands $MDE_PROJECT_DIR/$MDE_GENERATED_DIR at shell activation via env_shell_expand
-# Migration note: give MDE_PROJECT_DIR a dotfiles-native source before
-# declaring the takeover complete.
-# Other MDE variables compose from $MDE_PROJECT_DIR or $MDE_GENERATED_DIR.
-MDE_PROJECT_DIR = "$HOME/dev/github/ray-manaloto/macos-development-environment"
-MDE_GENERATED_DIR = "$MDE_PROJECT_DIR/.generated"
-MDE_DIR_REMEMBER = "$MDE_GENERATED_DIR/remember"
-MDE_DIR_LEARNINGS = "$MDE_GENERATED_DIR/learnings"
-MDE_DIR_TRANSCRIPTS = "$MDE_GENERATED_DIR/transcripts"
-MDE_DIR_SCHEMAS = "$MDE_GENERATED_DIR/schemas"
-MDE_DIR_REPORTS = "$MDE_GENERATED_DIR/reports"
-MDE_DIR_CONTEXT = "$MDE_GENERATED_DIR/context"
-MDE_DIR_DREAM = "$MDE_GENERATED_DIR/dream"
-MDE_DIR_TRAIL = "$MDE_GENERATED_DIR/trail"
 # Mossop pattern: name the brew prefix once; PATH entries below expand it (env_shell_expand).
 HOMEBREW_PREFIX = "{{ system_brew_prefix }}"
 # DL-766: ordinary LLVM clang owns CC/CXX; paths come from mise templates, never literals (DL-764).
