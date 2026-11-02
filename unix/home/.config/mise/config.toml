@@ -125,7 +125,7 @@ path = [
 # update:mise keeps these minor/patch selections and retains recovery installs.
 python = [{ version = "3.15", minimum_release_age = "0s" }, { version = "3.14.8", minimum_release_age = "0s" }]
 #python = { version = "3.15.2", minimum_release_age = "0s" }
-pipx = { version = "1.18.9", minimum_release_age = "0s" }
+pipx = { version = "1.18.11", minimum_release_age = "0s" }
 npm = { version = "12.2.1", minimum_release_age = "0s" }
 bun = { version = "1.4.4", minimum_release_age = "0s" }
 node = { version = "26.13.0", minimum_release_age = "0s" }
@@ -133,7 +133,7 @@ go = { version = "1.27.3", minimum_release_age = "0s" }
 rust = { version = "1.99.1", minimum_release_age = "0s" }
 pixi = { version = "0.83.0", minimum_release_age = "0s" }
 uv = { version = "0.13.6", minimum_release_age = "0s" }
-chezmoi = { version = "2.73.3", minimum_release_age = "0s" }
+chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
 pkl = { version = "0.32.2", minimum_release_age = "0s" }
 hk = { version = "2.11.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
@@ -153,8 +153,8 @@ delta = { version = "0.20.1", minimum_release_age = "0s" }
 lsd = { version = "1.2.0", minimum_release_age = "0s" }
 hyperfine = { version = "2.0.0", minimum_release_age = "0s" }
 glow = { version = "3.0.0", minimum_release_age = "0s" }
-atuin = { version = "18.24.3", minimum_release_age = "0s" }
-"github:ast-grep/ast-grep" = { version = "0.51.0", minimum_release_age = "0s" }
+atuin = { version = "18.24.4", minimum_release_age = "0s" }
+"github:ast-grep/ast-grep" = { version = "0.51.1", minimum_release_age = "0s" }
 "aqua:FiloSottile/age" = { version = "1.3.2", minimum_release_age = "0s" }
 sops = { version = "3.13.3", minimum_release_age = "0s" }
 #github:DopplerHQ/cli" = { version = "3.77.0", exe = "doppler", asset_pattern = "*macOS_arm64.tar.gz", minimum_release_age = "0s" }
@@ -167,29 +167,29 @@ pre-commit = { version = "4.7.0", minimum_release_age = "0s" }
 #"pipx:mgrep" = { version = "0.1.6", minimum_release_age = "0s" }
 typos = { version = "1.51.1", minimum_release_age = "0s" }
 #"pypi:yamllint" = { version = "1.38.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-aws-cli = { version = "2.39.1", symlink_bins = "true", minimum_release_age = "0s" }
+aws-cli = { version = "2.39.3", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
 "aqua:loft-sh/devpod" = { version = "0.6.15", minimum_release_age = "0s" }
 github-cli = { version = "2.103.3", minimum_release_age = "0s" }
-cloudflared = { version = "2026.10.6", minimum_release_age = "0s" }
+cloudflared = { version = "2026.10.7", minimum_release_age = "0s" }
 pandoc = { version = "3.13", minimum_release_age = "0s" }
 tmux = { version = "3.7c", minimum_release_age = "0s" }
 lefthook = { version = "2.2.2", minimum_release_age = "0s" }
 devcontainer-cli = { version = "0.90.0", minimum_release_age = "0s" }
 docker-cli = { version = "29.9.2", minimum_release_age = "0s" }
-docker-compose = { version = "5.6.1", minimum_release_age = "0s" }
+docker-compose = { version = "5.7.0", minimum_release_age = "0s" }
 #"github:docker/docker-agent" = { version = "1.152.0", asset_pattern = "*-arm64", minimum_release_age = "0s" }
-"github:docker/docker-agent" = { version = "1.154.0", minimum_release_age = "0s" }
+"github:docker/docker-agent" = { version = "1.156.1", minimum_release_age = "0s" }
 xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
 bats = { version = "1.14.0", minimum_release_age = "0s" }
 "github:charmbracelet/gum" = { version = "2.0.2", minimum_release_age = "0s" }
 gemini = { version = "0.66.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
 #"npm:@opencode/cli" = { version = "2.1.0", bun_args = "--trust", minimum_release_age = "0s" }
 "npm:@modelcontextprotocol/inspector" = { version = "2.13.0", minimum_release_age = "0s" }
-"npm:@mermaid-js/mermaid-cli" = { version = "12.0.0", minimum_release_age = "0s" }
+"npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s" }
 "npm:jscpd" = { version = "5.4.2", minimum_release_age = "0s" }
-"npm:@fission-ai/openspec" = { version = "1.15.0", minimum_release_age = "0s" }
+"npm:@fission-ai/openspec" = { version = "1.16.0", minimum_release_age = "0s" }
 biome = { version = "2.6.4", minimum_release_age = "0s" }
 yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = "0s" }
 rtk = { version = "1.1.0", minimum_release_age = "0s" }
@@ -199,13 +199,13 @@ rtk = { version = "1.1.0", minimum_release_age = "0s" }
 "npm:ctx7" = { version = "0.8.2", minimum_release_age = "0s" }
 "npm:@augmentcode/auggie" = { version = "0.36.0", minimum_release_age = "0s" }
 "npm:@tauri-apps/cli" = { version = "2.12.4", minimum_release_age = "0s" }
-"npm:@playwright/cli" = { version = "0.1.22", minimum_release_age = "0s" }
+"npm:@playwright/cli" = { version = "0.1.23", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
-"npm:skills" = { version = "1.7.4", minimum_release_age = "0s" }
-"npm:agent-browser" = { version = "0.41.0", minimum_release_age = "0s" }
+"npm:skills" = { version = "1.7.5", minimum_release_age = "0s" }
+"npm:agent-browser" = { version = "0.41.1", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
 "npm:dev3000" = { version = "0.0.189", minimum_release_age = "0s" }
-"npm:portless" = { version = "0.15.12", minimum_release_age = "0s" }
+"npm:portless" = { version = "0.15.13", minimum_release_age = "0s" }
 "npm:opensrc" = { version = "0.7.3", minimum_release_age = "0s" }
 #"pipx:langchain-cli" = { version = "0.0.37", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 #"pipx:langgraph-cli" = { version = "0.4.39", python = "3.15", with = ["typing-extensions"], minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
@@ -225,26 +225,26 @@ rtk = { version = "1.1.0", minimum_release_age = "0s" }
 #"pipx:specify-cli" = { version = "1.2.3", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:pyright" = { version = "1.1.414", minimum_release_age = "0s" }
 "npm:typescript" = { version = "7.0.2", minimum_release_age = "0s" }
-"npm:typescript-language-server" = { version = "6.0.2", minimum_release_age = "0s" }
+"npm:typescript-language-server" = { version = "6.0.3", minimum_release_age = "0s" }
 kubectl = { version = "1.37.2", minimum_release_age = "0s" }
 helm = { version = "4.3.1", minimum_release_age = "0s" }
 eksctl = { version = "0.231.0", minimum_release_age = "0s" }
 k9s = { version = "0.51.0", minimum_release_age = "0s" }
 kubectx = { version = "0.11.0", minimum_release_age = "0s" }
 stern = { version = "1.35.0", minimum_release_age = "0s" }
-"pipx:graphifyy" = { version = "0.9.97", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
+"pipx:graphifyy" = { version = "0.9.100", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
 #"pipx:check-jsonschema" = { version = "0.38.2", minimum_release_age = "0s" }
 "gitlab:graphviz/graphviz" = { version = "16.1.0", minimum_release_age = "0s" }
 "aqua:betterleaks/betterleaks" = { version = "1.9.0", minimum_release_age = "0s" }
 "npm:@ralph-orchestrator/ralph-cli" = { version = "2.10.1", minimum_release_age = "0s" }
-aube = { version = "2.8.5", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
+aube = { version = "2.9.0", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
 shfmt = { version = "3.14.1", minimum_release_age = "0s" }
 sqlite = { version = "3.54.1", minimum_release_age = "0s" }
 libsql-server = { version = "0.24.32", minimum_release_age = "0s" }
 micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
-"pipx:datamodel-code-generator" = { version = "0.87.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
+"pipx:datamodel-code-generator" = { version = "0.88.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:defuddle" = { version = "0.19.6", minimum_release_age = "0s" }
 rumdl = { version = "0.3.2", minimum_release_age = "0s" }
 herdr = { version = "0.9.5", minimum_release_age = "0s" }  # DL-714: its integrations run in [bootstrap.hooks.post-tools]
@@ -257,7 +257,7 @@ wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
 #"cargo:procs" = { version = "0.14.12", minimum_release_age = "0s" }
 topgrade = { version = "17.14.1", minimum_release_age = "0s" }
 
-"npm:openwiki" = { version = "0.7.2", minimum_release_age = "0s" }
+"npm:openwiki" = { version = "0.7.3", minimum_release_age = "0s" }
 
 "github:DeusData/codebase-memory-mcp" = { version = "0.12.1", minimum_release_age = "0s" }
 
