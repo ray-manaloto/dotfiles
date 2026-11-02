@@ -9,7 +9,7 @@ export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git gh)
 fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
-fpath=("$ZSH/custom/completions" "$HOME/.docker/completions" $fpath)
+fpath=("$XDG_CACHE_HOME/zsh/completions" "$ZSH/custom/completions" "$HOME/.docker/completions" $fpath)
 zstyle ':omz:update' mode auto
 zstyle ':omz:update' frequency 13
 export LS_COLORS="${LS_COLORS:-di=1;36:ln=35:so=32:pi=33:ex=31:bd=34;46:cd=34;43:su=30;41:sg=30;46:tw=30;42:ow=30;43}"

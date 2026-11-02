@@ -25,6 +25,8 @@ run = "echo all tests passed"
 [vars]
 private_home = "{{ env.HOME }}"
 private_user = "{{ env.USER }}"
+# What shell:apply backs up and shell:rollback restores, relative to $HOME.
+shell_backup_paths = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d"
 
 [tasks."privacy:scan"]
 description = "Refuse this machine's home path in tracked files, given files, or outgoing commits"
@@ -34,6 +36,16 @@ flag "--outgoing" help="Scan every commit not yet on a remote, branches and tags
 arg "[file]" var=#true help="Files to scan; default every tracked file"
 '''
 run = "bash tasks/privacy/scan.sh"
+
+[tasks."shell:apply"]
+description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
+env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
+run = "bash tasks/shell/apply.sh"
+
+[tasks."shell:rollback"]
+description = "Restore the zsh files from the newest shell:apply backup"
+env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
+run = "bash tasks/shell/rollback.sh"
 
 [tasks.pre-commit]
 run = "hk run pre-commit"
@@ -83,6 +95,13 @@ fi
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
 "~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
+# Separate entries, so ~/.zshrc.d stays a real folder. Applied by shell:apply, which backs up first.
+"~/.zshenv" = { source = "unix/home/.zshenv", mode = "symlink" }
+"~/.zprofile" = { source = "unix/home/.zprofile", mode = "symlink" }
+"~/.zshrc" = { source = "unix/home/.zshrc", mode = "symlink" }
+"~/.zshrc.d/10-zsh.zsh" = { source = "unix/home/.zshrc.d/10-zsh.zsh", mode = "symlink" }
+"~/.zshrc.d/90-mise.zsh" = { source = "unix/home/.zshrc.d/90-mise.zsh", mode = "symlink" }
+"~/.config/zsh/path.zsh" = { source = "unix/home/.config/zsh/path.zsh", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
