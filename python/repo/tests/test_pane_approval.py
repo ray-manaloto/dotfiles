@@ -303,3 +303,54 @@ def test_an_unknown_command_names_the_choices(capsys: pytest.CaptureFixture[str]
     with pytest.raises(SystemExit):
         main(["nope"])
     assert "pane-approved" in json.loads(capsys.readouterr().err)["error"]
+
+
+def aborted(turn_id: str) -> dict[str, Any]:
+    return {"type": "event_msg", "payload": {"type": "turn_aborted", "turn_id": turn_id, "reason": "interrupted"}}
+
+
+def test_an_interrupted_turn_leaves_the_session_usable(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    started = {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "t0"}}
+    write_log(repo, [started, aborted("t0"), *records])
+    main(["pane-approved"])
+
+
+def test_an_interrupted_turn_withdraws_an_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    started = {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "t2"}}
+    write_log(repo, [*approve(repo, capsys), started, aborted("t2")])
+    assert "no completed last turn" in refusal(capsys)
+
+
+def test_an_abort_of_no_running_turn_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, [*approve(repo, capsys), aborted("t9")])
+    assert "belongs to no running turn" in refusal(capsys)
+
+
+def test_a_trailing_newline_after_the_approval_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    write_log(repo, turn(repo, "t1", f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n"))
+    main(["pane-approved"])
+
+
+def test_an_image_in_a_user_message_does_not_break_the_check(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    image = {"type": "message", "role": "user", "content": [{"type": "input_image", "image_url": "data:"}]}
+    records.insert(2, {"type": "response_item", "payload": image})
+    write_log(repo, records)
+    main(["pane-approved"])
+
+
+def test_a_final_answer_with_no_text_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    records[2]["payload"]["content"] = [{"type": "output_text"}]
+    write_log(repo, records)
+    assert "not one output_text part" in refusal(capsys)
+
+
+def test_an_unreadable_rollout_is_a_named_failure(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["pane-pin", "--session", SESSION])
+    folder = repo.parent / "codex" / "sessions"
+    (folder / f"rollout-2026-11-02T19-55-16-{SESSION}.jsonl").mkdir(parents=True)
+    assert "rollout-" in refusal(capsys)

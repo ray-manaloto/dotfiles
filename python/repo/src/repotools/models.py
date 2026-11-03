@@ -179,7 +179,7 @@ class TurnContext(BaseModel):
 
 class OutputText(BaseModel):
     """
-    One content part of a message.
+    One content part of a message; an image part has no text.
     """
 
     model_config = ConfigDict(
@@ -189,7 +189,7 @@ class OutputText(BaseModel):
     """
     output_text for what the assistant wrote
     """
-    text: str
+    text: str | None = None
     """
     The words
     """
@@ -219,7 +219,7 @@ class Message(BaseModel):
 
 class TaskEvent(BaseModel):
     """
-    A rollout's task_started or task_complete payload.
+    A rollout's task_started, task_complete or turn_aborted payload.
     """
 
     model_config = ConfigDict(

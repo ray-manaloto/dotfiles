@@ -48,6 +48,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     except subprocess.CalledProcessError as error:
         sys.stderr.write(Failure(error=f"{error.cmd[0]} failed: {error.stderr}").model_dump_json() + "\n")
         raise SystemExit(1) from None
-    except ValueError as error:  # the refusals, pydantic's validation errors, and json's, all ValueError
+    except (ValueError, OSError) as error:  # the refusals, pydantic's and json's errors, and unreadable files
         sys.stderr.write(Failure(error=str(error)).model_dump_json() + "\n")
         raise SystemExit(1) from None

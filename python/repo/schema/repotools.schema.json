@@ -96,13 +96,13 @@
       "required": ["turn_id", "cwd", "approval_policy", "sandbox_policy", "permission_profile"]
     },
     "OutputText": {
-      "description": "One content part of a message.",
+      "description": "One content part of a message; an image part has no text.",
       "type": "object",
       "properties": {
         "type": { "type": "string", "description": "output_text for what the assistant wrote" },
-        "text": { "type": "string", "description": "The words" }
+        "text": { "type": ["string", "null"], "description": "The words" }
       },
-      "required": ["type", "text"]
+      "required": ["type"]
     },
     "Message": {
       "description": "A rollout's response_item message payload.",
@@ -115,7 +115,7 @@
       "required": ["role", "content"]
     },
     "TaskEvent": {
-      "description": "A rollout's task_started or task_complete payload.",
+      "description": "A rollout's task_started, task_complete or turn_aborted payload.",
       "type": "object",
       "properties": {
         "turn_id": { "type": "string", "description": "The turn" },

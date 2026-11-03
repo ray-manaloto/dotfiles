@@ -53,10 +53,11 @@ def rollout(session: str) -> str:
 
 
 def answer_text(message: Message) -> str:
-    if len(message.content) != 1 or message.content[0].type != "output_text":
+    text = message.content[0].text if len(message.content) == 1 else None
+    if text is None or message.content[0].type != "output_text":
         msg = "a final answer is not one output_text part"
         raise ValueError(msg)
-    return message.content[0].text
+    return text
 
 
 class Turns:
@@ -109,6 +110,14 @@ class Turns:
         self.done = (context, answer)
         self.running = None
 
+    def turn_aborted(self, payload: dict[str, Any]) -> None:
+        # Interrupted: nothing is approved, because task_started cleared it, and the next turn may run.
+        event = TaskEvent.model_validate(payload)
+        if event.turn_id != self.running:
+            msg = f"the abort of {event.turn_id} belongs to no running turn"
+            raise ValueError(msg)
+        self.running = None
+
     def read(self, line: str) -> None:
         record = RolloutLine.model_validate_json(line)
         kind = record.payload.get("type")
@@ -118,6 +127,7 @@ class Turns:
             ("response_item", "message"): self.message,
             ("event_msg", "task_started"): self.task_started,
             ("event_msg", "task_complete"): self.task_complete,
+            ("event_msg", "turn_aborted"): self.turn_aborted,
         }
         handler = handlers.get((record.type, kind))
         if handler is not None:
@@ -156,6 +166,6 @@ def check() -> None:
         msg = f"the last turn of session {session} was not read-only"
         raise ValueError(msg)
     wanted = f"{APPROVAL} {fingerprint()}"
-    if answer.split("\n")[-1] != wanted:
+    if answer.rstrip().split("\n")[-1] != wanted:
         msg = f"the reviewer's last answer does not end with: {wanted}"
         raise ValueError(msg)
