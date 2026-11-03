@@ -1,0 +1,32 @@
+[
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-01-22T11:54:03Z",
+    "isPullRequest": false,
+    "number": 20050,
+    "state": "open",
+    "title": "[BUG] LSP plugins not working with native/standalone binary installation",
+    "updatedAt": "2026-02-26T22:10:46Z",
+    "url": "https://github.com/anthropics/claude-code/issues/20050"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-02-04T07:32:08Z",
+    "isPullRequest": false,
+    "number": 23006,
+    "state": "closed",
+    "title": "kotlin-lsp plugin not working: 'No LSP server available for file type: .kt'",
+    "updatedAt": "2026-03-13T14:32:27Z",
+    "url": "https://github.com/anthropics/claude-code/issues/23006"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-03-12T13:06:39Z",
+    "isPullRequest": false,
+    "number": 33608,
+    "state": "closed",
+    "title": "[BUG] jdtls LSP plugin not starting despite valid config and prerequisites (boostvolt/claude-code-lsps)",
+    "updatedAt": "2026-03-24T14:40:56Z",
+    "url": "https://github.com/anthropics/claude-code/issues/33608"
+  }
+]

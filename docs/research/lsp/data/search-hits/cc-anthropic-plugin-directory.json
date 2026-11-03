@@ -1,0 +1,62 @@
+[
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-10-08T20:42:52Z",
+    "isPullRequest": false,
+    "number": 100608,
+    "state": "open",
+    "title": "[BUG] `strictKnownMarketplaces` silently drops `{\"source\":\"pluginDirectory\"}`, so the built-in Anthropic Directory can't be allowed",
+    "updatedAt": "2026-10-28T11:16:32Z",
+    "url": "https://github.com/anthropics/claude-code/issues/100608"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-06T14:58:53Z",
+    "isPullRequest": false,
+    "number": 99959,
+    "state": "open",
+    "title": "Plugins synced from claude.ai can't satisfy a declared plugin dependency, so the dependent plugin is disabled",
+    "updatedAt": "2026-11-02T01:05:36Z",
+    "url": "https://github.com/anthropics/claude-code/issues/99959"
+  },
+  {
+    "commentsCount": 10,
+    "createdAt": "2026-10-02T07:21:14Z",
+    "isPullRequest": false,
+    "number": 98894,
+    "state": "open",
+    "title": "[BUG] Uninstalled claude.ai plugins are re-enabled server-side within seconds and synced into every Claude Code session",
+    "updatedAt": "2026-10-29T00:38:26Z",
+    "url": "https://github.com/anthropics/claude-code/issues/98894"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-07-23T03:31:36Z",
+    "isPullRequest": false,
+    "number": 80422,
+    "state": "open",
+    "title": "MCP OAuth storage wiped mid-session (no update involved); CLI silently registers a new dynamic client, breaking auth for all remote MCP servers",
+    "updatedAt": "2026-10-21T10:37:22Z",
+    "url": "https://github.com/anthropics/claude-code/issues/80422"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-05T01:41:35Z",
+    "isPullRequest": false,
+    "number": 99543,
+    "state": "open",
+    "title": "Claude repeatedly invents human-approval gates, writes them into my system as my rules, and misreports what it did",
+    "updatedAt": "2026-10-05T01:48:03Z",
+    "url": "https://github.com/anthropics/claude-code/issues/99543"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-04-18T14:01:09Z",
+    "isPullRequest": false,
+    "number": 50394,
+    "state": "closed",
+    "title": "[BUG] Cowork Customize panel has no \"+\" button to add marketplace or create plugin on Pro plan (macOS 1.3109.0)",
+    "updatedAt": "2026-07-20T14:53:55Z",
+    "url": "https://github.com/anthropics/claude-code/issues/50394"
+  }
+]

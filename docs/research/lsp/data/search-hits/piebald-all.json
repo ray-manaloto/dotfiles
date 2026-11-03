@@ -1,0 +1,782 @@
+[
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-21T11:32:20Z",
+    "isPullRequest": false,
+    "number": 84,
+    "state": "open",
+    "title": "Copilot compatibility",
+    "updatedAt": "2026-08-21T11:32:20Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/84"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-18T11:28:38Z",
+    "isPullRequest": false,
+    "number": 75,
+    "state": "open",
+    "title": "LSP tool: workspaceSymbol unusable — schema has no `query` parameter",
+    "updatedAt": "2026-05-18T11:28:38Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/75"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-09T23:27:59Z",
+    "isPullRequest": false,
+    "number": 72,
+    "state": "open",
+    "title": "pyright on Windows: spawn fails with `ENOENT: uv_spawn 'pyright-langserver'` — needs .cmd extension",
+    "updatedAt": "2026-05-09T23:27:59Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/72"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-30T05:21:36Z",
+    "isPullRequest": false,
+    "number": 69,
+    "state": "open",
+    "title": "jdtls plugin: .java extension not registered with LSP router on Windows native installation",
+    "updatedAt": "2026-04-30T05:21:36Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/69"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-16T05:58:20Z",
+    "isPullRequest": false,
+    "number": 74,
+    "state": "open",
+    "title": "[BUG] Router gives diagnostics-only servers exclusive ownership of their file extensions, shadowing real language servers",
+    "updatedAt": "2026-05-16T05:58:20Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/74"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-30T13:20:51Z",
+    "isPullRequest": false,
+    "number": 62,
+    "state": "open",
+    "title": "ESLint plugin recommends @zed-industries/vscode-langservers-extracted which no longer includes ESLint",
+    "updatedAt": "2026-03-30T20:20:41Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/62"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-13T20:46:18Z",
+    "isPullRequest": false,
+    "number": 67,
+    "state": "open",
+    "title": "PowerShell plugin: `Install-Module PowerShellEditorServices` instructions are incorrect — module is not published to PSGallery",
+    "updatedAt": "2026-04-13T20:46:18Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/67"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-16T15:40:45Z",
+    "isPullRequest": true,
+    "number": 83,
+    "state": "closed",
+    "title": "fix: remove eslint server from vscode-langservers plugin",
+    "updatedAt": "2026-08-16T15:42:41Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/83"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-07-25T10:32:19Z",
+    "isPullRequest": true,
+    "number": 80,
+    "state": "merged",
+    "title": "feat: add terraform-ls plugin",
+    "updatedAt": "2026-07-25T19:15:25Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/80"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-07-25T21:48:09Z",
+    "isPullRequest": true,
+    "number": 82,
+    "state": "merged",
+    "title": "feat: add typescript-language-server plugin",
+    "updatedAt": "2026-07-25T22:46:43Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/82"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-07-25T10:32:45Z",
+    "isPullRequest": true,
+    "number": 81,
+    "state": "merged",
+    "title": "feat: add tofu-ls plugin",
+    "updatedAt": "2026-07-25T15:13:08Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/81"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-17T20:33:11Z",
+    "isPullRequest": true,
+    "number": 79,
+    "state": "merged",
+    "title": "Add perl-lsp (Perl language server)",
+    "updatedAt": "2026-06-17T21:44:49Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/79"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-01T09:00:08Z",
+    "isPullRequest": true,
+    "number": 71,
+    "state": "merged",
+    "title": "feat: add Swift/Objective-C LSP plugin (sourcekit-lsp)",
+    "updatedAt": "2026-06-01T13:40:45Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/71"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-28T15:18:00Z",
+    "isPullRequest": true,
+    "number": 78,
+    "state": "merged",
+    "title": "Add support for Gleam LSP",
+    "updatedAt": "2026-05-28T16:08:12Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/78"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-27T15:17:04Z",
+    "isPullRequest": false,
+    "number": 77,
+    "state": "closed",
+    "title": "LSP: bash-language-server",
+    "updatedAt": "2026-06-01T01:46:05Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/77"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-26T13:33:17Z",
+    "isPullRequest": false,
+    "number": 68,
+    "state": "closed",
+    "title": "Does it support accessing local LSP services with Claude Code?",
+    "updatedAt": "2026-06-01T13:41:06Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/68"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-30T18:09:37Z",
+    "isPullRequest": true,
+    "number": 70,
+    "state": "merged",
+    "title": "Add ty plugin (Astral's Python type checker)",
+    "updatedAt": "2026-04-30T20:21:50Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/70"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-14T15:22:53Z",
+    "isPullRequest": true,
+    "number": 73,
+    "state": "merged",
+    "title": "fix(jdtls): increase startupTimeout, add maxRestarts and Maven source downloads",
+    "updatedAt": "2026-06-01T01:43:49Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/73"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-04-04T15:30:52Z",
+    "isPullRequest": true,
+    "number": 64,
+    "state": "merged",
+    "title": "feat: add php-lsp — Rust-based PHP language server",
+    "updatedAt": "2026-04-04T17:20:39Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/64"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-23T22:58:09Z",
+    "isPullRequest": true,
+    "number": 59,
+    "state": "merged",
+    "title": "Add Svelte LSP plugin (svelte-language-server)",
+    "updatedAt": "2026-03-23T22:59:37Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/59"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-25T12:48:15Z",
+    "isPullRequest": false,
+    "number": 61,
+    "state": "closed",
+    "title": "powershell-editor-services: writes session file to working directory",
+    "updatedAt": "2026-06-01T13:55:22Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/61"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-12T11:58:40Z",
+    "isPullRequest": true,
+    "number": 65,
+    "state": "merged",
+    "title": "Add GraphQL language server plugin",
+    "updatedAt": "2026-04-12T14:23:08Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/65"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-11T20:48:01Z",
+    "isPullRequest": true,
+    "number": 57,
+    "state": "merged",
+    "title": "Add mdbase-lsp language server plugin",
+    "updatedAt": "2026-03-11T21:18:06Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/57"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-23T17:21:06Z",
+    "isPullRequest": true,
+    "number": 26,
+    "state": "closed",
+    "title": "Add lspServers config to ruby-lsp plugin",
+    "updatedAt": "2026-03-22T14:10:19Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/26"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-03T11:23:39Z",
+    "isPullRequest": false,
+    "number": 53,
+    "state": "closed",
+    "title": "Add Solidity LSP",
+    "updatedAt": "2026-03-03T20:38:53Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/53"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-18T08:45:01Z",
+    "isPullRequest": true,
+    "number": 58,
+    "state": "merged",
+    "title": "Add Lean 4 LSP plugin for interactive theorem proving",
+    "updatedAt": "2026-03-18T13:34:13Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/58"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-01T08:25:17Z",
+    "isPullRequest": true,
+    "number": 52,
+    "state": "merged",
+    "title": "feat: add Dart/Flutter LSP plugin",
+    "updatedAt": "2026-03-01T15:07:47Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/52"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-12T20:49:26Z",
+    "isPullRequest": true,
+    "number": 66,
+    "state": "merged",
+    "title": "Add Haskell language server plugin",
+    "updatedAt": "2026-04-12T23:14:20Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/66"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-03T13:45:08Z",
+    "isPullRequest": false,
+    "number": 63,
+    "state": "closed",
+    "title": "when will support swift language?",
+    "updatedAt": "2026-06-01T13:40:47Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/63"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-03-06T17:19:19Z",
+    "isPullRequest": false,
+    "number": 56,
+    "state": "closed",
+    "title": "Issue with the Scala metals LSP plugin in Claude Code",
+    "updatedAt": "2026-03-22T14:10:07Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/56"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-24T13:52:07Z",
+    "isPullRequest": true,
+    "number": 47,
+    "state": "merged",
+    "title": "Modernize LSP definitions and sync validation tooling",
+    "updatedAt": "2026-02-24T15:49:18Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/47"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-23T17:20:30Z",
+    "isPullRequest": true,
+    "number": 25,
+    "state": "closed",
+    "title": "Add lspServers config to clangd plugin",
+    "updatedAt": "2026-03-22T14:10:54Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/25"
+  },
+  {
+    "commentsCount": 7,
+    "createdAt": "2026-01-20T05:55:49Z",
+    "isPullRequest": false,
+    "number": 43,
+    "state": "closed",
+    "title": "Vue Volar LSP: Connection disposed during LSP operations",
+    "updatedAt": "2026-01-31T14:54:19Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/43"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-24T23:15:12Z",
+    "isPullRequest": true,
+    "number": 49,
+    "state": "merged",
+    "title": "fix(vue-volar): enforce latest compatible vue-language-server v2",
+    "updatedAt": "2026-03-01T14:30:18Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/49"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-22T10:56:28Z",
+    "isPullRequest": true,
+    "number": 44,
+    "state": "merged",
+    "title": "feat: add OCaml LSP plugin (ocamllsp)",
+    "updatedAt": "2026-01-22T15:53:49Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/44"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-25T06:24:26Z",
+    "isPullRequest": false,
+    "number": 60,
+    "state": "closed",
+    "title": "powershell-editor-services: /dev/null in LogPath breaks on Windows",
+    "updatedAt": "2026-03-25T18:22:08Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/60"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2025-12-23T17:16:28Z",
+    "isPullRequest": false,
+    "number": 19,
+    "state": "closed",
+    "title": "texlab plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-03-03T15:00:59Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/19"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-04T16:11:25Z",
+    "isPullRequest": true,
+    "number": 46,
+    "state": "merged",
+    "title": "fix(vue-volar): restore tsdk config and update docs",
+    "updatedAt": "2026-02-15T06:57:25Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/46"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:24:06Z",
+    "isPullRequest": true,
+    "number": 31,
+    "state": "closed",
+    "title": "Add lspServers config to kotlin-lsp plugin",
+    "updatedAt": "2026-01-30T16:55:23Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/31"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-06T22:17:30Z",
+    "isPullRequest": true,
+    "number": 40,
+    "state": "merged",
+    "title": "Add basedpyright LSP plugin",
+    "updatedAt": "2026-01-07T14:50:22Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/40"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-28T17:03:37Z",
+    "isPullRequest": true,
+    "number": 51,
+    "state": "merged",
+    "title": "Add Ada language server plugin",
+    "updatedAt": "2026-03-01T14:30:27Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/51"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-01-13T09:34:17Z",
+    "isPullRequest": false,
+    "number": 42,
+    "state": "closed",
+    "title": "add Julia lsp",
+    "updatedAt": "2026-01-14T18:17:32Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/42"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-01-01T18:07:45Z",
+    "isPullRequest": false,
+    "number": 39,
+    "state": "closed",
+    "title": "Temporary patch for the Claude 2.0.76 LSP bug",
+    "updatedAt": "2026-02-22T18:40:40Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/39"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-25T15:53:16Z",
+    "isPullRequest": false,
+    "number": 50,
+    "state": "closed",
+    "title": "Add Ada language server",
+    "updatedAt": "2026-03-01T15:08:21Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/50"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:21:43Z",
+    "isPullRequest": true,
+    "number": 27,
+    "state": "closed",
+    "title": "Add lspServers config to vscode-langservers plugin",
+    "updatedAt": "2026-01-30T16:55:21Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/27"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-23T17:22:18Z",
+    "isPullRequest": true,
+    "number": 28,
+    "state": "closed",
+    "title": "Add lspServers config to phpactor plugin",
+    "updatedAt": "2026-02-01T19:25:11Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/28"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-03-04T14:47:55Z",
+    "isPullRequest": false,
+    "number": 54,
+    "state": "closed",
+    "title": "Scala support?",
+    "updatedAt": "2026-03-06T10:34:02Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/54"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-20T12:32:21Z",
+    "isPullRequest": true,
+    "number": 4,
+    "state": "merged",
+    "title": "Add Kotlin LSP support",
+    "updatedAt": "2025-12-20T16:24:49Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/4"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:22:55Z",
+    "isPullRequest": true,
+    "number": 29,
+    "state": "closed",
+    "title": "Add lspServers config to omnisharp plugin",
+    "updatedAt": "2026-01-30T16:55:22Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/29"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:19:48Z",
+    "isPullRequest": true,
+    "number": 24,
+    "state": "closed",
+    "title": "Add lspServers config to jdtls plugin",
+    "updatedAt": "2026-01-30T16:55:19Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/24"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:19:20Z",
+    "isPullRequest": true,
+    "number": 23,
+    "state": "closed",
+    "title": "Add lspServers config to gopls plugin",
+    "updatedAt": "2026-01-30T16:55:19Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/23"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:18:53Z",
+    "isPullRequest": true,
+    "number": 22,
+    "state": "closed",
+    "title": "Add lspServers config to pyright plugin",
+    "updatedAt": "2026-01-30T16:55:18Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/22"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:24:41Z",
+    "isPullRequest": true,
+    "number": 32,
+    "state": "closed",
+    "title": "Add lspServers config to texlab plugin",
+    "updatedAt": "2026-01-30T16:55:24Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/32"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:18:16Z",
+    "isPullRequest": true,
+    "number": 21,
+    "state": "closed",
+    "title": "Add lspServers config to rust-analyzer plugin",
+    "updatedAt": "2026-01-30T16:55:17Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/21"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:17:22Z",
+    "isPullRequest": true,
+    "number": 20,
+    "state": "closed",
+    "title": "Add lspServers config to vtsls plugin",
+    "updatedAt": "2026-01-30T16:55:17Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/20"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:23:34Z",
+    "isPullRequest": true,
+    "number": 30,
+    "state": "closed",
+    "title": "Add lspServers config to powershell-editor-services plugin",
+    "updatedAt": "2026-01-30T16:55:23Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/30"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-24T17:01:48Z",
+    "isPullRequest": true,
+    "number": 48,
+    "state": "merged",
+    "title": "fix(marketplace): remove unsupported filePatterns and strengthen validation",
+    "updatedAt": "2026-02-24T18:45:18Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/48"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:55Z",
+    "isPullRequest": false,
+    "number": 18,
+    "state": "closed",
+    "title": "kotlin-lsp plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:04Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/18"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:42Z",
+    "isPullRequest": false,
+    "number": 13,
+    "state": "closed",
+    "title": "ruby-lsp plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:02Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/13"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:47Z",
+    "isPullRequest": false,
+    "number": 15,
+    "state": "closed",
+    "title": "phpactor plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:03Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/15"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:49Z",
+    "isPullRequest": false,
+    "number": 16,
+    "state": "closed",
+    "title": "omnisharp plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:03Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/16"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:36Z",
+    "isPullRequest": false,
+    "number": 11,
+    "state": "closed",
+    "title": "jdtls plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:02Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/11"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:17Z",
+    "isPullRequest": false,
+    "number": 10,
+    "state": "closed",
+    "title": "gopls plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:01Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/10"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:14Z",
+    "isPullRequest": false,
+    "number": 9,
+    "state": "closed",
+    "title": "pyright plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:01Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/9"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:53Z",
+    "isPullRequest": false,
+    "number": 17,
+    "state": "closed",
+    "title": "powershell-editor-services plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:04Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/17"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:44Z",
+    "isPullRequest": false,
+    "number": 14,
+    "state": "closed",
+    "title": "vscode-langservers plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:03Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/14"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:39Z",
+    "isPullRequest": false,
+    "number": 12,
+    "state": "closed",
+    "title": "clangd plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:02Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/12"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:10Z",
+    "isPullRequest": false,
+    "number": 7,
+    "state": "closed",
+    "title": "vtsls plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:00Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/7"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-23T17:15:13Z",
+    "isPullRequest": false,
+    "number": 8,
+    "state": "closed",
+    "title": "rust-analyzer plugin missing lspServers config in marketplace.json",
+    "updatedAt": "2026-01-30T16:55:00Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/8"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-11-12T23:17:02Z",
+    "isPullRequest": false,
+    "number": 1,
+    "state": "closed",
+    "title": "LSP not working",
+    "updatedAt": "2025-12-20T16:25:45Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/1"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-24T13:49:12Z",
+    "isPullRequest": true,
+    "number": 33,
+    "state": "merged",
+    "title": "Add bsl-lsp plugin with bsl-language-server",
+    "updatedAt": "2025-12-24T14:58:23Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/33"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-28T07:52:48Z",
+    "isPullRequest": true,
+    "number": 35,
+    "state": "merged",
+    "title": "fix(kotlin-lsp): add --stdio flag for proper stdio transport",
+    "updatedAt": "2025-12-28T14:49:21Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/35"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2025-11-14T18:15:18Z",
+    "isPullRequest": false,
+    "number": 2,
+    "state": "closed",
+    "title": "'plugin:gopls:go': no views",
+    "updatedAt": "2026-01-19T17:56:39Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/2"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-01-10T03:40:14Z",
+    "isPullRequest": false,
+    "number": 41,
+    "state": "closed",
+    "title": "Add Vue/Volar language server support",
+    "updatedAt": "2026-01-14T18:27:56Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/41"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-11-27T14:34:12Z",
+    "isPullRequest": true,
+    "number": 3,
+    "state": "merged",
+    "title": "Add PowerShell Editor Services LSP support",
+    "updatedAt": "2025-11-28T01:42:09Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/3"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2025-12-23T13:22:32Z",
+    "isPullRequest": true,
+    "number": 6,
+    "state": "merged",
+    "title": "Add LaTeX language server (texlab)",
+    "updatedAt": "2025-12-23T16:35:03Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/6"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2025-12-23T13:14:09Z",
+    "isPullRequest": false,
+    "number": 5,
+    "state": "closed",
+    "title": "Add LaTeX language server (texlab)",
+    "updatedAt": "2025-12-23T16:35:03Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/issues/5"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2025-12-24T18:37:03Z",
+    "isPullRequest": true,
+    "number": 34,
+    "state": "merged",
+    "title": "Fix JSON formatting in marketplace.json",
+    "updatedAt": "2025-12-24T18:41:40Z",
+    "url": "https://github.com/Piebald-AI/claude-code-lsps/pull/34"
+  }
+]

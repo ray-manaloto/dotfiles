@@ -1,0 +1,469 @@
+{
+  "version": 1,
+  "shape_source": "ray-manaloto/claude-code-marketplace dev/saved-searches.toml rows, validated by dev/search_catalog.py:60-108",
+  "deviation": "endpoint, qualifiers, why, hits_2026_11_03, result_file and note are extra fields. The source catalog validator accepts only id/query/repo/per_page/max_pages/max_items/timeout_seconds/control (search_catalog.py:74-77) and fixes the endpoint to GET /search/code (search_catalog.py:103, github_search_one_page.py:144). These rows are issue and PR searches, so the dotfiles port needs an endpoint field before they can run through githubkit. Control queries were defined, not run.",
+  "search": [
+    {
+      "id": "cc-plugin-directory-lsp",
+      "query": "plugin directory lsp",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "Directory installs of LSP plugins",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/cc-plugin-directory-lsp.json"
+    },
+    {
+      "id": "cc-anthropic-plugin-directory",
+      "query": "\"anthropic-plugin-directory\"",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "any report naming the built-in Directory marketplace",
+      "hits_2026_11_03": 6,
+      "result_file": "search-hits/cc-anthropic-plugin-directory.json"
+    },
+    {
+      "id": "cc-anthropic-directory",
+      "query": "\"Anthropic Directory\"",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "user-facing name of the Directory",
+      "hits_2026_11_03": 9,
+      "result_file": "search-hits/cc-anthropic-directory.json"
+    },
+    {
+      "id": "cc-zero-plugin-lsp-servers",
+      "query": "\"0 plugin LSP servers\"",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "exact /reload-plugins symptom",
+      "hits_2026_11_03": 18,
+      "result_file": "search-hits/cc-zero-plugin-lsp-servers.json"
+    },
+    {
+      "id": "cc-lspservers",
+      "query": "lspServers",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "lspServers config bugs in general",
+      "hits_2026_11_03": 50,
+      "result_file": "search-hits/cc-lspservers.json"
+    },
+    {
+      "id": "cc-strict-false",
+      "query": "strict false marketplace",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "strict:false marketplace-entry handling",
+      "hits_2026_11_03": 6,
+      "result_file": "search-hits/cc-strict-false.json",
+      "note": "first spelling \"\\\"strict: false\\\"\" was rejected by GitHub as invalid syntax; rerun with this query"
+    },
+    {
+      "id": "cc-strict-marketplace",
+      "query": "strict marketplace entry plugin",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "strict flag reports without the literal spelling",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/cc-strict-marketplace.json"
+    },
+    {
+      "id": "cc-no-lsp-server-available",
+      "query": "\"No LSP server available\"",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "LSP tool error text when no server registered",
+      "hits_2026_11_03": 48,
+      "result_file": "search-hits/cc-no-lsp-server-available.json"
+    },
+    {
+      "id": "cc-enable-lsp-tool",
+      "query": "ENABLE_LSP_TOOL",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "LSP tool gate env var",
+      "hits_2026_11_03": 46,
+      "result_file": "search-hits/cc-enable-lsp-tool.json"
+    },
+    {
+      "id": "cc-lsp-json",
+      "query": "\".lsp.json\"",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "plugin-root LSP config file",
+      "hits_2026_11_03": 50,
+      "result_file": "search-hits/cc-lsp-json.json"
+    },
+    {
+      "id": "cc-lsp-plugin-not-working",
+      "query": "lsp plugin not working",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "general LSP-in-plugins failures",
+      "hits_2026_11_03": 3,
+      "result_file": "search-hits/cc-lsp-plugin-not-working.json"
+    },
+    {
+      "id": "cc-directory-missing-components",
+      "query": "directory plugin missing skills OR mcp OR components",
+      "repo": "anthropics/claude-code",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "plugin",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-code"
+      ],
+      "why": "other inline-component plugins broken via the Directory",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/cc-directory-missing-components.json"
+    },
+    {
+      "id": "cpo-lsp",
+      "query": "lsp",
+      "repo": "anthropics/claude-plugins-official",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-official"
+      ],
+      "why": "LSP issues/PRs in the official marketplace",
+      "hits_2026_11_03": 50,
+      "result_file": "search-hits/cpo-lsp.json"
+    },
+    {
+      "id": "cpo-lsp-json",
+      "query": "\".lsp.json\" OR plugin.json lsp",
+      "repo": "anthropics/claude-plugins-official",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-official"
+      ],
+      "why": "proposals to move LSP config into the plugin folder",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/cpo-lsp-json.json"
+    },
+    {
+      "id": "cpo-directory",
+      "query": "directory",
+      "repo": "anthropics/claude-plugins-official",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-official"
+      ],
+      "why": "Directory-related reports in the official repo",
+      "hits_2026_11_03": 50,
+      "result_file": "search-hits/cpo-directory.json"
+    },
+    {
+      "id": "cpo-strict",
+      "query": "strict",
+      "repo": "anthropics/claude-plugins-official",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-official"
+      ],
+      "why": "strict:false entries in the official repo",
+      "hits_2026_11_03": 50,
+      "result_file": "search-hits/cpo-strict.json"
+    },
+    {
+      "id": "cpc-lsp",
+      "query": "lsp",
+      "repo": "anthropics/claude-plugins-community",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-community"
+      ],
+      "why": "LSP in the community marketplace",
+      "hits_2026_11_03": 8,
+      "result_file": "search-hits/cpc-lsp.json"
+    },
+    {
+      "id": "cpc-strict-directory",
+      "query": "strict OR directory",
+      "repo": "anthropics/claude-plugins-community",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:anthropics/claude-plugins-community"
+      ],
+      "why": "strict/Directory handling in the community marketplace",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/cpc-strict-directory.json"
+    },
+    {
+      "id": "piebald-all",
+      "query": "lsp",
+      "repo": "Piebald-AI/claude-code-lsps",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:Piebald-AI/claude-code-lsps"
+      ],
+      "why": "all Piebald issues and PRs (maintenance signal)",
+      "hits_2026_11_03": 78,
+      "result_file": "search-hits/piebald-all.json",
+      "note": "first spelling \"is:issue OR is:pr\" returned 0; rerun with this query; full lists also taken with gh issue list / gh pr list --state all"
+    },
+    {
+      "id": "piebald-directory",
+      "query": "directory OR official OR anthropic",
+      "repo": "Piebald-AI/claude-code-lsps",
+      "per_page": 50,
+      "max_pages": 1,
+      "max_items": 50,
+      "timeout_seconds": 30,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "endpoint": "GET /search/issues",
+      "qualifiers": [
+        "--include-prs",
+        "repo:Piebald-AI/claude-code-lsps"
+      ],
+      "why": "Piebald discussion of the official/Directory LSPs",
+      "hits_2026_11_03": 0,
+      "result_file": "search-hits/piebald-directory.json"
+    }
+  ]
+}

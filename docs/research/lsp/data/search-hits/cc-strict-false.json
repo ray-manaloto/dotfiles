@@ -1,0 +1,62 @@
+[
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-03T01:23:19Z",
+    "isPullRequest": false,
+    "number": 99117,
+    "state": "open",
+    "title": "[BUG] Desktop app's --plugin-dir copy of a strict:false LSP plugin drops its lspServers, so 0 servers load and the LSP tool never appears (bundled CLI resolves it)",
+    "updatedAt": "2026-10-03T01:24:35Z",
+    "url": "https://github.com/anthropics/claude-code/issues/99117"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-07-17T18:04:38Z",
+    "isPullRequest": false,
+    "number": 78604,
+    "state": "open",
+    "title": "[BUG] LSP plugins installed before the lspServers manifest-format change load as silent empty shells; `plugin update` reports the broken artifact as up-to-date",
+    "updatedAt": "2026-10-24T00:11:42Z",
+    "url": "https://github.com/anthropics/claude-code/issues/78604"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-08-27T13:48:41Z",
+    "isPullRequest": false,
+    "number": 90114,
+    "state": "closed",
+    "title": "clangd-lsp plugin never registers an LSP tool (missing lspServers manifest + possible hard gate)",
+    "updatedAt": "2026-11-03T10:13:58Z",
+    "url": "https://github.com/anthropics/claude-code/issues/90114"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-08-31T07:46:31Z",
+    "isPullRequest": false,
+    "number": 90926,
+    "state": "closed",
+    "title": "Desktop app never registers plugin LSP servers, though the bundled CLI resolves them (csharp-lsp, 1.40609.0 / CCD 2.1.247, Windows)",
+    "updatedAt": "2026-10-20T14:12:36Z",
+    "url": "https://github.com/anthropics/claude-code/issues/90926"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-03-19T06:14:59Z",
+    "isPullRequest": false,
+    "number": 36069,
+    "state": "closed",
+    "title": "Desktop: 'Browse plugins' fails with listAvailablePlugins validation error",
+    "updatedAt": "2026-03-30T14:45:34Z",
+    "url": "https://github.com/anthropics/claude-code/issues/36069"
+  },
+  {
+    "commentsCount": 17,
+    "createdAt": "2025-10-16T20:40:20Z",
+    "isPullRequest": false,
+    "number": 9686,
+    "state": "closed",
+    "title": "[BUG] JSON schema specified in the marketplace.json doesn't exist",
+    "updatedAt": "2026-05-01T14:47:43Z",
+    "url": "https://github.com/anthropics/claude-code/issues/9686"
+  }
+]

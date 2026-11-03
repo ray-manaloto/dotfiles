@@ -1,0 +1,502 @@
+[
+  {
+    "commentsCount": 12,
+    "createdAt": "2026-02-11T19:58:37Z",
+    "isPullRequest": false,
+    "number": 379,
+    "state": "open",
+    "title": "All LSP plugins missing .lsp.json — installed plugins have no LSP configuration",
+    "updatedAt": "2026-10-06T01:46:56Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/379"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-07-24T20:17:25Z",
+    "isPullRequest": false,
+    "number": 4492,
+    "state": "open",
+    "title": "feat(typescript-lsp): add native TypeScript 7 LSP support",
+    "updatedAt": "2026-09-24T19:33:28Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/4492"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-26T15:31:32Z",
+    "isPullRequest": false,
+    "number": 6895,
+    "state": "open",
+    "title": "typescript-lsp: hovers right after a file opens show no types (syntax server)",
+    "updatedAt": "2026-10-26T15:31:32Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6895"
+  },
+  {
+    "commentsCount": 18,
+    "createdAt": "2026-01-14T22:59:39Z",
+    "isPullRequest": false,
+    "number": 232,
+    "state": "open",
+    "title": "Add Vue/Volar LSP plugin",
+    "updatedAt": "2026-10-08T15:12:59Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/232"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-05-12T23:22:08Z",
+    "isPullRequest": false,
+    "number": 1836,
+    "state": "open",
+    "title": "pyright-lsp: set workspaceFolder to ${CLAUDE_PROJECT_DIR} for per-session scoping (and likely other LSP plugins too)",
+    "updatedAt": "2026-10-26T15:15:38Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1836"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-27T09:35:17Z",
+    "isPullRequest": false,
+    "number": 5667,
+    "state": "open",
+    "title": "rust-analyzer-lsp and clangd-lsp ship without .claude-plugin/plugin.json — install records, plugin never loads",
+    "updatedAt": "2026-08-27T09:35:17Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5667"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-05-18T07:02:05Z",
+    "isPullRequest": false,
+    "number": 1901,
+    "state": "open",
+    "title": "typescript-lsp: forward initializationOptions to typescript-language-server (especially tsserver.useSyntaxServer)",
+    "updatedAt": "2026-10-17T11:58:50Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1901"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-19T07:17:18Z",
+    "isPullRequest": false,
+    "number": 6800,
+    "state": "open",
+    "title": "typescript-lsp: set a default maxTsServerMemory (tsserver runs uncapped, 2-4 GB per session)",
+    "updatedAt": "2026-10-19T07:17:18Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6800"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-21T17:03:41Z",
+    "isPullRequest": false,
+    "number": 1521,
+    "state": "open",
+    "title": "pyright-lsp: LSP tool schema is missing 'query' parameter, making workspaceSymbol unusable",
+    "updatedAt": "2026-05-19T15:14:23Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1521"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-03-06T13:25:14Z",
+    "isPullRequest": false,
+    "number": 539,
+    "state": "open",
+    "title": "Use official C# LSP",
+    "updatedAt": "2026-04-29T09:57:35Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/539"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-05-26T06:10:10Z",
+    "isPullRequest": false,
+    "number": 2032,
+    "state": "open",
+    "title": "Marketplace pins 54 plugins to revisions that fail `codex plugin add` validation",
+    "updatedAt": "2026-10-12T07:52:24Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2032"
+  },
+  {
+    "commentsCount": 9,
+    "createdAt": "2026-01-20T17:41:24Z",
+    "isPullRequest": false,
+    "number": 261,
+    "state": "open",
+    "title": "[gopls-lsp] Enable daemon mode to share single instance across sessions",
+    "updatedAt": "2026-10-23T15:03:43Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/261"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-04-11T19:27:25Z",
+    "isPullRequest": false,
+    "number": 1359,
+    "state": "open",
+    "title": "csharp-lsp plugin: Claude Code LSP client doesn't handle three server→client requests, breaks csharp-ls solution loading",
+    "updatedAt": "2026-08-13T16:10:59Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1359"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-25T19:39:51Z",
+    "isPullRequest": false,
+    "number": 56,
+    "state": "open",
+    "title": "Plugin request: Julialang LSP server",
+    "updatedAt": "2026-05-09T02:12:07Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/56"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-09-30T07:19:05Z",
+    "isPullRequest": false,
+    "number": 6329,
+    "state": "open",
+    "title": "jdtls-lsp: auto-build compiles into Maven's `target/classes`, so agents debug phantom classes",
+    "updatedAt": "2026-09-30T07:52:15Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6329"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-04-16T08:58:43Z",
+    "isPullRequest": false,
+    "number": 1432,
+    "state": "open",
+    "title": "typescript-lsp plugin fails on Windows — uv_spawn cannot find binary without .cmd extension",
+    "updatedAt": "2026-10-13T07:26:50Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1432"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-19T03:10:43Z",
+    "isPullRequest": false,
+    "number": 250,
+    "state": "open",
+    "title": "Cannot activate kotlin lsp",
+    "updatedAt": "2026-01-19T03:10:57Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/250"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-08-04T00:52:32Z",
+    "isPullRequest": false,
+    "number": 4842,
+    "state": "open",
+    "title": "pyright-lsp: silently dead on Windows npm installs — bare 'pyright-langserver' command can't resolve npm .cmd shims in a no-shell spawn",
+    "updatedAt": "2026-08-25T11:06:10Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/4842"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-04T06:30:22Z",
+    "isPullRequest": false,
+    "number": 2284,
+    "state": "open",
+    "title": "Add .hh file extension to clangd-lsp",
+    "updatedAt": "2026-06-04T06:30:22Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2284"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-10T23:31:32Z",
+    "isPullRequest": false,
+    "number": 2616,
+    "state": "open",
+    "title": "jdtls-lsp README understates Java requirement (says 17+, jdtls needs 21+) — stale claim masks crash as LSP init timeout",
+    "updatedAt": "2026-06-10T23:31:32Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2616"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-22T14:34:28Z",
+    "isPullRequest": false,
+    "number": 271,
+    "state": "open",
+    "title": "LSP-PHP more extensions support",
+    "updatedAt": "2026-01-22T14:34:28Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/271"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-08T04:56:57Z",
+    "isPullRequest": false,
+    "number": 1772,
+    "state": "open",
+    "title": "Custom tsserver.path for typescript-lsp plugin",
+    "updatedAt": "2026-05-08T04:56:57Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1772"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-05-03T07:46:35Z",
+    "isPullRequest": false,
+    "number": 1693,
+    "state": "open",
+    "title": "typescript-lsp: ENOENT on Windows — libuv can't spawn typescript-language-server (.cmd shim, no .exe)",
+    "updatedAt": "2026-08-25T11:05:56Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1693"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-01-17T13:02:00Z",
+    "isPullRequest": false,
+    "number": 245,
+    "state": "open",
+    "title": "jdtls plguin not working - \"LSP server 'plugin:jdtls-lsp:jdtls': startupTimeout is not yet implemented.\"",
+    "updatedAt": "2026-02-12T14:45:35Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/245"
+  },
+  {
+    "commentsCount": 8,
+    "createdAt": "2025-12-19T06:17:03Z",
+    "isPullRequest": false,
+    "number": 40,
+    "state": "open",
+    "title": "how to use the pyright lsp plugin",
+    "updatedAt": "2026-04-09T22:44:34Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/40"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-31T10:49:43Z",
+    "isPullRequest": false,
+    "number": 2109,
+    "state": "open",
+    "title": "lspServers: PostToolUse integration blocks on all diagnostic severities — request minBlockSeverity config (block on ERROR only)",
+    "updatedAt": "2026-05-31T10:49:43Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2109"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-20T00:14:09Z",
+    "isPullRequest": false,
+    "number": 44,
+    "state": "open",
+    "title": "Rust LSP Plugin Nonfunctional with Claude Code",
+    "updatedAt": "2026-03-01T18:32:43Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/44"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-02-25T18:36:38Z",
+    "isPullRequest": false,
+    "number": 463,
+    "state": "open",
+    "title": "Add roslyn-language-server LSP plugin for C#",
+    "updatedAt": "2026-04-27T14:38:33Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/463"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-02T17:32:42Z",
+    "isPullRequest": false,
+    "number": 324,
+    "state": "open",
+    "title": "Official `kotlin-lsp` plugin fails to initialize",
+    "updatedAt": "2026-02-02T17:32:42Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/324"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-20T08:06:04Z",
+    "isPullRequest": false,
+    "number": 772,
+    "state": "open",
+    "title": "[BUG]: Kotlin-LSP \"Cancelled\" error and duplicate \"Unknown\" plugin entry when running multiple terminal sessions",
+    "updatedAt": "2026-03-20T14:34:18Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/772"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-02-25T14:13:55Z",
+    "isPullRequest": false,
+    "number": 461,
+    "state": "open",
+    "title": "[BUG?] jdtls-lsp generates Eclipse metadata files in project root",
+    "updatedAt": "2026-07-09T13:44:00Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/461"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-09T23:25:52Z",
+    "isPullRequest": false,
+    "number": 371,
+    "state": "open",
+    "title": "kotlin-lsp: No textDocument notifications sent after successful initialize handshake",
+    "updatedAt": "2026-02-10T22:04:07Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/371"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-26T17:42:18Z",
+    "isPullRequest": false,
+    "number": 3417,
+    "state": "open",
+    "title": "rust-analyzer-lsp: reuse a single rust-analyzer per workspace instead of one-per-root (multi-crate/worktree repos hit 60+ GB RAM)",
+    "updatedAt": "2026-06-26T17:42:18Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/3417"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-16T19:48:23Z",
+    "isPullRequest": false,
+    "number": 668,
+    "state": "open",
+    "title": "kotlin-lsp: Support workspaceFolder override for monorepo projects",
+    "updatedAt": "2026-03-16T19:48:23Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/668"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-03T10:34:41Z",
+    "isPullRequest": false,
+    "number": 330,
+    "state": "open",
+    "title": "kotlin-lsp plugin fails to load due to unrecognized startupTimeout field",
+    "updatedAt": "2026-02-03T10:34:41Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/330"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-21T02:13:29Z",
+    "isPullRequest": false,
+    "number": 444,
+    "state": "open",
+    "title": "php-lsp plugin ships with no configuration, language server never starts",
+    "updatedAt": "2026-04-02T10:12:44Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/444"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-05-07T15:09:23Z",
+    "isPullRequest": false,
+    "number": 1758,
+    "state": "open",
+    "title": "Multiple plugins lack `version` field in plugin.json, displayed as \"unknown\"",
+    "updatedAt": "2026-08-31T12:06:34Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1758"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-05T14:19:41Z",
+    "isPullRequest": false,
+    "number": 1711,
+    "state": "open",
+    "title": "false advertising of \"error checking\" capabilities re: typescript-lsp plugin",
+    "updatedAt": "2026-05-05T14:19:41Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1711"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-20T19:56:39Z",
+    "isPullRequest": false,
+    "number": 441,
+    "state": "open",
+    "title": "lua-lsp plugin ships with no configuration, ignores .luarc.json",
+    "updatedAt": "2026-02-21T02:10:30Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/441"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-01-13T05:22:35Z",
+    "isPullRequest": false,
+    "number": 217,
+    "state": "open",
+    "title": "jdtls plguin not working - \"No LSP server available for file type: .java\"",
+    "updatedAt": "2026-02-20T13:30:56Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/217"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-08T08:26:31Z",
+    "isPullRequest": false,
+    "number": 2432,
+    "state": "open",
+    "title": "clangd-lsp configuration should be able to specify the location of clangd",
+    "updatedAt": "2026-06-08T08:26:31Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2432"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-26T23:33:31Z",
+    "isPullRequest": true,
+    "number": 6907,
+    "state": "open",
+    "title": "Fail PRs that change a versioned plugin without bumping it",
+    "updatedAt": "2026-10-26T23:33:31Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/6907"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-14T15:25:03Z",
+    "isPullRequest": false,
+    "number": 1861,
+    "state": "open",
+    "title": "jdtls-lsp: startupTimeout too low, missing maxRestarts and Maven source download settings",
+    "updatedAt": "2026-05-14T15:25:03Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1861"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-31T14:17:45Z",
+    "isPullRequest": false,
+    "number": 1184,
+    "state": "open",
+    "title": "Kotlin LSP plugin does not find references outside the declaration file",
+    "updatedAt": "2026-03-31T14:25:27Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1184"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-10-23T03:19:32Z",
+    "isPullRequest": false,
+    "number": 6862,
+    "state": "open",
+    "title": "Clarify directory code-execution declaration for skills with local validators",
+    "updatedAt": "2026-10-26T22:55:13Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6862"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-03-25T15:37:47Z",
+    "isPullRequest": false,
+    "number": 1000,
+    "state": "open",
+    "title": "jdtls-lsp: support passing JVM args to JDTLS (e.g. for Lombok agent)",
+    "updatedAt": "2026-03-25T15:37:47Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1000"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-03-11T15:56:04Z",
+    "isPullRequest": false,
+    "number": 597,
+    "state": "open",
+    "title": "[Question] How long does a submission take to be reviewed?",
+    "updatedAt": "2026-06-16T08:19:04Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/597"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-24T19:17:14Z",
+    "isPullRequest": false,
+    "number": 5596,
+    "state": "open",
+    "title": "code-review plugin installs as version \"unknown\", causing repeated \"plugin updated\" notices on every marketplace refresh",
+    "updatedAt": "2026-08-24T19:17:14Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5596"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-10T15:39:38Z",
+    "isPullRequest": false,
+    "number": 1342,
+    "state": "open",
+    "title": "Install instructions for csharp-ls not working",
+    "updatedAt": "2026-04-10T15:39:38Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1342"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-07-01T08:42:06Z",
+    "isPullRequest": false,
+    "number": 3571,
+    "state": "open",
+    "title": "feature-dev plugin lacks version in manifest → false 'update available' notifications",
+    "updatedAt": "2026-07-01T08:42:06Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/3571"
+  }
+]

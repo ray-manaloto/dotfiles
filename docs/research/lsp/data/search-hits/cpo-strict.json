@@ -1,0 +1,502 @@
+[
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-09-19T10:33:55Z",
+    "isPullRequest": false,
+    "number": 6261,
+    "state": "open",
+    "title": "silent-failure-hunter agent: description YAML-breaks strict frontmatter parsers",
+    "updatedAt": "2026-09-19T10:33:55Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6261"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-08-25T19:05:07Z",
+    "isPullRequest": false,
+    "number": 5624,
+    "state": "open",
+    "title": "skill-creator: run_eval.py omits --strict-mcp-config, so the operator's MCP servers are charged against a 30s per-query timeout",
+    "updatedAt": "2026-09-20T22:00:38Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5624"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-09-24T20:42:31Z",
+    "isPullRequest": false,
+    "number": 6304,
+    "state": "open",
+    "title": "Plugin `erp-upgrade-fit-gap` passed review (2026-09-24) but is missing from claude-plugins-community marketplace.json",
+    "updatedAt": "2026-09-24T20:42:31Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6304"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-28T19:38:00Z",
+    "isPullRequest": true,
+    "number": 6933,
+    "state": "open",
+    "title": "mcp-server-dev: move the TypeScript examples to MCP SDK v2",
+    "updatedAt": "2026-10-28T19:42:27Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/6933"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-09-26T01:01:48Z",
+    "isPullRequest": true,
+    "number": 6313,
+    "state": "open",
+    "title": "Add TogetherLink plugin (togetherlink)",
+    "updatedAt": "2026-09-26T01:01:48Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/6313"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-19T16:06:38Z",
+    "isPullRequest": false,
+    "number": 5479,
+    "state": "open",
+    "title": "[Plugin Submission] chamnan — Context-optimized security plugin for Claude Code",
+    "updatedAt": "2026-08-19T16:06:38Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5479"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-29T01:31:38Z",
+    "isPullRequest": false,
+    "number": 301,
+    "state": "open",
+    "title": "ralph-loop: Bash unbound variable error in setup-ralph-loop.sh",
+    "updatedAt": "2026-01-29T01:31:38Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/301"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-07T11:20:07Z",
+    "isPullRequest": false,
+    "number": 3774,
+    "state": "open",
+    "title": "Point azure-cosmos-db-assistant source to our canonical agent-kit repo",
+    "updatedAt": "2026-10-01T13:25:12Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/3774"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-02-20T15:43:02Z",
+    "isPullRequest": false,
+    "number": 437,
+    "state": "open",
+    "title": "JDTLS plugin contains invalid properties",
+    "updatedAt": "2026-02-26T17:08:33Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/437"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-15T22:04:53Z",
+    "isPullRequest": true,
+    "number": 6627,
+    "state": "open",
+    "title": "security-guidance: do not save review runs as session transcripts",
+    "updatedAt": "2026-10-27T21:57:40Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/6627"
+  },
+  {
+    "commentsCount": 12,
+    "createdAt": "2026-02-11T19:58:37Z",
+    "isPullRequest": false,
+    "number": 379,
+    "state": "open",
+    "title": "All LSP plugins missing .lsp.json — installed plugins have no LSP configuration",
+    "updatedAt": "2026-10-06T01:46:56Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/379"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-30T04:51:09Z",
+    "isPullRequest": false,
+    "number": 4678,
+    "state": "open",
+    "title": "[discord] fetch_messages drops thread and attachment context, and there is no search tool",
+    "updatedAt": "2026-07-30T05:00:19Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/4678"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-04-02T11:26:19Z",
+    "isPullRequest": false,
+    "number": 1211,
+    "state": "open",
+    "title": "Hookify: Invalid \\escape JSON parse error on Windows (backslash in file paths)",
+    "updatedAt": "2026-07-19T12:10:20Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1211"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-07T17:38:23Z",
+    "isPullRequest": false,
+    "number": 356,
+    "state": "open",
+    "title": "Bug: Case-insensitive duplicate keys in marketplace.json breaks Windows/PowerShell",
+    "updatedAt": "2026-02-07T17:38:23Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/356"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-10-14T23:59:05Z",
+    "isPullRequest": false,
+    "number": 6611,
+    "state": "open",
+    "title": "vercel plugin: hooks invoke bare `node`, so they fail on keg-only/nvm installs — and SessionStart failures print nothing",
+    "updatedAt": "2026-10-17T07:01:34Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6611"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-05-15T15:24:47Z",
+    "isPullRequest": false,
+    "number": 1872,
+    "state": "open",
+    "title": "Telegram plugin · Add inline keyboard buttons + callback_query support",
+    "updatedAt": "2026-10-04T19:07:49Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1872"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-25T12:49:56Z",
+    "isPullRequest": false,
+    "number": 1591,
+    "state": "open",
+    "title": "discord plugin: typing indicator dies before reply lands on slow Claude responses",
+    "updatedAt": "2026-07-16T00:54:12Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1591"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-21T22:22:40Z",
+    "isPullRequest": false,
+    "number": 1522,
+    "state": "open",
+    "title": "discord: fan out permission_request to a single originating user instead of all of access.allowFrom",
+    "updatedAt": "2026-04-21T22:22:40Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1522"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-08-21T23:53:01Z",
+    "isPullRequest": false,
+    "number": 5565,
+    "state": "open",
+    "title": "telegram: inbound marked delivered when mcp.notification() resolves, so messages die with a stale transport",
+    "updatedAt": "2026-08-21T23:53:01Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5565"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-13T09:20:53Z",
+    "isPullRequest": false,
+    "number": 218,
+    "state": "open",
+    "title": "ralph-loop: setup-ralph-loop.sh fails with 'unbound variable' when PROMPT_PARTS array is empty",
+    "updatedAt": "2026-01-13T09:20:53Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/218"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-02-01T18:02:39Z",
+    "isPullRequest": false,
+    "number": 321,
+    "state": "open",
+    "title": "ralph-loop: 'PROMPT_PARTS[*]: unbound variable' when running /ralph-loop without arguments",
+    "updatedAt": "2026-02-01T18:08:31Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/321"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-01-13T14:56:24Z",
+    "isPullRequest": false,
+    "number": 221,
+    "state": "open",
+    "title": "bug(ralph-loop): 'unbound variable' error when PROMPT_PARTS array is empty",
+    "updatedAt": "2026-01-13T14:56:24Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/221"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-03-11T00:43:46Z",
+    "isPullRequest": false,
+    "number": 585,
+    "state": "open",
+    "title": "`git-subdir` source type in marketplace.json breaks older Claude Code clients",
+    "updatedAt": "2026-03-23T09:35:08Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/585"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-05-13T15:25:42Z",
+    "isPullRequest": false,
+    "number": 1841,
+    "state": "open",
+    "title": "Plugin agent-handoff not listed after marked as Published",
+    "updatedAt": "2026-05-26T02:18:48Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1841"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-06-15T21:51:36Z",
+    "isPullRequest": false,
+    "number": 2857,
+    "state": "open",
+    "title": "Telegram channel plugin permanently stops polling after 8 transient 409 Conflicts",
+    "updatedAt": "2026-10-07T21:31:27Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2857"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-25T05:45:26Z",
+    "isPullRequest": false,
+    "number": 4504,
+    "state": "open",
+    "title": "commit-commands: /clean_gone force-deletes live branches and unmerged work",
+    "updatedAt": "2026-08-12T10:03:18Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/4504"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-02-23T21:26:57Z",
+    "isPullRequest": false,
+    "number": 453,
+    "state": "open",
+    "title": "bug: ralph-loop setup script crashes with 'unbound variable' when invoked without args",
+    "updatedAt": "2026-02-23T21:26:57Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/453"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-05-13T15:11:19Z",
+    "isPullRequest": false,
+    "number": 1839,
+    "state": "open",
+    "title": "[telegram] .env loader skips TELEGRAM_BOT_TOKEN line when file has UTF-8 BOM",
+    "updatedAt": "2026-09-01T16:51:48Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1839"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-06-08T07:34:00Z",
+    "isPullRequest": false,
+    "number": 2431,
+    "state": "open",
+    "title": "telegram plugin: zombie bun server.ts pollers pin CPU at ~95% each for days (SIGTERM-immune, leaks .in_use locks)",
+    "updatedAt": "2026-06-09T17:40:19Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2431"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-03-22T01:42:37Z",
+    "isPullRequest": false,
+    "number": 881,
+    "state": "open",
+    "title": "Telegram plugin starts polling in non-channel instances, stealing updates",
+    "updatedAt": "2026-08-18T21:53:25Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/881"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-08-25T03:21:40Z",
+    "isPullRequest": true,
+    "number": 5605,
+    "state": "open",
+    "title": "ralph-loop: fix false completion on bare word, whitespace-asymmetric promise match, and frozen iteration counter",
+    "updatedAt": "2026-09-08T03:19:45Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/5605"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-04-23T10:16:14Z",
+    "isPullRequest": false,
+    "number": 1545,
+    "state": "open",
+    "title": "commit-commands: 4 small upstream fixes (plugin.json version, git checkout --branch flag, clean_gone allowed-tools, commit-push-pr phase split)",
+    "updatedAt": "2026-10-02T22:49:44Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1545"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-03-06T13:25:14Z",
+    "isPullRequest": false,
+    "number": 539,
+    "state": "open",
+    "title": "Use official C# LSP",
+    "updatedAt": "2026-04-29T09:57:35Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/539"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-17T14:52:58Z",
+    "isPullRequest": false,
+    "number": 1457,
+    "state": "open",
+    "title": "iMessage plugin: own-message echoes not filtered outside self-chat (server.ts:802-804)",
+    "updatedAt": "2026-04-17T14:52:58Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1457"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-19T16:40:07Z",
+    "isPullRequest": true,
+    "number": 6809,
+    "state": "merged",
+    "title": "security-guidance: run reviews on machines with a managed MCP config",
+    "updatedAt": "2026-10-20T20:27:00Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/pull/6809"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-05-17T22:46:17Z",
+    "isPullRequest": false,
+    "number": 1900,
+    "state": "open",
+    "title": "pr-review-toolkit: `Task` tool references break specialist dispatch on newer Claude Code versions where the tool is named `Agent`",
+    "updatedAt": "2026-05-17T23:35:03Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1900"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-01T21:29:54Z",
+    "isPullRequest": false,
+    "number": 1205,
+    "state": "open",
+    "title": "Marketplace incompatible with GitHub Copilot CLI",
+    "updatedAt": "2026-04-01T21:29:54Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1205"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-05-23T16:19:53Z",
+    "isPullRequest": false,
+    "number": 1998,
+    "state": "open",
+    "title": "Telegram: add forwardPermissions toggle to control permission prompt forwarding",
+    "updatedAt": "2026-07-03T01:34:47Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1998"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-04-24T07:33:14Z",
+    "isPullRequest": false,
+    "number": 1569,
+    "state": "open",
+    "title": "Telegram plugin: stale server.ts can spin at 100% CPU — SIGTERM fallback missing",
+    "updatedAt": "2026-06-03T13:43:25Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1569"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-09-25T05:22:04Z",
+    "isPullRequest": false,
+    "number": 6306,
+    "state": "open",
+    "title": "hookify: hooks decode stdin with the Windows ANSI codepage — non-ASCII payloads silently corrupt and block rules fail open",
+    "updatedAt": "2026-10-18T01:51:49Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6306"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-04-21T05:01:47Z",
+    "isPullRequest": false,
+    "number": 1510,
+    "state": "open",
+    "title": "Publish `version` field in plugin.json for code-review and frontend-design",
+    "updatedAt": "2026-04-21T05:01:47Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1510"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-10-05T02:30:42Z",
+    "isPullRequest": false,
+    "number": 6356,
+    "state": "open",
+    "title": "discord: include reply reference in inbound channel meta",
+    "updatedAt": "2026-10-14T19:04:22Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6356"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-03T06:36:41Z",
+    "isPullRequest": false,
+    "number": 2197,
+    "state": "open",
+    "title": "save-session.sh: nested `claude -p` silently no-ops (num_turns=0) while any parent session is alive; reported as success",
+    "updatedAt": "2026-06-03T06:36:41Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/2197"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-10T13:47:45Z",
+    "isPullRequest": false,
+    "number": 6406,
+    "state": "open",
+    "title": "discord: fetch_messages cannot page past the newest 100 messages",
+    "updatedAt": "2026-10-10T13:47:45Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/6406"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-08-19T03:54:10Z",
+    "isPullRequest": false,
+    "number": 5468,
+    "state": "open",
+    "title": "Discord plugin: allowlist entries are silently ignored for bot senders",
+    "updatedAt": "2026-08-24T16:50:47Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/5468"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-05-07T16:46:03Z",
+    "isPullRequest": false,
+    "number": 1761,
+    "state": "open",
+    "title": "Stop hook misses <promise> tag emitted in the same turn — likely transcript-flush race",
+    "updatedAt": "2026-05-22T16:47:45Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1761"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-01-06T12:43:26Z",
+    "isPullRequest": false,
+    "number": 128,
+    "state": "open",
+    "title": "Bug: ralph-wiggum/ralph-loop skill uses multi-line bash causing permission failure",
+    "updatedAt": "2026-01-06T15:25:05Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/128"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-07-30T14:14:45Z",
+    "isPullRequest": false,
+    "number": 4693,
+    "state": "open",
+    "title": "security-guidance: agentic reviewer prompt never states its working directory, causing hallucinated absolute paths",
+    "updatedAt": "2026-09-19T18:58:30Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/4693"
+  },
+  {
+    "commentsCount": 15,
+    "createdAt": "2026-04-19T22:09:54Z",
+    "isPullRequest": false,
+    "number": 1494,
+    "state": "open",
+    "title": "# [BUG] M365 Connector — \"Your organization's access policy blocks the MCP server\" despite admin consent granted - ofid_bb6f3fced443d7db",
+    "updatedAt": "2026-08-09T20:30:20Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/1494"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-06-18T13:07:32Z",
+    "isPullRequest": false,
+    "number": 3038,
+    "state": "open",
+    "title": "[BUG] Word (By Anthropic) `open_document` false-negative on an already-open file (\"did not open within the timeout period\")",
+    "updatedAt": "2026-06-18T13:07:32Z",
+    "url": "https://github.com/anthropics/claude-plugins-official/issues/3038"
+  }
+]

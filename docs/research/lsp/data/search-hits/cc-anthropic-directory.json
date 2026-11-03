@@ -1,0 +1,92 @@
+[
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-10-08T20:42:52Z",
+    "isPullRequest": false,
+    "number": 100608,
+    "state": "open",
+    "title": "[BUG] `strictKnownMarketplaces` silently drops `{\"source\":\"pluginDirectory\"}`, so the built-in Anthropic Directory can't be allowed",
+    "updatedAt": "2026-10-28T11:16:32Z",
+    "url": "https://github.com/anthropics/claude-code/issues/100608"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-22T17:02:06Z",
+    "isPullRequest": false,
+    "number": 104338,
+    "state": "open",
+    "title": "[GitHub integration]",
+    "updatedAt": "2026-10-22T17:03:23Z",
+    "url": "https://github.com/anthropics/claude-code/issues/104338"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-31T08:33:28Z",
+    "isPullRequest": false,
+    "number": 106369,
+    "state": "open",
+    "title": "Claude projects: the \"/\" slash-command pop-up lists no plugin skills in the pro…",
+    "updatedAt": "2026-10-31T08:34:43Z",
+    "url": "https://github.com/anthropics/claude-code/issues/106369"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-28T17:43:39Z",
+    "isPullRequest": false,
+    "number": 105748,
+    "state": "open",
+    "title": "[GitHub integration] Cowork tasks can't access repos; Claude Code works",
+    "updatedAt": "2026-10-28T17:45:01Z",
+    "url": "https://github.com/anthropics/claude-code/issues/105748"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-23T02:26:03Z",
+    "isPullRequest": false,
+    "number": 104457,
+    "state": "open",
+    "title": "Installing a directory plugin from the desktop app has no working path (no Add button, install card doesn't appear, CLI not on PATH)",
+    "updatedAt": "2026-10-23T02:27:16Z",
+    "url": "https://github.com/anthropics/claude-code/issues/104457"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-06T14:58:53Z",
+    "isPullRequest": false,
+    "number": 99959,
+    "state": "open",
+    "title": "Plugins synced from claude.ai can't satisfy a declared plugin dependency, so the dependent plugin is disabled",
+    "updatedAt": "2026-11-02T01:05:36Z",
+    "url": "https://github.com/anthropics/claude-code/issues/99959"
+  },
+  {
+    "commentsCount": 12,
+    "createdAt": "2026-05-26T00:49:07Z",
+    "isPullRequest": false,
+    "number": 62338,
+    "state": "open",
+    "title": "[BUG] Claude Code silently billed $447 to API instead of Max subscription, then gave incorrect auth confirmation",
+    "updatedAt": "2026-09-29T16:18:53Z",
+    "url": "https://github.com/anthropics/claude-code/issues/62338"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-06-12T09:17:37Z",
+    "isPullRequest": false,
+    "number": 67839,
+    "state": "closed",
+    "title": "[BUG]",
+    "updatedAt": "2026-08-20T14:19:10Z",
+    "url": "https://github.com/anthropics/claude-code/issues/67839"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-06-13T10:26:35Z",
+    "isPullRequest": false,
+    "number": 68193,
+    "state": "closed",
+    "title": "[MODEL]  Opus 4.8 convinced me I was under a prompt injection attack .It startled me. After repeated verification, it turned out to be an illusion. It was just that the process was so realistic.",
+    "updatedAt": "2026-09-20T14:14:28Z",
+    "url": "https://github.com/anthropics/claude-code/issues/68193"
+  }
+]
