@@ -20,6 +20,7 @@
 /cpp/build/
 /python/.venv/
 /python/toolchains/p2996/.venv/
+/python/repo/.venv/
 /typescript/node_modules/
 __pycache__/
 .coverage

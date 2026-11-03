@@ -1,0 +1,54 @@
+# Checks for this repository: the repotools package does the work, one task per step. No [tools]:
+# ruff, ty, uv and datamodel-codegen are global (DL-757). From the repository root: //repo:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+# From the repository root: a hook exports GIT_DIR, and git then takes the current folder as the top.
+[tasks.pane-fingerprint]
+description = "Print the hash of HEAD and the whole index that the reviewer pane must approve"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/repo --locked repotools pane-fingerprint"
+
+[tasks.pane-pin]
+description = "Name the reviewer's Codex session, started in this checkout, for this checkout's commits"
+usage = 'arg "<session>" help="The Codex session id"'
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools pane-pin --session "$usage_session"'
+
+[tasks.pane-approved]
+description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD and index"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/repo --locked repotools pane-approved"
+
+# Development: uv runs only through these tasks.
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/repotools/models.py from schema/repotools.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]
