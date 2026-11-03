@@ -3,4 +3,4 @@ run = "uv sync --locked"
 
 [tasks.test]
 depends = ["sync"]
-run = "uv run --locked python -m unittest discover -s tests"
+run = "uv run --locked python -m unittest discover --catch -s tests"
