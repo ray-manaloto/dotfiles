@@ -34,6 +34,20 @@ GitHub shares one number space across issues and PRs, so a bare `#42` may be eit
 
 Create a GitHub issue.
 
+## Triage vocabulary
+
+`GLOSSARY.md` defines the terms: source issue, spec group, ticket, the outcomes PORT, DONE,
+OBSOLETE and PARK, and the priorities P0 to P3. On GitHub they show as labels:
+
+- `needs-triage`: a source issue not yet specified into tickets.
+- `from-marketplace`: carried over from the claude-code-marketplace sunset.
+- `group:<slug>`: the spec group; list one with `gh issue list --label group:<slug> --state open`.
+- `P0`, `P1`, `P2`, `P3`: priority. Work P0 first, then P1, P2 and P3 in order.
+- `parked`: an outcome of PARK; it waits and is not worked.
+
+Work one spec group at a time: grill-with-docs, then `/to-spec`, then `/to-tickets` on its open
+issues. Close a source issue only once its tickets cover it, with a comment that lists them.
+
 ## Tickets and the planning-with-files task plan
 
 Every ticket `/to-tickets` creates is a GitHub issue in this repo. Right after creating it, add one
