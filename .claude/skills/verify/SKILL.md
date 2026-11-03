@@ -15,6 +15,7 @@ Run everything through mise tasks, which run uv underneath. Never run bare `pyth
 ## 1. Find the change
 
 ```
+git fetch origin main
 git status --short
 git diff HEAD --stat
 git diff origin/main... --stat
@@ -35,6 +36,7 @@ about it.
 | `python/repo/` | `mise run //repo:check` |
 | `typescript/` | `mise run //typescript:test` |
 | `cpp/` | `mise run //cpp:test` |
+| any other task: `tasks/privacy/`, `tasks/review/`, `hk.pkl`, a task in a `mise.toml` | that task itself, through `mise run`, on an input that reaches the change |
 
 A change to the shell tests is verified here: they are the instrument, and a broken instrument
 passes broken shells. Run the row for every path the diff touches. Docs alone (`*.md`, comments)
