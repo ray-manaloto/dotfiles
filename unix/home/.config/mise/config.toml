@@ -17,9 +17,13 @@ github.credential_command = "gh auth token"
 experimental = true
 #verbose = true
 activate_aggressive = true
-# ipruning pattern: trust by path only where configs are created. The temp roots stay because test
-# harnesses and agent scratch dirs create mise configs there (590 tracked under /private/var/folders).
-trusted_config_paths = ["~/dev", "~/.config/mise", "~/.codex/worktrees", "~/.claude", "~/.gemini", "/private/var/folders", "/private/tmp"]
+# Trust by record, not by path: only the global config folder is trusted by path. Any other folder in
+# this list made every mise.toml under it trusted, so a cloned or downloaded config ran its hooks, env
+# and tasks without a prompt, and `mise trust --untrust` had no effect there. A repo is trusted once
+# with `mise trust`; `mise run`, `mise install` and `mise exec` record trust themselves, and a git
+# worktree inherits its main checkout's record. Test harnesses that make configs in temporary folders
+# set MISE_TRUSTED_CONFIG_PATHS for their run.
+trusted_config_paths = ["~/.config/mise"]
 minimum_release_age = "0s"
 lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.
