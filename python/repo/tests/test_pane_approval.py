@@ -354,3 +354,50 @@ def test_an_unreadable_rollout_is_a_named_failure(repo: Path, capsys: pytest.Cap
     folder = repo.parent / "codex" / "sessions"
     (folder / f"rollout-2026-11-02T19-55-16-{SESSION}.jsonl").mkdir(parents=True)
     assert "rollout-" in refusal(capsys)
+
+
+def reported(records: list[dict[str, Any]], shown: str) -> list[dict[str, Any]]:
+    """The turn's end reports the answer as Codex shows it, its memory citations removed."""
+    records[3]["payload"]["last_agent_message"] = shown
+    return records
+
+
+# A memory citation in the shape of a real reviewer's final answer (Codex 0.166.0 rollouts).
+CITATION = (
+    "<oai-mem-citation>\n<citation_entries>\nMEMORY.md:777-777|note=[historical context only]\n"
+    "</citation_entries>\n<rollout_ids>\n</rollout_ids>\n</oai-mem-citation>"
+)
+
+
+def test_a_memory_citation_after_the_approval_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    shown = f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n\n"
+    write_log(repo, reported(turn(repo, "t1", shown + CITATION), shown))
+    main(["pane-approved"])
+
+
+def test_an_approval_inside_a_citation_is_not_one(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    hidden = CITATION.replace("</oai-mem-citation>", f"PANE-APPROVE {fingerprint(capsys)}\n</oai-mem-citation>")
+    write_log(repo, reported(turn(repo, "t1", f"Reviewed.\n{hidden}"), "Reviewed.\n"))
+    assert "does not end with" in refusal(capsys)
+
+
+def test_a_citation_never_closed_hides_the_rest(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    answer = f"Reviewed.\n<oai-mem-citation>\nPANE-APPROVE {fingerprint(capsys)}"
+    write_log(repo, reported(turn(repo, "t1", answer), "Reviewed.\n"))
+    assert "does not end with" in refusal(capsys)
+
+
+def test_an_end_of_turn_text_still_holding_the_citation_is_refused(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    answer = f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n\n{CITATION}"
+    write_log(repo, turn(repo, "t1", answer))
+    assert "without matching settings and answer" in refusal(capsys)

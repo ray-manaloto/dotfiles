@@ -13,6 +13,8 @@ from typing import Any
 from .models import Message, PanePin, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
+CITATION_OPEN = "<oai-mem-citation>"
+CITATION_CLOSE = "</oai-mem-citation>"
 
 
 def git(*args: str, stdin: str | None = None) -> str:
@@ -60,6 +62,25 @@ def answer_text(message: Message) -> str:
     return text
 
 
+def shown(text: str) -> str:
+    """The answer as Codex shows it and reports it at the turn's end: memory citations removed.
+
+    Codex 0.166.0 strips them from the agent message (core/src/stream_events_utils.rs:495-498) and
+    takes task_complete.last_agent_message from that text (:289). Its strip_citations
+    (utils/stream-parser/src/citation.rs:69) matches literally, without nesting, and a citation never
+    closed runs to the end (utils/stream-parser/src/inline_hidden_tag.rs:167-177).
+    """
+    kept: list[str] = []
+    rest = text
+    while (start := rest.find(CITATION_OPEN)) != -1:
+        kept.append(rest[:start])
+        end = rest.find(CITATION_CLOSE, start + len(CITATION_OPEN))
+        if end == -1:
+            return "".join(kept)
+        rest = rest[end + len(CITATION_CLOSE) :]
+    return "".join([*kept, rest])
+
+
 class Turns:
     """Walks a rollout to its last completed turn; an order the log can't vouch for is refused."""
 
@@ -92,7 +113,7 @@ class Turns:
             if self.running is None or self.context is None:
                 msg = "a final answer sits outside a turn with settings"
                 raise ValueError(msg)
-            self.answer = answer_text(message)
+            self.answer = shown(answer_text(message))
 
     def task_started(self, payload: dict[str, Any]) -> None:
         if self.running is not None:
