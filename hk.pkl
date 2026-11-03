@@ -37,10 +37,16 @@ hooks {
                 glob = List("python/**")
                 check = "mise run review:python:approved"
             }
-            // AND the check above: the pinned reviewer pane's last answer approves this HEAD and index.
+        }
+    }
+    // Every commit, docs included: the pinned reviewer pane's last answer approves this HEAD, index and message.
+    // The public repo's leak check: the reviewer refuses challenge content (AGENTS.md). Here, not in pre-commit,
+    // because pre-commit runs before the message exists; commit-msg sees it after preparation and editing.
+    ["commit-msg"] {
+        steps {
             ["pane-approval"] {
-                glob = List("python/**")
-                check = "mise run //repo:pane-approved"
+                // hk inserts the path as raw text (hk src/tera.rs:8-12); single quotes, each ' as '\'', keep it one word.
+                check = #"mise run //repo:pane-approved '{{ commit_msg_file | replace(from="'", to="'\''") }}'"#
             }
         }
     }

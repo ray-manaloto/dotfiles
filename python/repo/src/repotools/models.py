@@ -13,6 +13,9 @@ class Command(StrEnum):
     pane_fingerprint = "pane-fingerprint"
     pane_pin = "pane-pin"
     pane_approved = "pane-approved"
+    pr_fingerprint = "pr-fingerprint"
+    pr_approved = "pr-approved"
+    pr_create = "pr-create"
     zero_bash = "zero-bash"
 
 
@@ -61,15 +64,38 @@ class Finding(BaseModel):
     """
 
 
-class NoOptions(BaseModel):
+class CommitText(BaseModel):
     """
-    A subcommand that takes no options.
+    A commit's message, which the reviewer reads and the approval covers with HEAD and the index.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
+    message: str
+    """
+    The commit message file
+    """
+
+
+class PrText(BaseModel):
+    """
+    A pull request's title and body, which the reviewer reads and the approval covers with HEAD.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    title: Annotated[str, Field(pattern="^[^\\n]+$")]
+    """
+    The title, one line
+    """
+    body_file: str
+    """
+    The file holding the body
+    """
 
 
 class PanePin(BaseModel):
@@ -87,6 +113,12 @@ class PanePin(BaseModel):
     """
 
 
+type Options = CommitText | PrText | PanePin | ZeroBash
+"""
+What a repotools command parses from its arguments.
+"""
+
+
 class Fingerprint(BaseModel):
     """
     What an approval must name, printed as a JSON line.
@@ -98,7 +130,7 @@ class Fingerprint(BaseModel):
     )
     fingerprint: str
     """
-    Hash of HEAD and the whole index
+    Hash of what is approved: HEAD with the index and message, or with a pull request's text
     """
 
 
@@ -307,9 +339,11 @@ class Repotools(BaseModel):
     )
     failure: Failure | None = None
     command: Command | None = None
-    no_options: NoOptions | None = None
+    commit_text: CommitText | None = None
+    pr_text: PrText | None = None
     pane_pin: PanePin | None = None
     zero_bash: ZeroBash | None = None
+    options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None
     rollout_line: RolloutLine | None = None

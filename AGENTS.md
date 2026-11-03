@@ -30,12 +30,24 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   in its own terminal pane, never inside a read-only Codex session: that sandbox denies mise's temp
   file, the git-dir report and the network, and the session gets no extra access. A read-only session
   reviews by reading the report and the changes under `python/`: staged, unstaged and untracked.
-- The hook also needs the reviewer pane's own approval: start the reviewer Codex in the checkout being
-  committed and name its session once with `mise run //repo:pane-pin <session id>`. Stage everything,
-  run `mise run //repo:pane-fingerprint`, and the reviewer's last final answer must end with the line
-  `PANE-APPROVE <fingerprint>`. Any later final answer withdraws it, so ask for nothing after it. A
-  new commit or a changed index voids it. This is a local record: the pin and Codex's session log are
-  plain files that anyone running as this user can edit, so it catches mistakes, not a forger.
+- Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
+  reviewer Codex in the checkout being committed and name its session once with
+  `mise run //repo:pane-pin <session id>`. Stage everything, write the message to a file, run
+  `mise run //repo:pane-fingerprint <message file>` and commit with `git commit -F <message file>`.
+  The reviewer's last final answer must end with the line `PANE-APPROVE <fingerprint>`. Any later
+  final answer withdraws it, so ask for nothing after it. A new commit, a changed index or a changed
+  message voids it. This is a local record: the pin and Codex's session log are plain files that
+  anyone running as this user can edit, so it catches mistakes, not a forger.
+- Open a pull request only with `mise run //repo:pr-create <title> <body file>`, after the reviewer
+  approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
+  bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
+  text. This is a rule, not a lock: `.claude/settings.json` makes Claude ask the owner before
+  `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
+  publish anything.
+- This repo is public and the approval is its leak check. Before approving, the reviewer reads the
+  whole staged diff and the commit message, or the PR title and body, for content from a private
+  project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
+  research. If any is there it does not approve. Never commit with `--no-verify` or `HK=0`.
 - Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
   this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.

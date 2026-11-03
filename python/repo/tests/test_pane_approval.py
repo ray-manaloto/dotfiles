@@ -1,8 +1,9 @@
-"""repotools pane-* through its command line, in real git repositories, against rollout files in Codex's shape."""
+"""repotools pane-* and pr-* through its command line, in real git repositories, against Codex-shaped rollouts."""
 
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from repotools.cli import main
 SESSION = "01a19f1e-28d7-7b12-bce2-4731b8693992"
 OTHER = "01a19f20-baa0-7ff0-8adb-6bb7a2919e7f"
 READ_ONLY = {"file_system": {"type": "restricted", "entries": [{"path": "root", "access": "read"}]}}
+MESSAGE = "feat: one\n\nWhy it changes.\n"
 
 
 @pytest.fixture
@@ -23,6 +25,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
+    # Beside the repository, untracked: the commit message the reviewer reads, which tests may rewrite.
+    (tmp_path / "message").write_text(MESSAGE)
+    monkeypatch.setenv("TEST_MESSAGE_FILE", str(tmp_path / "message"))
     root = tmp_path / "repo"
     root.mkdir()
     subprocess.run(["git", "init", "-q", root], check=True)
@@ -69,8 +74,12 @@ def write_log(root: Path, records: list[dict[str, Any]], session: str = SESSION,
     (folder / f"rollout-2026-11-02T19-55-16-{session}.jsonl").write_text("\n".join(lines) + "\n")
 
 
+def text() -> list[str]:
+    return ["--message", os.environ["TEST_MESSAGE_FILE"]]
+
+
 def fingerprint(capsys: pytest.CaptureFixture[str]) -> str:
-    main(["pane-fingerprint"])
+    main(["pane-fingerprint", *text()])
     return json.loads(capsys.readouterr().out)["fingerprint"]
 
 
@@ -83,7 +92,7 @@ def approve(root: Path, capsys: pytest.CaptureFixture[str], **context: object) -
 def refusal(capsys: pytest.CaptureFixture[str]) -> str:
     capsys.readouterr()
     with pytest.raises(SystemExit) as stopped:
-        main(["pane-approved"])
+        main(["pane-approved", *text()])
     assert stopped.value.code == 1
     return json.loads(capsys.readouterr().err)["error"]
 
@@ -92,13 +101,14 @@ def test_a_fresh_approval_passes(repo: Path, capsys: pytest.CaptureFixture[str])
     records = approve(repo, capsys)
     records.insert(3, {"type": "event_msg", "payload": {"type": "token_count"}})
     write_log(repo, records)
-    main(["pane-approved"])
+    main(["pane-approved", *text()])
 
 
 def test_the_fingerprint_is_what_the_read_only_reviewer_can_compute(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    script = "{ git rev-parse HEAD; git ls-files -s; } | git hash-object --stdin"
+    message = 'git stripspace < "$TEST_MESSAGE_FILE"'
+    script = f"{{ git rev-parse HEAD; git ls-files -s; echo; {message}; }} | git hash-object --stdin"
     own = subprocess.run(script, shell=True, capture_output=True, check=True, text=True, cwd=repo)  # noqa: S602 -- the documented reviewer command is a pipeline
     assert fingerprint(capsys) == own.stdout.strip()
 
@@ -313,7 +323,7 @@ def test_an_interrupted_turn_leaves_the_session_usable(repo: Path, capsys: pytes
     records = approve(repo, capsys)
     started = {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "t0"}}
     write_log(repo, [started, aborted("t0"), *records])
-    main(["pane-approved"])
+    main(["pane-approved", *text()])
 
 
 def test_an_interrupted_turn_withdraws_an_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -331,7 +341,7 @@ def test_a_trailing_newline_after_the_approval_is_accepted(repo: Path, capsys: p
     main(["pane-pin", "--session", SESSION])
     capsys.readouterr()
     write_log(repo, turn(repo, "t1", f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n"))
-    main(["pane-approved"])
+    main(["pane-approved", *text()])
 
 
 def test_an_image_in_a_user_message_does_not_break_the_check(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -339,7 +349,7 @@ def test_an_image_in_a_user_message_does_not_break_the_check(repo: Path, capsys:
     image = {"type": "message", "role": "user", "content": [{"type": "input_image", "image_url": "data:"}]}
     records.insert(2, {"type": "response_item", "payload": image})
     write_log(repo, records)
-    main(["pane-approved"])
+    main(["pane-approved", *text()])
 
 
 def test_a_final_answer_with_no_text_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -374,7 +384,7 @@ def test_a_memory_citation_after_the_approval_is_accepted(repo: Path, capsys: py
     capsys.readouterr()
     shown = f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n\n"
     write_log(repo, reported(turn(repo, "t1", shown + CITATION), shown))
-    main(["pane-approved"])
+    main(["pane-approved", *text()])
 
 
 def test_an_approval_inside_a_citation_is_not_one(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -401,3 +411,250 @@ def test_an_end_of_turn_text_still_holding_the_citation_is_refused(
     answer = f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}\n\n{CITATION}"
     write_log(repo, turn(repo, "t1", answer))
     assert "without matching settings and answer" in refusal(capsys)
+
+
+def test_a_changed_message_voids_it(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, approve(repo, capsys))
+    Path(os.environ["TEST_MESSAGE_FILE"]).write_text("feat: one\n\nWhy it changes, and more.\n")
+    assert "does not end with" in refusal(capsys)
+
+
+def test_whitespace_git_strips_from_a_message_changes_nothing(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, approve(repo, capsys))
+    Path(os.environ["TEST_MESSAGE_FILE"]).write_text("\n" + MESSAGE.replace("one", "one  ") + "\n\n")
+    main(["pane-approved", *text()])
+
+
+def commit_through_hook(message: str) -> subprocess.CompletedProcess[str]:
+    """A real git commit whose commit-msg hook is the installed console script; git appends the message file."""
+    script = Path(sys.executable).parent / "repotools"  # what uv installed from [project.scripts]
+    Path(os.environ["TEST_MESSAGE_FILE"]).write_text(message)
+    hook = ["-c", "hook.pane.event=commit-msg", "-c", f"hook.pane.command={script} pane-approved --message"]
+    identity = ["-c", "user.name=t", "-c", "user.email=t@e"]
+    command = ["git", *hook, *identity, "commit", "-q", "-F", os.environ["TEST_MESSAGE_FILE"]]
+    return subprocess.run(command, capture_output=True, check=False, text=True)
+
+
+def head() -> str:
+    return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, check=True, text=True).stdout
+
+
+def test_a_real_commit_checks_the_message_git_hands_its_hook(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (repo / "notes.md").write_text("x\n")
+    subprocess.run(["git", "add", "notes.md"], check=True)
+    write_log(repo, approve(repo, capsys))
+    done = commit_through_hook(MESSAGE + "\n")
+    assert done.returncode == 0, done.stderr
+    stored = subprocess.run(["git", "log", "-1", "--format=%B"], capture_output=True, check=True, text=True)
+    assert stored.stdout == MESSAGE + "\n"
+
+
+def test_a_real_commit_with_another_message_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (repo / "notes.md").write_text("x\n")
+    subprocess.run(["git", "add", "notes.md"], check=True)
+    write_log(repo, approve(repo, capsys))
+    before = head()
+    refused = commit_through_hook("feat: something else\n")
+    assert refused.returncode != 0
+    assert "does not end with" in refused.stderr
+    assert head() == before
+
+
+def body(content: str = "## Summary\n\nOne change.\n") -> str:
+    path = Path(os.environ["TEST_MESSAGE_FILE"]).with_name("body.md")
+    path.write_text(content)
+    return str(path)
+
+
+def pr(title: str = "feat: one", body_file: str | None = None) -> list[str]:
+    return ["--title", title, "--body-file", body() if body_file is None else body_file]
+
+
+def pr_approve(root: Path, capsys: pytest.CaptureFixture[str]) -> list[dict[str, Any]]:
+    main(["pane-pin", "--session", SESSION])
+    main(["pr-fingerprint", *pr()])
+    shown = json.loads(capsys.readouterr().out)["fingerprint"]
+    return turn(root, "t1", f"Reviewed.\nPANE-APPROVE {shown}")
+
+
+def pr_refusal_of(capsys: pytest.CaptureFixture[str], command: str, options: list[str]) -> str:
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as stopped:
+        main([command, *options])
+    assert stopped.value.code == 1
+    return json.loads(capsys.readouterr().err)["error"]
+
+
+def pr_refusal(capsys: pytest.CaptureFixture[str], options: list[str]) -> str:
+    return pr_refusal_of(capsys, "pr-approved", options)
+
+
+def test_an_approved_pull_request_text_passes(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, pr_approve(repo, capsys))
+    main(["pr-approved", *pr()])
+
+
+def test_the_pull_request_fingerprint_is_what_the_reviewer_can_compute(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main(["pr-fingerprint", *pr()])
+    shown = json.loads(capsys.readouterr().out)["fingerprint"]
+    text = 'echo "pull request"; git rev-parse HEAD; echo "feat: one"; echo; cat ../body.md'
+    script = f"{{ {text}; }} | git hash-object --stdin"
+    own = subprocess.run(script, shell=True, capture_output=True, check=True, text=True, cwd=repo)  # noqa: S602 -- the documented reviewer command is a pipeline
+    assert shown == own.stdout.strip()
+
+
+def test_a_changed_pull_request_body_or_title_voids_it(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, pr_approve(repo, capsys))
+    assert "does not end with" in pr_refusal(capsys, pr(body_file=body("## Summary\n\nTwo changes.\n")))
+    assert "does not end with" in pr_refusal(capsys, pr(title="feat: two"))
+
+
+def test_a_commit_approval_does_not_approve_a_pull_request(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, approve(repo, capsys))
+    assert "does not end with" in pr_refusal(capsys, pr())
+
+
+def test_a_new_commit_voids_a_pull_request_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, pr_approve(repo, capsys))
+    (repo / "b.py").write_text("two\n")
+    commit()
+    assert "does not end with" in pr_refusal(capsys, pr())
+
+
+@pytest.mark.parametrize("title", ["feat: one\nmore", "feat: one\n", ""])
+def test_a_title_that_is_not_one_line_is_refused(repo: Path, capsys: pytest.CaptureFixture[str], title: str) -> None:
+    assert repo.exists()
+    assert "title" in pr_refusal(capsys, pr(title=title))
+
+
+def test_a_pull_request_body_is_approved_byte_for_byte(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, pr_approve(repo, capsys))
+    # Markdown renders a trailing double space as a line break; what GitHub receives is what was approved.
+    assert "does not end with" in pr_refusal(capsys, pr(body_file=body("## Summary\n\nOne change.  \n")))
+
+
+GH_URL = "https://github.com/owner/repo/pull/7"
+GH_EXISTS = f'a pull request for branch "topic" into branch "main" already exists:\n{GH_URL}\n'
+GH_STAND_IN = """import json, sys
+record, exists = sys.argv[1], sys.argv[2] == "1"
+args = sys.argv[3:]
+# gh pr create's flags as repotools passes them; anything else is gh's usage error.
+if args[:5] != ["pr", "create", "--base", "main", "--title"] or args[6:] != ["--body-file", "-"]:
+    sys.stderr.write("unknown flag\\nUsage:  gh pr create [flags]\\n")
+    sys.exit(1)
+open(record, "w").write(json.dumps({"title": args[5], "body": sys.stdin.buffer.read().decode()}))
+if exists:
+    sys.stderr.write(EXISTS)
+    sys.exit(1)
+sys.stdout.write(URL + "\\n")
+"""
+
+
+def fake_gh(root: Path, monkeypatch: pytest.MonkeyPatch, *, exists: bool = False) -> Path:
+    """A gh first on PATH that checks its flags, reads the body from stdin and answers as gh pr create does.
+
+    It prints the new pull request's URL, or gh's error when the branch already has one; it opens nothing.
+    """
+    record = root.parent / "gh.json"
+    program = root.parent / "bin" / "gh"
+    program.parent.mkdir()
+    code = GH_STAND_IN.replace("EXISTS", repr(GH_EXISTS)).replace("URL", repr(GH_URL))
+    (root.parent / "gh.py").write_text(code)
+    flag = "1" if exists else "0"
+    program.write_text(
+        f"#!{sys.executable}\nimport runpy, sys\nsys.argv[1:1] = [{str(record)!r}, {flag!r}]\n"
+        f"runpy.run_path({str(root.parent / 'gh.py')!r}, run_name='__main__')\n"
+    )
+    program.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{program.parent}{os.pathsep}{os.environ['PATH']}")
+    return record
+
+
+def test_pr_create_sends_the_approved_text_to_gh(
+    repo: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """capfd, not capsys: gh's own stdout passes straight through to the caller's."""
+    record = fake_gh(repo, monkeypatch)
+    write_log(repo, pr_approve(repo, capfd))
+    capfd.readouterr()
+    main(["pr-create", *pr()])
+    assert json.loads(record.read_text()) == {"title": "feat: one", "body": "## Summary\n\nOne change.\n"}
+    assert capfd.readouterr().out == GH_URL + "\n"
+
+
+def test_pr_create_without_approval_never_runs_gh(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = fake_gh(repo, monkeypatch)
+    write_log(repo, approve(repo, capsys))
+    assert "does not end with" in pr_refusal_of(capsys, "pr-create", pr())
+    assert not record.exists()
+
+
+def test_gh_refusing_the_pull_request_is_a_named_failure(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_gh(repo, monkeypatch, exists=True)
+    write_log(repo, pr_approve(repo, capsys))
+    assert pr_refusal_of(capsys, "pr-create", pr()) == f"gh failed: {GH_EXISTS}"
+
+
+HK_PKL = Path(__file__).resolve().parents[3] / "hk.pkl"
+
+
+def test_hk_hands_the_hook_a_path_with_spaces_and_quotes_as_one_word(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """This repository's own commit-msg step, run by the real hk, in a checkout whose path needs quoting."""
+    # repo cleared GIT_* and the global config; an outer hk run's own settings must not reach the inner one either.
+    for name in [name for name in os.environ if name.startswith("HK_")]:
+        monkeypatch.delenv(name)
+    root = repo.parent / "it's a checkout"
+    root.mkdir()
+    monkeypatch.chdir(root)
+    subprocess.run(["git", "init", "-q"], check=True)
+    (root / "a.md").write_text("one\n")
+    commit()
+    real = HK_PKL.read_text()
+    step = real[real.index('["commit-msg"]') :]
+    step = step[: step.index("\n    }\n") + len("\n    }\n")]
+    script = Path(sys.executable).parent / "repotools"
+    assert "mise run //repo:pane-approved " in step
+    step = step.replace("mise run //repo:pane-approved ", f"{script} pane-approved --message ")
+    (root / "hk.pkl").write_text(real.splitlines()[0] + "\n\nhooks {\n    " + step + "}\n")
+    (root / "notes.md").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], check=True)
+    message = root / "message"
+    message.write_text(MESSAGE)
+    monkeypatch.setenv("TEST_MESSAGE_FILE", str(message))
+    write_log(root, approve(root, capsys))
+    hook = ["-c", "hook.hk.event=commit-msg", "-c", "hook.hk.command=hk run commit-msg --from-hook"]
+    identity = ["-c", "user.name=t", "-c", "user.email=t@e"]
+    command = ["git", *hook, *identity, "commit", "-q", "-F", str(message)]
+    message.write_text("feat: not what was approved\n")
+    refused = subprocess.run(command, capture_output=True, check=False, text=True)
+    assert refused.returncode != 0
+    assert "does not end with" in refused.stderr
+    message.write_text(MESSAGE)
+    done = subprocess.run(command, capture_output=True, check=False, text=True)
+    assert done.returncode == 0, done.stderr
+
+
+def test_a_crlf_body_is_hashed_and_sent_as_its_bytes(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    crlf = Path(body()).with_name("crlf.md")
+    crlf.write_bytes(b"## Summary\r\n\r\nOne change.\r\n")
+    main(["pr-fingerprint", *pr(body_file=str(crlf))])
+    shown = json.loads(capsys.readouterr().out)["fingerprint"]
+    text = 'echo "pull request"; git rev-parse HEAD; echo "feat: one"; echo; cat ../crlf.md'
+    script = f"{{ {text}; }} | git hash-object --stdin"
+    own = subprocess.run(script, shell=True, capture_output=True, check=True, cwd=repo)  # noqa: S602 -- the documented reviewer command is a pipeline
+    assert shown == own.stdout.decode().strip()
+    record = fake_gh(repo, monkeypatch)
+    write_log(repo, turn(repo, "t1", f"Reviewed.\nPANE-APPROVE {shown}"))
+    main(["pane-pin", "--session", SESSION])
+    main(["pr-create", *pr(body_file=str(crlf))])
+    assert json.loads(record.read_text())["body"] == "## Summary\r\n\r\nOne change.\r\n"
