@@ -13,5 +13,33 @@
       "Bash(gh issue edit *)",
       "Bash(gh issue comment *)"
     ]
-  }
+  },
+  "env": {
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "10",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
+  "disableClaudeAiConnectors": true,
+  "enabledPlugins": {
+    "code-modernization@claude-plugins-official": true,
+    "mattpocock-skills@mattpocock": true,
+    "tokeneconomizer@tokeneconomizer": true,
+    "plugin-dev@claude-plugins-official": true,
+    "eli5@claude-community": true,
+    "html-plan@claude-community": true,
+    "next-steps@claude-community": true,
+    "code-simplifier@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "clangd-lsp@claude-plugins-official": true,
+    "planning-with-files@planning-with-files": true
+  },
+  "subagentPromptCacheTtl": "1h",
+  "autoCompactWindow": 200000,
+  "autoCompactEnabled": true,
+  "agentPushNotifEnabled": true,
+  "effortLevel": "medium",
+  "fastMode": false,
+  "remoteControlAtStartup": true
 }
