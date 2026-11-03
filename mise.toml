@@ -37,7 +37,8 @@ usage = '''
 flag "--outgoing" help="Scan every commit not yet on a remote, branches and tags (pre-push)"
 arg "[file]" var=#true help="Files to scan; default every tracked file"
 '''
-run = "bash tasks/privacy/scan.sh"
+# --option=value: a value that starts with - would otherwise be read by argparse as an option.
+run = 'uv run --project python/repo --locked repotools privacy-scan --patterns="$PRIVATE_PATTERNS" --files="${usage_file:-}" ${usage_outgoing:+--outgoing}'
 
 [tasks."shell:apply"]
 description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
@@ -53,7 +54,8 @@ run = "bash tasks/shell/rollback.sh"
 run = "hk run pre-commit"
 
 # Run after staging a Python unit; fix or answer every finding, then rerun until PASS. A full PASS
-# records a fingerprint of the staged python/ files, which the pre-commit hook compares.
+# records a fingerprint of the staged python/ files, which the pre-commit hook compares. repotools
+# review-python does the work (python/repo/src/repotools/gates.py).
 # Pattern: jazzsequence/jazz-nextjs@9c427f84 .githooks/lib/approval.sh:48-64 (index fingerprint from
 # `git ls-files -s`, so a later `git add` voids the approval); Open-BFME/Open-BFME-1@5a6f78cf
 # .githooks/pre-commit:411,640 does it with `git write-tree`. Marketplace saved searches review-gate-*.
@@ -64,31 +66,12 @@ arg "[path]" default="python" help="Directory whose uncommitted changes are revi
 flag "--commit <sha>" help="Review this commit instead of the uncommitted changes"
 flag "--out <file>" help="Report file (default review-python.md in the git dir, never tracked)"
 '''
-run = '''
-out="${usage_out:-$(git rev-parse --git-path review-python.md)}"
-# Taken before Codex reads, so anything staged during the review stays unapproved.
-staged="$(git ls-files -s -- python | git hash-object --stdin)"
-{ cat tasks/review/python.md; printf 'Path: %s\nCommit: %s\n' "$usage_path" "${usage_commit:-none}"; } |
-  codex exec -C . -c 'sandbox_mode="read-only"' -o "$out" -
-printf "%s\n" "$(tail -n 1 "$out")"
-grep -qx 'VERDICT: PASS' "$out"
-# The reviewer also reads unstaged files, so a PASS approves the index only when they match it.
-if [ "$usage_path" = python ] && [ -z "${usage_commit:-}" ] && git diff --quiet -- python &&
-  [ -z "$(git ls-files -o --exclude-standard -- python)" ]; then
-  printf '%s\n' "$staged" > "$(git rev-parse --git-path review-python.approved)"
-fi
-'''
+# --option=value: a value that starts with - would otherwise be read by argparse as an option.
+run = 'uv run --project python/repo --locked repotools review-python --path="$usage_path" ${usage_commit:+--commit="$usage_commit"} ${usage_out:+--out="$usage_out"}'
 
 [tasks."review:python:approved"]
 description = "Refuse unless review:python passed on exactly the staged python/ files"
-run = '''
-approved="$(git rev-parse --git-path review-python.approved)"
-staged="$(git ls-files -s -- python | git hash-object --stdin)"
-if [ "$staged" != "$(cat "$approved" 2>/dev/null)" ]; then
-  echo "review:python has not passed on the staged python/ files; stage them, then mise run review:python" >&2
-  exit 1
-fi
-'''
+run = "uv run --project python/repo --locked repotools review-python-approved"
 
 [dotfiles]
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }

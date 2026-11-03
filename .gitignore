@@ -35,3 +35,5 @@
 /typescript/node_modules/
 __pycache__/
 .coverage
+# A subprocess writes its own .coverage.<host>.pid<n>.<random> until pytest-cov combines them.
+.coverage.*

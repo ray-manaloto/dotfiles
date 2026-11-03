@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import main_guard, pane_approval, zero_bash
+from . import gates, main_guard, pane_approval, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -18,7 +18,10 @@ from .models import (
     MainGuardRemove,
     Options,
     PanePin,
+    PrivacyScan,
     PrText,
+    ReviewApproved,
+    ReviewPython,
     ZeroBash,
 )
 
@@ -30,6 +33,9 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.pr_approved: PrText,
     Command.pr_create: PrText,
     Command.zero_bash: ZeroBash,
+    Command.review_python: ReviewPython,
+    Command.review_python_approved: ReviewApproved,
+    Command.privacy_scan: PrivacyScan,
     Command.main_guard: MainGuard,
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
@@ -61,6 +67,12 @@ def run(command: Command, options: Options) -> None:
         sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
         if options.strict and found:
             raise SystemExit(1)
+    elif isinstance(options, ReviewPython):
+        gates.review(options)
+    elif isinstance(options, ReviewApproved):
+        gates.approved()
+    elif isinstance(options, PrivacyScan):
+        gates.privacy_scan(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
     elif isinstance(options, PanePin):

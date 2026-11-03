@@ -6,7 +6,7 @@ local linters = new Mapping<String, Step> {
     ["trailing-whitespace"] = (Builtins.trailing_whitespace) { exclude = "**/*.patch" }
     ["newlines"] = Builtins.newlines
     ["merge-conflicts"] = Builtins.check_merge_conflict
-    // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (tasks/privacy/scan.sh).
+    // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (repotools privacy-scan).
     ["betterleaks"] = Builtins.betterleaks
     ["shellcheck"] = Builtins.shellcheck
     ["private-paths"] {
