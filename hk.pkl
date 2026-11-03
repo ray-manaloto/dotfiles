@@ -32,6 +32,9 @@ hooks {
         fix = true
         stash = "git"
         steps = (linters) {
+            // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
+            // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
+            ["no-commit-to-main"] = Builtins.no_commit_to_branch
             // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
             ["python-review"] {
                 glob = List("python/**")

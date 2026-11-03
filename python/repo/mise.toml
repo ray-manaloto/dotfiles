@@ -55,6 +55,25 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools zero-bash ${usage_strict:+--strict}'
 
+# The main guard (AGENTS.md): git runs it from the shared .git/config on every ref update, so it lives in a
+# uv tool outside every checkout, and the hook's shell line skips all but a prepared update of main.
+[tasks.main-guard-copy]
+description = "Install this checkout's repotools as a uv tool, the copy the main guard hook runs"
+dir = "{{ config_root }}/../.."
+run = "uv tool install --reinstall ./python/repo"
+
+[tasks.main-guard-install]
+description = "Install the guard's copy and register it as this repository's reference-transaction hook"
+depends = ["main-guard-copy"]
+dir = "{{ config_root }}/../.."
+run = '"$(uv tool dir --bin)/repotools" main-guard-install --bin "$(uv tool dir --bin)/repotools"'
+
+[tasks.main-guard-remove]
+description = "Remove the main guard's hook entry from this repository's config"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools main-guard-remove'
+
 # Development: uv runs only through these tasks.
 [tasks.sync]
 description = "Install the locked dependencies into .venv"

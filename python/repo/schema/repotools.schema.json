@@ -8,7 +8,7 @@
     "Command": {
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
-      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash"]
+      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash", "main-guard", "main-guard-install", "main-guard-remove"]
     },
     "ZeroBash": {
       "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
@@ -16,6 +16,27 @@
       "properties": {
         "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" }
       },
+      "additionalProperties": false
+    },
+    "MainGuard": {
+      "description": "Refuse a move of refs/heads/main, read from the reference-transaction rows on stdin, unless it is to origin/main.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "MainGuardInstall": {
+      "description": "Register the main guard as this repository's reference-transaction hook, after a self-test.",
+      "type": "object",
+      "properties": {
+        "bin": { "type": "string", "description": "The installed repotools executable the hook runs, outside every checkout" }
+      },
+      "required": ["bin"],
+      "additionalProperties": false
+    },
+    "MainGuardRemove": {
+      "description": "Remove the main guard's hook entry from this repository's config.",
+      "type": "object",
+      "properties": {},
       "additionalProperties": false
     },
     "Rule": {
@@ -72,7 +93,10 @@
         { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
         { "$ref": "#/$defs/PanePin" },
-        { "$ref": "#/$defs/ZeroBash" }
+        { "$ref": "#/$defs/ZeroBash" },
+        { "$ref": "#/$defs/MainGuard" },
+        { "$ref": "#/$defs/MainGuardInstall" },
+        { "$ref": "#/$defs/MainGuardRemove" }
       ]
     },
     "Fingerprint": {
@@ -190,6 +214,9 @@
     "pr_text": { "$ref": "#/$defs/PrText" },
     "pane_pin": { "$ref": "#/$defs/PanePin" },
     "zero_bash": { "$ref": "#/$defs/ZeroBash" },
+    "main_guard": { "$ref": "#/$defs/MainGuard" },
+    "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
+    "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
