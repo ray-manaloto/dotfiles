@@ -21,6 +21,10 @@ local linters = new Mapping<String, Step> {
         glob = List("python/repo/**")
         check = "mise run //repo:check"
     }
+    // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
+    ["zero-bash"] {
+        check = "mise run //repo:zero-bash"
+    }
 }
 
 hooks {
