@@ -1,16 +1,21 @@
-"""A commit needs the reviewer pane's approval of HEAD and the whole index, read from Codex's own session log."""
+"""A commit needs the reviewer pane's approval of HEAD, the whole index and the message; a pull request, of its text."""
 
+# The approval is read from Codex's own session log. This repository is public, and the reviewer is its leak check.
 # Precedent for gating a commit on what is staged: onlygian/G-Forge@5ed9839b hooks/pre-commit:150-155 and
 # CEDRIC-code1982/Mivro@715fa888 scripts/review-gate.sh:20,37 compare git write-tree. This hashes ls-files
 # instead: write-tree writes objects, and the read-only reviewer must be able to compute the same value.
+# Gerrit's commit-msg hook, as vendored in TYPO3/typo3@d389f860 Build/git-hooks/commit-msg:34-46,175-188, hashes
+# the message from $1 after git stripspace with the tree and parent; the message is hashed the same way here.
+# A pull request's title and body are hashed as they are sent: GitHub stores and renders the body as given.
 # A local record: anyone running as this user can edit the log or the pin. See AGENTS.md.
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
-from .models import Message, PanePin, RolloutLine, SessionMeta, TaskEvent, TurnContext
+from .models import CommitText, Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
 CITATION_OPEN = "<oai-mem-citation>"
@@ -21,12 +26,32 @@ def git(*args: str, stdin: str | None = None) -> str:
     return subprocess.run(["git", *args], input=stdin, capture_output=True, check=True, text=True).stdout
 
 
-def fingerprint() -> str:
-    # From the root, the reviewer's own command gives these bytes:
-    # { git rev-parse HEAD; git ls-files -s; } | git hash-object --stdin
+def hashed(data: bytes) -> str:
+    # Bytes, not text: Python's text mode would turn a body's CRLF into LF before hashing.
+    done = subprocess.run(["git", "hash-object", "--stdin"], input=data, capture_output=True, check=True)
+    return done.stdout.decode().strip()
+
+
+def stripped(path: str) -> str:
+    # git commit cleans the message the same way before it is stored, so a trailing blank line changes nothing.
+    return git("stripspace", stdin=Path(path).read_text())
+
+
+def fingerprint(text: CommitText | PrText, body: bytes | None = None) -> str:
+    """What the reviewer approves. From the root, its own command gives these bytes:
+
+    { git rev-parse HEAD; git ls-files -s; echo; git stripspace < MESSAGE; } | git hash-object --stdin
+    { echo "pull request"; git rev-parse HEAD; echo "$TITLE"; echo; cat BODY; } | git hash-object --stdin
+
+    body, when given, is the body file as already read, so what is checked is what is sent.
+    """
+    head = git("rev-parse", "HEAD")
+    if isinstance(text, PrText):
+        sent = Path(text.body_file).read_bytes() if body is None else body
+        return hashed(f"pull request\n{head}{text.title}\n\n".encode() + sent)
     # :/ and --full-name keep the whole index when run from a subfolder, where ls-files lists only that folder.
     listing = git("ls-files", "-s", "--full-name", ":/")
-    return git("hash-object", "--stdin", stdin=git("rev-parse", "HEAD") + listing).strip()
+    return hashed(f"{head}{listing}\n{stripped(text.message)}".encode())
 
 
 def pin_file() -> Path:
@@ -176,7 +201,7 @@ def read_only(context: TurnContext) -> bool:
     )
 
 
-def check() -> None:
+def check(text: CommitText | PrText, body: bytes | None = None) -> None:
     session = pinned().session
     meta, context, answer = last_turn(rollout(session), session)
     root = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
@@ -186,7 +211,16 @@ def check() -> None:
     if not read_only(context):
         msg = f"the last turn of session {session} was not read-only"
         raise ValueError(msg)
-    wanted = f"{APPROVAL} {fingerprint()}"
+    wanted = f"{APPROVAL} {fingerprint(text, body)}"
     if answer.rstrip().split("\n")[-1] != wanted:
         msg = f"the reviewer's last answer does not end with: {wanted}"
         raise ValueError(msg)
+
+
+def create(text: PrText) -> None:
+    """Open the pull request with the body read once: the bytes checked are the bytes gh sends."""
+    body = Path(text.body_file).read_bytes()
+    check(text, body)
+    command = ["gh", "pr", "create", "--base", "main", "--title", text.title, "--body-file", "-"]
+    done = subprocess.run(command, input=body, stderr=subprocess.PIPE, check=True)
+    sys.stderr.write(done.stderr.decode(errors="replace"))

@@ -7,10 +7,11 @@ _.python.venv = { path = ".venv" }
 
 # From the repository root: a hook exports GIT_DIR, and git then takes the current folder as the top.
 [tasks.pane-fingerprint]
-description = "Print the hash of HEAD and the whole index that the reviewer pane must approve"
+description = "Print the hash of HEAD, the whole index and the commit message that the reviewer pane must approve"
+usage = 'arg "<message>" help="The commit message file, which the reviewer reads"'
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = "uv run --project python/repo --locked repotools pane-fingerprint"
+run = 'uv run --project python/repo --locked repotools pane-fingerprint --message "$usage_message"'
 
 [tasks.pane-pin]
 description = "Name the reviewer's Codex session, started in this checkout, for this checkout's commits"
@@ -20,10 +21,32 @@ dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pane-pin --session "$usage_session"'
 
 [tasks.pane-approved]
-description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD and index"
+description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD, index and message"
+usage = 'arg "<message>" help="The commit message file"'
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = "uv run --project python/repo --locked repotools pane-approved"
+run = 'uv run --project python/repo --locked repotools pane-approved --message "$usage_message"'
+
+[tasks.pr-fingerprint]
+description = "Print the hash of HEAD and a pull request's title and body that the reviewer pane must approve"
+usage = '''
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the body, which the reviewer reads"
+'''
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools pr-fingerprint --title "$usage_title" --body-file "$usage_body"'
+
+# The only way a pull request's text should reach GitHub: repotools reads the body once, checks it, and pipes it to gh.
+[tasks.pr-create]
+description = "Open a pull request against main once the pinned reviewer approved its title and body"
+usage = '''
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the body"
+'''
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools pr-create --title "$usage_title" --body-file "$usage_body"'
 
 [tasks.zero-bash]
 description = "Report tracked shell scripts, shell shebangs and multi-line mise run; --strict fails on any"

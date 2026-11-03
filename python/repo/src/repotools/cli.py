@@ -7,17 +7,21 @@ from collections.abc import Sequence
 from pydantic_settings import CliApp, CliSettingsSource
 
 from . import pane_approval, zero_bash
-from .models import Command, Failure, Fingerprint, NoOptions, PanePin, ZeroBash
+from .models import Command, CommitText, Failure, Fingerprint, Options, PanePin, PrText, ZeroBash
 
-OPTIONS: dict[Command, type[NoOptions | PanePin | ZeroBash]] = {
-    Command.pane_fingerprint: NoOptions,
+OPTIONS: dict[Command, type[Options]] = {
+    Command.pane_fingerprint: CommitText,
     Command.pane_pin: PanePin,
-    Command.pane_approved: NoOptions,
+    Command.pane_approved: CommitText,
+    Command.pr_fingerprint: PrText,
+    Command.pr_approved: PrText,
+    Command.pr_create: PrText,
     Command.zero_bash: ZeroBash,
 }
+APPROVED = {Command.pane_approved, Command.pr_approved}
 
 
-def parse(argv: Sequence[str]) -> tuple[Command, NoOptions | PanePin | ZeroBash]:
+def parse(argv: Sequence[str]) -> tuple[Command, Options]:
     if not argv or argv[0] not in set(Command):
         msg = f"repotools: the first argument is one of {', '.join(Command)}"
         raise ValueError(msg)
@@ -34,19 +38,20 @@ def parse(argv: Sequence[str]) -> tuple[Command, NoOptions | PanePin | ZeroBash]
     return command, CliApp.run(model, cli_args=list(argv[1:]), cli_settings_source=cli)
 
 
-def run(command: Command, options: NoOptions | PanePin | ZeroBash) -> None:
+def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
         found = zero_bash.findings()
         sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
         if options.strict and found:
             raise SystemExit(1)
-        return
-    if isinstance(options, PanePin):
+    elif isinstance(options, PanePin):
         pane_approval.pin(options)
-    elif command is Command.pane_approved:
-        pane_approval.check()
-    if command is not Command.pane_approved:
-        sys.stdout.write(Fingerprint(fingerprint=pane_approval.fingerprint()).model_dump_json() + "\n")
+    elif isinstance(options, PrText) and command is Command.pr_create:
+        pane_approval.create(options)
+    elif command in APPROVED:
+        pane_approval.check(options)
+    else:
+        sys.stdout.write(Fingerprint(fingerprint=pane_approval.fingerprint(options)).model_dump_json() + "\n")
 
 
 def main(argv: Sequence[str] | None = None) -> None:

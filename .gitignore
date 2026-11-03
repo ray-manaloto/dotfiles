@@ -16,9 +16,10 @@
 !/tests/
 !/typescript/
 !/unix/
-# Only the project's /verify skill; settings.local.json and anything else under .claude stay out.
+# The project's settings and /verify skill; settings.local.json and anything else under .claude stay out.
 !/.claude/
 /.claude/*
+!/.claude/settings.json
 !/.claude/skills/
 /.claude/skills/*
 !/.claude/skills/verify/

@@ -8,7 +8,7 @@
     "Command": {
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
-      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "zero-bash"]
+      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash"]
     },
     "ZeroBash": {
       "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
@@ -34,9 +34,23 @@
       "required": ["path", "rule", "detail"],
       "additionalProperties": false
     },
-    "NoOptions": {
-      "description": "A subcommand that takes no options.",
+    "CommitText": {
+      "description": "A commit's message, which the reviewer reads and the approval covers with HEAD and the index.",
       "type": "object",
+      "properties": {
+        "message": { "type": "string", "description": "The commit message file" }
+      },
+      "required": ["message"],
+      "additionalProperties": false
+    },
+    "PrText": {
+      "description": "A pull request's title and body, which the reviewer reads and the approval covers with HEAD.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "pattern": "^[^\\n]+$", "description": "The title, one line" },
+        "body_file": { "type": "string", "description": "The file holding the body" }
+      },
+      "required": ["title", "body_file"],
       "additionalProperties": false
     },
     "PanePin": {
@@ -52,11 +66,20 @@
       "required": ["session"],
       "additionalProperties": false
     },
+    "Options": {
+      "description": "What a repotools command parses from its arguments.",
+      "anyOf": [
+        { "$ref": "#/$defs/CommitText" },
+        { "$ref": "#/$defs/PrText" },
+        { "$ref": "#/$defs/PanePin" },
+        { "$ref": "#/$defs/ZeroBash" }
+      ]
+    },
     "Fingerprint": {
       "description": "What an approval must name, printed as a JSON line.",
       "type": "object",
       "properties": {
-        "fingerprint": { "type": "string", "description": "Hash of HEAD and the whole index" }
+        "fingerprint": { "type": "string", "description": "Hash of what is approved: HEAD with the index and message, or with a pull request's text" }
       },
       "required": ["fingerprint"],
       "additionalProperties": false
@@ -160,9 +183,11 @@
   "properties": {
     "failure": { "$ref": "#/$defs/Failure" },
     "command": { "$ref": "#/$defs/Command" },
-    "no_options": { "$ref": "#/$defs/NoOptions" },
+    "commit_text": { "$ref": "#/$defs/CommitText" },
+    "pr_text": { "$ref": "#/$defs/PrText" },
     "pane_pin": { "$ref": "#/$defs/PanePin" },
     "zero_bash": { "$ref": "#/$defs/ZeroBash" },
+    "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
     "rollout_line": { "$ref": "#/$defs/RolloutLine" },
