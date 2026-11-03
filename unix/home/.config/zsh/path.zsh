@@ -5,7 +5,7 @@ path=("${(@)path:#$HOME/.cache/oh-my-opencode/bin}")
 path=("${(@)path:#$HOME/.opencode/bin}")
 path=("${(@)path:#/usr/local/Homebrew/*}")
 path=("${(@)path:#/usr/local/opt/*}")
-_inherited=("${(@)path:#(/usr/bin|/bin|/usr/sbin|/sbin)}")
+_inherited=("${(@)path[1,${path[(i)(/usr/bin|/bin|/usr/sbin|/sbin)]}-1]}")
 path=("$XDG_DATA_HOME/mise/shims" "$HOME/.local/bin" /usr/local/share/mise/shims
       /opt/homebrew/bin /opt/homebrew/sbin /usr/bin /bin /usr/sbin /sbin $path
       "$HOME/.docker/bin"

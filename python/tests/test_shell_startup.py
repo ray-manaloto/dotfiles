@@ -182,6 +182,12 @@ class ShellStartupTest(unittest.TestCase):
         for entry in (*LOGIN_FIRST, *LOGIN_LAST):
             self.assertIn(entry, entries)
 
+    def test_a_child_of_a_login_shell_keeps_its_path(self) -> None:
+        print_path = "print -r -- $PATH"
+        login = self.zsh(("-l", "-c"), print_path, path=TOOL_PATH)[1].strip()
+        child = self.zsh(("-c",), print_path, path=login)[1].strip()
+        self.assertEqual(child.split(":"), login.split(":"))
+
     def test_a_bare_system_path_gets_the_shims_ahead_of_usr_bin(self) -> None:
         path = self.zsh(("-c",), "print -rl -- $path", path=SYSTEM_PATH)[1]
         entries = path.splitlines()
