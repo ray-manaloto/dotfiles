@@ -3,6 +3,7 @@
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -33,8 +34,10 @@ KEG_BIN = "~/homebrew/opt/llvm/bin"
 TOOL_PATH = f"{VENV_BIN}:{KEG_BIN}:{INHERITED_PATH}"
 # The native install, the only one `opencode upgrade` recognises.
 OPENCODE = "~/.opencode/bin/opencode"
-# This machine's native OpenCode v2 install, which `mise run agents:update` installs.
-REAL_OPENCODE = Path.home() / ".opencode/bin/opencode"
+# The native install is a link to a real executable that every test run has, this Python, so
+# no OpenCode is needed on the host. Its `--version` output differs from mise's, so a shim that
+# ran mise instead shows.
+NATIVE_TOOL = Path(sys.executable).resolve()
 # The shims hold both too, which is how they shadow a venv and a keg.
 SHIMS = "~/.local/share/mise/shims"
 STARSHIP = shutil.which("starship")
@@ -125,11 +128,7 @@ class ShellStartupTest(unittest.TestCase):
             native = Path(OPENCODE.replace("~", str(home)))
             native.parent.mkdir(parents=True)
             if opencode:
-                self.assertTrue(
-                    REAL_OPENCODE.is_file(),
-                    "no native OpenCode; run: mise run agents:update",
-                )
-                native.symlink_to(REAL_OPENCODE.resolve())
+                native.symlink_to(NATIVE_TOOL)
             if stale_opencode_shim:
                 # What a mise install pinned by another project leaves behind: a shim, which is
                 # a link to mise, ahead of the native install on an interactive PATH.
