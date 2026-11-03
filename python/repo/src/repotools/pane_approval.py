@@ -191,10 +191,15 @@ def last_turn(log: str, session: str) -> tuple[SessionMeta, TurnContext, str]:
 
 
 def read_only(context: TurnContext) -> bool:
-    files = context.permission_profile.file_system
+    # Codex 0.166.0 PermissionProfile (protocol/src/models.rs:426-440): only Managed carries file_system;
+    # Disabled is full access, as a resume without a sandbox flag runs under this user's config.
+    profile = context.permission_profile
+    files = profile.file_system
     return (
         context.approval_policy == "never"
         and context.sandbox_policy.type == "read-only"
+        and profile.type == "managed"
+        and files is not None
         and files.type == "restricted"
         and bool(files.entries)
         and all(entry.access == "read" for entry in files.entries)

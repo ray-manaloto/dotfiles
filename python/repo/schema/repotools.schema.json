@@ -125,10 +125,13 @@
       "required": ["type", "entries"]
     },
     "PermissionProfile": {
-      "description": "A turn's effective permissions.",
+      "description": "A turn's effective permissions; only a managed profile lists its filesystem access.",
       "type": "object",
-      "properties": { "file_system": { "$ref": "#/$defs/FileSystem" } },
-      "required": ["file_system"]
+      "properties": {
+        "type": { "type": "string", "description": "managed, disabled (no sandbox) or external" },
+        "file_system": { "$ref": "#/$defs/FileSystem" }
+      },
+      "required": ["type"]
     },
     "TurnContext": {
       "description": "A rollout's turn_context payload.",

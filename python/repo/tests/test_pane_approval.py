@@ -13,7 +13,14 @@ from repotools.cli import main
 
 SESSION = "01a19f1e-28d7-7b12-bce2-4731b8693992"
 OTHER = "01a19f20-baa0-7ff0-8adb-6bb7a2919e7f"
-READ_ONLY = {"file_system": {"type": "restricted", "entries": [{"path": "root", "access": "read"}]}}
+# Permission profiles as Codex 0.166.0 recorded them in a real session, resumed with and without a sandbox flag.
+ROOT = {"type": "special", "value": {"kind": "root"}}
+READ_ONLY = {
+    "type": "managed",
+    "file_system": {"type": "restricted", "entries": [{"path": ROOT, "access": "read"}]},
+    "network": "restricted",
+}
+FULL_ACCESS = {"sandbox_policy": {"type": "danger-full-access"}, "permission_profile": {"type": "disabled"}}
 MESSAGE = "feat: one\n\nWhy it changes.\n"
 
 
@@ -248,15 +255,37 @@ def test_a_turn_in_another_checkout_is_refused(repo: Path, capsys: pytest.Captur
     [
         {"approval_policy": "on-request"},
         {"sandbox_policy": {"type": "workspace-write"}},
-        {"permission_profile": {"file_system": {"type": "unrestricted", "entries": []}}},
-        {"permission_profile": {"file_system": {"type": "restricted", "entries": []}}},
-        {"permission_profile": {"file_system": {"type": "restricted", "entries": [{"access": "write"}]}}},
+        {"permission_profile": {**READ_ONLY, "file_system": {"type": "unrestricted", "entries": []}}},
+        {"permission_profile": {**READ_ONLY, "file_system": {"type": "restricted", "entries": []}}},
+        {"permission_profile": {**READ_ONLY, "file_system": {"type": "restricted", "entries": [{"access": "write"}]}}},
+        {"permission_profile": {"type": "managed"}},
+        {"permission_profile": {"type": "disabled"}},
+        {"permission_profile": {"type": "external", "network": "restricted"}},
+        FULL_ACCESS,
     ],
 )
 def test_a_turn_that_could_write_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], context: dict[str, Any]
 ) -> None:
     write_log(repo, approve(repo, capsys, **context))
+    assert "not read-only" in refusal(capsys)
+
+
+def test_a_session_resumed_read_only_after_a_full_access_turn_approves(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The last turn decides: a reviewer resumed without a sandbox flag, then read-only again, can approve."""
+    main(["pane-pin", "--session", SESSION])
+    capsys.readouterr()
+    answer = f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}"
+    write_log(repo, [*turn(repo, "t1", "Looked.", **FULL_ACCESS), *turn(repo, "t2", answer)])
+    main(["pane-approved", *text()])
+
+
+def test_an_approval_from_a_full_access_turn_after_a_read_only_one_is_refused(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    write_log(repo, [*turn(repo, "t0", "Looked."), *approve(repo, capsys, **FULL_ACCESS)])
     assert "not read-only" in refusal(capsys)
 
 
