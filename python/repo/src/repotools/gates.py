@@ -17,6 +17,8 @@ REFUSAL = "review:python has not passed on the staged python/ files; stage them,
 HINT = "privacy:scan: replace each host path with ~ or a {{ env.HOME }} template"
 # Short values (a CI runner's HOME, say) would match ordinary text; only real paths are kept.
 SHORTEST = 8
+# The task always renders /Users/<user>/, 8 characters even for an empty user; a direct call may not.
+EMPTY = "privacy:scan: no patterns rendered"
 
 
 def staged_python() -> str:
@@ -65,6 +67,9 @@ def leaks(data: bytes, patterns: list[bytes]) -> list[int]:
 def privacy_scan(options: PrivacyScan) -> None:
     """Report each private path in the given or tracked files, or in each commit not yet on a remote."""
     patterns = [line.encode() for line in options.patterns.split("\n") if len(line) >= SHORTEST]
+    if not patterns:
+        sys.stderr.write(EMPTY + "\n")
+        raise SystemExit(2)
     found: list[str] = []
     if options.outgoing:
         for commit in git("rev-list", "--branches", "--tags", "--not", "--remotes").split():

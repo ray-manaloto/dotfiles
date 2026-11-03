@@ -99,8 +99,7 @@
       "properties": {
         "patterns": {
           "type": "string",
-          "pattern": "(?m)^.{8,}$",
-          "description": "Private paths, one per line; lines under 8 characters are dropped, and one must remain"
+          "description": "Private paths, one per line; lines under 8 characters are dropped, and none left exits 2"
         },
         "files": { "type": "string", "default": "", "description": "Files to scan, as mise's shell-quoted usage_file; empty scans every tracked file" },
         "outgoing": { "type": "boolean", "default": false, "description": "Scan every commit not yet on a remote, branches and tags" }

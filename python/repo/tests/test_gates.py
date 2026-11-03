@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from repotools.cli import main
+
 REPO = Path(__file__).resolve().parents[3]
 USER = "gatetester"
 REFUSAL = "review:python has not passed on the staged python/ files; stage them, then mise run review:python"
@@ -242,6 +244,33 @@ def test_the_files_hk_passes_are_scanned_as_given(copy: Path) -> None:
         "privacy:scan: tracked.txt:1 holds a private path",
         HINT,
     ]
+
+
+def test_quoted_file_names_split_as_the_shell_split_them(copy: Path) -> None:
+    # mise hands the files over as one usage_file string in POSIX quotes; the old script eval'ed it.
+    names = ['dq"x.txt', "$HOME.txt", "back\\slash.txt", "star*.txt", "a b/'q'.txt"]
+    write(dict.fromkeys(names, f"/Users/{USER}/x\n"), add=False)
+    done = mise("privacy:scan", "--", *names)
+    assert done.returncode == 1
+    assert said(done, "privacy:scan:") == [f"privacy:scan: {name}:1 holds a private path" for name in names] + [HINT]
+    assert copy.exists()
+
+
+def test_an_unreadable_file_fails_the_scan(copy: Path) -> None:
+    # The shell scan let grep's error pass and exited 0; a file the scan cannot read now fails it.
+    write({"locked.txt": f"/Users/{USER}/x\n"}, add=False)
+    (copy / "locked.txt").chmod(0)
+    done = mise("privacy:scan", "--", "locked.txt")
+    (copy / "locked.txt").chmod(0o644)
+    assert done.returncode == 1
+    assert said(done, '{"error":') == ['{"error":"[Errno 13] Permission denied: \'locked.txt\'"}']
+
+
+def test_no_pattern_of_8_characters_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
+    # Unreachable through the task, which always renders /Users/<user>/; repotools is called here directly.
+    with pytest.raises(SystemExit) as stopped:
+        main(["privacy-scan", "--patterns", "/x/\n\n/home//"])
+    assert (stopped.value.code, capsys.readouterr().err) == (2, "privacy:scan: no patterns rendered\n")
 
 
 def test_short_patterns_are_dropped(copy: Path, monkeypatch: pytest.MonkeyPatch) -> None:

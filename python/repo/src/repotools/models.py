@@ -159,9 +159,9 @@ class PrivacyScan(BaseModel):
         extra="forbid",
         frozen=True,
     )
-    patterns: Annotated[str, Field(pattern="(?m)^.{8,}$")]
+    patterns: str
     """
-    Private paths, one per line; lines under 8 characters are dropped, and one must remain
+    Private paths, one per line; lines under 8 characters are dropped, and none left exits 2
     """
     files: str = ""
     """
