@@ -23,7 +23,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   package that follows this; its `check` task runs all of it.
 - Before committing a Python unit, stage it and run `mise run review:python`, which must end
   `VERDICT: PASS`: a read-only Codex reviewer checks the changes against `CODING_STANDARDS.md`. The
-  pre-commit hook refuses a commit under `python/` whose staged files differ from what passed.
+  pre-commit hook refuses a commit under `python/` whose staged files differ from what passed. Run it
+  in its own terminal pane, never inside a read-only Codex session: that sandbox denies mise's temp
+  file, the git-dir report and the network, and the session gets no extra access. A read-only session
+  reviews by reading the report and the changes under `python/`: staged, unstaged and untracked.
 - Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
   this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.
