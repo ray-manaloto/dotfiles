@@ -23,17 +23,8 @@
   "disableClaudeAiConnectors": true,
   "enabledPlugins": {
     "code-modernization@claude-plugins-official": true,
-    "mattpocock-skills@mattpocock": true,
     "tokeneconomizer@tokeneconomizer": true,
-    "plugin-dev@claude-plugins-official": true,
-    "eli5@claude-community": true,
-    "html-plan@claude-community": true,
-    "next-steps@claude-community": true,
-    "code-simplifier@claude-plugins-official": true,
-    "code-review@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true,
-    "clangd-lsp@claude-plugins-official": true,
-    "planning-with-files@planning-with-files": true
+    "clangd-lsp@claude-plugins-official": true
   },
   "subagentPromptCacheTtl": "1h",
   "autoCompactWindow": 200000,
