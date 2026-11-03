@@ -49,7 +49,7 @@ install_layout = "identity"
 auto = true
 check_duration = "1h"
 
-#minimum_release_age_excludes = ["pipx:langgraph-cli", "pipx:specify-cli", "npm:oh-my-codex", "npm:skills", "npm:renovate", "rumdl", "docker-cli", "gemini", "npm:agent-browser", "npm:portless", "github:DopplerHQ/cli", "github:docker/docker-agent", "bats", "pipx:datamodel-code-generator", "pipx:notebooklm-py", "herdr"]
+#minimum_release_age_excludes = ["pipx:langgraph-cli", "pipx:specify-cli", "npm:oh-my-codex", "npm:skills", "npm:renovate", "rumdl", "docker-cli", "gemini", "npm:agent-browser", "npm:portless", "github:DopplerHQ/cli", "github:docker/docker-agent", "bats", "pipx:datamodel-code-generator", "pipx:notebooklm-py"]
 [settings.go]
 set_gobin = false
 
@@ -241,7 +241,6 @@ micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
 "pipx:datamodel-code-generator" = { version = "0.88.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:defuddle" = { version = "0.19.6", minimum_release_age = "0s" }
 rumdl = { version = "0.3.2", minimum_release_age = "0s" }
-herdr = { version = "0.9.5", minimum_release_age = "0s" }  # DL-714: its integrations run in [bootstrap.hooks.post-tools]
 "github:asciimoo/hister" = { version = "0.21.0", minimum_release_age = "0s" }
 llmfit = { version = "1.1.18", minimum_release_age = "0s" }
 wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
@@ -606,15 +605,18 @@ mise bootstrap packages apply brew:ruby --yes
 {% endif %}
 '''
 
-# DL-714: herdr writes its Claude and Codex hooks once per bootstrap, not on every herdr install.
-# herdr re-adds its entry last and Orca rewrites its own entry in place, so ~/.codex/hooks.json
-# settles at Orca first, herdr second; trust it once in Codex ("Hooks need review" -> Trust all).
+# hc's skill is a mise-run install, so it waits for the tools phase; what is installed is skipped:
+# Codex reads ~/.agents/skills, and Claude needs its own link in ~/.claude/skills.
+# It is only a pointer to `hc --skill`, so the tag needs no bump to follow hc.
+# The removal comes first: `skills add herdrdev/herdr` installed the Herdr TUI's skill, which tells
+# agents to drive a TUI that no longer runs, and four skills for working on Herdr's own repo. The
+# name matches the folder, and the source matches every lock entry from that repo (skills 1.7.5
+# resolveSkillsToRemove); with nothing to remove it exits 0.
 [bootstrap.hooks.post-tools]
-run = '''
-for integration in claude codex; do
-  mise exec -- herdr integration install "${integration}"
-done
-'''
+run = [
+  "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
+  "[ -e ~/.agents/skills/herdr-core ] && [ -e ~/.claude/skills/herdr-core ] || mise exec -- skills add herdrdev/herdr-core#v0.1.17 -g -a claude-code codex -s herdr-core -y </dev/null",
+]
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
 # renders them from [vars] before the packages step. mise reads its config before this file is written:
@@ -650,6 +652,9 @@ content = '''
 # mise evaluates a third-party-tap cask with Ruby 3+ on PATH; macOS ships 2.6 ([bootstrap.hooks.pre-packages]).
 "brew:ruby" = { os = "macos" }
 "brew-cask:stablyai/orca/orca" = { os = "macos", adopt = true }
+# Herdr self-updates, so the cask adopts the app. No package ships herdr-core: the app's first-run
+# setup runs Herdr's installer, which also adds hc.
+"brew-cask:herdr-app" = { os = "macos", adopt = true, appdir = "~/Applications" }
 # A current git instead of the one bundled with the Xcode Command Line Tools.
 "brew:git" = { os = "macos" }
 
