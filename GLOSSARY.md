@@ -59,6 +59,18 @@ Other global-config and migration work.
 **P3**:
 Everything else.
 
+### Repository rules
+
+**Zero-bash finding**:
+One place where the repository breaks its zero-bash rule: a tracked shell file, a shell shebang, or a
+mise `run` that spans more than one line.
+_Avoid_: Violation, leftover, bash debt
+
+**Zero-bash exception**:
+Shell the zero-bash rule itself allows, so it is not a finding. AGENTS.md states each one; today
+the only exception is the zsh startup files under `unix/home`.
+_Avoid_: Waiver, skip, ignore
+
 ### Labels
 
 **`needs-triage`**:
