@@ -4,7 +4,7 @@ title: "CLion MCP server"
 description: "How Claude Code reaches CLion's MCP server, how the clion-debugger skill is installed, what to redo when the IDE changes, and the rejected options."
 resource: "docs/research/clion-mcp.md"
 tags: [clion, mcp, claude-code, skills, jetbrains]
-generated: { by: process:claude-code-session, at: "2026-11-03T15:45:00-06:00" }
+generated: { by: process:claude-code-session, at: "2026-11-03T17:30:00-06:00" }
 status: stable
 stale_after: "2027-05-03T00:00:00+00:00"
 ---
@@ -54,14 +54,36 @@ Sessions started after the switch connect on their own.
   in the app. In 2026.2.4.1 the AI Assistant plugin (`air-plugin`) was a separate install, under
   `~/Library/Application Support/JetBrains/CLion2026.2/plugins/`, and its jar of the same name
   carries an older copy, version 1.1.4.
-- Install (user scope): in CLion, Settings | Tools | AI Assistant | Skills, find `clion-debugger`
-  under Bundled skills, open its menu and pick Claude Agent (Global). That writes
-  `~/.claude/skills/clion-debugger/`. Codex has a matching "Codex (Global)" choice. Without the
-  IDE: unzip `bundledSkills/clion-debugger/*` from the jar into an empty folder, then copy its
-  `bundledSkills/clion-debugger/` folder to `~/.claude/skills/clion-debugger/` (the archive keeps
-  the `bundledSkills/` prefix).
-- After each CLion update, redo the export so the copy matches the IDE's tools. Compare the
-  `version` in `~/.claude/skills/clion-debugger/metadata.json` with the jar's.
+- Install (user scope): `mise run clion:skills`, which bootstrap runs after the tools
+  (`[bootstrap.hooks.post-tools]` in `unix/home/.config/mise/config.toml`). The task,
+  `unix/home/.config/mise/tasks/clion/skills`, copies `bundledSkills/clion-debugger/` from the
+  installed CLion's jar to `~/.claude/skills/clion-debugger/`, so no JetBrains file is committed.
+  - Source: the skill must match the CLion serving MCP. Skill 1.1.4 (2026.2) calls
+    `xdebug_set_breakpoint` where 1.3.2 (2026.3) calls `xdebug_set_breakpoints`, so the newest
+    installed copy can be the wrong one. In order:
+    - `CLION_SKILL_JAR`, when set, names the jar.
+    - With `mcpServers.clion` in `~/.claude.json`: the module jar that the one process listening
+      on its loopback port has open (`lsof -iTCP@<host>:<port> -sTCP:LISTEN`, then `lsof -p`),
+      wherever it was loaded from. The listener is read again afterwards, and must not have changed.
+    - With no such entry: the one installed jar, from a `CLion*.app` in `/Applications` or
+      `~/Applications` (`CLION_SKILL_APPS` replaces these) or a
+      `~/Library/Application Support/JetBrains/CLion*/plugins/`.
+    - Otherwise nothing changes, with exit 0, so bootstrap never fails on it: `no-server` when the
+      entry is set but nothing listens, or several CLions are installed and no entry picks one;
+      `invalid-config` when `~/.claude.json` or the entry cannot be read. Start CLion and re-run
+      `mise run clion:skills`.
+  - Ownership: the task writes `.dotfiles-clion-skills.json`, listing every file's sha256, into
+    the folder. It replaces the folder only when the files still match that list and the jar's
+    copy differs. An unmarked folder byte-identical to the jar's copy is adopted. A changed or
+    unmarked folder, or a link, is left alone with status `modified` or `unmanaged`.
+  - It prints one JSON event: `installed`, `current`, `adopted`, `modified`, `unmanaged`,
+    `no-server`, `invalid-config` or `no-clion` with exit 0, or an `error` on stderr with exit 1
+    (a broken jar, bad metadata, a path that leaves the skill folder, a listener with no skill
+    module open or several).
+- The IDE way: in CLion, Settings | Tools | AI Assistant | Skills, find `clion-debugger` under
+  Bundled skills, open its menu and pick Claude Agent (Global). CLion's `InstallSkillAction`
+  copies the folder once and reports it already installed when the folder exists, so it never
+  updates a copy. A fresh export is adopted by the task on its next run.
 
 ## Rejected options and failed searches
 
@@ -75,6 +97,13 @@ Sessions started after the switch connect on their own.
   CLion, and the repo has no license.
 - **Committing the skill folder here**: rejected. The files are JetBrains' proprietary content in a
   public repo, and a copy would go stale with every CLion update.
-- **A mise task that unzips the skill from the installed CLion**: deferred. Toolbox keeps several
-  CLion apps side by side, so the task would have to pick one. The IDE's own export does the same
-  job in one click.
+- **The highest installed version**: the first version of the task took it. It gave the
+  2026.3 skill to a session served by 2026.2, whose tools have other names.
+- **Mapping the listener to its app folder**: tried, and replaced by reading the jar the process
+  has open, which also finds a plugin loaded from a config folder.
+- **Failing when CLion is not running**: a Codex peer's first version did. Bootstrap would then
+  fail on a Mac where CLion is closed, so the task reports `no-server` and changes nothing.
+- **Leaving updates to CLion**: its skills module has a sync to agent homes
+  (`AgentHomeSkillsSync`), but it is off unless the JVM property
+  `intellij.aiagentextensions.skills.sync.to.agent.homes` is set, and it refuses a non-empty
+  `~/.claude/skills` that it has not claimed.

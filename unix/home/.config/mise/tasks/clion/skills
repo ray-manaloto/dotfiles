@@ -1,0 +1,313 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Copy CLion's bundled clion-debugger skill into ~/.claude/skills from the installed CLion"
+"""CLion ships its clion-debugger skill only inside the IDE; no other JetBrains copy was found.
+
+CLion's own export (Settings | Tools | AI Assistant | Skills, Claude Agent (Global)) copies the
+skill to ~/.claude/skills/clion-debugger/ once and never replaces an existing folder. This task
+copies the same files from the jar on disk, so a new Mac gets the skill without a click, a
+CLion update reaches it, and no JetBrains file is ever committed.
+
+The skill lives under bundledSkills/clion-debugger/ in the AI Assistant plugin's
+intellij.aiagentextensions.contrib.ide.clion.jar: inside the app from 2026.3, in the config
+folder's plugins/ when AI Assistant was a separate install (2026.2). Toolbox keeps several
+CLion apps side by side, and their skills differ (1.1.4 calls xdebug_set_breakpoint, 1.3.2
+xdebug_set_breakpoints), so the skill must come from the CLion serving Claude Code:
+- CLION_SKILL_JAR, when set, names the jar;
+- with mcpServers.clion in ~/.claude.json, the module jar that the one process listening on
+  its loopback port has open, whatever folder it was loaded from;
+- with no such entry, the installed jar, when there is exactly one.
+Anything else changes nothing and says why, exit 0, so bootstrap never fails on it: the entry
+is set but nothing listens or several CLions are installed with no entry (no-server), or
+~/.claude.json or the entry cannot be read (invalid-config). A listener with no skill module
+open, or several, is an error. CLION_SKILL_APPS (os.pathsep-separated folders) replaces the
+app folders searched.
+
+The task owns the folder only through its marker, OWNED, which lists every file's sha256:
+- no folder: the skill is copied and the marker written;
+- marked, files as listed: replaced when the jar's copy differs, else left as it is;
+- marked, files changed since: left alone (status modified);
+- unmarked, byte-identical to the jar's copy (an export or a hand copy): adopted;
+- anything else, a link included: left alone (status unmanaged).
+With no CLion installed it reports no-clion. Each run prints one JSON event: to stdout with exit
+0, or to stderr with exit 1 on an error.
+"""
+
+import ctypes
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path, PurePosixPath
+from urllib.parse import urlsplit
+
+SKILL = "clion-debugger"
+PREFIX = f"bundledSkills/{SKILL}/"
+MODULE = "lib/modules/intellij.aiagentextensions.contrib.ide.clion.jar"
+OWNED = ".dotfiles-clion-skills.json"
+HOME = Path.home()
+TARGET = HOME / ".claude/skills" / SKILL
+CONFIGS = HOME / "Library/Application Support/JetBrains"
+# renamex_np's RENAME_SWAP on macOS and renameat2's RENAME_EXCHANGE on Linux are both 2.
+RENAME_SWAP = 2
+AT_FDCWD = -100
+LOOPBACK = {"127.0.0.1": "127.0.0.1", "localhost": "localhost", "::1": "[::1]"}
+HINT = "start the CLion that serves Claude Code's clion MCP entry, then re-run mise run clion:skills"
+
+
+class Skip(Exception):
+    """No source can be chosen safely: report `status` and change nothing."""
+
+    def __init__(self, status: str, hint: str) -> None:
+        super().__init__(status)
+        self.status = status
+        self.hint = hint
+
+
+def app_folders() -> list[Path]:
+    value = os.environ.get("CLION_SKILL_APPS")
+    if value is None:
+        return [Path("/Applications"), HOME / "Applications"]
+    return [Path(part) for part in value.split(os.pathsep) if part]
+
+
+def installed() -> list[Path]:
+    """Every AI Assistant CLion module jar on disk: in an app, or in a config folder."""
+    found = [
+        app / "Contents/plugins/air-plugin" / MODULE
+        for folder in app_folders()
+        for app in sorted(folder.glob("CLion*.app"))
+    ]
+    found += [config / "plugins/air-plugin" / MODULE for config in sorted(CONFIGS.glob("CLion*"))]
+    return sorted({jar.resolve() for jar in found if jar.is_file()})
+
+
+def mcp_endpoint() -> str | None:
+    """The lsof selector for mcpServers.clion's loopback port; None when there is no entry."""
+    config = HOME / ".claude.json"
+    if not config.exists() and not config.is_symlink():
+        return None
+    invalid = Skip("invalid-config", f"{config}: mcpServers.clion needs a loopback http URL")
+    try:
+        settings = json.loads(config.read_text())
+        servers = settings.get("mcpServers", {}) if isinstance(settings, dict) else None
+        if not isinstance(servers, dict):
+            raise invalid
+        if "clion" not in servers:
+            return None
+        entry = servers["clion"]
+        if not isinstance(entry, dict) or not isinstance(entry.get("url"), str):
+            raise invalid
+        url = urlsplit(entry["url"])
+        port = (443 if url.scheme == "https" else 80) if url.port is None else url.port
+    except (OSError, ValueError) as error:
+        raise invalid from error
+    if url.scheme not in ("http", "https") or url.hostname not in LOOPBACK or port == 0:
+        raise invalid
+    return f"-iTCP@{LOOPBACK[url.hostname]}:{port}"
+
+
+def lsof(*args: str) -> list[str]:
+    """lsof's field output. It exits 1 with nothing on stderr when nothing matches; any
+    other failure is an error, never "nothing matches"."""
+    command = [shutil.which("lsof") or "/usr/sbin/lsof", "-nP", *args]
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=30)
+    except subprocess.TimeoutExpired as error:
+        msg = f"{' '.join(command)} took over 30 seconds"
+        raise ValueError(msg) from error
+    if done.returncode == 0 or (done.returncode == 1 and not done.stderr.strip()):
+        return done.stdout.splitlines()
+    msg = f"{' '.join(command)} failed ({done.returncode}): {done.stderr.strip()}"
+    raise ValueError(msg)
+
+
+def listeners(endpoint: str) -> set[str]:
+    return {line[1:] for line in lsof(endpoint, "-sTCP:LISTEN", "-Fp") if line.startswith("p")}
+
+
+def serving(endpoint: str) -> tuple[str, Path]:
+    """The pid listening on `endpoint` and the one CLion skill module jar it has open."""
+    pids = listeners(endpoint)
+    if not pids:
+        raise Skip("no-server", HINT)
+    if len(pids) > 1:
+        msg = f"several processes listen on {endpoint}: {sorted(pids)}"
+        raise ValueError(msg)
+    (pid,) = pids
+    opened = {
+        Path(line[1:]).resolve()
+        for line in lsof("-a", "-p", pid, "-Fn")
+        if line.startswith("n") and line.endswith("/" + MODULE)
+    }
+    if len(opened) != 1:
+        msg = f"pid {pid} on {endpoint} has {len(opened)} CLion skill modules open, not one"
+        raise ValueError(msg)
+    if listeners(endpoint) != pids:
+        msg = f"the listener on {endpoint} changed while it was read; re-run"
+        raise ValueError(msg)
+    return pid, opened.pop()
+
+
+def source() -> tuple[str, Path | None]:
+    """Where the skill comes from and its jar; None for the jar when no CLion is installed."""
+    pinned = os.environ.get("CLION_SKILL_JAR")
+    if pinned:
+        return "pinned", Path(pinned)
+    endpoint = mcp_endpoint()
+    if endpoint is not None:
+        pid, jar = serving(endpoint)
+        return f"pid {pid}", jar
+    found = [jar for jar in installed() if skill_files(jar)]
+    if len(found) > 1:
+        raise Skip("no-server", f"{len(found)} CLions have the skill and no clion MCP entry picks one; {HINT}")
+    return "installed", found[0] if found else None
+
+
+def skill_files(jar: Path) -> dict[str, bytes]:
+    """The skill's files in `jar`, by path inside the skill folder; empty if it has none."""
+    files: dict[str, bytes] = {}
+    with zipfile.ZipFile(jar) as archive:
+        for member in archive.infolist():
+            if not member.filename.startswith(PREFIX) or member.is_dir():
+                continue
+            relative = PurePosixPath(member.filename[len(PREFIX) :])
+            if relative.is_absolute() or ".." in relative.parts or relative.as_posix() == OWNED:
+                msg = f"{jar}: unsafe path {member.filename}"
+                raise ValueError(msg)
+            files[relative.as_posix()] = archive.read(member)
+    return files
+
+
+def metadata(jar: Path, files: dict[str, bytes]) -> dict[str, str]:
+    meta = json.loads(files.get("metadata.json", b"null"))
+    if not isinstance(meta, dict) or not all(isinstance(meta.get(key), str) for key in ("version", "hash")):
+        msg = f"{jar}: {PREFIX}metadata.json needs a string version and hash"
+        raise ValueError(msg)
+    if "SKILL.md" not in files:
+        msg = f"{jar}: {PREFIX} has no SKILL.md"
+        raise ValueError(msg)
+    return meta
+
+
+def digests(files: dict[str, bytes]) -> dict[str, str]:
+    return {name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())}
+
+
+def on_disk(folder: Path) -> dict[str, str] | None:
+    """sha256 of every file under `folder` but the marker; None if anything in it is a link."""
+    found: dict[str, str] = {}
+    for path in sorted(folder.rglob("*")):
+        if path.is_symlink():
+            return None
+        name = path.relative_to(folder).as_posix()
+        if path.is_file() and name != OWNED:
+            found[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return found
+
+
+def recorded(folder: Path) -> dict[str, str] | None:
+    """The file list in the marker, or None when there is no marker this task could have written."""
+    marker = folder / OWNED
+    if marker.is_symlink() or not marker.is_file():
+        return None
+    try:
+        record = json.loads(marker.read_text())
+    except ValueError:
+        return None
+    files = record.get("files") if isinstance(record, dict) else None
+    if not isinstance(files, dict) or not all(isinstance(value, str) for value in files.values()):
+        return None
+    return files
+
+
+def mark(folder: Path, jar: Path, meta: dict[str, str], files: dict[str, bytes]) -> None:
+    record = {"jar": str(jar), "version": meta["version"], "hash": meta["hash"], "files": digests(files)}
+    (folder / OWNED).write_text(json.dumps(record, indent=2) + "\n")
+
+
+def swap(first: Path, second: Path) -> None:
+    """Exchange two folders in one rename, so the target is never missing, even if this fails."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == "darwin":
+        done = libc.renamex_np(os.fsencode(first), os.fsencode(second), RENAME_SWAP)
+    else:
+        done = libc.renameat2(AT_FDCWD, os.fsencode(first), AT_FDCWD, os.fsencode(second), RENAME_SWAP)
+    if done != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(second))
+
+
+def install(jar: Path, meta: dict[str, str], files: dict[str, bytes]) -> None:
+    """Stage the skill beside the target, then swap it in, so a failure leaves the old copy."""
+    TARGET.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{SKILL}.", dir=TARGET.parent))
+    try:
+        for name, data in files.items():
+            path = staging.joinpath(*PurePosixPath(name).parts)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        mark(staging, jar, meta, files)
+        if TARGET.exists():
+            swap(staging, TARGET)  # staging now holds the old copy
+        else:
+            staging.rename(TARGET)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+
+
+def state(want: dict[str, str]) -> str:
+    """What is at the target: absent, current, stale, adoptable, modified or unmanaged."""
+    if not TARGET.exists() and not TARGET.is_symlink():
+        return "absent"
+    if TARGET.is_symlink() or not TARGET.is_dir():
+        return "unmanaged"
+    have = on_disk(TARGET)
+    record = recorded(TARGET)
+    if have is None:
+        return "unmanaged"
+    if record is None:
+        return "adoptable" if have == want else "unmanaged"
+    if have != record:
+        return "modified"
+    return "current" if have == want else "stale"
+
+
+def main() -> int:
+    try:
+        origin, jar = source()
+    except Skip as skip:
+        print(json.dumps({"skill": SKILL, "status": skip.status, "hint": skip.hint}))
+        return 0
+    if jar is None:
+        print(json.dumps({"skill": SKILL, "status": "no-clion"}))
+        return 0
+    files = skill_files(jar)
+    if not files:
+        msg = f"{jar}: no {PREFIX}"
+        raise ValueError(msg)
+    meta = metadata(jar, files)
+    status = state(digests(files))
+    event = {"skill": SKILL, "status": status, "version": meta["version"], "jar": str(jar), "source": origin}
+    if status in ("absent", "stale"):
+        install(jar, meta, files)
+        event["status"] = "installed"
+    elif status == "adoptable":
+        mark(TARGET, jar, meta, files)
+        event["status"] = "adopted"
+    elif status in ("modified", "unmanaged"):
+        event["hint"] = f"{TARGET} was left as it is; move it away to let clion:skills manage it"
+    print(json.dumps(event))
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
+        print(json.dumps({"skill": SKILL, "error": str(error)}), file=sys.stderr)
+        sys.exit(1)

@@ -66,6 +66,12 @@ class HerdrAppTest(unittest.TestCase):
             "herdr-core", "herdrdev/herdr-core", ".agents/skills", ".claude/skills"
         )
         self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
+        # The global file tasks the hook runs, deployed as ~/.config/mise/tasks is; with no
+        # CLion in its empty app folder, clion:skills reports no-clion and writes nothing.
+        shutil.copytree(
+            REPO / "unix/home/.config/mise/tasks", self.root / "config/mise/tasks"
+        )
+        (self.root / "apps").mkdir()
 
     def install(self, name: str, source: str, *folders: str) -> None:
         """A skill as `skills add -g` leaves it: a folder per agent and a lock entry."""
@@ -128,7 +134,8 @@ class HerdrAppTest(unittest.TestCase):
 
     def post_tools(self) -> None:
         for command in POST_TOOLS:
-            done = self.scratch("env", *self.offline, *SHELL, command)
+            apps = f"CLION_SKILL_APPS={self.root / 'apps'}"
+            done = self.scratch("env", *self.offline, apps, *SHELL, command)
             self.assertEqual(done.returncode, 0, (command, done.stdout, done.stderr))
 
     def on_disk(self) -> set[str]:
