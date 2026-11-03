@@ -31,6 +31,7 @@
 /python/.venv/
 /python/toolchains/p2996/.venv/
 /python/repo/.venv/
+/python/workflow/.venv/
 /typescript/node_modules/
 __pycache__/
 .coverage
