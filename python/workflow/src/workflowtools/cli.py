@@ -4,6 +4,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 
+import yaml
 from pydantic import BaseModel
 from pydantic_settings import CliApp, CliSettingsSource
 
@@ -63,7 +64,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     except subprocess.CalledProcessError as error:
         sys.stderr.write(Failure(error=f"{error.cmd[0]} failed: {error.stderr}").model_dump_json() + "\n")
         raise SystemExit(1) from None
-    # pydantic's and json's errors (ValueError subclasses), and an unreadable table, manifest or SKILL.md.
-    except (ValueError, OSError) as error:
+    # pydantic's and json's errors (ValueError subclasses), an installed SKILL.md whose YAML does not parse, and an
+    # unreadable table, manifest or SKILL.md.
+    except (ValueError, yaml.YAMLError, OSError) as error:
         sys.stderr.write(Failure(error=str(error)).model_dump_json() + "\n")
         raise SystemExit(1) from None

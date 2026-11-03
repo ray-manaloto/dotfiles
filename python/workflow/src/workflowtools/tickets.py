@@ -24,10 +24,10 @@ def blockers(ticket: Ticket) -> list[str]:
     return re.findall(r"\b\d{2}\b", re.sub(r"\([^)]*\)", "", text))
 
 
-def load(root: Path) -> tuple[dict[tuple[str, str], Ticket], list[Finding]]:
+def load(root: Path, feature: str | None) -> tuple[dict[tuple[str, str], Ticket], list[Finding]]:
     tickets: dict[tuple[str, str], Ticket] = {}
     found = []
-    for path in sorted((root / ".scratch").glob("*/issues/*.md")):
+    for path in sorted((root / ".scratch").glob(f"{feature or '*'}/issues/*.md")):
         relative = str(path.relative_to(root))
         if not re.match(r"\d{2}-", path.name):
             found.append(finding(relative, "name must start with a two-digit ticket number"))
@@ -108,11 +108,7 @@ def listed(tickets: dict[tuple[str, str], Ticket], satisfying: set[str], options
         return status(ticket) not in satisfying | {"wontfix"}
 
     wanted = ready if options.listing is Listing.frontier else unfinished
-    return [
-        Listed(path=ticket.path)
-        for _, ticket in sorted(tickets.items())
-        if options.feature in {None, ticket.feature} and wanted(ticket)
-    ]
+    return [Listed(path=ticket.path) for _, ticket in sorted(tickets.items()) if wanted(ticket)]
 
 
 def run(options: Tickets) -> tuple[list[Finding], list[Listed]]:
@@ -124,7 +120,8 @@ def run(options: Tickets) -> tuple[list[Finding], list[Listed]]:
         return [finding(f".scratch/{options.feature}", "no such feature")], []
     known = {name for name, _ in rows}
     satisfying = {name for name, unblocks in rows if unblocks == "yes"}
-    tickets, found = load(root)
+    # --feature narrows the check too: another feature's broken ticket does not block this one's listing.
+    tickets, found = load(root, options.feature)
     found += [finding(t.path, p) for t in tickets.values() for p in problems(t, tickets, satisfying, known)]
     found += cycles(tickets)
     if found or options.listing is None:

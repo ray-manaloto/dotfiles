@@ -114,6 +114,14 @@ LISTED = {
 }
 
 
+def test_a_feature_is_checked_alone(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    tickets(repo, {**LISTED, "h/issues/01-a": "no status\n"})
+    assert report(capsys, "tickets", "--listing", "frontier", "--feature", "g") == [
+        {"path": ".scratch/g/issues/02-b.md"},
+        {"exit": "0"},
+    ]
+
+
 @pytest.mark.parametrize(
     ("args", "paths"),
     [

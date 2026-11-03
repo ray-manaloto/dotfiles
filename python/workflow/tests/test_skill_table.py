@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from workflowtools.cli import main
+
 from .conftest import add, report, write
 
 SHA = "a" * 40
@@ -94,3 +96,14 @@ def test_rows_that_disagree_are_reported(repo: Path, home: Path, capsys: pytest.
         "gone: in the table, not in the plugin",
         None,
     ]
+
+
+def test_an_installed_skill_with_broken_yaml_is_a_failure(
+    repo: Path, home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    install(home, [plugin(home / "plugin")])
+    write(home / "plugin", {"skills/tdd/SKILL.md": "---\nname: [\n---\n"})
+    add(repo, {TABLE: table("")})
+    with pytest.raises(SystemExit):
+        main(["skill-table"])
+    assert json.loads(capsys.readouterr().err)["error"].startswith("while parsing")
