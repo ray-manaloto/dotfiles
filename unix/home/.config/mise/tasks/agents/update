@@ -79,9 +79,9 @@ def run(
     argv: list[str | Path], env: dict[str, str] | None = None, *, capture: bool = False
 ) -> str:
     """Run argv in its own process group and return what it printed when captured. While it
-    runs, its group has the terminal, so its prompts can be answered. Past TIMEOUT the whole
-    group is killed, so a vendor installer's children stop with it, and TimeoutExpired is
-    raised; a non-zero exit raises CalledProcessError."""
+    runs, its group has the terminal, so its prompts can be answered. Past TIMEOUT, or on an
+    interrupt, the whole group is killed, so a vendor installer's children stop with it, and
+    TimeoutExpired or KeyboardInterrupt is raised; a non-zero exit raises CalledProcessError."""
     tty = terminal()
     try:
         with subprocess.Popen(
@@ -91,16 +91,18 @@ def run(
             text=True,
             process_group=0,
         ) as process:
-            if tty is not None:
-                # The group is gone if the command already exited.
-                with contextlib.suppress(ProcessLookupError, PermissionError):
-                    give_terminal(tty, process.pid)
-                    # A read of the terminal before the hand-over stopped it on SIGTTIN.
-                    os.killpg(process.pid, signal.SIGCONT)
             try:
+                if tty is not None:
+                    # The group is gone if the command already exited.
+                    with contextlib.suppress(ProcessLookupError, PermissionError):
+                        give_terminal(tty, process.pid)
+                        # A read of the terminal before the hand-over stopped it on SIGTTIN.
+                        os.killpg(process.pid, signal.SIGCONT)
                 out, _ = process.communicate(timeout=TIMEOUT)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
+            # Past TIMEOUT, or interrupted while its group, without the terminal, got no signal.
+            except BaseException:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
                 process.communicate()
                 raise
     finally:

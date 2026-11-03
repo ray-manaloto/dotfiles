@@ -46,8 +46,10 @@ PROMPT = "continue? [y/N] "
 # codex prompt switch, then puts the CLI at its native path. The installer is shell because
 # the task runs each vendor installer with the shell it is written for.
 # A URL listed in HOME/stall-install stalls its installer on a child that would write HOME/late
-# after the time limit, as a slow download inside a vendor installer would.
+# after the time limit, as a slow download inside a vendor installer would; HOME/stalling marks
+# that the stall began.
 INSTALLER = r"""if grep -qxF '@URL@' "$HOME/stall-install"; then
+  touch "$HOME/stalling"
   (sleep $((AGENTS_UPDATE_TIMEOUT + 2)); touch "$HOME/late") &
   wait
 fi
@@ -116,9 +118,11 @@ class AgentsUpdateTest(unittest.TestCase):
         stalled_downloads: tuple[str, ...] = (),
         stalled_installers: tuple[str, ...] = (),
         answer: str | None = None,
+        interrupt: bool = False,
     ) -> tuple[int, list[str], str]:
         """`mise run agents:update` from a fresh HOME, `runs` times; rc, recorded calls, stderr.
-        With `answer`, it runs in a terminal and `answer` is typed at each prompt."""
+        With `answer`, it runs in a terminal and `answer` is typed at each prompt. With
+        `interrupt`, SIGINT goes to the run's process group once an installer stalls."""
         self.assertTrue(TASK.is_file(), f"missing {TASK.relative_to(REPO)}")
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp).resolve()
@@ -142,15 +146,18 @@ class AgentsUpdateTest(unittest.TestCase):
                 "".join(f"{u}\n" for u in stalled_installers)
             )
             for _ in range(runs):
-                if answer is None:
+                if interrupt:
+                    done = self.mise_interrupted(home, stubs)
+                elif answer is None:
                     done = self.mise(home, stubs)
                 else:
                     done = self.mise_in_terminal(home, stubs, answer)
                 if done.returncode:
                     break
             if stalled_installers:
-                # Long enough for a surviving installer child to have written HOME/late.
-                time.sleep(TIMEOUT + 1)
+                # The child writes HOME/late TIMEOUT + 2 seconds after the stall began, which
+                # was before the run ended, so a surviving child has written it by now.
+                time.sleep(TIMEOUT + 3)
                 self.assertFalse(
                     (home / "late").exists(), "an installer child outlived the timeout"
                 )
@@ -171,6 +178,32 @@ class AgentsUpdateTest(unittest.TestCase):
             timeout=60,
             check=False,
         )
+
+    def mise_interrupted(
+        self, home: Path, stubs: Path
+    ) -> subprocess.CompletedProcess[str]:
+        """The same run with no terminal, sent SIGINT once an installer stalls, as `kill -INT`
+        on the run's group would be; the installer's own group gets no signal."""
+        with subprocess.Popen(
+            [MISE, "run", "agents:update"],
+            env=self.environment(home, stubs),
+            cwd=self.elsewhere(home),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        ) as process:
+            end = time.monotonic() + 30
+            while not (home / "stalling").exists():
+                if time.monotonic() > end or process.poll() is not None:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGKILL)
+                    self.fail("no installer stalled")
+                time.sleep(0.05)
+            os.killpg(process.pid, signal.SIGINT)
+            out, err = process.communicate(timeout=60)
+        return subprocess.CompletedProcess(MISE, process.returncode, out, err)
 
     def mise_in_terminal(
         self, home: Path, stubs: Path, answer: str
@@ -305,9 +338,10 @@ class AgentsUpdateTest(unittest.TestCase):
         code, calls, out = self.run_task(
             tuple(NATIVE.values()), versions={CLAUDE: "ask"}, answer="\x03"
         )
-        self.assertNotEqual(code, 0, out)
-        self.assertEqual(calls, [], out)
-        self.assertIn('{"event": "agents_update_cancelled", "agent": "claude"}', out)
+        self.assertEqual((code, calls), (128 + signal.SIGINT, []), out)
+        self.assertEqual(
+            self.events(out), [{"event": "agents_update_cancelled", "agent": "claude"}]
+        )
 
     def test_in_a_terminal_a_stalled_update_times_out_and_the_others_still_run(
         self,
@@ -331,6 +365,19 @@ class AgentsUpdateTest(unittest.TestCase):
         self.assertEqual(event["agent"], "agy")
         self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
 
+    def test_an_interrupt_stops_a_stalled_installer_with_its_children(self) -> None:
+        # The installer runs in its own group, so only the task gets the signal; run_task
+        # then checks that the installer's child never wrote HOME/late.
+        code, calls, err = self.run_task(
+            (),
+            stalled_installers=("https://antigravity.google/cli/install.sh",),
+            interrupt=True,
+        )
+        self.assertEqual((code, calls), (128 + signal.SIGINT, INSTALLS[:2]), err)
+        self.assertEqual(
+            self.events(err), [{"event": "agents_update_cancelled", "agent": "agy"}]
+        )
+
     def test_a_stalled_version_check_times_out(self) -> None:
         code, calls, err = self.run_task(
             tuple(NATIVE.values()), versions={OPENCODE: "stall"}
@@ -340,10 +387,15 @@ class AgentsUpdateTest(unittest.TestCase):
         self.assertEqual(event["agent"], "opencode")
         self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
 
+    @staticmethod
+    def events(err: str) -> list[dict[str, str]]:
+        """The JSON events on stderr; a terminal ends each line with a carriage return."""
+        lines = (line.strip() for line in err.splitlines())
+        return [json.loads(line) for line in lines if line.startswith("{")]
+
     def failures(self, err: str) -> list[dict[str, str]]:
         """The `agent_failed` events on stderr."""
-        events = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
-        return [event for event in events if event["event"] == "agent_failed"]
+        return [event for event in self.events(err) if event["event"] == "agent_failed"]
 
 
 if __name__ == "__main__":
