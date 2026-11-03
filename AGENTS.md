@@ -50,6 +50,13 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
   research. If any is there it does not approve. Never commit with `--no-verify` or `HK=0`.
+- Local `main` moves only to `origin/main`: merge on GitHub, fetch, then `git merge --ff-only origin/main`.
+  A `reference-transaction` hook in the shared `.git/config` refuses any other commit, reset, `branch -f`
+  or deletion of main, `HK=0` and `--no-verify` included. hk's post-merge step installs it, a uv tool copy
+  of repotools, on the fast-forward that brings it or a newer one to main; `mise run //repo:main-guard-install`
+  does the same by hand, and `//repo:main-guard-remove` switches it off until the next install. If the
+  copy can't start (its Python pruned), every move of main fails with a hint to re-run the install. It is
+  a local check that anyone running as this user can remove, so it catches mistakes, not a forger.
 - Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
   this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.

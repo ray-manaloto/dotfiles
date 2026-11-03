@@ -18,7 +18,11 @@
         "zero-bash",
         "review-python",
         "review-python-approved",
-        "privacy-scan"
+        "privacy-scan",
+        "main-guard",
+        "main-guard-install",
+        "main-guard-remove",
+        "main-guard-armed"
       ]
     },
     "ZeroBash": {
@@ -27,6 +31,33 @@
       "properties": {
         "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" }
       },
+      "additionalProperties": false
+    },
+    "MainGuard": {
+      "description": "Refuse a move of refs/heads/main, read from the reference-transaction rows on stdin, unless it is to origin/main.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "MainGuardInstall": {
+      "description": "Register the main guard as this repository's reference-transaction hook, after a self-test.",
+      "type": "object",
+      "properties": {
+        "bin": { "type": "string", "description": "The installed repotools executable the hook runs, outside every checkout" }
+      },
+      "required": ["bin"],
+      "additionalProperties": false
+    },
+    "MainGuardRemove": {
+      "description": "Remove the main guard's hook entry from this repository's config and record that the owner switched it off.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "MainGuardArmed": {
+      "description": "Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.",
+      "type": "object",
+      "properties": {},
       "additionalProperties": false
     },
     "Rule": {
@@ -116,7 +147,11 @@
         { "$ref": "#/$defs/ZeroBash" },
         { "$ref": "#/$defs/ReviewPython" },
         { "$ref": "#/$defs/ReviewApproved" },
-        { "$ref": "#/$defs/PrivacyScan" }
+        { "$ref": "#/$defs/PrivacyScan" },
+        { "$ref": "#/$defs/MainGuard" },
+        { "$ref": "#/$defs/MainGuardInstall" },
+        { "$ref": "#/$defs/MainGuardRemove" },
+        { "$ref": "#/$defs/MainGuardArmed" }
       ]
     },
     "Fingerprint": {
@@ -237,6 +272,10 @@
     "review_python": { "$ref": "#/$defs/ReviewPython" },
     "review_approved": { "$ref": "#/$defs/ReviewApproved" },
     "privacy_scan": { "$ref": "#/$defs/PrivacyScan" },
+    "main_guard": { "$ref": "#/$defs/MainGuard" },
+    "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
+    "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
+    "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
