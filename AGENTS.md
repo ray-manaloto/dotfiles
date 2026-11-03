@@ -58,3 +58,19 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   with no backup.
 - `.gitignore` is an allowlist. A new top-level path must be added there on purpose; never
   add keys, `age.txt` or any secret file.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `ray-manaloto/dotfiles`, through `gh`; each ticket also gets one line in the
+planning-with-files `task_plan.md`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default roles, each label named as its role (`needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
