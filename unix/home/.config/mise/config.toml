@@ -64,6 +64,10 @@ compile = false
 #precompiled_arch = "x86_64_v2"
 #precompiled_flavor = "x86_64_v2-*"
 #precompiled_os = "x86_64_v2"
+# Walks up to the nearest uv.lock; if its .venv (or UV_PROJECT_ENVIRONMENT) is missing, creates it
+# with uv, then activates it (mise src/uv.rs). Through a shim, `python3` still runs mise's Python, but
+# a non-interactive caller whose PATH starts with the shims (hooks from a GUI-launched Claude, launchd)
+# creates that .venv as a side effect. An activated zsh puts the install dirs first, so it does not.
 uv_venv_auto = "create|source"
 
 [settings.status]

@@ -23,7 +23,6 @@
   "disableClaudeAiConnectors": true,
   "enabledPlugins": {
     "code-modernization@claude-plugins-official": true,
-    "tokeneconomizer@tokeneconomizer": true,
     "clangd-lsp@claude-plugins-official": true
   },
   "subagentPromptCacheTtl": "1h",

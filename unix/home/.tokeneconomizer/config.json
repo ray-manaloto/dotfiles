@@ -1,0 +1,26 @@
+{
+  "loopguard": "nudge",
+  "loopguard_aggr": "aggressive",
+  "loopguard_nudges": 1,
+  "microskills": "envfacts+distiller",
+  "microskills_max_facts": 12,
+  "microskills_max_tokens": 600,
+  "microskills_propose_every": 1,
+  "toolprune": "propose",
+  "toolprune_protect": [
+    "AskUserQuestion",
+    "SendUserMessage",
+    "SendMessage",
+    "Workflow",
+    "ListAgents",
+    "ReadNotifications",
+    "ScheduleWakeup",
+    "Cron*",
+    "EnterWorktree",
+    "ExitWorktree",
+    "ReportFindings",
+    "PushNotification",
+    "LSP",
+    "mcp__*"
+  ]
+}
