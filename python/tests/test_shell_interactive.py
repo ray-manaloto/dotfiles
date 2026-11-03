@@ -7,12 +7,15 @@ import re
 import shlex
 import shutil
 import socket as unix
+import stat
 import subprocess
 import tempfile
+import threading
 import time
 import tomllib
 import unittest
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from test_shell_startup import STARTUP_FILES, UNIX_HOME
@@ -110,12 +113,12 @@ def launched(folder: Path) -> list[int] | None:
 
 
 def abandoned(folder: Path) -> bool:
-    """Whether nothing can still use folder: its run, its server and its shells are all gone.
+    """Whether nothing can still use a dead run's folder: its server and its shells are gone.
 
     A folder whose socket exists but whose shells were never recorded launched a server with an
     unknown outcome, so it stays.
     """
-    if owned_by_a_live_run(folder.name) or panes(folder / "tmux") is not None:
+    if panes(folder / "tmux") is not None:
         return False
     shells = launched(folder)
     if shells is None:
@@ -123,11 +126,42 @@ def abandoned(folder: Path) -> bool:
     return not any(alive(pid) for pid in shells)
 
 
+def ours(entry: Path) -> bool:
+    """Whether entry is a real folder this user owns: /tmp is shared, so a name proves nothing."""
+    info = entry.lstat()  # a link is not followed: it is skipped, whatever it points to
+    return stat.S_ISDIR(info.st_mode) and info.st_uid == os.getuid()
+
+
+@contextmanager
+def locked() -> Iterator[None]:
+    """Hold the lock every removal of a test folder takes, a run's own and a sweep's alike.
+
+    So no folder a sweep has listed can vanish before it looks at it. The lock is TEMP_ROOT itself:
+    a file of a fixed name in a shared /tmp could be another user's symlink, which opening it
+    would follow.
+    """
+    root = os.open(TEMP_ROOT, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(root, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(root)
+
+
 def sweep(root: Path) -> None:
-    """Remove the test folders in root that nothing can still use."""
+    """Remove this user's test folders in root that nothing can still use; call it under locked().
+
+    A live run's folders are passed over: that run removes them itself.
+    """
     for folder in root.glob(f"{PREFIX}*"):
-        if abandoned(folder):
+        if not owned_by_a_live_run(folder.name) and ours(folder) and abandoned(folder):
             shutil.rmtree(folder)
+
+
+def remove(folder: Path) -> None:
+    """Remove a run's own folder under the sweep's lock, never while a sweep is listing it."""
+    with locked():
+        shutil.rmtree(folder)
 
 
 def setUpModule() -> None:
@@ -136,19 +170,12 @@ def setUpModule() -> None:
     Another run's things go only once its process, its server and its shells are gone: this never
     stops a server or a shell, so it can't end a run, even one this pid check misjudges.
     """
-    # One sweep at a time, so two runs never remove the same leftovers; a run removes only its
-    # own folders otherwise. The lock is TEMP_ROOT itself: a file of a fixed name in a shared /tmp
-    # could be another user's symlink, which opening it would follow.
-    root = os.open(TEMP_ROOT, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(root, fcntl.LOCK_EX)
+    with locked():
         sweep(TEMP_ROOT)
         if (labeled := labeled_root()) is not None:
             for socket in labeled.glob(f"{PREFIX}*"):
                 if not owned_by_a_live_run(socket.name) and panes(socket) is None:
                     socket.unlink()
-    finally:
-        os.close(root)
 
 
 class InteractiveShellTest(unittest.TestCase):
@@ -197,7 +224,7 @@ class InteractiveShellTest(unittest.TestCase):
         end(self.socket, self.shells or [])  # raises, keeping the folder, while a shell lives
         if self.shells is None and self.socket.exists():
             self.fail(f"tmux started but never printed the shell's pid; kept {folder}")
-        shutil.rmtree(folder)
+        remove(folder)
 
     def tmux(self, *args: str) -> str:
         done = at(self.socket, *args)
@@ -327,6 +354,23 @@ class SweepTest(unittest.TestCase):
         with unix.socket(unix.AF_UNIX) as bound:
             bound.bind(str(self.folder / "tmux"))  # a server that bound its socket, then died
 
+    def test_a_run_removes_its_folder_only_once_no_sweep_holds_the_lock(self) -> None:
+        with locked():  # stands in for a sweep: flock excludes a second open of /tmp, same process
+            removing = threading.Thread(target=remove, args=(self.folder,))
+            removing.start()
+            removing.join(timeout=1)
+            self.assertTrue(removing.is_alive())
+            self.assertTrue(self.folder.exists())
+        removing.join()
+        self.assertFalse(self.folder.exists())
+
+    def test_passes_over_a_live_run_s_folder(self) -> None:
+        live = self.root / f"{PREFIX}{os.getpid()}-live"  # this run: it removes its own
+        live.mkdir()
+        sweep(self.root)
+        self.assertTrue(live.exists())
+        self.assertFalse(self.folder.exists())
+
     def test_keeps_a_folder_while_its_shell_lives(self) -> None:
         shell = subprocess.Popen(["sleep", "60"])
         self.addCleanup(shell.wait)
@@ -349,6 +393,19 @@ class SweepTest(unittest.TestCase):
         (self.folder / SHELLS).write_text("")
         sweep(self.root)
         self.assertTrue(self.folder.exists())
+
+    def test_skips_a_link_and_a_file_with_a_test_folder_name(self) -> None:
+        target = self.root / "target"
+        target.mkdir()
+        link = self.root / f"{self.folder.name}-link"
+        link.symlink_to(target)
+        plain = self.root / f"{self.folder.name}-file"
+        plain.write_text("")
+        sweep(self.root)
+        self.assertTrue(link.is_symlink())
+        self.assertTrue(target.exists())
+        self.assertTrue(plain.exists())
+        self.assertFalse(self.folder.exists())
 
     def test_removes_a_folder_that_never_launched(self) -> None:
         sweep(self.root)
