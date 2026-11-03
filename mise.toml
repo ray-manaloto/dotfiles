@@ -93,6 +93,7 @@ fi
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
+"~/.config/starship.toml" = { source = "unix/home/.config/starship.toml", mode = "symlink" }
 "~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
 # Separate entries, so ~/.zshrc.d stays a real folder. Applied by shell:apply, which backs up first.

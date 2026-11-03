@@ -1,0 +1,212 @@
+#:schema https://starship.rs/config-schema.json
+
+# =============================================================================
+# starship.toml - Cross-Shell Prompt Configuration
+# God-Tier macOS Development Environment
+# =============================================================================
+# Documentation: https://starship.rs/config/
+# Copy to: ~/.config/starship.toml
+# =============================================================================
+
+# Don't print a new line at the start of the prompt
+add_newline = true
+
+# Timeout for commands (ms)
+command_timeout = 1000
+
+# Format string
+format = """
+$username\
+$hostname\
+$directory\
+$git_branch\
+$git_status\
+$git_state\
+$python\
+$nodejs\
+$bun\
+$rust\
+$cmake\
+$cpp\
+$golang\
+$terraform\
+$aws\
+$docker_context\
+$jobs\
+$cmd_duration\
+$line_break\
+$character"""
+
+# Right prompt (optional - shows time)
+right_format = """$time"""
+
+# =============================================================================
+# Core Modules
+# =============================================================================
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+vimcmd_symbol = "[❮](bold green)"
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+style = "cyan"
+repo_root_style = "bold cyan"
+read_only = " 🔒"
+format = "[$path]($style)[$read_only]($read_only_style) "
+
+[username]
+show_always = false
+style_user = "bold blue"
+style_root = "bold red"
+format = "[$user]($style) "
+
+[hostname]
+ssh_only = true
+style = "bold yellow"
+format = "[@$hostname]($style) "
+
+# =============================================================================
+# Git
+# =============================================================================
+
+[git_branch]
+symbol = " "
+style = "bold purple"
+format = "[$symbol$branch(:$remote_branch)]($style) "
+
+[git_status]
+style = "bold yellow"
+format = '([\[$all_status$ahead_behind\]]($style) )'
+conflicted = "⚔️ "
+ahead = "⇡${count}"
+behind = "⇣${count}"
+diverged = "⇕⇡${ahead_count}⇣${behind_count}"
+untracked = "?${count}"
+stashed = "📦"
+modified = "!${count}"
+staged = "+${count}"
+renamed = "»${count}"
+deleted = "✘${count}"
+
+[git_state]
+style = "bold yellow"
+format = '\([$state( $progress_current/$progress_total)]($style)\) '
+rebase = "REBASING"
+merge = "MERGING"
+revert = "REVERTING"
+cherry_pick = "CHERRY-PICKING"
+bisect = "BISECTING"
+
+# =============================================================================
+# Languages & Runtimes
+# =============================================================================
+
+[python]
+symbol = "🐍 "
+style = "bold yellow"
+format = '[$symbol($version )(\($virtualenv\) )]($style)'
+detect_files = ["requirements.txt", "pyproject.toml", "setup.py", "pixi.toml", ".python-version"]
+
+[nodejs]
+symbol = "⬢ "
+style = "bold green"
+format = "[$symbol($version )]($style)"
+detect_files = ["package.json", ".node-version", ".nvmrc"]
+detect_folders = ["node_modules"]
+
+[bun]
+symbol = "🥟 "
+style = "bold yellow"
+format = "[$symbol($version )]($style)"
+detect_files = ["bun.lockb", "bunfig.toml"]
+
+[rust]
+symbol = "🦀 "
+style = "bold red"
+format = "[$symbol($version )]($style)"
+detect_files = ["Cargo.toml"]
+
+[golang]
+symbol = "🐹 "
+style = "bold cyan"
+format = "[$symbol($version )]($style)"
+detect_files = ["go.mod", "go.sum"]
+
+# =============================================================================
+# Infrastructure
+# =============================================================================
+
+[terraform]
+symbol = "💠 "
+style = "bold 105"
+format = "[$symbol$workspace]($style) "
+detect_files = ["*.tf", ".terraform"]
+
+[aws]
+symbol = "☁️ "
+style = "bold yellow"
+format = '[$symbol($profile )(\($region\) )]($style)'
+[aws.region_aliases]
+us-east-1 = "va"
+us-west-2 = "or"
+eu-west-1 = "ie"
+
+[docker_context]
+symbol = "🐳 "
+style = "bold blue"
+format = "[$symbol$context]($style) "
+only_with_files = true
+detect_files = ["docker-compose.yml", "docker-compose.yaml", "Dockerfile"]
+
+# =============================================================================
+# Utilities
+# =============================================================================
+
+[jobs]
+symbol = "✦"
+style = "bold blue"
+number_threshold = 1
+format = "[$symbol$number]($style) "
+
+[cmd_duration]
+min_time = 2_000
+style = "bold yellow"
+format = "[took $duration]($style) "
+show_notifications = false
+
+[time]
+disabled = false
+style = "bold dimmed white"
+format = "[$time]($style)"
+time_format = "%H:%M"
+utc_time_offset = "local"
+
+# =============================================================================
+# Disabled Modules (enable as needed)
+# =============================================================================
+
+[battery]
+disabled = true
+
+[memory_usage]
+disabled = true
+
+[package]
+disabled = true
+
+# =============================================================================
+# Custom Commands (for mise awareness)
+# =============================================================================
+
+# Show mise environment indicator
+[custom.mise]
+command = "echo '📦'"
+when = "test -f .mise.toml || test -f mise.toml"
+format = "[$output]($style) "
+style = "bold blue"
+
+[cpp]
+disabled = false
