@@ -11,7 +11,8 @@ file holds the judgement calls. Each finding cites the rule number and `path:lin
    generated model is a finding unless it says why the library cannot take the model as it is.
 2. **Real seams.** Tests run the real tools (git, cmake, mise, usage, compilers). A stand-in
    executable is for a tool that cannot run in a test (hours long, paid, networked) and does the
-   same observable job: same arguments in, same files and output out. `monkeypatch` touches only the
+   same observable job: same arguments in, same files and output out. A test that only checks which
+   executable a name resolves to links the name to a real tool. `monkeypatch` touches only the
    environment and `PATH`, never package internals.
 3. **Tests assert what a user sees**: exit code, JSON events, files on disk. A test that only
    reaches a line for coverage, or restates a third-party tool's behaviour, is a finding.

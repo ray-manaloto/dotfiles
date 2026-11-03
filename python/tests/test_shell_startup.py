@@ -33,6 +33,7 @@ TOOL_PATH = f"{VENV_BIN}:{KEG_BIN}:{INHERITED_PATH}"
 SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 # The shims hold both too, which is how they shadow a venv and a keg.
 SHIMS = "~/.local/share/mise/shims"
+STARSHIP = shutil.which("starship")
 FAKE_TOOLS = (
     f"{VENV_BIN}/python3",
     f"{KEG_BIN}/clang",
@@ -86,6 +87,8 @@ class ShellStartupTest(unittest.TestCase):
         *,
         mise: bool = True,
         path: str = INHERITED_PATH,
+        xdg: bool = True,
+        starship: bool = False,
     ) -> tuple[int, str, str, list[str]]:
         """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
         with tempfile.TemporaryDirectory() as temp:
@@ -102,6 +105,8 @@ class ShellStartupTest(unittest.TestCase):
                     f'{MISE}exec "{REAL_MISE}" "$@"\n'
                 )
                 (home / ".local/bin/mise").chmod(0o755)
+            if starship:
+                (home / ".local/bin/starship").symlink_to(STARSHIP)
             for tool in FAKE_TOOLS:
                 fake = Path(tool.replace("~", str(home)))
                 fake.parent.mkdir(parents=True, exist_ok=True)
@@ -110,10 +115,16 @@ class ShellStartupTest(unittest.TestCase):
                 [ZSH, *mode, command],
                 env={
                     "HOME": str(home),
-                    "XDG_CONFIG_HOME": str(home / ".config"),
-                    "XDG_DATA_HOME": str(home / ".local/share"),
-                    "XDG_STATE_HOME": str(home / ".local/state"),
-                    "XDG_CACHE_HOME": str(home / ".cache"),
+                    **(
+                        {
+                            "XDG_CONFIG_HOME": str(home / ".config"),
+                            "XDG_DATA_HOME": str(home / ".local/share"),
+                            "XDG_STATE_HOME": str(home / ".local/state"),
+                            "XDG_CACHE_HOME": str(home / ".cache"),
+                        }
+                        if xdg
+                        else {}
+                    ),
                     "PATH": path.replace("~", str(home)),
                     "TERM": "xterm-256color",
                 },
@@ -131,6 +142,14 @@ class ShellStartupTest(unittest.TestCase):
                 done.stderr,
                 calls.read_text().splitlines() if calls.exists() else [],
             )
+
+    def test_a_login_with_no_xdg_paths_gets_the_defaults(self) -> None:
+        names = "$XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_DATA_HOME $XDG_STATE_HOME"
+        out = self.zsh(("-l", "-c"), f"print -rl -- {names}", xdg=False)[1]
+        self.assertEqual(
+            out.splitlines(),
+            ["~/.config", "~/.cache", "~/.local/share", "~/.local/state"],
+        )
 
     def test_path_order(self) -> None:
         for mode in MODES:
@@ -213,10 +232,22 @@ class ShellStartupTest(unittest.TestCase):
             with self.subTest(mode=mode):
                 bare = self.zsh(mode, mise=False)
                 self.assertEqual(bare[:3], (0, "", ""))
+
+    def test_interactive_shells_use_plain_zsh_completion(self) -> None:
+        command = (
+            "print -r -- ${ZSH-unset} ${ZSH_THEME-unset} ${+functions[compdef]}; "
+            "zstyle -s ':completion:*' menu style; print -r -- $style"
+        )
         for mode in INTERACTIVE:
             with self.subTest(mode=mode):
-                plugins = self.zsh(mode, "print -r -- $plugins", mise=False)[1]
-                self.assertEqual(plugins, "git gh\n")
+                self.assertEqual(self.zsh(mode, command)[1], "unset unset 1\nselect\n")
+
+    def test_starship_sets_the_interactive_prompt(self) -> None:
+        self.assertIsNotNone(STARSHIP, "starship must be on PATH")
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                code, out, err, _ = self.zsh(mode, "print -r -- $STARSHIP_SHELL", starship=True)
+                self.assertEqual((code, out, err), (0, "zsh\n", ""))
 
     def test_drop_ins_load_and_no_claude_mem_alias(self) -> None:
         for mode in INTERACTIVE:

@@ -59,6 +59,8 @@ class ShellApplyTest(unittest.TestCase):
             "XDG_STATE_HOME": str(self.state),
             "XDG_CACHE_HOME": str(self.cache),
             "MISE_TRUSTED_CONFIG_PATHS": str(self.repo),
+            "MISE_CEILING_PATHS": str(root),
+            "MISE_AUTO_INSTALL": "0",
         }
         for name in STARTUP:
             (self.home / name).parent.mkdir(parents=True, exist_ok=True)
@@ -248,6 +250,8 @@ class ShellApplyTest(unittest.TestCase):
         self.assertNotEqual(self.spawn(MISE, "run", "shell:apply").returncode, 0)
         linked = [name for name in DEPLOYED if (self.home / name).is_symlink()]
         self.assertEqual(linked, [*STARTUP, *DROP_INS])
+        # A shell started now writes the new history, so the old one must already be there.
+        self.assertEqual(self.history.read_bytes(), HISTORY)
         blocker.unlink()
         self.run_ok("shell:apply")
         self.run_ok("shell:rollback")
@@ -256,6 +260,26 @@ class ShellApplyTest(unittest.TestCase):
     def test_a_failed_dry_run_stops_the_apply(self) -> None:
         (self.repo / "unix/home/.zshrc.d/10-zsh.zsh").unlink()
         self.assert_refused(snapshot(self.home))
+
+    def test_a_linked_worktree_refuses(self) -> None:
+        (self.repo / ".git").write_text("gitdir: elsewhere\n")
+        self.assert_refused(snapshot(self.home))
+
+    def test_scratch_env_keeps_every_home_path_in_its_folder(self) -> None:
+        folder = self.home.parent / "scratch"
+        done = self.spawn("bash", "tasks/scratch/env.sh", folder, "/usr/bin/env")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        seen = dict(line.split("=", 1) for line in done.stdout.splitlines())
+        for name in (
+            "HOME",
+            "TMPDIR",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_STATE_HOME",
+            "XDG_CACHE_HOME",
+        ):
+            self.assertTrue(seen[name].startswith(f"{folder}/"), name)
+        self.assertEqual(seen["MISE_AUTO_INSTALL"], "0")
 
     def test_apply_refuses_and_changes_nothing(self) -> None:
         drop_in = self.repo / "unix/home/.zshrc.d/90-mise.zsh"

@@ -5,6 +5,7 @@
 set -euo pipefail
 : "${SHELL_BACKUP_PATHS:?run this through: mise run shell:apply}"
 # Named, because a whole-config apply would also repoint ~/.zshrc.d/60-agent-tools.zsh at this checkout.
+# shellcheck disable=SC2088 # the tilde stays literal: mise matches the raw keys of [dotfiles].
 targets=('~/.zshenv' '~/.zprofile' '~/.zshrc' '~/.zshrc.d/10-zsh.zsh' '~/.zshrc.d/90-mise.zsh' '~/.config/zsh/path.zsh')
 state="${XDG_STATE_HOME:-$HOME/.local/state}"
 cache="${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -44,10 +45,11 @@ if [ -n "$pending" ]; then
   mkdir -m 700 "$fresh"
   copy_live "$fresh"
 
-  # A clean start prints the one word. env -i keeps the shell's XDG paths inside the scratch folder.
+  # A clean start prints the one word. env -i keeps the shell's XDG paths inside the scratch folder; the
+  # scratch home holds the whole global config, so a startup line that calls mise installs nothing.
   mkdir "$scratch/home" "$scratch/now"
   cp -R unix/home/. "$scratch/home"
-  started="$(env -i HOME="$scratch/home" PATH="$PATH" TERM=dumb zsh -il -c 'print started' </dev/null 2>&1 || true)"
+  started="$(env -i HOME="$scratch/home" PATH="$PATH" TERM=dumb MISE_AUTO_INSTALL=0 MISE_CEILING_PATHS="${PWD%/*}" zsh -il -c 'print started' </dev/null 2>&1 || true)"
   [ "$started" = started ] || refuse "a shell started from unix/home printed: $started"
 
   # Compared as two folders: Apple diff fails on a dangling link or an absent path named on its command line.
@@ -60,13 +62,13 @@ if [ -n "$pending" ]; then
   else
     mv "$fresh" "$backups/pre-apply"
   fi
+  # Before the links: a shell started after a partial link would write the new history first.
+  history="$state/zsh/history"
+  if [ -f "$HOME/.zsh_history" ] && [ ! -e "$history" ]; then
+    mkdir -p "${history%/*}"
+    install -m 600 "$HOME/.zsh_history" "$history"
+  fi
   link
-fi
-
-history="$state/zsh/history"
-if [ -f "$HOME/.zsh_history" ] && [ ! -e "$history" ]; then
-  mkdir -p "${history%/*}"
-  install -m 600 "$HOME/.zsh_history" "$history"
 fi
 
 mkdir -p "$cache/zsh/completions"

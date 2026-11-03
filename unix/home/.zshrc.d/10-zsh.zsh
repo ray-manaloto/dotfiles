@@ -5,17 +5,20 @@ mkdir -p "${HISTFILE:h}" "$ZSH_CACHE_DIR"
 HISTSIZE=50000
 SAVEHIST=10000
 setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY
-export ZSH="$HOME/.oh-my-zsh"
-ZSH_THEME="robbyrussell"
-plugins=(git gh)
 fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
-fpath=("$XDG_CACHE_HOME/zsh/completions" "$ZSH/custom/completions" "$HOME/.docker/completions" $fpath)
-zstyle ':omz:update' mode auto
-zstyle ':omz:update' frequency 13
+fpath=("$XDG_CACHE_HOME/zsh/completions" "$HOME/.oh-my-zsh/custom/completions" "$HOME/.docker/completions" $fpath)
 export LS_COLORS="${LS_COLORS:-di=1;36:ln=35:so=32:pi=33:ex=31:bd=34;46:cd=34;43:su=30;41:sg=30;46:tw=30;42:ow=30;43}"
-if [[ -r "$ZSH/oh-my-zsh.sh" ]]; then
-  source "$ZSH/oh-my-zsh.sh"
-else
-  autoload -Uz compinit
-  compinit -d "$ZSH_COMPDUMP"
+export CLICOLOR=1
+setopt AUTO_CD
+autoload -Uz compinit up-line-or-beginning-search down-line-or-beginning-search
+compinit -d "$ZSH_COMPDUMP"
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+zle -N up-line-or-beginning-search
+zle -N down-line-or-beginning-search
+bindkey -e
+bindkey '^[[A' up-line-or-beginning-search '^[OA' up-line-or-beginning-search
+bindkey '^[[B' down-line-or-beginning-search '^[OB' down-line-or-beginning-search
+if command -v starship >/dev/null; then
+  eval "$(starship init zsh)"
 fi

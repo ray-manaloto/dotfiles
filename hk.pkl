@@ -8,6 +8,7 @@ local linters = new Mapping<String, Step> {
     ["merge-conflicts"] = Builtins.check_merge_conflict
     // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (tasks/privacy/scan.sh).
     ["betterleaks"] = Builtins.betterleaks
+    ["shellcheck"] = Builtins.shellcheck
     ["private-paths"] {
         check = "mise run privacy:scan -- {{files}}"
     }
