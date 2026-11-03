@@ -17,7 +17,7 @@ USER = "gatetester"
 REFUSAL = "review:python has not passed on the staged python/ files; stage them, then mise run review:python"
 HINT = "privacy:scan: replace each host path with ~ or a {{ env.HOME }} template"
 REPORT = "Reviewed.\nclean: R1, R2\nVERDICT: PASS\n"
-# Codex's place in review:python: records what it was given, then writes the report where -o says.
+# Codex's place in review:python: records what it was given, then writes the report where --output-last-message= says.
 CODEX = """
 import json, os, subprocess, sys
 from collections.abc import Mapping
@@ -28,7 +28,9 @@ Path(os.environ["STANDIN_LOG"]).write_text(json.dumps(log))
 if os.environ.get("STANDIN_STAGE"):
     Path(os.environ["STANDIN_STAGE"]).write_text("staged while the reviewer read\\n")
     subprocess.run(["git", "add", os.environ["STANDIN_STAGE"]], check=True)
-Path(args[args.index("-o") + 1]).write_text(os.environ["STANDIN_REPORT"])
+# Only the one-word form: real codex exits 2 on -o -report, reading -report as options.
+out = next(a for a in args if a.startswith("--output-last-message=")).split("=", 1)[1]
+Path(out).write_bytes(os.environb[b"STANDIN_REPORT"])
 sys.exit(int(os.environ.get("STANDIN_EXIT", "0")))
 """
 
@@ -117,7 +119,15 @@ def test_a_pass_prints_the_verdict_and_approves_the_staged_python_files(copy: Pa
     done = mise("review:python")
     assert (done.returncode, done.stdout) == (0, "VERDICT: PASS\n")
     assert codex() == {
-        "argv": ["exec", "-C", ".", "-c", 'sandbox_mode="read-only"', "-o", ".git/review-python.md", "-"],
+        "argv": [
+            "exec",
+            "-C",
+            ".",
+            "-c",
+            'sandbox_mode="read-only"',
+            "--output-last-message=.git/review-python.md",
+            "-",
+        ],
         "cwd": str(copy),
         "stdin": prompt("python", "none"),
     }
@@ -164,10 +174,68 @@ def test_codex_failing_stops_with_its_exit_code(copy: Path, monkeypatch: pytest.
     assert not recorded(copy)
 
 
+def review_bytes(*args: str) -> tuple[int, bytes]:
+    """review:python's exit code and stdout as bytes: text mode would turn a \\r into \\n."""
+    done = subprocess.run(["mise", "run", "review:python", *args], capture_output=True, check=False)
+    return done.returncode, done.stdout
+
+
+@pytest.mark.parametrize(
+    ("report", "expected"),
+    [
+        ("VERDICT: PASS\r\n", (1, b"VERDICT: PASS\r\n")),
+        ("VERDICT: PASS\rmore\n", (1, b"VERDICT: PASS\rmore\n")),
+        ("\udcff\nVERDICT: PASS\n", (0, b"VERDICT: PASS\n")),
+    ],
+    ids=["crlf", "bare-cr", "not-utf8"],
+)
+def test_the_verdict_is_an_exact_line_of_bytes(
+    copy: Path, monkeypatch: pytest.MonkeyPatch, report: str, expected: tuple[int, bytes]
+) -> None:
+    # As grep -qx and tail -n 1 read it: a \r is part of the line, and the report need not be UTF-8.
+    monkeypatch.setenv("STANDIN_REPORT", report)  # \udcff reaches the stand-in as the byte 0xff
+    assert review_bytes() == expected
+    assert recorded(copy) == (expected[0] == 0)
+
+
+def test_a_stamp_with_a_carriage_return_is_refused(copy: Path) -> None:
+    assert mise("review:python").returncode == 0
+    stamp = copy / ".git" / "review-python.approved"
+    stamp.write_bytes(stamp.read_bytes().replace(b"\n", b"\r\n"))
+    refused = mise("review:python:approved")
+    assert (refused.returncode, said(refused, "review:python has")) == (1, [REFUSAL])
+    stamp.write_bytes(stamp.read_bytes().replace(b"\r\n", b"\n\n"))  # $(cat) dropped trailing newlines
+    assert mise("review:python:approved").returncode == 0
+
+
+def test_values_that_start_with_a_dash_reach_the_reviewer(copy: Path) -> None:
+    done = mise("review:python", "--commit=-value", "--out=-report", "--", "-dir")
+    assert (done.returncode, done.stdout) == (0, "VERDICT: PASS\n")
+    assert codex()["argv"] == [
+        "exec",
+        "-C",
+        ".",
+        "-c",
+        'sandbox_mode="read-only"',
+        "--output-last-message=-report",
+        "-",
+    ]
+    assert codex()["stdin"] == prompt("-dir", "-value")
+    assert (copy / "-report").read_text() == REPORT
+
+
 def test_the_path_commit_and_out_reach_the_reviewer(copy: Path) -> None:
     done = mise("review:python", "cpp", "--commit", "HEAD", "--out", "report.md")
     assert (done.returncode, done.stdout) == (0, "VERDICT: PASS\n")
-    assert codex()["argv"] == ["exec", "-C", ".", "-c", 'sandbox_mode="read-only"', "-o", "report.md", "-"]
+    assert codex()["argv"] == [
+        "exec",
+        "-C",
+        ".",
+        "-c",
+        'sandbox_mode="read-only"',
+        "--output-last-message=report.md",
+        "-",
+    ]
     assert codex()["stdin"] == prompt("cpp", "HEAD")
     assert (copy / "report.md").read_text() == REPORT
     assert not recorded(copy)
@@ -215,6 +283,7 @@ def test_every_tracked_file_is_scanned_line_by_line() -> None:
             "notes/b c.md": f"/home/{USER}/w\n",
             "crlf.txt": f"x\r\n/Users/{USER}/end",
             "binary.dat": f"\0/Users/{USER}/x\n".encode(),
+            "late-nul.dat": f"/Users/{USER}/x\n".encode() + b"x" * 100_000 + b"\0",
             "clean.txt": f"/Users/{USER}\n",
         }
     )
@@ -226,7 +295,9 @@ def test_every_tracked_file_is_scanned_line_by_line() -> None:
     assert said(done, "privacy:scan:") == [
         "privacy:scan: a.txt:2 holds a private path",
         "privacy:scan: a.txt:3 holds a private path",
+        "privacy:scan: binary.dat:1 holds a private path",
         "privacy:scan: crlf.txt:2 holds a private path",
+        "privacy:scan: late-nul.dat:1 holds a private path",
         "privacy:scan: link.txt:2 holds a private path",
         "privacy:scan: link.txt:3 holds a private path",
         "privacy:scan: notes/b c.md:1 holds a private path",
@@ -293,6 +364,14 @@ def test_a_tracked_file_gone_from_the_working_tree_is_scanned_as_staged() -> Non
     Path("gone.txt").unlink()
     stage("160000", b"sub", f"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n\n/Users/{USER}/x\n")
     assert scan_bytes() == (1, [b"privacy:scan: gone.txt:2 holds a private path", HINT.encode()])
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_file_whose_name_starts_with_a_dash_is_scanned() -> None:
+    write({"-dash.txt": f"/Users/{USER}/x\n"}, add=False)
+    done = mise("privacy:scan", "--", "-dash.txt")
+    assert done.returncode == 1
+    assert said(done, "privacy:scan:") == ["privacy:scan: -dash.txt:1 holds a private path", HINT]
 
 
 def test_an_unreadable_file_fails_the_scan(copy: Path) -> None:

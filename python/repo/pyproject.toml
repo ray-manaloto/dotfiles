@@ -31,8 +31,10 @@ testpaths = ["tests"]
 # Measure the console script the tests run as a real process, too.
 [tool.coverage.run]
 patch = ["subprocess"]
-# A killed run leaves its subprocesses' .coverage.* files; parallel makes the next run erase them
-# at start (Coverage.erase) instead of combining their stale lines into its report.
+# A killed run leaves its subprocesses' .coverage.* files until the next run starts: pytest-cov
+# (engine.py Central.start) then calls Coverage.erase, which removes them because parallel is on.
+# patch = ["subprocess"] already turns it on (coverage config.py post_process), as does pytest-cov's
+# data_suffix=True; this line only states it, it did not change the behaviour.
 parallel = true
 
 # tests/test_gates.py runs the gates through mise in a copy of the checkout, whose venv imports

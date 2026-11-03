@@ -13,7 +13,7 @@ from .models import PrivacyScan, ReviewPython
 from .pane_approval import git, hashed
 
 PROMPT = Path("tasks/review/python.md")
-APPROVING = "VERDICT: PASS"
+APPROVING = b"VERDICT: PASS"
 REFUSAL = "review:python has not passed on the staged python/ files; stage them, then mise run review:python"
 HINT = "privacy:scan: replace each host path with ~ or a {{ env.HOME }} template"
 # Short values (a CI runner's HOME, say) would match ordinary text; only real paths are kept.
@@ -37,12 +37,16 @@ def review(options: ReviewPython) -> None:
     # Taken before Codex reads, so anything staged during the review stays unapproved.
     staged = staged_python()
     prompt = PROMPT.read_bytes() + f"Path: {options.path}\nCommit: {options.commit or 'none'}\n".encode()
-    command = ["codex", "exec", "-C", ".", "-c", 'sandbox_mode="read-only"', "-o", out, "-"]
+    # One word, as codex's clap parser reads a separate value that starts with - as an option.
+    command = ["codex", "exec", "-C", ".", "-c", 'sandbox_mode="read-only"', f"--output-last-message={out}", "-"]
     done = subprocess.run(command, input=prompt, check=False)
     if done.returncode:
         raise SystemExit(done.returncode)
-    lines = Path(out).read_text().removesuffix("\n").split("\n")
-    sys.stdout.write(lines[-1] + "\n")
+    # Bytes, as tail -n 1 and grep -qx read it: a \\r stays in its line and the report need not be UTF-8.
+    lines = Path(out).read_bytes().removesuffix(b"\n").split(b"\n")
+    sys.stdout.flush()
+    sys.stdout.buffer.write(lines[-1] + b"\n")
+    sys.stdout.buffer.flush()
     if APPROVING not in lines:
         raise SystemExit(1)
     # The reviewer also reads unstaged files, so a PASS approves the index only when they match it.
@@ -54,15 +58,18 @@ def review(options: ReviewPython) -> None:
 
 def approved() -> None:
     path = approval_file()
-    if staged_python() != (path.read_text().rstrip("\n") if path.exists() else ""):
+    # Bytes, as $(cat) read it: trailing newlines dropped, a \\r kept, so a CRLF stamp is refused.
+    if staged_python().encode() != (path.read_bytes().rstrip(b"\n") if path.exists() else b""):
         sys.stderr.write(REFUSAL + "\n")
         raise SystemExit(1)
 
 
 def leaks(data: bytes, patterns: list[bytes]) -> list[int]:
-    """Line numbers holding a pattern, as grep -n counts them; a file with a NUL byte is binary and skipped (-I)."""
-    if b"\0" in data:
-        return []
+    """Line numbers holding a pattern, as grep -n counts them, in any file whatever bytes it holds.
+
+    The shell scan's grep -I skipped a file it took for binary: BSD grep one with a NUL in its first 32 KiB,
+    GNU grep by its own rules. A private path is as public in a binary file, so none is skipped.
+    """
     return [number for number, line in enumerate(data.split(b"\n"), 1) if any(p in line for p in patterns)]
 
 

@@ -36,7 +36,8 @@ usage = '''
 flag "--outgoing" help="Scan every commit not yet on a remote, branches and tags (pre-push)"
 arg "[file]" var=#true help="Files to scan; default every tracked file"
 '''
-run = 'uv run --project python/repo --locked repotools privacy-scan --patterns "$PRIVATE_PATTERNS" --files "${usage_file:-}" ${usage_outgoing:+--outgoing}'
+# --option=value: a value that starts with - would otherwise be read by argparse as an option.
+run = 'uv run --project python/repo --locked repotools privacy-scan --patterns="$PRIVATE_PATTERNS" --files="${usage_file:-}" ${usage_outgoing:+--outgoing}'
 
 [tasks."shell:apply"]
 description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
@@ -64,7 +65,8 @@ arg "[path]" default="python" help="Directory whose uncommitted changes are revi
 flag "--commit <sha>" help="Review this commit instead of the uncommitted changes"
 flag "--out <file>" help="Report file (default review-python.md in the git dir, never tracked)"
 '''
-run = 'uv run --project python/repo --locked repotools review-python --path "$usage_path" ${usage_commit:+--commit "$usage_commit"} ${usage_out:+--out "$usage_out"}'
+# --option=value: a value that starts with - would otherwise be read by argparse as an option.
+run = 'uv run --project python/repo --locked repotools review-python --path="$usage_path" ${usage_commit:+--commit="$usage_commit"} ${usage_out:+--out="$usage_out"}'
 
 [tasks."review:python:approved"]
 description = "Refuse unless review:python passed on exactly the staged python/ files"
