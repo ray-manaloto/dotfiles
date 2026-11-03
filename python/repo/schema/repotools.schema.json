@@ -8,7 +8,18 @@
     "Command": {
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
-      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash"]
+      "enum": [
+        "pane-fingerprint",
+        "pane-pin",
+        "pane-approved",
+        "pr-fingerprint",
+        "pr-approved",
+        "pr-create",
+        "zero-bash",
+        "review-python",
+        "review-python-approved",
+        "privacy-scan"
+      ]
     },
     "ZeroBash": {
       "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
@@ -66,13 +77,47 @@
       "required": ["session"],
       "additionalProperties": false
     },
+    "ReviewPython": {
+      "description": "Have a read-only Codex reviewer check changes against CODING_STANDARDS.md.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "default": "python", "description": "Directory whose uncommitted changes are reviewed" },
+        "commit": { "type": ["string", "null"], "default": null, "description": "Review this commit instead of the uncommitted changes" },
+        "out": { "type": ["string", "null"], "default": null, "description": "Report file (default review-python.md in the git dir)" }
+      },
+      "additionalProperties": false
+    },
+    "ReviewApproved": {
+      "description": "Refuse unless review:python passed on exactly the staged python/ files.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "PrivacyScan": {
+      "description": "Refuse this machine's private paths in tracked files, given files, or outgoing commits.",
+      "type": "object",
+      "properties": {
+        "patterns": {
+          "type": "string",
+          "pattern": "(?m)^.{8,}$",
+          "description": "Private paths, one per line; lines under 8 characters are dropped, and one must remain"
+        },
+        "files": { "type": "string", "default": "", "description": "Files to scan, as mise's shell-quoted usage_file; empty scans every tracked file" },
+        "outgoing": { "type": "boolean", "default": false, "description": "Scan every commit not yet on a remote, branches and tags" }
+      },
+      "required": ["patterns"],
+      "additionalProperties": false
+    },
     "Options": {
       "description": "What a repotools command parses from its arguments.",
       "anyOf": [
         { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
         { "$ref": "#/$defs/PanePin" },
-        { "$ref": "#/$defs/ZeroBash" }
+        { "$ref": "#/$defs/ZeroBash" },
+        { "$ref": "#/$defs/ReviewPython" },
+        { "$ref": "#/$defs/ReviewApproved" },
+        { "$ref": "#/$defs/PrivacyScan" }
       ]
     },
     "Fingerprint": {
@@ -190,6 +235,9 @@
     "pr_text": { "$ref": "#/$defs/PrText" },
     "pane_pin": { "$ref": "#/$defs/PanePin" },
     "zero_bash": { "$ref": "#/$defs/ZeroBash" },
+    "review_python": { "$ref": "#/$defs/ReviewPython" },
+    "review_approved": { "$ref": "#/$defs/ReviewApproved" },
+    "privacy_scan": { "$ref": "#/$defs/PrivacyScan" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

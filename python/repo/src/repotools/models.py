@@ -17,6 +17,9 @@ class Command(StrEnum):
     pr_approved = "pr-approved"
     pr_create = "pr-create"
     zero_bash = "zero-bash"
+    review_python = "review-python"
+    review_python_approved = "review-python-approved"
+    privacy_scan = "privacy-scan"
 
 
 class ZeroBash(BaseModel):
@@ -113,7 +116,64 @@ class PanePin(BaseModel):
     """
 
 
-type Options = CommitText | PrText | PanePin | ZeroBash
+class ReviewPython(BaseModel):
+    """
+    Have a read-only Codex reviewer check changes against CODING_STANDARDS.md.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    path: str = "python"
+    """
+    Directory whose uncommitted changes are reviewed
+    """
+    commit: str | None = None
+    """
+    Review this commit instead of the uncommitted changes
+    """
+    out: str | None = None
+    """
+    Report file (default review-python.md in the git dir)
+    """
+
+
+class ReviewApproved(BaseModel):
+    """
+    Refuse unless review:python passed on exactly the staged python/ files.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class PrivacyScan(BaseModel):
+    """
+    Refuse this machine's private paths in tracked files, given files, or outgoing commits.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    patterns: Annotated[str, Field(pattern="(?m)^.{8,}$")]
+    """
+    Private paths, one per line; lines under 8 characters are dropped, and one must remain
+    """
+    files: str = ""
+    """
+    Files to scan, as mise's shell-quoted usage_file; empty scans every tracked file
+    """
+    outgoing: bool = False
+    """
+    Scan every commit not yet on a remote, branches and tags
+    """
+
+
+type Options = CommitText | PrText | PanePin | ZeroBash | ReviewPython | ReviewApproved | PrivacyScan
 """
 What a repotools command parses from its arguments.
 """
@@ -347,6 +407,9 @@ class Repotools(BaseModel):
     pr_text: PrText | None = None
     pane_pin: PanePin | None = None
     zero_bash: ZeroBash | None = None
+    review_python: ReviewPython | None = None
+    review_approved: ReviewApproved | None = None
+    privacy_scan: PrivacyScan | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

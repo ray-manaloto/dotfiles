@@ -32,6 +32,11 @@ testpaths = ["tests"]
 [tool.coverage.run]
 patch = ["subprocess"]
 
+# tests/test_gates.py runs the gates through mise in a copy of the checkout, whose venv imports
+# repotools from the copy's src; combining maps those lines back onto this src.
+[tool.coverage.paths]
+source = ["src/repotools", "*/python/repo/src/repotools"]
+
 # Flags live here, so the codegen task stays one line (zero-bash rule).
 [tool.datamodel-codegen]
 input = "schema/repotools.schema.json"
