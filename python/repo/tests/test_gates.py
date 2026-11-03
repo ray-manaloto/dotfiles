@@ -256,6 +256,45 @@ def test_quoted_file_names_split_as_the_shell_split_them(copy: Path) -> None:
     assert copy.exists()
 
 
+def scan_bytes(*args: str) -> tuple[int, list[bytes]]:
+    """privacy:scan's exit code and its own lines, as bytes: text mode would turn a \\r in a name into \\n."""
+    done = subprocess.run(["mise", "run", "privacy:scan", *args], capture_output=True, check=False)
+    return done.returncode, [line for line in done.stderr.split(b"\n") if line.startswith(b"privacy:scan:")]
+
+
+def stage(mode: str, name: bytes, text: str) -> None:
+    """Track an object under a name in the index only, without a file in the working tree."""
+    kind = ["-t", "commit", "--literally"] if mode == "160000" else []
+    hashing = ["git", "hash-object", "-w", *kind, "--stdin"]
+    made = subprocess.run(hashing, input=text.encode(), capture_output=True, check=True)
+    entry = f"{mode},{made.stdout.decode().strip()},".encode() + name
+    subprocess.run([b"git", b"update-index", b"--add", b"--cacheinfo", entry], check=True)
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_tracked_name_with_a_carriage_return_is_scanned() -> None:
+    write({"cr\rname.txt": f"/Users/{USER}/x\n"})
+    # Given by hk too: usage-lib leaves a \r unquoted and bash's eval did not split at it.
+    for args in [[], ["--", "cr\rname.txt"]]:
+        assert scan_bytes(*args) == (1, [b"privacy:scan: cr\rname.txt:1 holds a private path", HINT.encode()])
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_tracked_name_that_is_not_utf8_is_scanned() -> None:
+    # macOS refuses such a name on disk, so the file is only in the index, which the scan then reads.
+    stage("100644", b"bad\xff.txt", f"/Users/{USER}/x\n")
+    assert scan_bytes() == (1, [b"privacy:scan: bad\xff.txt:1 holds a private path", HINT.encode()])
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_tracked_file_gone_from_the_working_tree_is_scanned_as_staged() -> None:
+    # The shell scan skipped it; git still holds it. A submodule is another repository's and stays skipped.
+    write({"gone.txt": f"\n/home/{USER}/x\n"})
+    Path("gone.txt").unlink()
+    stage("160000", b"sub", f"tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904\n\n/Users/{USER}/x\n")
+    assert scan_bytes() == (1, [b"privacy:scan: gone.txt:2 holds a private path", HINT.encode()])
+
+
 def test_an_unreadable_file_fails_the_scan(copy: Path) -> None:
     # The shell scan let grep's error pass and exited 0; a file the scan cannot read now fails it.
     write({"locked.txt": f"/Users/{USER}/x\n"}, add=False)
