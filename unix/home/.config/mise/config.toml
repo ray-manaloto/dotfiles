@@ -675,10 +675,10 @@ timeout = "15s"
 
 [doctor.checks.gh-scopes]
 description = "The stored gh login has repo, workflow and read:org"
-run = """s=$(env -u GH_TOKEN -u GITHUB_TOKEN gh api -i user | awk 'tolower($1) == "x-oauth-scopes:"')
-case "$s" in *repo*) ;; *) exit 1;; esac
-case "$s" in *workflow*) ;; *) exit 1;; esac
-case "$s" in *read:org*) ;; *) exit 1;; esac"""
+# One line, so `mise doctor project` in the global pre-push hook never needs this checkout's Python.
+# With --json, gh auth status always exits 0, so the jq prints ok or missing and the test compares it.
+# Scopes are matched whole: a substring test would take public_repo for repo.
+run = '''[ "$(env -u GH_TOKEN -u GITHUB_TOKEN gh auth status --active --no-refresh --hostname github.com --json hosts --jq '.hosts["github.com"][]? | select(.active) | if .state == "success" and (["repo","workflow","read:org"] - (.scopes | split(", ")) | length) == 0 then "ok" else "missing" end')" = ok ]'''
 hint = "Run `gh auth refresh -s repo,workflow,read:org`."
 timeout = "15s"
 depends = "gh-keyring"
