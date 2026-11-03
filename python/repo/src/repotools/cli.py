@@ -6,8 +6,21 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import pane_approval, zero_bash
-from .models import Command, CommitText, Failure, Fingerprint, Options, PanePin, PrText, ZeroBash
+from . import main_guard, pane_approval, zero_bash
+from .models import (
+    Command,
+    CommitText,
+    Failure,
+    Fingerprint,
+    MainGuard,
+    MainGuardArmed,
+    MainGuardInstall,
+    MainGuardRemove,
+    Options,
+    PanePin,
+    PrText,
+    ZeroBash,
+)
 
 OPTIONS: dict[Command, type[Options]] = {
     Command.pane_fingerprint: CommitText,
@@ -17,6 +30,10 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.pr_approved: PrText,
     Command.pr_create: PrText,
     Command.zero_bash: ZeroBash,
+    Command.main_guard: MainGuard,
+    Command.main_guard_install: MainGuardInstall,
+    Command.main_guard_remove: MainGuardRemove,
+    Command.main_guard_armed: MainGuardArmed,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -44,6 +61,8 @@ def run(command: Command, options: Options) -> None:
         sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
         if options.strict and found:
             raise SystemExit(1)
+    elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
+        main_guard.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:

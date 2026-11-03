@@ -17,6 +17,10 @@ class Command(StrEnum):
     pr_approved = "pr-approved"
     pr_create = "pr-create"
     zero_bash = "zero-bash"
+    main_guard = "main-guard"
+    main_guard_install = "main-guard-install"
+    main_guard_remove = "main-guard-remove"
+    main_guard_armed = "main-guard-armed"
 
 
 class ZeroBash(BaseModel):
@@ -32,6 +36,54 @@ class ZeroBash(BaseModel):
     """
     Exit 1 when anything is left
     """
+
+
+class MainGuard(BaseModel):
+    """
+    Refuse a move of refs/heads/main, read from the reference-transaction rows on stdin, unless it is to origin/main.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class MainGuardInstall(BaseModel):
+    """
+    Register the main guard as this repository's reference-transaction hook, after a self-test.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    bin: str
+    """
+    The installed repotools executable the hook runs, outside every checkout
+    """
+
+
+class MainGuardRemove(BaseModel):
+    """
+    Remove the main guard's hook entry from this repository's config and record that the owner switched it off.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class MainGuardArmed(BaseModel):
+    """
+    Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
 
 
 class Rule(StrEnum):
@@ -113,7 +165,9 @@ class PanePin(BaseModel):
     """
 
 
-type Options = CommitText | PrText | PanePin | ZeroBash
+type Options = (
+    CommitText | PrText | PanePin | ZeroBash | MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed
+)
 """
 What a repotools command parses from its arguments.
 """
@@ -347,6 +401,10 @@ class Repotools(BaseModel):
     pr_text: PrText | None = None
     pane_pin: PanePin | None = None
     zero_bash: ZeroBash | None = None
+    main_guard: MainGuard | None = None
+    main_guard_install: MainGuardInstall | None = None
+    main_guard_remove: MainGuardRemove | None = None
+    main_guard_armed: MainGuardArmed | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None
