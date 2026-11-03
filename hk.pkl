@@ -21,6 +21,15 @@ local linters = new Mapping<String, Step> {
         glob = List("python/repo/**")
         check = "mise run //repo:check"
     }
+    ["workflow"] {
+        glob = List("python/workflow/**")
+        check = "mise run //workflow:check"
+    }
+    // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
+    ["frontmatter"] {
+        glob = List("**/*.md", "**/*.yml", "**/*.yaml")
+        check = "mise run //workflow:frontmatter"
+    }
     // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
     ["zero-bash"] {
         check = "mise run //repo:zero-bash"

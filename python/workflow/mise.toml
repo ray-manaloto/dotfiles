@@ -1,0 +1,59 @@
+# Checks for the agent workflow (skills, okf docs, tickets): the workflowtools package does the work, one task per
+# check. No [tools]: ruff, ty, uv and datamodel-codegen are global (DL-757). From the repository root: //workflow:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+[tasks.frontmatter]
+description = "Check SKILL.md and okf concept frontmatter, and that every YAML file parses, as the index has them"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/workflow --locked workflowtools frontmatter"
+
+[tasks.settings-local]
+description = "Refuse .claude/settings.local.json in this worktree, the main checkout or the index"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/workflow --locked workflowtools settings-local"
+
+[tasks.skill-table]
+description = "Check docs/workflow/skills.md against the mattpocock-skills plugin installed for this checkout"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/workflow --locked workflowtools skill-table"
+
+[tasks.tickets]
+description = "Check .scratch/<feature>/issues/ tickets; --listing frontier or open lists them after a clean check"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/workflow --locked workflowtools tickets"
+
+# Another repository's hk runs the installed copy (//workflow:install), so it needs no checkout of this one.
+[tasks.install]
+description = "Install this checkout's workflowtools as a uv tool, the copy other repositories' hk steps run"
+dir = "{{ config_root }}/../.."
+run = "uv tool install --reinstall ./python/workflow"
+
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.codegen]
+description = "Generate src/workflowtools/models.py from schema/workflowtools.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]
