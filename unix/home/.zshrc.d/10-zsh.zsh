@@ -13,7 +13,7 @@ setopt AUTO_CD
 autoload -Uz compinit up-line-or-beginning-search down-line-or-beginning-search
 compinit -d "$ZSH_COMPDUMP"
 zstyle ':completion:*' menu select
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
 zle -N up-line-or-beginning-search
 zle -N down-line-or-beginning-search
 bindkey -e
