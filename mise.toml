@@ -93,6 +93,7 @@ fi
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
+"~/.config/mise/tasks" = { source = "unix/home/.config/mise/tasks", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
 "~/.config/starship.toml" = { source = "unix/home/.config/starship.toml", mode = "symlink" }
 "~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }

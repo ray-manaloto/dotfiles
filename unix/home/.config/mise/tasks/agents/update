@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Update the native agent CLIs (claude, codex, agy, opencode); install any that are missing"
+# Each CLI updates itself; mise never manages these. A copy elsewhere on PATH is ignored:
+# only the native install path counts, so `opencode upgrade` keeps detecting its curl install.
+set -euo pipefail
+# Installers skip their own shell-profile edits when their folder is already on PATH.
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+
+native() {
+  case "$1" in
+    opencode) printf '%s\n' "$HOME/.opencode/bin/opencode" ;;
+    *) printf '%s\n' "$HOME/.local/bin/$1" ;;
+  esac
+}
+
+install() {
+  case "$1" in
+    claude) curl -fsSL https://claude.ai/install.sh | bash ;;
+    codex) curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh ;;
+    agy) curl -fsSL https://antigravity.google/cli/install.sh | bash ;;
+    opencode) curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path ;;
+  esac
+}
+
+for tool in claude codex agy opencode; do
+  bin="$(native "$tool")"
+  if [ -x "$bin" ]; then
+    "$bin" update
+  else
+    install "$tool"
+  fi
+done
