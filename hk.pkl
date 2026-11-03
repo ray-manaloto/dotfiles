@@ -41,7 +41,7 @@ hooks {
     }
     // Every commit, docs included: the pinned reviewer pane's last answer approves this HEAD, index and message.
     // The public repo's leak check: the reviewer refuses challenge content (AGENTS.md). Here, not in pre-commit,
-    // because only commit-msg sees the message.
+    // because pre-commit runs before the message exists; commit-msg sees it after preparation and editing.
     ["commit-msg"] {
         steps {
             ["pane-approval"] {
