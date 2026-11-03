@@ -5,12 +5,17 @@
 Only the native install path counts, so a copy elsewhere on PATH is ignored and
 `opencode upgrade` keeps detecting its curl install. Each installer is downloaded to a
 file first, so a cut-off download never runs. An OpenCode 1 install is replaced with the
-v2 installer, because its own updater stays on major version 1. A CLI that fails is
-reported as one JSON error event on stderr, the others still run, and the task exits 1.
+v2 installer, because its own updater stays on major version 1. Each download and each
+command gets AGENTS_UPDATE_TIMEOUT seconds (default 600), including any time a prompt
+waits for an answer, after which it is stopped with every process it started. A CLI that
+fails or times out is reported as one JSON error event on stderr, the others still run,
+and the task exits 1.
 """
 
+import contextlib
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -44,20 +49,81 @@ AGENTS = {
 }
 
 
+# Seconds each download and each command may take before that CLI counts as failed.
+TIMEOUT = int(os.environ.get("AGENTS_UPDATE_TIMEOUT", "600"))
+
+
+def terminal() -> int | None:
+    """The controlling terminal, open, when this task is in its foreground; else None."""
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR)
+    except OSError:  # no controlling terminal (CI, a test, a background job)
+        return None
+    if os.tcgetpgrp(fd) == os.getpgrp():
+        return fd
+    os.close(fd)
+    return None
+
+
+def give_terminal(fd: int, group: int) -> None:
+    """Put a process group in the terminal's foreground, as a shell does for a job."""
+    # Doing this from a background group raises SIGTTOU, which would stop this task.
+    previous = signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    try:
+        os.tcsetpgrp(fd, group)
+    finally:
+        signal.signal(signal.SIGTTOU, previous)
+
+
+def run(
+    argv: list[str | Path], env: dict[str, str] | None = None, *, capture: bool = False
+) -> str:
+    """Run argv in its own process group and return what it printed when captured. While it
+    runs, its group has the terminal, so its prompts can be answered. Past TIMEOUT the whole
+    group is killed, so a vendor installer's children stop with it, and TimeoutExpired is
+    raised; a non-zero exit raises CalledProcessError."""
+    tty = terminal()
+    try:
+        with subprocess.Popen(
+            argv,
+            env=env,
+            stdout=subprocess.PIPE if capture else None,
+            text=True,
+            process_group=0,
+        ) as process:
+            if tty is not None:
+                # The group is gone if the command already exited.
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    give_terminal(tty, process.pid)
+                    # A read of the terminal before the hand-over stopped it on SIGTTIN.
+                    os.killpg(process.pid, signal.SIGCONT)
+            try:
+                out, _ = process.communicate(timeout=TIMEOUT)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                raise
+    finally:
+        if tty is not None:
+            give_terminal(tty, os.getpgrp())
+            os.close(tty)
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, argv, out)
+    return out or ""
+
+
 def install(url: str, shell: str, args: list[str], env: dict[str, str]) -> None:
     """Download the vendor installer to a file, then run it."""
     with tempfile.TemporaryDirectory() as temp:
         script = Path(temp) / "install"
-        subprocess.run(["curl", "-fsSL", "-o", str(script), url], check=True)
-        subprocess.run([shell, str(script), *args], env=os.environ | env, check=True)
+        # curl also ends a stalled download itself at --max-time and exits non-zero.
+        run(["curl", "-fsSL", "--max-time", str(TIMEOUT), "-o", str(script), url])
+        run([shell, str(script), *args], os.environ | env)
 
 
 def major_version(binary: Path) -> str:
     """`opencode --version` prints `1.19.0` or `opencode v2.2.5`; return the major number."""
-    out = subprocess.run(
-        [binary, "--version"], capture_output=True, text=True, check=True
-    )
-    words = out.stdout.split()
+    words = run([binary, "--version"], capture=True).split()
     return words[-1].removeprefix("v").split(".")[0] if words else ""
 
 
@@ -79,9 +145,14 @@ def main() -> int:
             if missing or (name == "opencode" and major_version(binary) == "1"):
                 install(url, shell, args, env)
             else:
-                subprocess.run([binary, "update"], check=True)
-        # A command that could not start or exited non-zero: one CLI failed, the rest go on.
-        except (OSError, subprocess.CalledProcessError) as error:
+                run([binary, "update"])
+        # A command that could not start, exited non-zero or ran past TIMEOUT: one CLI
+        # failed, the rest go on.
+        except (
+            OSError,
+            subprocess.CalledProcessError,
+            subprocess.TimeoutExpired,
+        ) as error:
             event = {"event": "agent_failed", "agent": name, "error": str(error)}
             print(json.dumps(event), file=sys.stderr)
             failed = True

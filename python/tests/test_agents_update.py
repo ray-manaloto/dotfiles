@@ -3,11 +3,16 @@
 # curl and the four agent CLIs are stand-ins (networked tools), so no agent CLI on the host is
 # used and nothing is downloaded.
 
+import errno
 import json
+import os
+import pty
+import select
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -31,39 +36,69 @@ INSTALLS = [
     "install https://opencode.ai/v2/install --no-modify-path",
 ]
 UPDATES = ["claude update", "codex update", "agy update", "opencode update"]
+# Seconds each call may take in these tests, so a stalled stand-in ends quickly.
+TIMEOUT = 3
+PROMPT = "continue? [y/N] "
 
 # `curl -fsSL -o FILE URL` writes an installer that records its URL, arguments and the
 # codex prompt switch, then puts the CLI at its native path. The installer is shell because
 # the task runs each vendor installer with the shell it is written for.
-INSTALLER = r"""printf '%s\n' "install @URL@${*:+ $*}${CODEX_NON_INTERACTIVE:+ CODEX_NON_INTERACTIVE=$CODEX_NON_INTERACTIVE}" >> "$HOME/calls"
+# A URL listed in HOME/stall-install stalls its installer on a child that would write HOME/late
+# after the time limit, as a slow download inside a vendor installer would.
+INSTALLER = r"""if grep -qxF '@URL@' "$HOME/stall-install"; then
+  (sleep $((AGENTS_UPDATE_TIMEOUT + 2)); touch "$HOME/late") &
+  wait
+fi
+printf '%s\n' "install @URL@${*:+ $*}${CODEX_NON_INTERACTIVE:+ CODEX_NON_INTERACTIVE=$CODEX_NON_INTERACTIVE}" >> "$HOME/calls"
 mkdir -p "$HOME/@DIR@" && cp "$HOME/tool" "$HOME/@BIN@"
 rm -f "$HOME/@BIN@.version"
 """
+# Any other arguments are refused, so the task must pass curl its time limit. A URL listed in
+# HOME/stall gets no bytes, as on a dead connection, and ends as curl does at --max-time.
 CURL = f"""{PYTHON}
 import sys
+import time
 from pathlib import Path
 NATIVE = {NATIVE!r}
 INSTALLER = {INSTALLER!r}
-if sys.argv[1:3] != ["-fsSL", "-o"] or len(sys.argv) != 5 or sys.argv[4] not in NATIVE:
+args = sys.argv[1:]
+if args[:4] != ["-fsSL", "--max-time", "{TIMEOUT}", "-o"] or len(args) != 6 or args[5] not in NATIVE:
     sys.exit(2)
-url, binary = sys.argv[4], NATIVE[sys.argv[4]]
+url, binary = args[5], NATIVE[args[5]]
+stall = Path.home() / "stall"
+if stall.exists() and url in stall.read_text().split():
+    time.sleep(int(args[2]))
+    print(f"curl: (28) Operation timed out after {{args[2]}}000 milliseconds with 0 bytes received", file=sys.stderr)
+    sys.exit(28)
 script = INSTALLER.replace("@URL@", url).replace("@BIN@", binary)
-Path(sys.argv[3]).write_text(script.replace("@DIR@", str(Path(binary).parent)))
+Path(args[4]).write_text(script.replace("@DIR@", str(Path(binary).parent)))
 """
-# A native CLI: `update` is recorded, or fails when BINARY.version holds `fail`; `--version`
-# prints BINARY.version (OpenCode 1 prints a bare `1.19.0`), else `NAME v2.2.5`; anything
-# else is refused.
+# A native CLI: `update` is recorded, fails when BINARY.version holds `fail`, stalls when it
+# holds `stall`, and asks the terminal to continue when it holds `ask`, as an updater's
+# prompt would; `--version` prints BINARY.version (OpenCode 1 prints a bare `1.19.0`), else
+# `NAME v2.2.5`; anything else is refused.
 TOOL = f"""{PYTHON}
 import sys
+import time
 from pathlib import Path
 me = Path(sys.argv[0])
 version = Path(str(me) + ".version")
 if sys.argv[1:] == ["update"]:
+    note = ""
     if version.exists() and version.read_text() == "fail":
         sys.exit(1)
+    if version.exists() and version.read_text() == "stall":
+        time.sleep(60)
+    if version.exists() and version.read_text() == "ask":
+        with open("/dev/tty", "w") as out, open("/dev/tty") as tty:
+            out.write("{PROMPT}")
+            out.flush()
+            note = " answered " + tty.readline().strip()
     with open(Path.home() / "calls", "a") as calls:
-        calls.write(me.name + " update\\n")
+        calls.write(me.name + " update" + note + "\\n")
 elif sys.argv[1:] == ["--version"]:
+    if version.exists() and version.read_text() == "stall":
+        time.sleep(60)
     print(version.read_text().strip() if version.exists() else me.name + " v2.2.5")
 else:
     sys.exit(2)
@@ -76,8 +111,12 @@ class AgentsUpdateTest(unittest.TestCase):
         installed: tuple[str, ...],
         runs: int = 1,
         versions: dict[str, str] | None = None,
+        stalled_downloads: tuple[str, ...] = (),
+        stalled_installers: tuple[str, ...] = (),
+        answer: str | None = None,
     ) -> tuple[int, list[str], str]:
-        """`mise run agents:update` from a fresh HOME, `runs` times; rc, recorded calls, stderr."""
+        """`mise run agents:update` from a fresh HOME, `runs` times; rc, recorded calls, stderr.
+        With `answer`, it runs in a terminal and `answer` is typed at each prompt."""
         self.assertTrue(TASK.is_file(), f"missing {TASK.relative_to(REPO)}")
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp).resolve()
@@ -96,10 +135,23 @@ class AgentsUpdateTest(unittest.TestCase):
                 shutil.copy2(home / "tool", tool)
             for binary, version in (versions or {}).items():
                 (home / f"{binary}.version").write_text(version)
+            (home / "stall").write_text(" ".join(stalled_downloads))
+            (home / "stall-install").write_text(
+                "".join(f"{u}\n" for u in stalled_installers)
+            )
             for _ in range(runs):
-                done = self.mise(home, stubs)
+                if answer is None:
+                    done = self.mise(home, stubs)
+                else:
+                    done = self.mise_in_terminal(home, stubs, answer)
                 if done.returncode:
                     break
+            if stalled_installers:
+                # Long enough for a surviving installer child to have written HOME/late.
+                time.sleep(TIMEOUT + 1)
+                self.assertFalse(
+                    (home / "late").exists(), "an installer child outlived the timeout"
+                )
             calls = home / "calls"
             lines = calls.read_text().splitlines() if calls.exists() else []
             return done.returncode, lines, done.stderr
@@ -107,28 +159,72 @@ class AgentsUpdateTest(unittest.TestCase):
     def mise(self, home: Path, stubs: Path) -> subprocess.CompletedProcess[str]:
         """One `mise run agents:update` from an unrelated folder, with HOME, XDG and PATH
         inside the temporary HOME, so only the global task folder can provide the task."""
-        elsewhere = home / "elsewhere"
-        elsewhere.mkdir(exist_ok=True)
         return subprocess.run(
             [MISE, "run", "agents:update"],
-            env={
-                "HOME": str(home),
-                "XDG_CONFIG_HOME": str(home / ".config"),
-                "XDG_DATA_HOME": str(home / ".local/share"),
-                "XDG_STATE_HOME": str(home / ".local/state"),
-                "XDG_CACHE_HOME": str(home / ".cache"),
-                "MISE_CEILING_PATHS": str(home),
-                "MISE_AUTO_INSTALL": "0",
-                # The task's python3 is this test's interpreter, never a host one.
-                "PATH": f"{stubs}:{Path(sys.executable).parent}:/usr/bin:/bin",
-            },
-            cwd=elsewhere,
+            env=self.environment(home, stubs),
+            cwd=self.elsewhere(home),
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=60,
             check=False,
         )
+
+    def mise_in_terminal(
+        self, home: Path, stubs: Path, answer: str
+    ) -> subprocess.CompletedProcess[str]:
+        """The same run with a pseudo-terminal as its controlling terminal, as when the user
+        types it; `answer` is typed at each prompt. Its output is returned as stderr."""
+        pid, terminal = pty.fork()
+        if pid == 0:  # the child: its own session, with the terminal in the foreground
+            os.chdir(self.elsewhere(home))
+            os.execve(
+                MISE, [MISE, "run", "agents:update"], self.environment(home, stubs)
+            )
+        seen, answered, end = b"", 0, time.monotonic() + 60
+        while time.monotonic() < end:
+            ready, _, _ = select.select([terminal], [], [], 1)
+            try:
+                chunk = os.read(terminal, 4096) if ready else b""
+            except OSError as error:
+                if error.errno != errno.EIO:
+                    raise
+                break  # every process holding the terminal has exited
+            if ready and not chunk:
+                break
+            seen += chunk
+            if seen.count(PROMPT.encode()) > answered:
+                os.write(terminal, f"{answer}\n".encode())
+                answered += 1
+        os.close(terminal)
+        code = os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1])
+        return subprocess.CompletedProcess(
+            MISE, code, "", seen.decode(errors="replace")
+        )
+
+    @staticmethod
+    def elsewhere(home: Path) -> Path:
+        """An unrelated folder, so only the global task folder can provide the task."""
+        folder = home / "elsewhere"
+        folder.mkdir(exist_ok=True)
+        return folder
+
+    @staticmethod
+    def environment(home: Path, stubs: Path) -> dict[str, str]:
+        """HOME, XDG and PATH inside the temporary HOME."""
+        return {
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "XDG_DATA_HOME": str(home / ".local/share"),
+            "XDG_STATE_HOME": str(home / ".local/state"),
+            "XDG_CACHE_HOME": str(home / ".cache"),
+            "MISE_CEILING_PATHS": str(home),
+            "MISE_AUTO_INSTALL": "0",
+            "AGENTS_UPDATE_TIMEOUT": str(TIMEOUT),
+            "TERM": "dumb",
+            # The task's python3 is this test's interpreter, never a host one.
+            "PATH": f"{stubs}:{Path(sys.executable).parent}:/usr/bin:/bin",
+        }
 
     def test_installed_tools_update_themselves(self) -> None:
         code, calls, err = self.run_task(tuple(NATIVE.values()))
@@ -167,6 +263,69 @@ class AgentsUpdateTest(unittest.TestCase):
             [(event["event"], event["agent"]) for event in events],
             [("agent_failed", "claude")],
         )
+
+    def test_a_stalled_update_times_out_and_the_others_still_run(self) -> None:
+        code, calls, err = self.run_task(
+            tuple(NATIVE.values()), versions={CLAUDE: "stall"}
+        )
+        self.assertEqual((code, calls), (1, UPDATES[1:]), err)
+        [event] = self.failures(err)
+        self.assertEqual(event["agent"], "claude")
+        self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
+
+    def test_a_stalled_download_fails_at_its_time_limit_and_the_others_install(
+        self,
+    ) -> None:
+        code, calls, err = self.run_task(
+            (), stalled_downloads=("https://chatgpt.com/codex/install.sh",)
+        )
+        self.assertEqual((code, calls), (1, INSTALLS[:1] + INSTALLS[2:]), err)
+        self.assertEqual([event["agent"] for event in self.failures(err)], ["codex"])
+
+    def test_an_updater_prompt_can_be_answered_from_the_terminal(self) -> None:
+        # The run goes on past its time limit only if the answer reached the prompt.
+        code, calls, out = self.run_task(
+            tuple(NATIVE.values()), versions={CLAUDE: "ask"}, answer="y"
+        )
+        self.assertEqual(
+            (code, calls), (0, ["claude update answered y", *UPDATES[1:]]), out
+        )
+
+    def test_in_a_terminal_a_stalled_update_times_out_and_the_others_still_run(
+        self,
+    ) -> None:
+        # codex asks after claude is killed: its prompt is answered only if the task took
+        # the terminal back and handed it on.
+        code, calls, out = self.run_task(
+            tuple(NATIVE.values()), versions={CLAUDE: "stall", CODEX: "ask"}, answer="y"
+        )
+        self.assertEqual(
+            (code, calls), (1, ["codex update answered y", *UPDATES[2:]]), out
+        )
+        self.assertIn(f"timed out after {TIMEOUT} seconds", out)
+
+    def test_a_stalled_installer_is_stopped_with_its_children(self) -> None:
+        code, calls, err = self.run_task(
+            (), stalled_installers=("https://antigravity.google/cli/install.sh",)
+        )
+        self.assertEqual((code, calls), (1, INSTALLS[:2] + INSTALLS[3:]), err)
+        [event] = self.failures(err)
+        self.assertEqual(event["agent"], "agy")
+        self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
+
+    def test_a_stalled_version_check_times_out(self) -> None:
+        code, calls, err = self.run_task(
+            tuple(NATIVE.values()), versions={OPENCODE: "stall"}
+        )
+        self.assertEqual((code, calls), (1, UPDATES[:3]), err)
+        [event] = self.failures(err)
+        self.assertEqual(event["agent"], "opencode")
+        self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
+
+    def failures(self, err: str) -> list[dict[str, str]]:
+        """The `agent_failed` events on stderr."""
+        events = [json.loads(line) for line in err.splitlines() if line.startswith("{")]
+        return [event for event in events if event["event"] == "agent_failed"]
 
 
 if __name__ == "__main__":
