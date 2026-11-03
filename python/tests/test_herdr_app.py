@@ -1,11 +1,17 @@
 """Herdr.app setup: the global post-tools hook and the hc-codex blocks, run in a scratch home."""
 
 # Both run through tasks/scratch/env.sh, so every home path is inside a temporary folder. The hook
-# runs with the real `skills` CLI; herdr-core is already in the scratch home, so its install is
-# skipped and nothing is downloaded.
+# runs with the real `skills` CLI. Where herdr-core is already in the scratch home its install is
+# skipped; where it is not, the scratch home's git config points GitHub at a local repository. Its
+# other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
+# dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a closed local port and fail,
+# which skills tolerates, so nothing leaves the machine.
 
 import json
+import os
+import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import tomllib
@@ -18,6 +24,7 @@ POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
 # mise runs each hook command with its default inline shell, unix_default_inline_shell_args
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
+[TAG] = re.findall(r"herdrdev/herdr-core#(\S+)", " ".join(POST_TOOLS))
 BLOCKS = ("~/.claude/CLAUDE.md/hc-codex", "~/.codex/AGENTS.md/hc-codex")
 
 # What `skills add herdrdev/herdr` installed in September, as the skills lock records it.
@@ -34,6 +41,17 @@ class HerdrAppTest(unittest.TestCase):
         # skills keeps its lock under $XDG_STATE_HOME, which env.sh sets.
         self.lock = self.root / "state/skills/.skill-lock.json"
         self.skills: dict[str, dict[str, str]] = {}
+        # Bound but never listening, so every connection to it is refused.
+        closed = socket.socket()
+        self.addCleanup(closed.close)
+        closed.bind(("127.0.0.1", 0))
+        proxy = f"http://127.0.0.1:{closed.getsockname()[1]}"
+        self.offline = (
+            "DO_NOT_TRACK=1",  # no install telemetry
+            "NODE_USE_ENV_PROXY=1",  # Node's fetch reads HTTP(S)_PROXY only with this
+            f"HTTPS_PROXY={proxy}",
+            f"HTTP_PROXY={proxy}",
+        )
         self.install(
             "herdr-core", "herdrdev/herdr-core", ".agents/skills", ".claude/skills"
         )
@@ -69,9 +87,36 @@ class HerdrAppTest(unittest.TestCase):
             check=False,
         )
 
+    def github(self) -> None:
+        """herdrdev/herdr-core at the pinned tag, served from a local repository."""
+        source = self.root / "source"
+        (source / "skills/herdr-core").mkdir(parents=True)
+        (source / "skills/herdr-core/SKILL.md").write_text(
+            "---\nname: herdr-core\ndescription: from the tag\n---\n"
+        )
+        remote = self.root / "remote"
+        for command in (
+            ["git", "init", "-q"],
+            ["git", "add", "."],
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "t"],
+            ["git", "tag", TAG],
+            ["git", "clone", "-q", "--bare", ".", str(remote / "herdr-core.git")],
+        ):
+            # HK=0: the user's global git hooks run `mise x hk`, which has no config here.
+            subprocess.run(
+                command,
+                cwd=source,
+                env=os.environ | {"HK": "0"},
+                check=True,
+                capture_output=True,
+            )
+        (self.home / ".gitconfig").write_text(
+            f'[url "file://{remote}/"]\n\tinsteadOf = https://github.com/herdrdev/\n'
+        )
+
     def post_tools(self) -> None:
         for command in POST_TOOLS:
-            done = self.scratch(*SHELL, command)
+            done = self.scratch("env", *self.offline, *SHELL, command)
             self.assertEqual(done.returncode, 0, (command, done.stdout, done.stderr))
 
     def on_disk(self) -> set[str]:
@@ -104,6 +149,16 @@ class HerdrAppTest(unittest.TestCase):
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
         self.assertEqual(self.locked(), {"herdr-core"})
+
+    def test_a_codex_only_herdr_core_gets_its_claude_copy(self) -> None:
+        shutil.rmtree(self.home / ".claude/skills/herdr-core")
+        self.github()
+        self.post_tools()
+        self.assertEqual(self.on_disk(), CORE)
+        self.assertIn(
+            "from the tag",
+            (self.home / ".claude/skills/herdr-core/SKILL.md").read_text(),
+        )
 
     def test_claude_and_codex_open_watched_agents_as_tabs(self) -> None:
         done = self.scratch("mise", "dot", "apply", *BLOCKS)
