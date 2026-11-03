@@ -137,14 +137,18 @@ def setUpModule() -> None:
     stops a server or a shell, so it can't end a run, even one this pid check misjudges.
     """
     # One sweep at a time, so two runs never remove the same leftovers; a run removes only its
-    # own folders otherwise. The lock file stays, and its name doesn't match PREFIX*.
-    with (TEMP_ROOT / "dotfiles-tests.lock").open("w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    # own folders otherwise. The lock is TEMP_ROOT itself: a file of a fixed name in a shared /tmp
+    # could be another user's symlink, which opening it would follow.
+    root = os.open(TEMP_ROOT, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(root, fcntl.LOCK_EX)
         sweep(TEMP_ROOT)
         if (labeled := labeled_root()) is not None:
             for socket in labeled.glob(f"{PREFIX}*"):
                 if not owned_by_a_live_run(socket.name) and panes(socket) is None:
                     socket.unlink()
+    finally:
+        os.close(root)
 
 
 class InteractiveShellTest(unittest.TestCase):
@@ -187,7 +191,8 @@ class InteractiveShellTest(unittest.TestCase):
     def finish(self, folder: Path) -> None:
         """Remove the folder only once its shell is known gone: zsh writes its history on exit.
 
-        A folder kept here is removed by a later run's sweep, once this run has ended.
+        A folder kept because a shell outlived the kill goes in a later run's sweep, once that shell
+        has exited. One whose launch never recorded a pid stays, for a person to look at.
         """
         end(self.socket, self.shells or [])  # raises, keeping the folder, while a shell lives
         if self.shells is None and self.socket.exists():
