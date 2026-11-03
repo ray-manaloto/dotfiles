@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "repotools",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of the repository checks; mise run //repo:codegen writes src/repotools/models.py from this file.",
+  "$defs": {
+    "Command": {
+      "description": "The repotools subcommands, one per mise task.",
+      "type": "string",
+      "enum": ["pane-fingerprint", "pane-pin", "pane-approved"]
+    },
+    "NoOptions": {
+      "description": "A subcommand that takes no options.",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "PanePin": {
+      "description": "Name the Codex session whose approval this checkout accepts.",
+      "type": "object",
+      "properties": {
+        "session": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "The session id, as in the rollout file's name"
+        }
+      },
+      "required": ["session"],
+      "additionalProperties": false
+    },
+    "Fingerprint": {
+      "description": "What an approval must name, printed as a JSON line.",
+      "type": "object",
+      "properties": {
+        "fingerprint": { "type": "string", "description": "Hash of HEAD and the whole index" }
+      },
+      "required": ["fingerprint"],
+      "additionalProperties": false
+    },
+    "RolloutLine": {
+      "description": "One line of a Codex session rollout; only the fields the check reads.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "session_meta, turn_context, response_item or event_msg" },
+        "payload": { "type": "object", "description": "Depends on type" }
+      },
+      "required": ["type", "payload"]
+    },
+    "SessionMeta": {
+      "description": "A rollout's session_meta payload.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The session id" },
+        "cwd": { "type": "string", "description": "The folder the session started in" },
+        "forked_from_id": { "type": ["string", "null"], "description": "Set on a forked session" }
+      },
+      "required": ["id", "cwd"]
+    },
+    "SandboxPolicy": {
+      "description": "A turn's legacy sandbox field.",
+      "type": "object",
+      "properties": { "type": { "type": "string", "description": "read-only when nothing may be written" } },
+      "required": ["type"]
+    },
+    "FileAccess": {
+      "description": "One filesystem permission entry.",
+      "type": "object",
+      "properties": { "access": { "type": "string", "description": "read when the entry only reads" } },
+      "required": ["access"]
+    },
+    "FileSystem": {
+      "description": "A turn's effective filesystem permissions.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "restricted when entries list everything allowed" },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/FileAccess" }, "description": "What is allowed" }
+      },
+      "required": ["type", "entries"]
+    },
+    "PermissionProfile": {
+      "description": "A turn's effective permissions.",
+      "type": "object",
+      "properties": { "file_system": { "$ref": "#/$defs/FileSystem" } },
+      "required": ["file_system"]
+    },
+    "TurnContext": {
+      "description": "A rollout's turn_context payload.",
+      "type": "object",
+      "properties": {
+        "turn_id": { "type": "string", "description": "The turn these settings apply to" },
+        "cwd": { "type": "string", "description": "The turn's working folder" },
+        "approval_policy": { "type": "string", "description": "never when no command can ask for more" },
+        "sandbox_policy": { "$ref": "#/$defs/SandboxPolicy" },
+        "permission_profile": { "$ref": "#/$defs/PermissionProfile" }
+      },
+      "required": ["turn_id", "cwd", "approval_policy", "sandbox_policy", "permission_profile"]
+    },
+    "OutputText": {
+      "description": "One content part of a message; an image part has no text.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "output_text for what the assistant wrote" },
+        "text": { "type": ["string", "null"], "description": "The words" }
+      },
+      "required": ["type"]
+    },
+    "Message": {
+      "description": "A rollout's response_item message payload.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "description": "assistant, user or developer" },
+        "phase": { "type": ["string", "null"], "description": "final_answer on a turn's answer" },
+        "content": { "type": "array", "items": { "$ref": "#/$defs/OutputText" }, "description": "The parts" }
+      },
+      "required": ["role", "content"]
+    },
+    "TaskEvent": {
+      "description": "A rollout's task_started, task_complete or turn_aborted payload.",
+      "type": "object",
+      "properties": {
+        "turn_id": { "type": "string", "description": "The turn" },
+        "last_agent_message": { "type": ["string", "null"], "description": "The answer, on task_complete" }
+      },
+      "required": ["turn_id"]
+    },
+    "Failure": {
+      "description": "Why a command stopped, printed as a JSON line on stderr.",
+      "type": "object",
+      "properties": {
+        "error": { "type": "string", "description": "The message" }
+      },
+      "required": ["error"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "failure": { "$ref": "#/$defs/Failure" },
+    "command": { "$ref": "#/$defs/Command" },
+    "no_options": { "$ref": "#/$defs/NoOptions" },
+    "pane_pin": { "$ref": "#/$defs/PanePin" },
+    "fingerprint": { "$ref": "#/$defs/Fingerprint" },
+    "rollout_line": { "$ref": "#/$defs/RolloutLine" },
+    "session_meta": { "$ref": "#/$defs/SessionMeta" },
+    "turn_context": { "$ref": "#/$defs/TurnContext" },
+    "message": { "$ref": "#/$defs/Message" },
+    "task_event": { "$ref": "#/$defs/TaskEvent" }
+  }
+}

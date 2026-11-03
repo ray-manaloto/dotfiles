@@ -17,6 +17,10 @@ local linters = new Mapping<String, Step> {
         glob = List("python/toolchains/p2996/**")
         check = "mise run //p2996:check"
     }
+    ["repo"] {
+        glob = List("python/repo/**")
+        check = "mise run //repo:check"
+    }
 }
 
 hooks {
@@ -28,6 +32,11 @@ hooks {
             ["python-review"] {
                 glob = List("python/**")
                 check = "mise run review:python:approved"
+            }
+            // AND the check above: the pinned reviewer pane's last answer approves this HEAD and index.
+            ["pane-approval"] {
+                glob = List("python/**")
+                check = "mise run //repo:pane-approved"
             }
         }
     }
