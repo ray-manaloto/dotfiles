@@ -73,6 +73,14 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 - `.gitignore` is an allowlist. A new top-level path must be added there on purpose; never
   add keys, `age.txt` or any secret file.
 
+## CLion MCP
+
+Claude Code reaches CLion's MCP server through the user-scope `clion` entry in `~/.claude.json`
+(`http://127.0.0.1:64362/stream`, router mode). The port is per machine, so never put it in a project
+`.mcp.json`. After CLion is switched or restarted, a running session shows `clion (ECONNREFUSED)`
+until you reconnect it from `/mcp`. The `clion-debugger` skill ships inside CLion (no other source found);
+re-export it after each CLion update. See the okf note `docs/research/clion-mcp.md`.
+
 ## Agent skills
 
 ### Issue tracker
