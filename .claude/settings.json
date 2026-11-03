@@ -32,7 +32,7 @@
     "code-simplifier@anthropic-plugin-directory": true,
     "code-review@anthropic-plugin-directory": true,
     "commit-commands@anthropic-plugin-directory": true,
-    "clangd-lsp@anthropic-plugin-directory": true,
+    "clangd-lsp@claude-plugins-official": true,
     "planning-with-files@planning-with-files": true
   },
   "subagentPromptCacheTtl": "1h",
