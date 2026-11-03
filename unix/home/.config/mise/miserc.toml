@@ -4,9 +4,27 @@
 # in config.toml. A later miserc.local.toml with its own list replaces this one instead of adding
 # to it, so keep every entry here.
 ignored_config_paths = [
-  # Retired: it still pins OpenCode 1, and so do its Codex worktrees.
+  # Retired: it still pins OpenCode 1, and so do its Codex worktrees. Those are listed one by one,
+  # because a Codex copy of the current dotfiles is also named `dotfiles` and must load.
   "~/dev/github/ray-manaloto/dotfiles-legacy",
-  "~/.codex/worktrees/*/dotfiles",
+  "~/.codex/worktrees/7267/dotfiles",
+  "~/.codex/worktrees/759b/dotfiles",
+  "~/.codex/worktrees/7835/dotfiles",
+  "~/.codex/worktrees/8e32/dotfiles",
+  "~/.codex/worktrees/9b64/dotfiles",
+  "~/.codex/worktrees/9def/dotfiles",
+  "~/.codex/worktrees/agentsview-recall-activation/dotfiles",
+  "~/.codex/worktrees/be23/dotfiles",
+  "~/.codex/worktrees/c4fe/dotfiles",
+  "~/.codex/worktrees/codex-native-settings/dotfiles",
+  "~/.codex/worktrees/codex-settings-capacity/dotfiles",
+  "~/.codex/worktrees/five-stage-integration/dotfiles",
+  "~/.codex/worktrees/graph-readiness-proof/dotfiles",
+  "~/.codex/worktrees/mise-global-owner-docs/dotfiles",
+  "~/.codex/worktrees/mise-lock-1673-validation/dotfiles",
+  "~/.codex/worktrees/research-performance-successor/dotfiles",
+  "~/.codex/worktrees/research-python-sdks/dotfiles",
+  "~/.codex/worktrees/worktree-graph-readiness/dotfiles",
   # Source mirrors kept for reading.
   "~/dev/github/ray-manaloto/claude-code-marketplace/offline",
   # Third-party clones, one folder per GitHub owner. A clone under a new owner stays untrusted

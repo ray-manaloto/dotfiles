@@ -17,7 +17,9 @@ github.credential_command = "gh auth token"
 experimental = true
 #verbose = true
 activate_aggressive = true
-# Your own repos load by path; any other repo runs no mise config until you approve it. Without
+# Your own repos load by path, and so do Codex task copies (~/.codex/worktrees/<id>/<repo>): Codex
+# makes one only for a task you started on that repo. mise matches these by folder prefix only, so
+# a Codex copy of any repo loads. Any other repo runs no mise config until you approve it. Without
 # paranoid config mode, `mise install`, `mise run` and `mise exec` in a fresh clone trust it on the
 # spot and run its env, hooks and tasks. With it, they exit 1 until `mise trust`, that approval is
 # tied to the file's contents (an edit needs approval again), and worktrees outside the trusted
@@ -27,7 +29,7 @@ activate_aggressive = true
 # clone with a mise.toml fails until `mise trust` (or `HK=0`). Test harnesses that make configs in temporary folders set
 # MISE_TRUSTED_CONFIG_PATHS for their run. python/tests/test_mise_trust.py checks all of this.
 paranoid = ["config"]
-trusted_config_paths = ["~/.config/mise", "~/dev/github/ray-manaloto"]
+trusted_config_paths = ["~/.config/mise", "~/dev/github/ray-manaloto", "~/.codex/worktrees"]
 minimum_release_age = "0s"
 lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.

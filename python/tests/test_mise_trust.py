@@ -23,7 +23,12 @@ CLONE = "dev/github/stranger/tool"  # an owner folder the ignore list does not n
 THIRD_PARTY = "dev/github/jdx/mise"
 MIRROR = "dev/github/ray-manaloto/claude-code-marketplace/offline/jdx-mise"
 LEGACY = "dev/github/ray-manaloto/dotfiles-legacy"
-LEGACY_WORKTREE = ".codex/worktrees/ab12/dotfiles"
+LEGACY_WORKTREE = ".codex/worktrees/7267/dotfiles"
+# Codex task copies of a repo, which Codex makes under ~/.codex/worktrees/<id>/<repo name>.
+CODEX_COPIES = (
+    ".codex/worktrees/new1/dotfiles",
+    ".codex/worktrees/new2/claude-code-marketplace",
+)
 
 
 class MiseTrustTest(unittest.TestCase):
@@ -121,6 +126,18 @@ class MiseTrustTest(unittest.TestCase):
             capture_output=True,
         )
         self.assertTrue(self.loads(worktree, name))
+
+    def test_a_codex_task_copy_loads_and_keeps_loading_after_an_edit(self) -> None:
+        # A legacy copy is also named `dotfiles`, so the ignore list must name
+        # those copies one by one rather than every `dotfiles` copy.
+        for rel in CODEX_COPIES:
+            with self.subTest(rel=rel):
+                folder, name = self.project(rel)
+                self.assertTrue(self.loads(folder, name))
+                (folder / "mise.toml").write_text(
+                    (folder / "mise.toml").read_text() + "\n"
+                )
+                self.assertTrue(self.loads(folder, name))
 
     def test_a_fresh_clone_is_not_trusted_by_install_run_or_exec(self) -> None:
         folder, name = self.project(CLONE)
