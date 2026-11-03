@@ -1,0 +1,92 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Update the native agent CLIs (claude, codex, agy, opencode); install any that are missing"
+"""Each agent CLI updates itself, and mise never manages these.
+
+Only the native install path counts, so a copy elsewhere on PATH is ignored and
+`opencode upgrade` keeps detecting its curl install. Each installer is downloaded to a
+file first, so a cut-off download never runs. An OpenCode 1 install is replaced with the
+v2 installer, because its own updater stays on major version 1. A CLI that fails is
+reported as one JSON error event on stderr, the others still run, and the task exits 1.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# name: (native path under HOME, installer URL, the shell the installer is written for,
+# installer arguments, installer environment)
+AGENTS = {
+    "claude": (".local/bin/claude", "https://claude.ai/install.sh", "bash", [], {}),
+    "codex": (
+        ".local/bin/codex",
+        "https://chatgpt.com/codex/install.sh",
+        "sh",
+        [],
+        {"CODEX_NON_INTERACTIVE": "1"},
+    ),
+    "agy": (
+        ".local/bin/agy",
+        "https://antigravity.google/cli/install.sh",
+        "bash",
+        [],
+        {},
+    ),
+    "opencode": (
+        ".opencode/bin/opencode",
+        "https://opencode.ai/v2/install",
+        "bash",
+        ["--no-modify-path"],
+        {},
+    ),
+}
+
+
+def install(url: str, shell: str, args: list[str], env: dict[str, str]) -> None:
+    """Download the vendor installer to a file, then run it."""
+    with tempfile.TemporaryDirectory() as temp:
+        script = Path(temp) / "install"
+        subprocess.run(["curl", "-fsSL", "-o", str(script), url], check=True)
+        subprocess.run([shell, str(script), *args], env=os.environ | env, check=True)
+
+
+def major_version(binary: Path) -> str:
+    """`opencode --version` prints `1.19.0` or `opencode v2.2.5`; return the major number."""
+    out = subprocess.run(
+        [binary, "--version"], capture_output=True, text=True, check=True
+    )
+    words = out.stdout.split()
+    return words[-1].removeprefix("v").split(".")[0] if words else ""
+
+
+def main() -> int:
+    home = Path.home()
+    # Installers skip their own shell-profile edits when their folder is already on PATH.
+    os.environ["PATH"] = os.pathsep.join(
+        [
+            str(home / ".local/bin"),
+            str(home / ".opencode/bin"),
+            os.environ.get("PATH", ""),
+        ]
+    )
+    failed = False
+    for name, (path, url, shell, args, env) in AGENTS.items():
+        binary = home / path
+        try:
+            missing = not os.access(binary, os.X_OK)
+            if missing or (name == "opencode" and major_version(binary) == "1"):
+                install(url, shell, args, env)
+            else:
+                subprocess.run([binary, "update"], check=True)
+        # A command that could not start or exited non-zero: one CLI failed, the rest go on.
+        except (OSError, subprocess.CalledProcessError) as error:
+            event = {"event": "agent_failed", "agent": name, "error": str(error)}
+            print(json.dumps(event), file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

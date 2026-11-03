@@ -3,6 +3,7 @@
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,15 +23,21 @@ ZSH = "/bin/zsh"
 MODES = (("-c",), ("-l", "-c"), ("-i", "-c"), ("-l", "-i", "-c"))
 INTERACTIVE = MODES[2:]
 
-RETIRED_PATH = "~/.opencode/bin:~/.cache/oh-my-opencode/bin"
-INHERITED_PATH = f"{RETIRED_PATH}:/usr/bin:/bin:/usr/sbin:/sbin:{RETIRED_PATH}"
-RETIRED_ENTRY = re.compile(r"/(?:\.opencode|oh-my-opencode)(?:/|$)", re.MULTILINE)
+# What a bare spawn inherits: nothing put first, only the system folders.
+SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+RETIRED_PATH = "~/.cache/oh-my-opencode/bin"
+INHERITED_PATH = f"{RETIRED_PATH}:{SYSTEM_PATH}:{RETIRED_PATH}"
+RETIRED_ENTRY = re.compile(r"/oh-my-opencode(?:/|$)", re.MULTILINE)
 # What `mise run` and an activated venv leave first on PATH for the commands they start.
 VENV_BIN = "~/.venv/bin"
 KEG_BIN = "~/homebrew/opt/llvm/bin"
 TOOL_PATH = f"{VENV_BIN}:{KEG_BIN}:{INHERITED_PATH}"
-# What a bare spawn inherits: nothing put first, only the system folders.
-SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+# The native install, the only one `opencode upgrade` recognises.
+OPENCODE = "~/.opencode/bin/opencode"
+# The native install is a link to a real executable that every test run has, this Python, so
+# no OpenCode is needed on the host. Its `--version` output differs from mise's, so a shim that
+# ran mise instead shows.
+NATIVE_TOOL = Path(sys.executable).resolve()
 # The shims hold both too, which is how they shadow a venv and a keg.
 SHIMS = "~/.local/share/mise/shims"
 STARSHIP = shutil.which("starship")
@@ -54,6 +61,7 @@ LOGIN_FIRST = [
 ]
 LOGIN_LAST = [
     "~/.docker/bin",
+    "~/.opencode/bin",
     "~/Library/Application Support/JetBrains/Toolbox/scripts",
     "/Applications/Obsidian.app/Contents/MacOS",
     "~/.antigravity-ide/antigravity-ide/bin",
@@ -70,7 +78,10 @@ BREW_COMMAND = re.compile(
 )
 
 # Records each call, then runs the real mise. Its hooks call the real binary directly.
-REAL_MISE = shutil.which("mise")
+# On macOS `mise activate` puts the folder it was started from on PATH, so it starts from
+# a link inside the temporary HOME, never from the host's shims folder.
+REAL_MISE = Path(shutil.which("mise") or "/nonexistent/mise").resolve()
+MISE_LINK = "~/.local/libexec/mise"
 MISE = """\
 #!/bin/sh
 printf '%s %s\\n' "${MISE_ENV_CACHE:-unset}" "$*" >> "$HOME/mise-calls"
@@ -89,6 +100,8 @@ class ShellStartupTest(unittest.TestCase):
         path: str = INHERITED_PATH,
         xdg: bool = True,
         starship: bool = False,
+        opencode: bool = False,
+        stale_opencode_shim: bool = False,
     ) -> tuple[int, str, str, list[str]]:
         """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
         with tempfile.TemporaryDirectory() as temp:
@@ -101,9 +114,10 @@ class ShellStartupTest(unittest.TestCase):
             (home / ".local/share/mise/shims").mkdir(parents=True)
             (home / ".local/bin").mkdir()
             if mise:
-                (home / ".local/bin/mise").write_text(
-                    f'{MISE}exec "{REAL_MISE}" "$@"\n'
-                )
+                link = Path(MISE_LINK.replace("~", str(home)))
+                link.parent.mkdir(parents=True)
+                link.symlink_to(REAL_MISE)
+                (home / ".local/bin/mise").write_text(f'{MISE}exec "{link}" "$@"\n')
                 (home / ".local/bin/mise").chmod(0o755)
             if starship:
                 (home / ".local/bin/starship").symlink_to(STARSHIP)
@@ -111,6 +125,14 @@ class ShellStartupTest(unittest.TestCase):
                 fake = Path(tool.replace("~", str(home)))
                 fake.parent.mkdir(parents=True, exist_ok=True)
                 fake.symlink_to(shutil.which(fake.name, path="/usr/bin:/bin"))
+            native = Path(OPENCODE.replace("~", str(home)))
+            native.parent.mkdir(parents=True)
+            if opencode:
+                native.symlink_to(NATIVE_TOOL)
+            if stale_opencode_shim:
+                # What a mise install pinned by another project leaves behind: a shim, which is
+                # a link to mise, ahead of the native install on an interactive PATH.
+                (home / ".local/share/mise/shims/opencode").symlink_to(REAL_MISE)
             done = subprocess.run(
                 [ZSH, *mode, command],
                 env={
@@ -167,6 +189,26 @@ class ShellStartupTest(unittest.TestCase):
                 ]
                 self.assertEqual(order, sorted(order))
                 self.assertEqual(RETIRED_ENTRY.findall(path), [])
+
+    def test_opencode_runs_the_native_install_in_every_mode(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                self.assertEqual(
+                    self.zsh(mode, "whence -p opencode", opencode=True)[1],
+                    f"{OPENCODE}\n",
+                )
+
+    def test_a_stale_opencode_shim_still_runs_the_native_install(self) -> None:
+        # A shim with no version set runs the next opencode on PATH, so `opencode upgrade`
+        # still sees its own path. Interactive modes put the shims folder first.
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                command = f"opencode --version; {OPENCODE} --version"
+                out = self.zsh(mode, command, opencode=True, stale_opencode_shim=True)[
+                    1
+                ].splitlines()
+                self.assertEqual(len(out), 2, out)
+                self.assertEqual(out[0], out[1])
 
     def test_login_shells_reorder_and_others_keep_inherited_tools_first(self) -> None:
         print_path = "print -rl -- $path"
@@ -252,7 +294,9 @@ class ShellStartupTest(unittest.TestCase):
         self.assertIsNotNone(STARSHIP, "starship must be on PATH")
         for mode in INTERACTIVE:
             with self.subTest(mode=mode):
-                code, out, err, _ = self.zsh(mode, "print -r -- $STARSHIP_SHELL", starship=True)
+                code, out, err, _ = self.zsh(
+                    mode, "print -r -- $STARSHIP_SHELL", starship=True
+                )
                 self.assertEqual((code, out, err), (0, "zsh\n", ""))
 
     def test_drop_ins_load_and_no_claude_mem_alias(self) -> None:

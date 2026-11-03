@@ -2,13 +2,13 @@
 typeset -U path
 # Remove retired managers and ambient Homebrew build-tool paths.
 path=("${(@)path:#$HOME/.cache/oh-my-opencode/bin}")
-path=("${(@)path:#$HOME/.opencode/bin}")
 path=("${(@)path:#/usr/local/Homebrew/*}")
 path=("${(@)path:#/usr/local/opt/*}")
 _inherited=("${(@)path[1,${path[(i)(/usr/bin|/bin|/usr/sbin|/sbin)]}-1]}")
 path=("$XDG_DATA_HOME/mise/shims" "$HOME/.local/bin" /usr/local/share/mise/shims
       /opt/homebrew/bin /opt/homebrew/sbin /usr/bin /bin /usr/sbin /sbin $path
       "$HOME/.docker/bin"
+      "$HOME/.opencode/bin"
       "$HOME/Library/Application Support/JetBrains/Toolbox/scripts"
       /Applications/Obsidian.app/Contents/MacOS
       "$HOME/.antigravity-ide/antigravity-ide/bin")

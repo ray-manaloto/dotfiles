@@ -33,13 +33,13 @@ lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
-disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "npm:@openai/codex", "aqua:openai/codex", "codex", "claude-code", "npm:@anthropic-ai/claude-code", "github:anthropics/claude-code"]
-# claude/codex/agy are native-installer-only (Ray, 2026-10-01). `disable_tools` above is REPLACED by any
+disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "npm:@openai/codex", "aqua:openai/codex", "codex", "claude-code", "npm:@anthropic-ai/claude-code", "github:anthropics/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode"]
+# claude/codex/agy/opencode are native-installer-only (Ray, 2026-10-01; opencode 2026-11-02). `disable_tools` above is REPLACED by any
 # project's own list, so a stale worktree pinning one of them still auto-installed it (dag-tick launchd job,
 # `mise exec` in a pytest gate). This key is NOT overridden by any tracked project and blocks auto-install on
 # `mise exec`/`mise run`; it does not block an explicit `mise install <tool>`. Match is literal to the config
 # key, so every spelling is listed. Never use MISE_DISABLE_TOOLS for this: it replaces project lists.
-auto_install_disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "codex", "aqua:openai/codex", "npm:@openai/codex", "claude-code", "github:anthropics/claude-code", "npm:@anthropic-ai/claude-code"]
+auto_install_disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "codex", "aqua:openai/codex", "npm:@openai/codex", "claude-code", "github:anthropics/claude-code", "npm:@anthropic-ai/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode"]
 pin = true
 install_layout = "identity"
 
@@ -47,7 +47,7 @@ install_layout = "identity"
 auto = true
 check_duration = "1h"
 
-#minimum_release_age_excludes = ["pipx:langgraph-cli", "pipx:specify-cli", "npm:oh-my-codex", "npm:skills", "npm:renovate", "rumdl", "opencode", "docker-cli", "gemini", "npm:agent-browser", "npm:portless", "github:DopplerHQ/cli", "github:docker/docker-agent", "bats", "pipx:datamodel-code-generator", "pipx:notebooklm-py", "herdr"]
+#minimum_release_age_excludes = ["pipx:langgraph-cli", "pipx:specify-cli", "npm:oh-my-codex", "npm:skills", "npm:renovate", "rumdl", "docker-cli", "gemini", "npm:agent-browser", "npm:portless", "github:DopplerHQ/cli", "github:docker/docker-agent", "bats", "pipx:datamodel-code-generator", "pipx:notebooklm-py", "herdr"]
 [settings.go]
 set_gobin = false
 
@@ -178,7 +178,6 @@ xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
 bats = { version = "1.14.0", minimum_release_age = "0s" }
 "github:charmbracelet/gum" = { version = "2.0.2", minimum_release_age = "0s" }
 gemini = { version = "0.66.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
-#"npm:@opencode/cli" = { version = "2.1.0", bun_args = "--trust", minimum_release_age = "0s" }
 "npm:@modelcontextprotocol/inspector" = { version = "2.13.0", minimum_release_age = "0s" }
 "npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s" }
 "npm:jscpd" = { version = "5.4.2", minimum_release_age = "0s" }
@@ -516,7 +515,7 @@ description = "structured, read-only: what is outdated? (exit 1 if anything is)"
 # Cheap enough to run any time — nothing is installed or upgraded. Every source is
 # printed AND gated, which is the fix made 2026-08-24: `mise upgrade --dry-run-code`
 # exits 1 on mise drift, but `brew outdated` and `mise outdated` only ever PRINT, so
-# the task reported rc=0 — "in sync" — with libksba and opencode-desktop both
+# the task reported rc=0 — "in sync" — with libksba and a cask both
 # outdated, while the description above promised exit 1. `jq` is pinned above, so the
 # emptiness tests read the STRUCTURE rather than grepping for a substring.
 #
