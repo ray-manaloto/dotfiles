@@ -47,3 +47,17 @@ def test_a_linked_worktree_sees_both_files(
         str((repo / LOCAL).resolve()),
         None,
     ]
+
+
+def test_a_bare_repository_checks_its_worktree(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    add(repo, {"a": "a"})
+    subprocess.run(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "a"], check=True)
+    bare = repo.parent / "bare.git"
+    subprocess.run(["git", "clone", "-q", "--bare", repo, bare], check=True)
+    linked = repo.parent / "linked"
+    subprocess.run(["git", "-C", bare, "worktree", "add", "-q", linked], check=True)
+    write(linked, {LOCAL: "{}"})
+    monkeypatch.chdir(linked)
+    assert [line.get("path") for line in report(capsys, "settings-local")] == [str((linked / LOCAL).resolve()), None]

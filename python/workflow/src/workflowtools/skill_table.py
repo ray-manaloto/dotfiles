@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .frontmatter import header
-from .git import git, top
+from .git import main_checkout, top
 from .models import Check, Finding, InstalledPlugins, PluginManifest, PluginRecord, Skipped
 
 TABLE = "docs/workflow/skills.md"
@@ -18,7 +18,7 @@ def installed() -> PluginRecord | None:
     records = Path.home() / ".claude/plugins/installed_plugins.json"
     if not records.is_file():
         return None
-    project = Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()).parent.resolve()
+    project = main_checkout().resolve()
     plugins = InstalledPlugins.model_validate_json(records.read_text()).plugins
     return next(
         (r for r in plugins.get(PLUGIN, []) if r.project_path and Path(r.project_path).resolve() == project),

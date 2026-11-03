@@ -39,7 +39,8 @@ def problem(path: str, text: str) -> str | None:
                 return "okf concept file has no frontmatter block"
             OkfFrontmatter.model_validate(data)
         elif name.endswith((".yml", ".yaml")):
-            yaml.safe_load(text)
+            # A file may hold several --- separated documents (a Kubernetes manifest); parse them all.
+            list(yaml.safe_load_all(text))
     except ValidationError as error:
         return "; ".join(f"frontmatter {'.'.join(map(str, e['loc'])) or 'block'}: {e['msg']}" for e in error.errors())
     # YAMLError is not a ValueError; ValueError here is the unterminated block.

@@ -47,6 +47,12 @@ class Listing(StrEnum):
     open = "open"
 
 
+type Feature = Annotated[str, Field(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
+"""
+Only this feature folder under .scratch
+"""
+
+
 class Tickets(BaseModel):
     """
     Check every ticket under .scratch against the status table in docs/agents/issue-tracker.md.
@@ -60,7 +66,7 @@ class Tickets(BaseModel):
     """
     After a clean check, print the tickets ready to start (frontier) or not yet finished (open)
     """
-    feature: str | None = None
+    feature: Feature | None = None
     """
     Only this feature folder under .scratch
     """

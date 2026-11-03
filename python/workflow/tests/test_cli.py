@@ -32,6 +32,11 @@ def test_a_bad_listing_is_a_failure(capsys: pytest.CaptureFixture[str]) -> None:
     assert "listing" in failure(capsys, ["tickets", "--listing", "all"])
 
 
+@pytest.mark.parametrize("feature", ["..", "../x", "*", "a/b"])
+def test_a_feature_must_be_one_folder_name(capsys: pytest.CaptureFixture[str], feature: str) -> None:
+    assert "feature" in failure(capsys, ["tickets", "--feature", feature])
+
+
 def test_outside_a_repository_git_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

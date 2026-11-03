@@ -25,6 +25,7 @@ def test_good_files_pass(repo: Path, capsys: pytest.CaptureFixture[str]) -> None
             "README.md": "no block\n",
             "a.yml": "key: value\n",
             "b.yaml": "- one\n",
+            "k8s.yaml": "kind: A\n---\nkind: B\n",
         },
     )
     assert report(capsys, "frontmatter") == [{"exit": "0"}]
