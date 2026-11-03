@@ -15,6 +15,12 @@
 !/tests/
 !/typescript/
 !/unix/
+# Only the project's /verify skill; settings.local.json and anything else under .claude stay out.
+!/.claude/
+/.claude/*
+!/.claude/skills/
+/.claude/skills/*
+!/.claude/skills/verify/
 
 # Build and environment outputs inside the allowed roots.
 /cpp/build/
