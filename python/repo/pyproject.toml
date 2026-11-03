@@ -31,6 +31,9 @@ testpaths = ["tests"]
 # Measure the console script the tests run as a real process, too.
 [tool.coverage.run]
 patch = ["subprocess"]
+# A killed run leaves its subprocesses' .coverage.* files; parallel makes the next run erase them
+# at start (Coverage.erase) instead of combining their stale lines into its report.
+parallel = true
 
 # tests/test_gates.py runs the gates through mise in a copy of the checkout, whose venv imports
 # repotools from the copy's src; combining maps those lines back onto this src.
