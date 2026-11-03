@@ -13,6 +13,52 @@ class Command(StrEnum):
     pane_fingerprint = "pane-fingerprint"
     pane_pin = "pane-pin"
     pane_approved = "pane-approved"
+    zero_bash = "zero-bash"
+
+
+class ZeroBash(BaseModel):
+    """
+    Report tracked shell scripts, shell shebangs and multi-line mise run.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    strict: bool = False
+    """
+    Exit 1 when anything is left
+    """
+
+
+class Rule(StrEnum):
+    """
+    What a zero-bash finding breaks.
+    """
+
+    shell_file = "shell-file"
+    shell_shebang = "shell-shebang"
+    multi_line_run = "multi-line-run"
+
+
+class Finding(BaseModel):
+    """
+    One zero-bash leftover, printed as a JSON line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    path: str
+    """
+    Tracked file, relative to the repository root
+    """
+    rule: Rule
+    detail: str
+    """
+    The file suffix, the shebang, or the TOML key of the run
+    """
 
 
 class NoOptions(BaseModel):
@@ -263,6 +309,8 @@ class Repotools(BaseModel):
     command: Command | None = None
     no_options: NoOptions | None = None
     pane_pin: PanePin | None = None
+    zero_bash: ZeroBash | None = None
+    finding: Finding | None = None
     fingerprint: Fingerprint | None = None
     rollout_line: RolloutLine | None = None
     session_meta: SessionMeta | None = None

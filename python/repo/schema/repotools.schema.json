@@ -8,7 +8,31 @@
     "Command": {
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
-      "enum": ["pane-fingerprint", "pane-pin", "pane-approved"]
+      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "zero-bash"]
+    },
+    "ZeroBash": {
+      "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
+      "type": "object",
+      "properties": {
+        "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" }
+      },
+      "additionalProperties": false
+    },
+    "Rule": {
+      "description": "What a zero-bash finding breaks.",
+      "type": "string",
+      "enum": ["shell-file", "shell-shebang", "multi-line-run"]
+    },
+    "Finding": {
+      "description": "One zero-bash leftover, printed as a JSON line.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Tracked file, relative to the repository root" },
+        "rule": { "$ref": "#/$defs/Rule" },
+        "detail": { "type": "string", "description": "The file suffix, the shebang, or the TOML key of the run" }
+      },
+      "required": ["path", "rule", "detail"],
+      "additionalProperties": false
     },
     "NoOptions": {
       "description": "A subcommand that takes no options.",
@@ -138,6 +162,8 @@
     "command": { "$ref": "#/$defs/Command" },
     "no_options": { "$ref": "#/$defs/NoOptions" },
     "pane_pin": { "$ref": "#/$defs/PanePin" },
+    "zero_bash": { "$ref": "#/$defs/ZeroBash" },
+    "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
     "rollout_line": { "$ref": "#/$defs/RolloutLine" },
     "session_meta": { "$ref": "#/$defs/SessionMeta" },

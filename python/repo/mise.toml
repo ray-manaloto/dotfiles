@@ -25,6 +25,13 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = "uv run --project python/repo --locked repotools pane-approved"
 
+[tasks.zero-bash]
+description = "Report tracked shell scripts, shell shebangs and multi-line mise run; --strict fails on any"
+usage = 'flag "--strict" help="Exit 1 when anything is left"'
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools zero-bash ${usage_strict:+--strict}'
+
 # Development: uv runs only through these tasks.
 [tasks.sync]
 description = "Install the locked dependencies into .venv"
