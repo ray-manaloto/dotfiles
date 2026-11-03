@@ -9,7 +9,7 @@ v2 installer, because its own updater stays on major version 1. Each download an
 command gets AGENTS_UPDATE_TIMEOUT seconds (default 600), including any time a prompt
 waits for an answer, after which it is stopped with every process it started. A CLI that
 fails or times out is reported as one JSON error event on stderr, the others still run,
-and the task exits 1.
+and the task exits 1. Ctrl-C cancels the whole run.
 """
 
 import contextlib
@@ -107,6 +107,9 @@ def run(
         if tty is not None:
             give_terminal(tty, os.getpgrp())
             os.close(tty)
+    # Ctrl-C reaches only the group holding the terminal; it cancels the whole run.
+    if process.returncode in (-signal.SIGINT, 128 + signal.SIGINT):
+        raise KeyboardInterrupt
     if process.returncode:
         raise subprocess.CalledProcessError(process.returncode, argv, out)
     return out or ""
@@ -146,6 +149,11 @@ def main() -> int:
                 install(url, shell, args, env)
             else:
                 run([binary, "update"])
+        # Ctrl-C: stop here, so no later CLI changes.
+        except KeyboardInterrupt:
+            event = {"event": "agents_update_cancelled", "agent": name}
+            print(json.dumps(event), file=sys.stderr)
+            return 128 + signal.SIGINT
         # A command that could not start, exited non-zero or ran past TIMEOUT: one CLI
         # failed, the rest go on.
         except (

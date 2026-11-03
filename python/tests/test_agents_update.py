@@ -3,12 +3,14 @@
 # curl and the four agent CLIs are stand-ins (networked tools), so no agent CLI on the host is
 # used and nothing is downloaded.
 
+import contextlib
 import errno
 import json
 import os
 import pty
 import select
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -182,7 +184,14 @@ class AgentsUpdateTest(unittest.TestCase):
                 MISE, [MISE, "run", "agents:update"], self.environment(home, stubs)
             )
         seen, answered, end = b"", 0, time.monotonic() + 60
-        while time.monotonic() < end:
+        while True:
+            if time.monotonic() > end:
+                # pty.fork made the child a session and group leader: end it all, then fail.
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(pid, signal.SIGKILL)
+                os.close(terminal)
+                os.waitpid(pid, 0)
+                self.fail(f"agents:update still running after 60 s: {seen!r}")
             ready, _, _ = select.select([terminal], [], [], 1)
             try:
                 chunk = os.read(terminal, 4096) if ready else b""
@@ -290,6 +299,15 @@ class AgentsUpdateTest(unittest.TestCase):
         self.assertEqual(
             (code, calls), (0, ["claude update answered y", *UPDATES[1:]]), out
         )
+
+    def test_ctrl_c_at_a_prompt_cancels_the_whole_run(self) -> None:
+        # Ctrl-C reaches only the updater holding the terminal; no later CLI may change.
+        code, calls, out = self.run_task(
+            tuple(NATIVE.values()), versions={CLAUDE: "ask"}, answer="\x03"
+        )
+        self.assertNotEqual(code, 0, out)
+        self.assertEqual(calls, [], out)
+        self.assertIn('{"event": "agents_update_cancelled", "agent": "claude"}', out)
 
     def test_in_a_terminal_a_stalled_update_times_out_and_the_others_still_run(
         self,
