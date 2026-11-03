@@ -222,13 +222,17 @@ class FileSystem(BaseModel):
 
 class PermissionProfile(BaseModel):
     """
-    A turn's effective permissions.
+    A turn's effective permissions; only a managed profile lists its filesystem access.
     """
 
     model_config = ConfigDict(
         frozen=True,
     )
-    file_system: FileSystem
+    type: str
+    """
+    managed, disabled (no sandbox) or external
+    """
+    file_system: FileSystem | None = None
 
 
 class TurnContext(BaseModel):

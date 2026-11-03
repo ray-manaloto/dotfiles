@@ -36,8 +36,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `mise run //repo:pane-fingerprint <message file>` and commit with `git commit -F <message file>`.
   The reviewer's last final answer must end with the line `PANE-APPROVE <fingerprint>`. Any later
   final answer withdraws it, so ask for nothing after it. A new commit, a changed index or a changed
-  message voids it. This is a local record: the pin and Codex's session log are plain files that
-  anyone running as this user can edit, so it catches mistakes, not a forger.
+  message voids it. Resume the reviewer with `codex resume <id> -s read-only`: a plain resume runs
+  under the global config, full access here, and only a read-only last turn approves. This is a
+  local record: the pin and Codex's session log are plain files that anyone running as this user
+  can edit, so it catches mistakes, not a forger.
 - Open a pull request only with `mise run //repo:pr-create <title> <body file>`, after the reviewer
   approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
   bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
