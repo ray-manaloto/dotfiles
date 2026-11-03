@@ -3,6 +3,8 @@
   "permissions": {
     "ask": [
       "Bash(gh pr create *)",
+      "Bash(mise run //repo:pr-create *)",
+      "Bash(mise run //python/repo:pr-create *)",
       "Bash(gh pr edit *)",
       "Bash(gh pr comment *)",
       "Bash(gh pr review *)",

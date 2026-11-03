@@ -42,7 +42,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
   bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
   text. This is a rule, not a lock: `.claude/settings.json` makes Claude ask the owner before
-  `gh pr` and `gh issue` writes, but the web UI and other clients can still publish anything.
+  `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
+  publish anything.
 - This repo is public and the approval is its leak check. Before approving, the reviewer reads the
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
