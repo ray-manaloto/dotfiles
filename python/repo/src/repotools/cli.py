@@ -13,6 +13,7 @@ from .models import (
     Failure,
     Fingerprint,
     MainGuard,
+    MainGuardArmed,
     MainGuardInstall,
     MainGuardRemove,
     Options,
@@ -32,6 +33,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard: MainGuard,
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
+    Command.main_guard_armed: MainGuardArmed,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -59,12 +61,8 @@ def run(command: Command, options: Options) -> None:
         sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
         if options.strict and found:
             raise SystemExit(1)
-    elif isinstance(options, MainGuard):
-        main_guard.run()
-    elif isinstance(options, MainGuardInstall):
-        main_guard.install(options)
-    elif isinstance(options, MainGuardRemove):
-        main_guard.remove()
+    elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
+        main_guard.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:

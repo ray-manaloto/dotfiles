@@ -219,3 +219,79 @@ def test_an_origin_main_with_other_guard_source_warns_and_still_fast_forwards(or
     done = git("merge", "-q", "--ff-only", "origin/main")
     assert done.returncode == 0, done.stderr
     assert "installed copy" not in done.stderr
+
+
+def armed() -> int:
+    """1 when main-guard-armed tells hk's post-merge step to install, 0 when there is nothing to do."""
+    done = subprocess.run([SCRIPT, "main-guard-armed"], capture_output=True, check=False, text=True)
+    assert (done.returncode, done.stderr) == (0, "")
+    return {"": 0, "install\n": 1}[done.stdout]
+
+
+@pytest.mark.usefixtures("clone")
+def test_post_merge_installs_only_on_main_and_only_what_is_missing() -> None:
+    assert armed() == 0  # Installed from HEAD's tree already.
+    ok("config", "--local", "--remove-section", "hook.main-guard")
+    assert armed() == 1  # Never installed, as on the first fast-forward that brings the guard.
+    ok("checkout", "-q", "feature")
+    assert armed() == 0  # A feature branch's code is never installed.
+
+
+@pytest.mark.usefixtures("clone")
+def test_a_fast_forward_to_a_newer_guard_source_asks_for_a_reinstall(origin: Path) -> None:
+    (origin / "python" / "repo").mkdir(parents=True)
+    (origin / "python" / "repo" / "guard.py").write_text("two\n")
+    ok("add", ".", cwd=origin)
+    ok("commit", "-q", "-m", "guard fix", cwd=origin)
+    ok("fetch", "-q")
+    ok("merge", "-q", "--ff-only", "origin/main")
+    assert armed() == 1
+    main(["main-guard-install", "--bin", SCRIPT])
+    assert armed() == 0
+
+
+@pytest.mark.usefixtures("clone")
+def test_a_guard_the_owner_removed_stays_off_until_installed_again() -> None:
+    main(["main-guard-remove"])
+    assert ok("config", "--local", "--get", main_guard.OFF) == "true"
+    assert armed() == 0
+    main(["main-guard-install", "--bin", SCRIPT])
+    assert git("config", "--local", "--get", main_guard.OFF).returncode == 1
+    assert armed() == 0
+
+
+@pytest.mark.usefixtures("clone")
+def test_post_merge_installs_nothing_but_origin_main_as_committed(clone: Path) -> None:
+    ok("config", "--local", "--remove-section", "hook.main-guard")
+    assert armed() == 1
+    (clone / "python" / "repo").mkdir(parents=True)
+    (clone / "python" / "repo" / "local.py").write_text("unreviewed\n")
+    assert armed() == 0  # A local change under python/repo.
+    ok("add", ".")
+    ok("commit", "-q", "-m", "local")
+    assert armed() == 0  # main ahead of origin/main.
+
+
+def arm_task(clone: Path, **env: str) -> subprocess.CompletedProcess[str]:
+    """The real //repo:main-guard-arm, pointed at the clone, with scratch uv tool folders."""
+    tools = clone.parent / "uv"
+    scratch = {"UV_TOOL_DIR": str(tools / "tools"), "UV_TOOL_BIN_DIR": str(tools / "bin")}
+    where = {"GIT_DIR": str(clone / ".git"), "GIT_WORK_TREE": str(clone)}
+    mise = shutil.which("mise")
+    assert mise is not None, "the global mise config installs mise"
+    run = [mise, "run", "//repo:main-guard-arm"]
+    full = {**os.environ, **scratch, **where, **env}
+    return subprocess.run(run, cwd=CHECKOUT, env=full, capture_output=True, check=False, text=True)
+
+
+def test_the_arm_task_installs_when_due_and_never_after_a_failing_check(clone: Path) -> None:
+    ok("config", "--local", "--remove-section", "hook.main-guard")
+    (clone.parent / "bad-index").write_text("not an index\n")
+    failed = arm_task(clone, GIT_INDEX_FILE=str(clone.parent / "bad-index"))
+    assert failed.returncode != 0
+    assert not (clone.parent / "uv").exists()  # The copy task never ran.
+    assert git("config", "--local", "--get", "hook.main-guard.command").returncode == 1
+    done = arm_task(clone)
+    assert done.returncode == 0, done.stderr
+    assert str(clone.parent / "uv" / "bin" / "repotools") in ok("config", "--local", "--get", "hook.main-guard.command")
+    assert armed() == 0

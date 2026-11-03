@@ -12,12 +12,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .models import MainGuardInstall
+from .models import MainGuard, MainGuardArmed, MainGuardInstall, MainGuardRemove
 
 MAIN = "refs/heads/main"
 ORIGIN = "refs/remotes/origin/main"
 SECTION = "hook.main-guard"
 SOURCE = "python/repo"  # The package the install task copies; its tree id says which guard is installed.
+OFF = "repotools.main-guard-off"  # Outside the hook section: main-guard-remove keeps it, so post-merge does not re-arm.
 REPAIR = "mise run //repo:main-guard-install, or mise run //repo:main-guard-remove to switch the guard off"
 
 
@@ -82,11 +83,25 @@ def install(options: MainGuardInstall) -> None:
     git("config", "--local", f"{SECTION}.command", command(options.bin))
     # The guard's source as HEAD has it: a later move of main to an origin/main with another one warns.
     git("config", "--local", f"{SECTION}.source", resolve(f"HEAD:{SOURCE}") or "none")
+    if resolve_config(OFF) is not None:
+        git("config", "--local", "--unset-all", OFF)
 
 
 def remove() -> None:
     if resolve_config(f"{SECTION}.command") is not None:
         git("config", "--local", "--remove-section", SECTION)
+    git("config", "--local", OFF, "true")
+
+
+def armed() -> bool:
+    """Whether hk's post-merge step has nothing to install. Only origin/main's reviewed code is ever installed:
+    main checked out at origin/main's commit, with no local change under python/repo."""
+    head = subprocess.run(["git", "symbolic-ref", "--quiet", "HEAD"], capture_output=True, check=False, text=True)
+    reviewed = head.stdout.strip() == MAIN and resolve("HEAD") == resolve(f"{ORIGIN}^{{commit}}")
+    if not reviewed or resolve_config(OFF) == "true" or git("status", "--porcelain", "--", SOURCE):
+        return True
+    installed = resolve_config(f"{SECTION}.source") if resolve_config(f"{SECTION}.command") is not None else None
+    return installed == (resolve(f"HEAD:{SOURCE}") or "none")
 
 
 def resolve_config(key: str) -> str | None:
@@ -99,9 +114,26 @@ def stale() -> None:
     installed = resolve_config(f"{SECTION}.source")
     current = resolve(f"{ORIGIN}:{SOURCE}")
     if installed is not None and current is not None and installed != current:
-        sys.stderr.write(f"main guard: the installed copy is not origin/main's {SOURCE}; update it with {REPAIR}\n")
+        sys.stderr.write(
+            f"main guard: the installed copy is not origin/main's {SOURCE}; hk's post-merge step updates it "
+            f"after a fast-forward of main, or update it with {REPAIR}\n"
+        )
 
 
 def run() -> None:
     stale()
     check(sys.stdin.read())
+
+
+def dispatch(options: MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed) -> None:
+    match options:
+        case MainGuardInstall():
+            install(options)
+        case MainGuardRemove():
+            remove()
+        case MainGuardArmed():
+            # Printed, not an exit status: a failing check must never read as "install".
+            if not armed():
+                sys.stdout.write("install\n")
+        case _:  # MainGuard: the hook itself.
+            run()

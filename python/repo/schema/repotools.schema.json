@@ -8,7 +8,7 @@
     "Command": {
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
-      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash", "main-guard", "main-guard-install", "main-guard-remove"]
+      "enum": ["pane-fingerprint", "pane-pin", "pane-approved", "pr-fingerprint", "pr-approved", "pr-create", "zero-bash", "main-guard", "main-guard-install", "main-guard-remove", "main-guard-armed"]
     },
     "ZeroBash": {
       "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
@@ -34,7 +34,13 @@
       "additionalProperties": false
     },
     "MainGuardRemove": {
-      "description": "Remove the main guard's hook entry from this repository's config.",
+      "description": "Remove the main guard's hook entry from this repository's config and record that the owner switched it off.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "MainGuardArmed": {
+      "description": "Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -96,7 +102,8 @@
         { "$ref": "#/$defs/ZeroBash" },
         { "$ref": "#/$defs/MainGuard" },
         { "$ref": "#/$defs/MainGuardInstall" },
-        { "$ref": "#/$defs/MainGuardRemove" }
+        { "$ref": "#/$defs/MainGuardRemove" },
+        { "$ref": "#/$defs/MainGuardArmed" }
       ]
     },
     "Fingerprint": {
@@ -217,6 +224,7 @@
     "main_guard": { "$ref": "#/$defs/MainGuard" },
     "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
     "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
+    "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

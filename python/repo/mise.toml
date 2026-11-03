@@ -68,8 +68,17 @@ depends = ["main-guard-copy"]
 dir = "{{ config_root }}/../.."
 run = '"$(uv tool dir --bin)/repotools" main-guard-install --bin "$(uv tool dir --bin)/repotools"'
 
+# hk's post-merge step: the fast-forward that brings a guard to main installs it, and a newer one refreshes it.
+# Git ignores post-merge's status, so a failed install never blocks the merge; the next one retries.
+# Only a check that succeeds and prints install installs: a failing check fails the step and installs nothing.
+[tasks.main-guard-arm]
+description = "On main, install the main guard unless it is HEAD's already or the owner switched it off"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'r=$(uv run --project python/repo --locked repotools main-guard-armed) && { test "$r" != install || mise run //repo:main-guard-install; }'
+
 [tasks.main-guard-remove]
-description = "Remove the main guard's hook entry from this repository's config"
+description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools main-guard-remove'

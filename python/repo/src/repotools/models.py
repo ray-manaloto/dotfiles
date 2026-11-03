@@ -20,6 +20,7 @@ class Command(StrEnum):
     main_guard = "main-guard"
     main_guard_install = "main-guard-install"
     main_guard_remove = "main-guard-remove"
+    main_guard_armed = "main-guard-armed"
 
 
 class ZeroBash(BaseModel):
@@ -65,7 +66,18 @@ class MainGuardInstall(BaseModel):
 
 class MainGuardRemove(BaseModel):
     """
-    Remove the main guard's hook entry from this repository's config.
+    Remove the main guard's hook entry from this repository's config and record that the owner switched it off.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class MainGuardArmed(BaseModel):
+    """
+    Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.
     """
 
     model_config = ConfigDict(
@@ -153,7 +165,9 @@ class PanePin(BaseModel):
     """
 
 
-type Options = CommitText | PrText | PanePin | ZeroBash | MainGuard | MainGuardInstall | MainGuardRemove
+type Options = (
+    CommitText | PrText | PanePin | ZeroBash | MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed
+)
 """
 What a repotools command parses from its arguments.
 """
@@ -390,6 +404,7 @@ class Repotools(BaseModel):
     main_guard: MainGuard | None = None
     main_guard_install: MainGuardInstall | None = None
     main_guard_remove: MainGuardRemove | None = None
+    main_guard_armed: MainGuardArmed | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

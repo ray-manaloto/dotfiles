@@ -62,6 +62,14 @@ hooks {
             }
         }
     }
+    // AGENTS.md main guard: a fast-forward of main to a new guard source installs it (//repo:main-guard-arm).
+    ["post-merge"] {
+        steps {
+            ["main-guard"] {
+                check = "mise run //repo:main-guard-arm"
+            }
+        }
+    }
     ["check"] {
         steps = linters
     }
