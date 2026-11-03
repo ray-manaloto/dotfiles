@@ -83,6 +83,14 @@ def install(options: MainGuardInstall) -> None:
     git("config", "--local", f"{SECTION}.command", command(options.bin))
     # The guard's source as HEAD has it: a later move of main to an origin/main with another one warns.
     git("config", "--local", f"{SECTION}.source", resolve(f"HEAD:{SOURCE}") or "none")
+    # git runs config hooks only if it knows them (an older git does not) and none is disabled through
+    # hook.main-guard.enabled or hook.reference-transaction.enabled: then git hook list prints the bare name.
+    event = ["git", "hook", "list", "reference-transaction"]
+    listed = subprocess.run(event, capture_output=True, check=False, text=True).stdout
+    if "main-guard" not in listed.splitlines():
+        git("config", "--local", "--remove-section", SECTION)
+        msg = f"git will not run {SECTION} ({' '.join(event)}: {listed.strip() or 'none'})"
+        raise ValueError(msg)
     if resolve_config(OFF) is not None:
         git("config", "--local", "--unset-all", OFF)
 

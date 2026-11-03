@@ -295,3 +295,14 @@ def test_the_arm_task_installs_when_due_and_never_after_a_failing_check(clone: P
     assert done.returncode == 0, done.stderr
     assert str(clone.parent / "uv" / "bin" / "repotools") in ok("config", "--local", "--get", "hook.main-guard.command")
     assert armed() == 0
+
+
+@pytest.mark.usefixtures("clone")
+def test_an_install_that_git_would_not_run_registers_nothing(capsys: pytest.CaptureFixture[str]) -> None:
+    main(["main-guard-remove"])
+    ok("config", "--local", "hook.reference-transaction.enabled", "false")
+    with pytest.raises(SystemExit):
+        main(["main-guard-install", "--bin", SCRIPT])
+    assert "git will not run hook.main-guard" in json.loads(capsys.readouterr().err)["error"]
+    assert git("config", "--local", "--get", "hook.main-guard.command").returncode == 1
+    assert armed() == 0  # Still switched off by the remove: post-merge leaves it so.
