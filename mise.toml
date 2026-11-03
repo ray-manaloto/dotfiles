@@ -109,12 +109,13 @@ fi
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
-# Both files are not this repo's, so only this block is managed. Other repos get the rule from here.
+# Both files are not this repo's, so only this block is managed. Other repos get the rule from here,
+# until ~/.claude/CLAUDE.md imports the shared ~/.config/agents/AGENTS.md and the rule moves there.
 "~/.codex/AGENTS.md/hc-codex" = { block = '''
-Start Codex under hc with `hc run --bg --name <name> codex-hc "<task>"`: `hc run codex` has no keys and no `--no-daemon`.
+Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: plain `codex` has no keys and no `--no-daemon`. `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
 ''' }
 "~/.claude/CLAUDE.md/hc-codex" = { block = '''
-Start Codex under hc with `hc run --bg --name <name> codex-hc "<task>"`: `hc run codex` has no keys and no `--no-daemon`.
+Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: plain `codex` has no keys and no `--no-daemon`. `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
 ''' }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
