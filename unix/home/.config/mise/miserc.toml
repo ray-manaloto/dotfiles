@@ -1,0 +1,44 @@
+#:schema https://mise.jdx.dev/schema/miserc.json
+# Read before config.toml. mise never loads a config under these folders, so their env, hooks and
+# tasks never run, and shims there use the global tools. This list wins over trusted_config_paths
+# in config.toml. A later miserc.local.toml with its own list replaces this one instead of adding
+# to it, so keep every entry here.
+ignored_config_paths = [
+  # Retired: it still pins OpenCode 1, and so do its Codex worktrees.
+  "~/dev/github/ray-manaloto/dotfiles-legacy",
+  "~/.codex/worktrees/*/dotfiles",
+  # Source mirrors kept for reading.
+  "~/dev/github/ray-manaloto/claude-code-marketplace/offline",
+  # Third-party clones, one folder per GitHub owner. A clone under a new owner stays untrusted
+  # (mise refuses it) until it is listed here or approved with `mise trust`.
+  "~/dev/github/agentic-flow-test",
+  "~/dev/github/aminya",
+  "~/dev/github/anthropics",
+  "~/dev/github/archon",
+  "~/dev/github/astral-sh",
+  "~/dev/github/aubepkg",
+  "~/dev/github/ccm-help",
+  "~/dev/github/CoderLuii",
+  "~/dev/github/facebookresearch",
+  "~/dev/github/fanvanzh",
+  "~/dev/github/guilde-lite",
+  "~/dev/github/ivy",
+  "~/dev/github/jdx",
+  "~/dev/github/langchain-ai",
+  "~/dev/github/LucaZugic",
+  "~/dev/github/martinemde",
+  "~/dev/github/mdx-js",
+  "~/dev/github/microsoft",
+  "~/dev/github/mikeyobrien",
+  "~/dev/github/openai",
+  "~/dev/github/oven-sh",
+  "~/dev/github/ray-manloto",
+  "~/dev/github/rio",
+  "~/dev/github/risu729",
+  "~/dev/github/safishamsi",
+  "~/dev/github/Skoma93",
+  "~/dev/github/sortakool",
+  "~/dev/github/tastyworks",
+  "~/dev/github/ultraworkers",
+  "~/dev/github/Vitorian",
+]

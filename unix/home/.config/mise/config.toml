@@ -17,9 +17,17 @@ github.credential_command = "gh auth token"
 experimental = true
 #verbose = true
 activate_aggressive = true
-# ipruning pattern: trust by path only where configs are created. The temp roots stay because test
-# harnesses and agent scratch dirs create mise configs there (590 tracked under /private/var/folders).
-trusted_config_paths = ["~/dev", "~/.config/mise", "~/.codex/worktrees", "~/.claude", "~/.gemini", "/private/var/folders", "/private/tmp"]
+# Your own repos load by path; any other repo runs no mise config until you approve it. Without
+# paranoid config mode, `mise install`, `mise run` and `mise exec` in a fresh clone trust it on the
+# spot and run its env, hooks and tasks. With it, they exit 1 until `mise trust`, that approval is
+# tied to the file's contents (an edit needs approval again), and worktrees outside the trusted
+# folder do not inherit it. Reading trees (third-party clones, mirrors, retired checkouts) are in
+# miserc.toml's ignored_config_paths, which wins over this list, so their configs never load and
+# shims there keep working. The global git hooks run `mise x hk`, so `git commit` in an unapproved
+# clone with a mise.toml fails until `mise trust` (or `HK=0`). Test harnesses that make configs in temporary folders set
+# MISE_TRUSTED_CONFIG_PATHS for their run. python/tests/test_mise_trust.py checks all of this.
+paranoid = ["config"]
+trusted_config_paths = ["~/.config/mise", "~/dev/github/ray-manaloto"]
 minimum_release_age = "0s"
 lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.
