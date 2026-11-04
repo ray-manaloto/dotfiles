@@ -394,11 +394,11 @@ def test_the_collection_id_covers_the_sources_and_window_but_not_the_time(tmp_pa
 
 
 def test_te_review_needs_a_known_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
-    for argv in (["te-review"], ["te-review", "report"]):
+    for argv in (["te-review"], ["te-review", "carry"]):
         with pytest.raises(SystemExit):
             main(argv)
         assert json.loads(capsys.readouterr().err) == {
-            "error": "repotools te-review: the next argument is one of collect"
+            "error": "repotools te-review: the next argument is one of collect, report"
         }
 
 

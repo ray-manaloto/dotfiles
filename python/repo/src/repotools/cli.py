@@ -6,10 +6,11 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, te_review, zero_bash
+from . import gates, main_guard, pane_approval, te_report, te_review, zero_bash
 from .models import (
     Command,
     CommitText,
+    ErrorCode,
     Failure,
     Fingerprint,
     MainGuard,
@@ -20,10 +21,12 @@ from .models import (
     PanePin,
     PrivacyScan,
     PrText,
+    PublicFailure,
     ReviewApproved,
     ReviewPython,
     TeReviewCollect,
     TeReviewCommand,
+    TeReviewReport,
     ZeroBash,
 )
 
@@ -44,7 +47,10 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_armed: MainGuardArmed,
 }
 # te-review takes a subcommand word first; each has its own model.
-TE_REVIEW: dict[TeReviewCommand, type[Options]] = {TeReviewCommand.collect: TeReviewCollect}
+TE_REVIEW: dict[TeReviewCommand, type[Options]] = {
+    TeReviewCommand.collect: TeReviewCollect,
+    TeReviewCommand.report: TeReviewReport,
+}
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
 
@@ -68,7 +74,16 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
         cli_implicit_flags=True,
         cli_exit_on_error=False,
     )
-    return command, CliApp.run(model, cli_args=list(argv[words:]), cli_settings_source=cli)
+    try:
+        return command, CliApp.run(model, cli_args=list(argv[words:]), cli_settings_source=cli)
+    # A te-review report argument may be private, and the mode is unknown until parsing succeeds, so a
+    # parse error is the code only, whatever mode the arguments ask for.
+    except ValueError as error:
+        if model is not TeReviewReport:
+            raise
+        refusal = te_review.TeReviewError(ErrorCode.BAD_ARGUMENTS, str(error))
+        refusal.public = True
+        raise refusal from None
 
 
 def run(command: Command, options: Options) -> None:
@@ -81,8 +96,8 @@ def run(command: Command, options: Options) -> None:
         gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
-    elif isinstance(options, TeReviewCollect):
-        te_review.collect(options)
+    elif isinstance(options, TeReviewCollect | TeReviewReport):
+        te_report.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
@@ -96,8 +111,9 @@ def run(command: Command, options: Options) -> None:
 def main(argv: Sequence[str] | None = None) -> None:
     try:
         run(*parse(sys.argv[1:] if argv is None else argv))
-    except te_review.CollectError as error:
-        sys.stderr.write(error.failure.model_dump_json() + "\n")
+    except te_review.TeReviewError as error:
+        failure = PublicFailure(code=error.failure.code) if error.public else error.failure
+        sys.stderr.write(failure.model_dump_json() + "\n")
         raise SystemExit(1) from None
     except subprocess.CalledProcessError as error:
         stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr

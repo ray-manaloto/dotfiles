@@ -83,6 +83,31 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools main-guard-remove'
 
+# te-review (#408): the collection and report hold private evidence, so both refuse a relative path, which
+# would resolve against this task's folder, a checkout, not the caller's.
+[tasks.te-review-collect]
+description = "Freeze the TokenEconomizer Claude ledger rows of a window into a new private collection"
+usage = '''
+flag "--since <date>" required=#true help="First calendar day, inclusive"
+flag "--until <date>" required=#true help="Last calendar day, inclusive"
+flag "--tz <zone>" required=#true help="IANA time zone, such as America/Chicago"
+flag "--out <dir>" required=#true help="The new collection directory, an absolute path that must not exist"
+flag "--te-root <dir>" help="TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+'''
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools te-review collect --since "$usage_since" --until "$usage_until" --tz "$usage_tz" --out "$usage_out" ${usage_te_root:+--te-root "$usage_te_root"}'
+
+[tasks.te-review-report]
+description = "Print the recorded overhead share of a te-review collection, public unless --private"
+usage = '''
+flag "--evidence <dir>" required=#true help="The collection directory, an absolute path"
+flag "--private" help="Print the private report, with every row and key name"
+'''
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools te-review report --evidence "$usage_evidence" ${usage_private:+--private}'
+
 # Development: uv runs only through these tasks.
 [tasks.sync]
 description = "Install the locked dependencies into .venv"
