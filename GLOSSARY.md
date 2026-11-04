@@ -132,6 +132,20 @@ The instructions every agent reads in every repository, kept in the agents folde
 own AGENTS.md adds to it; it never repeats it.
 _Avoid_: Global prompt, system prompt, CLAUDE.md
 
+**Installer**:
+A tool from outside this repository that sets an agent up and maintains instructions tied to that
+setup.
+_Avoid_: Setup script, bootstrap
+
+**Managed block**:
+A marked section of an instruction file that a named tool maintains.
+_Avoid_: Generated section, injected block
+
+**Snapshot block**:
+A marked section taken from a tool and kept by the repository. Its text changes only through
+review; the tool it came from never writes the delivered file.
+_Avoid_: Frozen block, vendored block
+
 **User scope**:
 Delivery that reaches every repository on the machine, from the home folder, as opposed to project
 scope, which reaches only the repository that holds the file.
