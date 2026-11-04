@@ -81,7 +81,7 @@ still on `main` (e0c7a1d); an upstream issue is drafted, not filed.
 Other installer facts at v0.12.1:
 - `--dir` is used verbatim, with no `realpath` (cli.c:11304-11319), so configs get the launcher path, not a
   versioned one. Without `--dir`, 0.12.1 writes a `~/.local/bin` path that does not exist under mise (#2722).
-- With `--skip-binary` the installer returns before any shell rc edit (cli.c:11186-11194); the closing
+- With `--skip-binary` the installer returns before any shell rc edit (cli.c:11192-11195); the closing
   "source ~/.zshrc" line is printed unconditionally.
 - The dry run skips the binary-preparation branch, and `--plan` lists every detected client before `--clients`
   is applied, so neither proves what a real run does.

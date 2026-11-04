@@ -11,7 +11,7 @@ much its token savings can be trusted.
 * [Install](install.md) - mise owns the binary; `//cbm:install` runs CBM's installer through a stable launcher; the macOS `--skip-binary` workaround.
 * [Verification](verification.md) - every check that was run, with results, and what is still open.
 * [Tools, hooks and agents](tools-hooks-agents.md) - the 13 read-only tools, the hook set per client, the three agent tiers, latency.
-* [Upgrades](upgrades.md) - the exact pin, why bulk upgrades skip CBM, the forced-drain finding, and the notes for the automation PR.
+* [Upgrades](upgrades.md) - the exact pin, why bulk upgrades skip CBM, what the forced drain keeps, and the agreed upgrade automation design (ADR 0001).
 * [How other projects set it up](other-projects.md) - multi-harness dotfiles setups, kept and stripped hooks, launch paths.
 * [Effectiveness and token cost](effectiveness.md) - the 10x claim has one source; independent tests disagree.
 
