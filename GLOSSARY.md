@@ -21,8 +21,30 @@ _Avoid_: Epic, batch, lane
 
 **Ticket**:
 One issue `/to-tickets` creates from a spec: a unit of work small enough to implement and review
-on its own. Each ticket has one line in the planning-with-files `task_plan.md` that links it.
-_Avoid_: Task, subtask, source issue
+on its own. Each ticket has one line in the roadmap that links it, and its own ticket plan. The
+same holds in every repository that uses the workflow; a ticket is never a file in the repository.
+_Avoid_: Task, subtask, source issue, file ticket
+
+**Roadmap**:
+The planning-with-files `task_plan.md` that lists every ticket the repository is working on, one
+line each, linking the ticket's issue and naming its ticket plan. It is local, never committed, and
+can be rebuilt from the issues.
+_Avoid_: Backlog, todo list, master plan
+
+**Ticket plan**:
+The planning-with-files plan for one ticket, kept in its own named folder outside every checkout,
+so several worktrees and sessions can each work their own ticket at the same time.
+_Avoid_: Session plan, scratch plan
+
+**Coordinator**:
+The one session that turns a spec into tickets: it creates each ticket's issue and ticket plan and is
+the only writer of the roadmap.
+_Avoid_: Lead, orchestrator, main agent
+
+**Worker**:
+A session that works one ticket in its own worktree, pinned to that ticket's plan. It never creates
+a plan and never edits the roadmap.
+_Avoid_: Subagent, helper
 
 ### Triage outcomes
 
@@ -97,6 +119,34 @@ _Avoid_: Waiver, sign-off, approval record
 **Apply**:
 Moving the live setup to a merged release: closing sessions, installing, reindexing and restarting.
 _Avoid_: Upgrade (for this step alone), deploy, rollout
+
+### Agent workflow
+
+**Agents folder**:
+The one tracked home of everything every coding agent shares: the shared AGENTS.md, the workflow
+docs and the workflow skills. Each agent reaches it through links, so none keeps its own copy.
+_Avoid_: Agent config, skills repo, prompt folder
+
+**Shared AGENTS.md**:
+The instructions every agent reads in every repository, kept in the agents folder. A repository's
+own AGENTS.md adds to it; it never repeats it.
+_Avoid_: Global prompt, system prompt, CLAUDE.md
+
+**User scope**:
+Delivery that reaches every repository on the machine, from the home folder, as opposed to project
+scope, which reaches only the repository that holds the file.
+_Avoid_: Global, machine-wide
+
+**Workflow docs**:
+The documents that say how work moves from an idea to a merged change, and which skills each step
+uses. The workflow skills read them from the agents folder.
+_Avoid_: Process docs, playbook
+
+**Workflow facts**:
+The few facts about one repository that the workflow docs leave open: its check, how a change
+ships, where research goes and how a review is approved. Each repository states them in its own
+AGENTS.md, after it has been set up for the workflow skills.
+_Avoid_: Repo config, project settings
 
 ### Labels
 
