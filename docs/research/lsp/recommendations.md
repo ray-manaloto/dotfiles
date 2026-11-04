@@ -20,13 +20,13 @@ sources:
 Each of these is a recommendation. Any plugin install, switch, enable or disable waits for the owner's OK.
 
 1. **Keep the 12 LSP plugins on `claude-plugins-official` for now.**
-   - It is the only route that works today; the [root cause](root-cause.md) explains why, and a real
-     `documentSymbol` call confirmed it.
-   - Move them to the Directory only after both of these hold:
-     - The listing's folder carries `.lsp.json`. Check with
-       `gh api repos/anthropics/claude-plugins-official/contents/plugins/clangd-lsp`.
+   - The Directory route loads 0 LSP servers; the [root cause](root-cause.md) explains why. The official route
+     was confirmed by one real `documentSymbol` call on a `.py` file (pyright-lsp); the other 11 were not called.
+   - Move a plugin to the Directory only when its own listing passes, checked per listing for all 12:
      - Its `reviewed_commit` in `~/.claude/plugins/plugin-directory-cache-v2.json` has moved past `ea0a38e`
        (`1aa8f02` for lua-lsp).
+     - The plugin folder carries `.lsp.json` **at that `reviewed_commit`**, not just on `main`. Check with
+       `gh api 'repos/anthropics/claude-plugins-official/contents/plugins/<name>?ref=<reviewed_commit>'`.
 2. **File one issue on anthropics/claude-code.** This is outward-facing, so the owner decides. claude-plugins-official
    refuses outside PRs (#378), so the channels are a claude-code issue or a comment on claude-plugins-official#379.
    - Title: "Anthropic Directory installs of the official `*-lsp` plugins load 0 LSP servers: the synthesized

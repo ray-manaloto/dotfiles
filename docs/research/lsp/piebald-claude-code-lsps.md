@@ -57,5 +57,5 @@ sources:
 
 ## Verdict
 
-**Not needed.** The official marketplace works today. If it stops being an option, a local marketplace whose folders
+**Not needed.** The official marketplace works today for the tested Python route. If it stops being an option, a local marketplace whose folders
 carry `.lsp.json` (see [recommendations](recommendations.md)) gives the same result with no third-party dependency.

@@ -38,8 +38,8 @@ server config only in a marketplace entry.**
 
 - After the 12 LSP plugins were switched to `@anthropic-plugin-directory`, `/reload-plugins --force` reported
   "0 plugin LSP servers".
-- Switching back to `@claude-plugins-official` fixed it: a headless LSP `documentSymbol` call on a `.py` file
-  returned symbols.
+- Switching back to `@claude-plugins-official` fixed the tested case: a headless LSP `documentSymbol` call on a
+  `.py` file (pyright-lsp) returned symbols. The other 11 plugins were not called.
 - The Directory cache copies (`~/.claude/plugins/cache/anthropic-plugin-directory/<n>-lsp/<sha>-<hash>/`) hold
   only `LICENSE` and `README.md`.
 

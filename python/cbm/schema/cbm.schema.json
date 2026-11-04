@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cbm",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of the cbm package; mise run //cbm:codegen writes src/cbm/models.py from this file.",
+  "$defs": {
+    "Command": {
+      "description": "The cbm subcommands, one per mise task.",
+      "type": "string",
+      "enum": [
+        "install",
+        "verify"
+      ]
+    },
+    "Client": {
+      "description": "An agent client whose codebase-memory-mcp setup this package installs and checks.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex"
+      ]
+    },
+    "Config": {
+      "description": "Where the setup lives and which clients get it; cbm.config.load fills it from the environment.",
+      "type": "object",
+      "properties": {
+        "home": {
+          "type": "string",
+          "format": "path",
+          "description": "The user's home folder (HOME)"
+        },
+        "mise_data_dir": {
+          "type": "string",
+          "format": "path",
+          "description": "mise's data folder (MISE_DATA_DIR, default ~/.local/share/mise)"
+        },
+        "clients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Client"
+          },
+          "minItems": 1,
+          "description": "The clients to install and check (CBM_CLIENTS, comma-separated; default every client)",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "home",
+        "mise_data_dir",
+        "clients"
+      ],
+      "additionalProperties": false
+    },
+    "Check": {
+      "description": "One check of the setup, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "check",
+          "default": "check",
+          "description": "The event name"
+        },
+        "name": {
+          "type": "string",
+          "description": "What was checked"
+        },
+        "ok": {
+          "type": "boolean",
+          "description": "Whether it holds"
+        },
+        "detail": {
+          "type": "string",
+          "default": "",
+          "description": "What was found, when it helps"
+        }
+      },
+      "required": [
+        "name",
+        "ok"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "description": "A failure the command caught, on stderr; the command then exits 1, or 2 for a bad setting.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "error",
+          "default": "error",
+          "description": "The event name"
+        },
+        "message": {
+          "type": "string",
+          "description": "What went wrong and what to do"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "path"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The file it concerns, if any"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Done": {
+      "description": "The end of a command, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "done",
+          "default": "done",
+          "description": "The event name"
+        },
+        "command": {
+          "$ref": "#/$defs/Command",
+          "description": "The command that ran"
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many checks failed"
+        }
+      },
+      "required": [
+        "command",
+        "failed"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

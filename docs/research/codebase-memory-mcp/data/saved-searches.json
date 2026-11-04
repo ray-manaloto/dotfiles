@@ -1,0 +1,1771 @@
+{
+  "schema": "saved-searches/v1-cbm",
+  "rows": [
+    {
+      "id": "code-mcp-json",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:.mcp.json",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:.mcp.json",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "project/user MCP entries for CBM in Claude-style .mcp.json",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:17:34.378433+00:00",
+      "hits": 133,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-codex-config",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:config.toml path:.codex",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:config.toml path:.codex",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Codex CLI config.toml entries",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:17:41.963616+00:00",
+      "hits": 38,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-codex-config-any",
+      "endpoint": "GET /search/code",
+      "query": "mcp_servers.codebase-memory-mcp",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "mcp_servers.codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Codex TOML table name anywhere (dotfiles keep config.toml outside .codex)",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:17:49.760279+00:00",
+      "hits": 227,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-opencode-json",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:opencode.json",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:opencode.json",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "OpenCode config entries",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:17:57.481106+00:00",
+      "hits": 165,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-opencode-jsonc",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:opencode.jsonc",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:opencode.jsonc",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "OpenCode jsonc config entries",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:18:05.218734+00:00",
+      "hits": 36,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-mcp-config-json",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:mcp_config.json",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:mcp_config.json",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Antigravity/Gemini mcp_config.json entries",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:18:13.058036+00:00",
+      "hits": 28,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-gemini-settings",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:settings.json path:.gemini",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:settings.json path:.gemini",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Gemini CLI settings.json entries",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:18:21.670203+00:00",
+      "hits": 8,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-mise-toml",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:mise.toml",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:mise.toml",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "mise tool pins (github:/aqua:/npm:)",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:18:29.202812+00:00",
+      "hits": 15,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-mise-dottoml",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:.mise.toml",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:.mise.toml",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "mise tool pins in .mise.toml",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:18:36.689466+00:00",
+      "hits": 1,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-cbmignore",
+      "endpoint": "GET /search/code",
+      "query": "filename:.cbmignore",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "filename:.cbmignore",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": ".cbmignore files in the wild",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:18:44.414342+00:00",
+      "hits": 196,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-hook-gate",
+      "endpoint": "GET /search/code",
+      "query": "cbm-code-discovery-gate",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "cbm-code-discovery-gate",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "installer hook shim kept in committed settings/hooks",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:18:52.230975+00:00",
+      "hits": 283,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-hook-augment",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp hook-augment\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp hook-augment\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "hook-augment entries in committed hooks",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:00.044510+00:00",
+      "hits": 90,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-cache-dir",
+      "endpoint": "GET /search/code",
+      "query": "CBM_CACHE_DIR",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "CBM_CACHE_DIR",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "how CBM_CACHE_DIR is set",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:07.956663+00:00",
+      "hits": 1428,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-allowed-root",
+      "endpoint": "GET /search/code",
+      "query": "CBM_ALLOWED_ROOT",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "CBM_ALLOWED_ROOT",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "how CBM_ALLOWED_ROOT is set",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:15.944509+00:00",
+      "hits": 338,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-plugin-enabled",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory@codebase-memory\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory@codebase-memory\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Claude plugin enabled in settings",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:23.388974+00:00",
+      "hits": 3,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-mise-github",
+      "endpoint": "GET /search/code",
+      "query": "\"github:DeusData/codebase-memory-mcp\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"github:DeusData/codebase-memory-mcp\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "mise/aqua github backend pins",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:31.253182+00:00",
+      "hits": 106,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-nix",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp language:Nix",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp language:Nix",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "nix/home-manager setups",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:39.161189+00:00",
+      "hits": 179,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-brewfile",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:Brewfile",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:Brewfile",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Homebrew setups",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:46.885372+00:00",
+      "hits": 1,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-npx",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp@\" npx",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp@\" npx",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "npx-launched entries with pinned version",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:19:54.628370+00:00",
+      "hits": 174,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-tool-profile",
+      "endpoint": "GET /search/code",
+      "query": "\"--tool-profile\" codebase-memory",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"--tool-profile\" codebase-memory",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "tool-profile usage in client configs",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:20:02.586978+00:00",
+      "hits": 167,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-claude-settings-hooks",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:settings.json path:.claude",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:settings.json path:.claude",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "Claude project settings carrying CBM hooks/plugins",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:20:10.767228+00:00",
+      "hits": 50,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-agents-md",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:AGENTS.md",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:AGENTS.md",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "AGENTS.md guidance mentioning CBM (kept/stripped installer pointer)",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:20:18.897921+00:00",
+      "hits": 780,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-install",
+      "endpoint": "GET /search/issues",
+      "query": "install",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "install repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "upstream install issues/PRs",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:27.824301+00:00",
+      "hits": 971,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-plugin",
+      "endpoint": "GET /search/issues",
+      "query": "plugin",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "plugin repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Claude plugin marketplace issues/PRs",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:31.926388+00:00",
+      "hits": 52,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-daemon",
+      "endpoint": "GET /search/issues",
+      "query": "daemon",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "daemon repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "daemon issues/PRs",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:36.147841+00:00",
+      "hits": 477,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-daemon-conflict",
+      "endpoint": "GET /search/issues",
+      "query": "daemon conflict",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "daemon conflict repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "version-cohort conflicts",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:40.557527+00:00",
+      "hits": 192,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-conflicts-ndjson",
+      "endpoint": "GET /search/issues",
+      "query": "daemon-conflicts",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "daemon-conflicts repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "daemon-conflicts.ndjson mentions",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:20:44.528183+00:00",
+      "hits": 60,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-version-mismatch",
+      "endpoint": "GET /search/issues",
+      "query": "version mismatch",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "version mismatch repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "build mismatch between clients",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:20:48.711946+00:00",
+      "hits": 114,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-codex",
+      "endpoint": "GET /search/issues",
+      "query": "codex",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "codex repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Codex CLI integration",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:53.038123+00:00",
+      "hits": 198,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-antigravity",
+      "endpoint": "GET /search/issues",
+      "query": "antigravity",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "antigravity repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Antigravity integration",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:20:56.725338+00:00",
+      "hits": 34,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-opencode",
+      "endpoint": "GET /search/issues",
+      "query": "opencode",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "opencode repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "OpenCode integration",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:21:01.054671+00:00",
+      "hits": 106,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-gemini",
+      "endpoint": "GET /search/issues",
+      "query": "gemini",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "gemini repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Gemini CLI integration",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:04.681865+00:00",
+      "hits": 43,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-worktree",
+      "endpoint": "GET /search/issues",
+      "query": "worktree",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "worktree repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "git worktree indexing",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:09.141788+00:00",
+      "hits": 115,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-hooks",
+      "endpoint": "GET /search/issues",
+      "query": "hook",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "hook repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "hook problems (noise, trust)",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:13.386026+00:00",
+      "hits": 350,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-npx",
+      "endpoint": "GET /search/issues",
+      "query": "npx",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "npx repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "npx/npm wrapper",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:17.005009+00:00",
+      "hits": 23,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-mise",
+      "endpoint": "GET /search/issues",
+      "query": "mise",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "mise repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "mise-managed binary",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:20.264967+00:00",
+      "hits": 14,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-cbmignore",
+      "endpoint": "GET /search/issues",
+      "query": "cbmignore",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "cbmignore repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": ".cbmignore behaviour",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:24.190442+00:00",
+      "hits": 79,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-allowed-root",
+      "endpoint": "GET /search/issues",
+      "query": "CBM_ALLOWED_ROOT",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "CBM_ALLOWED_ROOT repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "allowed root",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:27.600457+00:00",
+      "hits": 20,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-cross-repo",
+      "endpoint": "GET /search/issues",
+      "query": "cross-repo",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "cross-repo repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "cross-repo intelligence",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:31.953273+00:00",
+      "hits": 384,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-python",
+      "endpoint": "GET /search/issues",
+      "query": "python call graph",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "python call graph repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Python resolution quality",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:36.458301+00:00",
+      "hits": 192,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-typescript",
+      "endpoint": "GET /search/issues",
+      "query": "typescript",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "typescript repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "TS resolution quality",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:40.713334+00:00",
+      "hits": 222,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-cpp",
+      "endpoint": "GET /search/issues",
+      "query": "c++",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "c++ repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "C++ resolution quality",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:44.927757+00:00",
+      "hits": 1717,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-detect-changes",
+      "endpoint": "GET /search/issues",
+      "query": "detect_changes",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "detect_changes repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "blast radius quality",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:49.134315+00:00",
+      "hits": 90,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-benchmark",
+      "endpoint": "GET /search/issues",
+      "query": "benchmark",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "benchmark repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "benchmarks",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:53.113960+00:00",
+      "hits": 129,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-serena",
+      "endpoint": "GET /search/issues",
+      "query": "serena",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "serena repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "comparisons",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:21:56.202297+00:00",
+      "hits": 5,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-lsp",
+      "endpoint": "GET /search/issues",
+      "query": "lsp",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "lsp repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "Hybrid LSP",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:22:00.407634+00:00",
+      "hits": 375,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-context-noise",
+      "endpoint": "GET /search/issues",
+      "query": "context tokens",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "context tokens repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "noisy context / token cost",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:22:04.019580+00:00",
+      "hits": 31,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-skip-binary",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp install --skip-binary\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp install --skip-binary\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "upgrade scripts rerunning install --skip-binary",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:22:40.821776+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-install-y",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp install -y\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp install -y\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "scripted installer runs",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:22:48.496355+00:00",
+      "hits": 53,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-daemon-stop",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp daemon stop\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp daemon stop\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "upgrade steps stopping the daemon",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:22:56.592342+00:00",
+      "hits": 60,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-mise-x",
+      "endpoint": "GET /search/code",
+      "query": "\"mise x -- codebase-memory-mcp\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"mise x -- codebase-memory-mcp\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "stable launch via mise x",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:23:04.005912+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-mise-exec",
+      "endpoint": "GET /search/code",
+      "query": "\"mise exec\" codebase-memory-mcp",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"mise exec\" codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "stable launch via mise exec",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:23:12.372302+00:00",
+      "hits": 42,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-shim",
+      "endpoint": "GET /search/code",
+      "query": "\"shims/codebase-memory-mcp\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"shims/codebase-memory-mcp\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "MCP entries pointing at the mise shim",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:23:19.849095+00:00",
+      "hits": 3,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-local-bin",
+      "endpoint": "GET /search/code",
+      "query": "\".local/bin/codebase-memory-mcp\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\".local/bin/codebase-memory-mcp\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "MCP entries pointing at ~/.local/bin",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:23:27.663979+00:00",
+      "hits": 832,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-mise-installs",
+      "endpoint": "GET /search/code",
+      "query": "\"mise/installs\" codebase-memory-mcp",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"mise/installs\" codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "absolute version paths in configs",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:23:35.722665+00:00",
+      "hits": 31,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-renovate",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:renovate.json",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:renovate.json",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "renovate automation",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:23:43.305589+00:00",
+      "hits": 2,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-renovate5",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:renovate.json5",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:renovate.json5",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "renovate automation (json5)",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:23:50.720546+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-dependabot",
+      "endpoint": "GET /search/code",
+      "query": "codebase-memory-mcp filename:dependabot.yml",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp filename:dependabot.yml",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "dependabot automation",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:23:58.237955+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-npx-pin",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp@0.12\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp@0.12\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "npx@version pins at 0.12.x",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:05.878066+00:00",
+      "hits": 58,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-mise-npm",
+      "endpoint": "GET /search/code",
+      "query": "\"npm:codebase-memory-mcp\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"npm:codebase-memory-mcp\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "mise npm backend pins",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:13.483043+00:00",
+      "hits": 23,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-aqua",
+      "endpoint": "GET /search/code",
+      "query": "\"DeusData/codebase-memory-mcp\" filename:aqua.yaml",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"DeusData/codebase-memory-mcp\" filename:aqua.yaml",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "aqua registry pins",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:24:20.850671+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "code-q6-update-cmd",
+      "endpoint": "GET /search/code",
+      "query": "\"codebase-memory-mcp update\"",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "\"codebase-memory-mcp update\"",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "README",
+          "expected_min": 1
+        }
+      ],
+      "why": "scripts calling the update subcommand",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:24:28.719255+00:00",
+      "hits": 218,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-upgrade",
+      "endpoint": "GET /search/issues",
+      "query": "upgrade",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "upgrade repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "upgrade problems",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:37.580946+00:00",
+      "hits": 231,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-update-cmd",
+      "endpoint": "GET /search/issues",
+      "query": "\"update\" subcommand",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "\"update\" subcommand repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "update subcommand",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:40.967370+00:00",
+      "hits": 22,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-installsh-daemon",
+      "endpoint": "GET /search/issues",
+      "query": "install.sh daemon",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "install.sh daemon repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "install.sh stopping the daemon",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:45.064152+00:00",
+      "hits": 72,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-cohort",
+      "endpoint": "GET /search/issues",
+      "query": "cohort",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "cohort repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "version cohort",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:48.811923+00:00",
+      "hits": 63,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-exact-build",
+      "endpoint": "GET /search/issues",
+      "query": "\"exact build\"",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "\"exact build\" repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "exact-build admission",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:24:52.365908+00:00",
+      "hits": 69,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-refused",
+      "endpoint": "GET /search/issues",
+      "query": "refused",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "refused repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "refused clients",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:24:56.257226+00:00",
+      "hits": 165,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-skip-binary",
+      "endpoint": "GET /search/issues",
+      "query": "skip-binary",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "skip-binary repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "install --skip-binary",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:25:00.645168+00:00",
+      "hits": 366,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-npm-version",
+      "endpoint": "GET /search/issues",
+      "query": "npm version",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "npm version repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "npm wrapper version drift",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:25:04.890367+00:00",
+      "hits": 144,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-renovate",
+      "endpoint": "GET /search/issues",
+      "query": "renovate",
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "renovate repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "renovate support/datasource",
+      "updates_set": false,
+      "run_at": "2026-11-03T21:25:07.804990+00:00",
+      "hits": 0,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-q6-releases-global",
+      "endpoint": "GET /search/issues",
+      "query": "codebase-memory-mcp upgrade -repo:DeusData/codebase-memory-mcp",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp upgrade -repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "other repos' CBM upgrade issues",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:25:13.361346+00:00",
+      "hits": 1062,
+      "incomplete_results": false
+    },
+    {
+      "id": "iss-global",
+      "endpoint": "GET /search/issues",
+      "query": "codebase-memory-mcp -repo:DeusData/codebase-memory-mcp",
+      "repo": null,
+      "repo_note": "all of GitHub (no single repo)",
+      "qualifiers": "codebase-memory-mcp -repo:DeusData/codebase-memory-mcp",
+      "per_page": 100,
+      "max_pages": 1,
+      "max_items": 100,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "is:issue",
+          "expected_min": 1
+        }
+      ],
+      "why": "other repos' issues/PRs mentioning CBM",
+      "updates_set": true,
+      "run_at": "2026-11-03T21:22:08.710001+00:00",
+      "hits": 127373,
+      "incomplete_results": false
+    },
+    {
+      "id": "upd-releases",
+      "endpoint": "GET /repos/{owner}/{repo}/releases",
+      "query": null,
+      "repo": "DeusData/codebase-memory-mcp",
+      "repo_note": null,
+      "qualifiers": "per_page=10",
+      "per_page": 10,
+      "max_pages": 1,
+      "max_items": 10,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "tag v0.12.1 present",
+          "expected_min": 1
+        }
+      ],
+      "why": "new release => plugin npx pin and mise pin must move together (Q6)",
+      "updates_set": true,
+      "hits": null,
+      "run_at": null,
+      "note": "not a search endpoint; rerun with `gh api repos/DeusData/codebase-memory-mcp/releases?per_page=10`"
+    },
+    {
+      "id": "upd-watch-issues",
+      "endpoint": "GET /repos/{owner}/{repo}/issues/{n}",
+      "query": null,
+      "repo": "DeusData/codebase-memory-mcp",
+      "qualifiers": "numbers=2856,2398,2722,1430,1664,2228,2435,2671,2072,1188",
+      "per_page": 1,
+      "max_pages": 1,
+      "max_items": 10,
+      "timeout_seconds": 60,
+      "control": [
+        {
+          "query": "issue 2716 state=closed",
+          "expected_min": 1
+        }
+      ],
+      "why": "open upstream items that change the recommendation (stable manager path, different-path admission, ignore_worktrees release, Codex env_vars, Codex config ownership, plugin slices)",
+      "updates_set": true,
+      "hits": null,
+      "run_at": null
+    }
+  ],
+  "pending": [],
+  "updated_at": "2026-11-03T21:29:04.100851+00:00",
+  "updates_set": [
+    "code-mcp-json",
+    "code-codex-config",
+    "code-codex-config-any",
+    "code-opencode-json",
+    "code-opencode-jsonc",
+    "code-mcp-config-json",
+    "code-mise-toml",
+    "code-cbmignore",
+    "iss-install",
+    "iss-plugin",
+    "iss-daemon",
+    "iss-daemon-conflict",
+    "iss-codex",
+    "iss-antigravity",
+    "iss-opencode",
+    "code-q6-skip-binary",
+    "code-q6-install-y",
+    "code-q6-daemon-stop",
+    "code-q6-mise-x",
+    "code-q6-shim",
+    "code-q6-local-bin",
+    "code-q6-renovate",
+    "code-q6-dependabot",
+    "code-q6-npx-pin",
+    "code-q6-mise-npm",
+    "iss-q6-upgrade",
+    "iss-q6-update-cmd",
+    "iss-q6-installsh-daemon",
+    "iss-q6-cohort",
+    "iss-q6-exact-build",
+    "iss-q6-releases-global",
+    "iss-global",
+    "upd-releases",
+    "upd-watch-issues"
+  ],
+  "notes": [
+    "repo=null rows search all of GitHub; code-search totals include forks/vendored copies of CBM itself (filter repos whose name contains codebase-memory or cbm)",
+    "no rate limit was hit on 2026-11-03; pending list is empty",
+    "row shape follows dev/saved-searches.toml (id, query, repo, per_page, max_pages, max_items, timeout_seconds, control[]) plus endpoint, qualifiers, why, hits"
+  ]
+}

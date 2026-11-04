@@ -252,6 +252,8 @@ topgrade = { version = "17.14.1", minimum_release_age = "0s" }
 
 "npm:openwiki" = { version = "0.7.3", minimum_release_age = "0s" }
 
+# Deliberate upgrades only: update_mise.py excludes it from `upgrade --bump`. Close sessions and
+# stop the old daemon with the old binary before changing this pin (one build per account).
 "github:DeusData/codebase-memory-mcp" = { version = "0.12.1", minimum_release_age = "0s" }
 
 # Build prerequisites for the webclaw browser build below. aws-lc-sys (pulled in
