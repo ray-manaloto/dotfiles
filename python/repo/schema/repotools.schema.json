@@ -22,7 +22,8 @@
         "main-guard",
         "main-guard-install",
         "main-guard-remove",
-        "main-guard-armed"
+        "main-guard-armed",
+        "te-review"
       ]
     },
     "ZeroBash": {
@@ -151,7 +152,8 @@
         { "$ref": "#/$defs/MainGuard" },
         { "$ref": "#/$defs/MainGuardInstall" },
         { "$ref": "#/$defs/MainGuardRemove" },
-        { "$ref": "#/$defs/MainGuardArmed" }
+        { "$ref": "#/$defs/MainGuardArmed" },
+        { "$ref": "#/$defs/TeReviewCollect" }
       ]
     },
     "Fingerprint": {
@@ -252,6 +254,251 @@
       },
       "required": ["turn_id"]
     },
+    "TeReviewCommand": {
+      "description": "The te-review subcommands, the word after te-review.",
+      "type": "string",
+      "enum": ["collect"]
+    },
+    "TeReviewCollect": {
+      "description": "Freeze the TokenEconomizer Claude ledger rows of a window into a new, create-only evidence collection.",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First calendar day of the window, inclusive" },
+        "until": { "type": "string", "format": "date", "description": "Last calendar day of the window, inclusive" },
+        "tz": { "type": "string", "description": "IANA time zone the calendar days are read in, such as America/Chicago" },
+        "out": { "type": "string", "description": "The collection directory, which must not exist" },
+        "te_root": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+        }
+      },
+      "required": ["since", "until", "tz", "out"],
+      "additionalProperties": false
+    },
+    "ErrorCode": {
+      "description": "Why te-review collect stopped; it writes nothing when it does.",
+      "type": "string",
+      "enum": [
+        "OUT_EXISTS",
+        "BAD_WINDOW",
+        "BAD_TIMEZONE",
+        "NO_LEDGER",
+        "UNREADABLE",
+        "MALFORMED_LINE",
+        "TRUNCATED_LINE",
+        "UNKNOWN_SCHEMA",
+        "SOURCE_CHANGED"
+      ]
+    },
+    "CodedFailure": {
+      "description": "Why a te-review command stopped, printed as a JSON line on stderr.",
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "error": { "type": "string", "description": "The message" }
+      },
+      "required": ["code", "error"],
+      "additionalProperties": false
+    },
+    "SessionRow": {
+      "description": "A TokenEconomizer 0.1.0 ledger session row, as plugin/fold.py fold_locked writes it; other keys are unknown.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "session", "description": "The record kind" },
+        "session_id": { "type": "string", "description": "The Claude session id" },
+        "host": { "const": "claude", "description": "The agent host; this adapter reads Claude only" },
+        "repo": { "type": "string", "description": "The repository label" },
+        "folded_at": { "type": "number", "description": "When the session was folded, Unix seconds" },
+        "started": { "type": ["number", "null"], "description": "Session start, Unix seconds" },
+        "ended": { "type": ["number", "null"], "description": "Session end, Unix seconds; the window selects on it" },
+        "shadow": { "type": "boolean", "description": "Folded in shadow mode" },
+        "imported": { "type": "boolean", "description": "Folded from the agent's history, from before the plugin" },
+        "prompts": { "type": ["integer", "null"], "description": "Prompts in the transcript" },
+        "error": { "type": "string", "description": "Why the transcript could not be read" },
+        "injection": { "type": ["object", "null"], "description": "The micro-skills fold result" },
+        "untool": { "type": ["object", "null"], "description": "The tool-pruning fold result" },
+        "model": { "type": ["string", "null"], "description": "The billed model id" },
+        "requests": { "type": ["integer", "null"], "description": "Model requests" },
+        "input_tokens": { "type": ["integer", "null"], "description": "Fresh input tokens" },
+        "cache_read_input_tokens": { "type": ["integer", "null"], "description": "Cached input tokens read" },
+        "cache_creation_input_tokens": { "type": ["integer", "null"], "description": "Cached input tokens written" },
+        "output_tokens": { "type": ["integer", "null"], "description": "Output tokens" },
+        "effective_tokens": { "type": ["number", "null"], "description": "Cache-aware effective tokens" },
+        "priced_by": { "type": ["string", "null"], "description": "model, fallback or no_usage" },
+        "turns": { "type": "integer", "description": "Turns the plugin recorded" },
+        "nudges": { "type": "integer", "description": "Redirects delivered" },
+        "aborts": { "type": "integer", "description": "Still-stuck notices" },
+        "injected_chars": { "type": "integer", "description": "Characters injected at session start" },
+        "untool_applied": { "type": "array", "description": "Deny rules the session ran under" },
+        "overhead": { "type": "object", "description": "Mechanism overhead tokens, by ledger.py OVERHEAD_KEYS" }
+      },
+      "required": [
+        "kind",
+        "session_id",
+        "host",
+        "repo",
+        "folded_at",
+        "started",
+        "ended",
+        "shadow",
+        "prompts",
+        "turns",
+        "nudges",
+        "aborts",
+        "injected_chars",
+        "untool_applied",
+        "overhead"
+      ],
+      "additionalProperties": false
+    },
+    "OverheadRow": {
+      "description": "A TokenEconomizer 0.1.0 ledger overhead row, as plugin/judge.py run_job writes it; other keys are an unknown schema.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "overhead", "description": "The record kind" },
+        "session_id": { "type": "string", "description": "The Claude session charged" },
+        "host": { "const": "claude", "description": "The agent host; this adapter reads Claude only" },
+        "job": { "type": ["string", "null"], "description": "The judge job; a charge without one is ambiguous" },
+        "at": { "type": "number", "description": "When it was charged, Unix seconds" },
+        "overhead": { "type": "object", "description": "Mechanism overhead tokens, by ledger.py OVERHEAD_KEYS" }
+      },
+      "required": ["kind", "session_id", "host", "at", "overhead"],
+      "additionalProperties": false
+    },
+    "RowKind": {
+      "description": "A ledger record kind.",
+      "type": "string",
+      "enum": ["session", "overhead"]
+    },
+    "RowClass": {
+      "description": "What the collection made of a distinct ledger row.",
+      "type": "string",
+      "enum": [
+        "in_window",
+        "outside_window",
+        "missing_end",
+        "matched",
+        "not_selected",
+        "unmatched",
+        "conflict",
+        "ambiguous"
+      ]
+    },
+    "SourceLine": {
+      "description": "Where a row was read.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "description": "The ledger file, relative to the state root" },
+        "line": { "type": "integer", "description": "The 1-based line number" }
+      },
+      "required": ["source", "line"],
+      "additionalProperties": false
+    },
+    "LedgerRead": {
+      "description": "One ledger row as read: its store, its place, the validated record and the row itself.",
+      "type": "object",
+      "properties": {
+        "store": { "type": "string", "description": "The repository store, repos/<label> under the state root" },
+        "place": { "$ref": "#/$defs/SourceLine" },
+        "record": { "anyOf": [{ "$ref": "#/$defs/SessionRow" }, { "$ref": "#/$defs/OverheadRow" }] },
+        "row": { "type": "object", "description": "The row as read" }
+      },
+      "required": ["store", "place", "record", "row"],
+      "additionalProperties": false
+    },
+    "EvidenceRow": {
+      "description": "One distinct ledger row and its class; identical repeats are one row with their count.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference, stable within the collection" },
+        "kind": { "$ref": "#/$defs/RowKind" },
+        "row_class": { "$ref": "#/$defs/RowClass" },
+        "store": { "type": "string", "description": "The repository store, repos/<label> under the state root" },
+        "host": { "type": "string", "description": "The agent host" },
+        "session_id": { "type": "string", "description": "The session" },
+        "job": { "type": ["string", "null"], "description": "The charge's judge job; null for a session or a charge without one" },
+        "count": { "type": "integer", "description": "How many identical copies were read" },
+        "lines": { "type": "array", "items": { "$ref": "#/$defs/SourceLine" }, "description": "Every copy's place" },
+        "row": { "type": "object", "description": "The row as read" }
+      },
+      "required": ["ref", "kind", "row_class", "store", "host", "session_id", "job", "count", "lines", "row"],
+      "additionalProperties": false
+    },
+    "Evidence": {
+      "description": "evidence.json: every distinct row read, in source order.",
+      "type": "object",
+      "properties": {
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRow" }, "description": "The rows" }
+      },
+      "required": ["rows"],
+      "additionalProperties": false
+    },
+    "Window": {
+      "description": "Inclusive calendar days in a time zone, read as the half-open instants [start, end).",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First day" },
+        "until": { "type": "string", "format": "date", "description": "Last day" },
+        "tz": { "type": "string", "description": "IANA time zone" },
+        "start": { "type": "string", "format": "date-time", "description": "since at 00:00 in tz, included" },
+        "end": { "type": "string", "format": "date-time", "description": "The day after until at 00:00 in tz, excluded" }
+      },
+      "required": ["since", "until", "tz", "start", "end"],
+      "additionalProperties": false
+    },
+    "Label": {
+      "description": "INTERIM when collected before the window's end, else FINAL.",
+      "type": "string",
+      "enum": ["INTERIM", "FINAL"]
+    },
+    "SourceFile": {
+      "description": "One consumed ledger file, as hashed before and after the read.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Relative to the state root" },
+        "bytes": { "type": "integer", "description": "Size" },
+        "sha256": { "type": "string", "description": "Hash of the bytes read" },
+        "lines": { "type": "integer", "description": "Line count" }
+      },
+      "required": ["path", "bytes", "sha256", "lines"],
+      "additionalProperties": false
+    },
+    "Mirror": {
+      "description": "A TokenEconomizer source file whose row shapes the adapter mirrors.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Relative to the plugin root" },
+        "sha256": { "type": "string", "description": "Hash of the file at the mirrored version" }
+      },
+      "required": ["path", "sha256"],
+      "additionalProperties": false
+    },
+    "Versions": {
+      "description": "What read the ledgers.",
+      "type": "object",
+      "properties": {
+        "adapter": { "type": "string", "description": "The ledger adapter, named by the TokenEconomizer version it mirrors" },
+        "schema": { "type": "integer", "description": "The evidence and collection schema version" },
+        "mirrors": { "type": "array", "items": { "$ref": "#/$defs/Mirror" }, "description": "The mirrored source files" }
+      },
+      "required": ["adapter", "schema", "mirrors"],
+      "additionalProperties": false
+    },
+    "Collection": {
+      "description": "collection.json: when and from what evidence.json was built.",
+      "type": "object",
+      "properties": {
+        "collection_id": { "type": "string", "description": "sha256 over the window, versions, every source's bytes and evidence.json" },
+        "collected_at": { "type": "string", "format": "date-time", "description": "When, in the window's time zone" },
+        "label": { "$ref": "#/$defs/Label" },
+        "window": { "$ref": "#/$defs/Window" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/SourceFile" }, "description": "The consumed ledgers" },
+        "versions": { "$ref": "#/$defs/Versions" }
+      },
+      "required": ["collection_id", "collected_at", "label", "window", "sources", "versions"],
+      "additionalProperties": false
+    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -283,6 +530,14 @@
     "session_meta": { "$ref": "#/$defs/SessionMeta" },
     "turn_context": { "$ref": "#/$defs/TurnContext" },
     "message": { "$ref": "#/$defs/Message" },
-    "task_event": { "$ref": "#/$defs/TaskEvent" }
+    "task_event": { "$ref": "#/$defs/TaskEvent" },
+    "te_review_command": { "$ref": "#/$defs/TeReviewCommand" },
+    "te_review_collect": { "$ref": "#/$defs/TeReviewCollect" },
+    "coded_failure": { "$ref": "#/$defs/CodedFailure" },
+    "session_row": { "$ref": "#/$defs/SessionRow" },
+    "overhead_row": { "$ref": "#/$defs/OverheadRow" },
+    "evidence": { "$ref": "#/$defs/Evidence" },
+    "collection": { "$ref": "#/$defs/Collection" },
+    "ledger_read": { "$ref": "#/$defs/LedgerRead" }
   }
 }

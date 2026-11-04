@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .models import PrivacyScan, ReviewPython
+from .models import PrivacyScan, ReviewApproved, ReviewPython
 from .pane_approval import git, hashed
 
 PROMPT = Path("tasks/review/python.md")
@@ -128,3 +128,13 @@ def privacy_scan(options: PrivacyScan) -> None:
         lines = [f"privacy:scan: {line}" for line in found] + [HINT]
         sys.stderr.buffer.write(b"".join(os.fsencode(line + "\n") for line in lines))
         raise SystemExit(1)
+
+
+def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan) -> None:
+    match options:
+        case ReviewPython():
+            review(options)
+        case ReviewApproved():
+            approved()
+        case _:
+            privacy_scan(options)
