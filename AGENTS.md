@@ -16,6 +16,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `codebase-memory-mcp`), then confirm it with a real run. Say what stays unexplained and keep digging.
 - codebase-memory-mcp: install, reinstall and upgrade its agent setup only with `mise run //cbm:install`, never with
   its own `install`, `update` or `install.sh` (`docs/research/codebase-memory-mcp/install.md`).
+  Run the task only from the primary checkout on `main`; `CBM_INSTALL_ALLOW_NON_MAIN=1` is only for
+  qualifying a candidate from another checkout on purpose and still changes the live setup.
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).

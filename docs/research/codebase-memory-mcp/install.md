@@ -42,8 +42,10 @@ mise run //cbm:install       # agent setup, then the checks
 mise run //cbm:verify        # the checks only
 ```
 
-Run them from a dotfiles checkout: the tasks belong to the `python/cbm` package (`//cbm` is its monorepo alias), so
-any checkout or worktree that holds the package works, before or after the merge. Then restart Claude, Codex and
+The tasks belong to the `python/cbm` package (`//cbm` is its monorepo alias). Run `//cbm:install` only from the
+primary dotfiles checkout on `main`. To deliberately install from another branch or a linked worktree, opt in
+with `CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup. `//cbm:verify`
+works from any checkout or worktree that holds the package. After installation, restart Claude, Codex and
 OpenCode sessions. Codex lists the two new hooks under `/hooks` until they are trusted.
 `CBM_CLIENTS` overrides the client list (default `claude,codex,opencode`; Antigravity comes later).
 One install runs at a time (`~/.local/share/codebase-memory-mcp/cbm-install.lock`); a second is refused.

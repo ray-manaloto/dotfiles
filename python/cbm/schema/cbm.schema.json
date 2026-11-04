@@ -13,6 +13,7 @@
         "invalid_setting",
         "missing_binary",
         "install_busy",
+        "install_checkout_refused",
         "foreign_launcher",
         "installer_start_failed",
         "installer_failed",
