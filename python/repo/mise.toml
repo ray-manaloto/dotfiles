@@ -98,9 +98,9 @@ usage = 'flag "--check" help="Only fail when models.py differs from what the sch
 run = "datamodel-codegen ${usage_check:+--check}"
 
 [tasks.lint]
-description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+description = "ruff, ty, generated models, and the subprocess pipe guard"
 depends = ["sync", "codegen --check"]
-run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv", "ast-grep test --skip-snapshot-tests", "ast-grep scan src"]
 
 [tasks.test]
 description = "Real tests (no mocking library) at 100% line and branch coverage"

@@ -1,0 +1,55 @@
+id: no-captured-stdin
+valid:
+  - 'subprocess.run(command, capture_output=True)'
+  - 'subprocess.run(command, input=None, capture_output=True)'
+  - 'subprocess.run(command, input="", capture_output=True)'
+  - "subprocess.run(command, input=b'', capture_output=True)"
+  - 'subprocess.run(command, input=prompt, check=False)'
+  - 'subprocess.run(command, input=data, capture_output=False)'
+  - 'child.communicate(timeout=5)'
+  - 'child.communicate(input=None)'
+  - 'child.communicate(input=b"")'
+  - 'child.communicate(None, timeout=5)'
+  - 'child.communicate(b"")'
+invalid:
+  - 'child.communicate(data)'
+  - |
+    from subprocess import PIPE, Popen
+    Popen(command, stdin=PIPE, stdout=PIPE).communicate(data)
+  - |
+    from subprocess import PIPE, Popen
+    child = Popen(command, stdin=PIPE, stderr=PIPE)
+    child.communicate(input=data)
+  - |
+    from subprocess import run
+    run(command, input=data, capture_output=True)
+  - |
+    from subprocess import PIPE, run
+    run(command, input=data, stdout=PIPE)
+  - |
+    from subprocess import PIPE, run
+    run(command, input=data, stderr=PIPE)
+  - |
+    from subprocess import check_output
+    check_output(command, input=data)
+  - |
+    from subprocess import PIPE
+    subprocess.run(command, input=data, stdout=PIPE)
+  - |
+    from subprocess import PIPE
+    subprocess.run(command, input=data, stderr=PIPE)
+  - 'subprocess.check_output(command, input=data)'
+  - 'subprocess.run(command, input=data, capture_output=True)'
+  - 'subprocess.run(command, input=data, capture_output=capture)'
+  - 'subprocess.run(command, stdout=subprocess.PIPE, input=data)'
+  - 'subprocess.run(command, input=data, stderr=subprocess.PIPE)'
+  - 'subprocess.run(command, input=data, capture_output=False, stderr=subprocess.PIPE)'
+  - |
+    subprocess.run(
+        command,
+        capture_output=True,
+        input=requests,
+        check=True,
+    )
+  - 'child.communicate(input=data)'
+  - 'subprocess.Popen(command, stdout=subprocess.PIPE).communicate(input=data)'

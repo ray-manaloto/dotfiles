@@ -1,0 +1,59 @@
+id: no-captured-stdin
+language: Python
+severity: error
+message: Use repotools.process.run to feed stdin independently of draining captured output.
+note: A blocking stdin write can deadlock the output reader on macOS even after poll reports writable.
+rule:
+  any:
+    - any:
+        - pattern:
+            context: subprocess.check_output($$$BEFORE, input=$INPUT, $$$AFTER)
+            strictness: ast
+        - pattern:
+            context: check_output($$$BEFORE, input=$INPUT, $$$AFTER)
+            strictness: ast
+    - all:
+        - any:
+            - pattern: subprocess.run($$$ARGS)
+            - pattern: run($$$ARGS)
+        - pattern:
+            context: $RUN($$$BEFORE, input=$INPUT, $$$AFTER)
+            strictness: ast
+        - any:
+            - all:
+                - pattern:
+                    context: $RUN($$$LEFT, capture_output=$CAPTURE, $$$RIGHT)
+                    strictness: ast
+                - not:
+                    pattern:
+                      context: $RUN($$$LEFT, capture_output=False, $$$RIGHT)
+                      strictness: ast
+            - pattern:
+                context: $RUN($$$LEFT, stdout=subprocess.PIPE, $$$RIGHT)
+                strictness: ast
+            - pattern:
+                context: $RUN($$$LEFT, stderr=subprocess.PIPE, $$$RIGHT)
+                strictness: ast
+            - pattern:
+                context: $RUN($$$LEFT, stdout=PIPE, $$$RIGHT)
+                strictness: ast
+            - pattern:
+                context: $RUN($$$LEFT, stderr=PIPE, $$$RIGHT)
+                strictness: ast
+    # communicate's pipes are configured by Popen elsewhere; supplied input conservatively needs the helper.
+    - pattern:
+        context: $CHILD.communicate($$$BEFORE, input=$INPUT, $$$AFTER)
+        strictness: ast
+    - pattern:
+        context: $CHILD.communicate($INPUT, $$$AFTER)
+        strictness: ast
+constraints:
+  INPUT:
+    not:
+      any:
+        - kind: keyword_argument
+        - pattern: None
+        - pattern: "''"
+        - pattern: '""'
+        - pattern: 'b""'
+        - pattern: "b''"

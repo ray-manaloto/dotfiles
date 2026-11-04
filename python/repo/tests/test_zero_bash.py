@@ -4,11 +4,13 @@ import json
 import os
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 
 import pytest
 
 from repotools.cli import main
+from tests import run_python
 
 REPO = Path(__file__).resolve().parents[3]
 LONG_RUN = "[tasks.a]\nrun = '''\necho one\necho two\n'''\n"
@@ -249,3 +251,33 @@ def test_this_repository_reports_no_zsh_startup_file(
     paths = [finding["path"] for finding in report(capsys)]
     assert "unix/home/.config/mise/config.toml" in paths
     assert not [path for path in paths if path.startswith(("unix/home/.z", "unix/home/.config/zsh/"))]
+
+
+def test_large_index_and_blob_output_finish_without_a_pipe_deadlock(repo: Path) -> None:
+    # 2,048 SHA-1 request lines exceed 64 KiB. The first blob fills stdout before Git drains stdin.
+    files: dict[str, str | bytes] = {f"files/{number:04}.txt": b"plain\x00text\r\n\xff\n" for number in range(2048)}
+    files["files/0000.txt"] *= 8192
+    files["zz-last.sh"] = b"echo last\n"
+    add(repo, files)
+    (repo / "files/0000.txt").write_bytes(b"#!/bin/sh\n")  # Only staged bytes may affect the scan.
+    (repo / "zz-last.sh").unlink()
+    done = run_python("from repotools.cli import main\nmain(['zero-bash', '--strict'])\n")
+    assert done.returncode == 1, done.stderr.decode(errors="replace")
+    assert [json.loads(line) for line in done.stdout.splitlines()] == [
+        {"path": "zz-last.sh", "rule": "shell-file", "detail": ".sh"}
+    ]
+
+
+def test_an_early_batch_failure_reports_git_error_instead_of_a_broken_pipe(repo: Path) -> None:
+    add(repo, {f"files/{number:04}.txt": "object content\n" for number in range(2048)})
+    oid = subprocess.run(["git", "ls-files", "-s"], capture_output=True, check=True, text=True).stdout.split()[1]
+    # ls-files still reads the index, but cat-file fails on its first object while requests fill stdin.
+    blob = repo / ".git" / "objects" / oid[:2] / oid[2:]
+    blob.unlink()  # Git's object is read-only; replace it in this disposable repository.
+    blob.write_bytes(zlib.compress(b"blob 65536\x00" + b"x" * 65536)[:-4])
+    done = run_python("from repotools.cli import main\nmain(['zero-bash', '--strict'])\n")
+    assert done.returncode == 1
+    assert done.stdout == b""
+    event = json.loads(done.stderr)
+    assert set(event) == {"error"}
+    assert event["error"].startswith("git failed: ")
