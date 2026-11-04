@@ -99,7 +99,8 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
      version.
    - Create a worktree and pin the candidate temporarily in `python/cbm/mise.toml` with `mise use --path`;
      the launcher's `global` link is built from the global config only, so it keeps the live build.
-   - Writes to the shared mise store must stay inside a per-tool allowlist.
+   - Every mise call uses prepare's config overrides (the worktree's global config file, an empty system
+     config); writes to the shared mise data, state and cache dirs must stay inside a per-tool allowlist.
    - The worktree is created beside the checkout, in a folder mise already trusts (the global config is
      paranoid about config files), and its path is recorded.
    - The pin and the read of its lock entry run from the worktree root (mise routes the entry only with the
@@ -109,6 +110,8 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
      pin; the pin may change only the package `mise.toml` and exactly one lockfile, whose path and hashes are
      recorded; no changed lockfile is `provenance_mismatch`. Verify the host archive against the new entry, compare its executable with the candidate's,
      and record the entry's URL and checksum in the trial's binding.
+   - From here on the candidate executable runs by absolute path through the trial's own launcher, never
+     `global`, and its version and hash must match the binding before any result counts.
    - Run the candidate installer for every client in a private HOME and capture what it writes into a
      versioned baseline (`expected/<version>.json`).
    - Classify every difference from the previous baseline into upgrade changes with content ids.

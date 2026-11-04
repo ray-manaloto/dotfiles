@@ -6,7 +6,9 @@ status: accepted
 
 A new codebase-memory-mcp (CBM) release will reach the live setup in two steps (designed in spec #412, not
 built yet). The first is a pull request that `python/cbm` will prepare; the second is an apply step, run only
-after that PR is merged. The first PR changes nothing live. It runs these steps:
+after that PR is merged. The first PR changes nothing live, with one accepted exception: the trial shares the mise store with the
+live setup, and writes there are checked after each mise command rather than prevented (see below). It runs
+these steps:
 
 1. Check for an update.
 2. Run a zero-token trial of the candidate build with private client configs and its own CBM runtime
@@ -25,7 +27,12 @@ agents and permissions reviewed in a diff before anything live moves.
 
 - **The trial pins the candidate temporarily in the package's own `mise.toml`** with `mise use --path` on that
   file. The `global` link the launcher follows is built from the global config only (mise v2026.11.0
-  `src/runtime_symlinks.rs:48-55`), so a session that starts CBM meanwhile still gets the live build. It uses the shared mise store,
+  `src/runtime_symlinks.rs:48-55`), so a session that starts CBM meanwhile still gets the live build. For the same reason nothing in the trial
+  reaches the candidate through `global` or the live launcher: the installer, the index and the MCP probe run
+  the candidate executable by absolute path through the trial's own launcher, after its version and hash are
+  checked against the binding below. Every trial mise call uses the same config overrides as prepare (the
+  worktree's global config file, an empty system config dir, a cleared system config file); the mise data,
+  state and cache dirs stay the shared ones and are covered by the allowlist check. It uses the shared mise store,
   which `//cbm:install` also uses. Using the shared store is an accepted risk: before and after each mise
   command, the trial checks the paths it may write against an allowlist. Any change to the live launcher, the
   `global` link, client configs or skill dirs stops the run. This catches damage rather than preventing it. The
