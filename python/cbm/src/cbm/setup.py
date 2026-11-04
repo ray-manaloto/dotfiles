@@ -14,7 +14,7 @@ from typing import Any
 
 from . import config
 from .events import check, emit
-from .models import Client, Config, Error
+from .models import Client, Config, Error, ErrorCode
 
 CLAUDE_HOOKS = {("SessionStart", m) for m in ("startup", "resume", "clear", "compact")} | {
     ("SubagentStart", "*"),
@@ -50,9 +50,10 @@ TIMEOUT = 60
 class InstallError(Exception):
     """The installer could not run or failed; the CLI turns it into one error event and exits 1."""
 
-    def __init__(self, message: str, path: Path | None = None) -> None:
+    def __init__(self, message: str, path: Path | None = None, *, code: ErrorCode) -> None:
         super().__init__(message)
         self.path = path
+        self.code = code
 
 
 def run(cfg: Config, *args: str, stdin: str = "", program: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -65,7 +66,13 @@ def run(cfg: Config, *args: str, stdin: str = "", program: Path | None = None) -
             timeout=TIMEOUT, check=False,
         )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as error:  # one error event, then a failed run
-        emit(Error(message=f"cbm: {path.name} could not run: {error}", path=path))
+        if isinstance(error, FileNotFoundError):
+            code = ErrorCode.missing_binary
+        elif isinstance(error, subprocess.TimeoutExpired):
+            code = ErrorCode.command_timeout
+        else:
+            code = ErrorCode.command_failed
+        emit(Error(code=code, message=f"cbm: {path.name} could not run: {error}", path=path))
         return subprocess.CompletedProcess(command, 127, "", str(error))
 
 
@@ -79,7 +86,7 @@ def install(cfg: Config) -> int:
     link, launcher = config.link(cfg), config.launcher(cfg)
     if not link.exists():
         msg = "cbm: the mise global link is missing; run `mise install` for the global config first"
-        raise InstallError(msg, link)
+        raise InstallError(msg, link, code=ErrorCode.missing_binary)
     launcher.parent.mkdir(parents=True, exist_ok=True)
     # One install at a time: a second run would see the launcher removed and restore it under the first.
     lock_path = launcher.parent.parent / "cbm-install.lock"
@@ -88,7 +95,7 @@ def install(cfg: Config) -> int:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             msg = "cbm: another cbm install is running; rerun when it has finished"
-            raise InstallError(msg, lock_path) from None
+            raise InstallError(msg, lock_path, code=ErrorCode.install_busy) from None
         return installed(cfg)
 
 
@@ -98,7 +105,7 @@ def installed(cfg: Config) -> int:
     mine = ours(cfg)
     if not mine and (launcher.exists() or launcher.is_symlink()):
         msg = f"cbm: the launcher is not this package's symlink to {link}; move it away and rerun"
-        raise InstallError(msg, launcher)
+        raise InstallError(msg, launcher, code=ErrorCode.foreign_launcher)
     clients = ",".join(cfg.clients)
     try:
         if mine:
@@ -109,13 +116,13 @@ def installed(cfg: Config) -> int:
         )  # fmt: skip
     except OSError as error:  # the global link exists but cannot run
         msg = f"cbm: the CBM installer could not start: {error}"
-        raise InstallError(msg, link) from None
+        raise InstallError(msg, link, code=ErrorCode.installer_start_failed) from None
     finally:
         if not launcher.is_symlink():  # back on every exit path, so configs keep working
             launcher.symlink_to(link)
     if done.returncode != 0:
         msg = f"cbm: the CBM installer exited {done.returncode}"
-        raise InstallError(msg, link)
+        raise InstallError(msg, link, code=ErrorCode.installer_failed)
     set_ = run(cfg, "config", "set", "auto_index", "false")
     return int(not check("config set auto_index false", ok=set_.returncode == 0, detail=first_line(set_)))
 
@@ -130,7 +137,7 @@ def read_json(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text()) if path.is_file() else {}
     except json.JSONDecodeError as error:
-        emit(Error(message=f"cbm: cannot parse JSON: {error}", path=path))
+        emit(Error(code=ErrorCode.invalid_json, message=f"cbm: cannot parse JSON: {error}", path=path))
         return {}
 
 
@@ -139,7 +146,7 @@ def read_toml(path: Path) -> dict[str, Any]:
     try:
         return tomllib.loads(path.read_text()) if path.is_file() else {}
     except tomllib.TOMLDecodeError as error:
-        emit(Error(message=f"cbm: cannot parse TOML: {error}", path=path))
+        emit(Error(code=ErrorCode.invalid_toml, message=f"cbm: cannot parse TOML: {error}", path=path))
         return {}
 
 
@@ -172,7 +179,7 @@ def serves(cfg: Config, version: str) -> bool:
         replies = {reply.get("id"): reply.get("result", {}) for reply in map(json.loads, done.stdout.splitlines())}
     except json.JSONDecodeError as error:
         msg = f"cbm: the MCP server answered something other than JSON: {error}"
-        emit(Error(message=msg, path=config.launcher(cfg)))
+        emit(Error(code=ErrorCode.invalid_mcp_response, message=msg, path=config.launcher(cfg)))
         replies = {}
     name = replies.get(1, {}).get("serverInfo", {}).get("version", "")
     tools = {tool.get("name") for tool in replies.get(2, {}).get("tools", [])}
