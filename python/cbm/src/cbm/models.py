@@ -27,6 +27,7 @@ class ErrorCode(StrEnum):
     invalid_setting = "invalid_setting"
     missing_binary = "missing_binary"
     install_busy = "install_busy"
+    install_checkout_refused = "install_checkout_refused"
     foreign_launcher = "foreign_launcher"
     installer_start_failed = "installer_start_failed"
     installer_failed = "installer_failed"

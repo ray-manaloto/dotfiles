@@ -16,6 +16,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -155,20 +156,33 @@ def failed(out: str) -> list[str]:
     return [event["name"] for event in events(out) if event["event"] == "check" and not event["ok"]]
 
 
-def cbm(*args: str, timeout: int = TIMEOUT, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
-    """`cbm <args>` as a child process with this test's environment."""
+def cbm(*args: str, cwd: Path, timeout: int = TIMEOUT) -> subprocess.CompletedProcess[str]:
+    """`cbm <args>` with this test's environment and an explicit caller-owned working directory."""
     return subprocess.run(
         [str(CBM), *args], env=os.environ.copy(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
         timeout=timeout, cwd=cwd, check=False,
     )  # fmt: skip
 
 
+def package_source(folder: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Load an unchanged copy of this package through the installed CLI entrypoint."""
+    source = folder / "python/cbm/src"
+    shutil.copytree(Path(__file__).parents[1] / "src", source, ignore=shutil.ignore_patterns("__pycache__"))
+    monkeypatch.setenv("PYTHONPATH", str(source))
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    return source
+
+
 @pytest.fixture
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A temporary HOME with the stand-in at the mise global link, in mode ok."""
     root = tmp_path.resolve()
-    for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CBM_CACHE_DIR", "CBM_RUNTIME_DIR"):
+    for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CBM_CACHE_DIR", "CBM_RUNTIME_DIR",
+                 "CBM_INSTALL_GIT_TIMEOUT_SECONDS",
+                 "CBM_INSTALL_ALLOW_NON_MAIN", *(key for key in os.environ if key.startswith("GIT_"))):  # fmt: skip
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("HOME", str(root))
     monkeypatch.setenv("MISE_DATA_DIR", str(root / ".local/share/mise"))
     for name, folder in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
@@ -180,6 +194,15 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     link(root).write_text(f"#!{sys.executable} -I\n{STAND_IN}")
     link(root).chmod(0o755)
     mode(root, "ok")
+    checkout = root / "checkout"
+    checkout.mkdir()
+    git(checkout, "init", "--initial-branch=main")
+    git(checkout, "commit", "--allow-empty", "-m", "Initial fixture")
+    package = root / "package-checkout"
+    package_source(package, monkeypatch)
+    git(package, "init", "--initial-branch=main")
+    git(package, "add", ".")
+    git(package, "commit", "-m", "Package fixture")
     return root
 
 
@@ -206,8 +229,6 @@ def provision(home: Path, *args: str) -> None:
 def releases(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Two local releases installed through a PATH-only mise stand-in; returns a clean git checkout to run in."""
     checkout = home / "checkout"
-    checkout.mkdir()
-    git(checkout, "init", "--initial-branch=main")
     (checkout / "mise.toml").write_text('[tools]\n"github:DeusData/codebase-memory-mcp" = "9.9.9"\n')
     git(checkout, "add", ".")
     git(checkout, "commit", "-m", "Initial fixture")

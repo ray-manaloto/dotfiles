@@ -5,7 +5,7 @@ import sys
 from collections.abc import Sequence
 from types import FrameType
 
-from . import config, setup
+from . import checkout, config, setup
 from .events import emit
 from .models import Command, Done, Error, ErrorCode, Outcome
 
@@ -25,6 +25,24 @@ def stop(sig: int, _frame: FrameType | None) -> None:
     raise SystemExit(128 + sig)
 
 
+def report_install_refusal(message: str, *, interrupted: bool = False) -> None:
+    emit(Error(code=ErrorCode.install_checkout_refused, message=message))
+    result = "interrupted" if interrupted else "failed"
+    emit(Done(command=Command.install, failed=1, outcome=Outcome.failed,
+              message=f"cbm: install refused: checkout check {result}"))  # fmt: skip
+
+
+def check_install_checkout() -> None:
+    try:
+        message = checkout.install_refusal()
+    except SystemExit:  # A signal's SystemExit reaches here after subprocess.run cleans up its child.
+        report_install_refusal("cbm: git checkout discovery interrupted", interrupted=True)
+        raise
+    if message:
+        report_install_refusal(message)
+        raise SystemExit(1)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     args = list(sys.argv[1:] if argv is None else argv)
     try:
@@ -32,13 +50,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     except ValueError as error:
         emit(Error(code=ErrorCode.invalid_usage, message=str(error)))
         raise SystemExit(2) from None
+    for each in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(each, stop)
     try:
+        if command is Command.install:
+            check_install_checkout()
         cfg = config.load()
     except config.SettingError as error:
         emit(Error(code=ErrorCode.invalid_setting, message=str(error)))
         raise SystemExit(2) from None
-    for each in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(each, stop)
     failed = 0
     if command is Command.install:
         try:

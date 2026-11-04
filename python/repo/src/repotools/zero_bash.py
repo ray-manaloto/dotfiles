@@ -9,10 +9,12 @@ import shlex
 import subprocess
 from collections.abc import Iterator
 from pathlib import PurePosixPath
+from typing import cast
 
 import tomlkit
 from tomlkit.items import String
 
+from . import process
 from .models import Finding, Rule
 
 SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh", ".csh", ".fish")
@@ -40,7 +42,10 @@ def allowed(path: str) -> bool:
 
 
 def git(*args: str, stdin: bytes | None = None) -> bytes:
-    return subprocess.run(["git", *args], input=stdin, capture_output=True, check=True).stdout
+    if stdin is None:
+        return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+    # This call keeps the helper's default capture_stdout=True.
+    return cast("bytes", process.run(["git", *args], stdin).stdout)
 
 
 def index() -> list[tuple[str, str, str]]:

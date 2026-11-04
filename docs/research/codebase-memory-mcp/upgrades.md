@@ -80,6 +80,9 @@ from the link, and running processes keep their old executable when the pin move
 the new build; if the old daemon were still up, the daemon would refuse it (`fingerprint_mismatch`,
 runtime.c:2074-2148). That is why steps 2 and 3 come before steps 4 and 5.
 
+For a deliberate install from another checkout, opt in for that invocation with
+`CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup.
+
 ## Installer facts
 
 - `install --skip-binary` alone does not drain sessions: it quiesces only when it validates a binary or deletes
