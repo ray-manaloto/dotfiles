@@ -22,7 +22,7 @@ from .conftest import calls, cbm, events, git, launcher, link, provision
     ],
 )
 def test_future_commands_are_recognized_but_do_not_change_setup(home: Path, args: list[str]) -> None:
-    done = cbm(*args)
+    done = cbm(*args, cwd=home / "checkout")
     assert done.returncode == 1
     assert events(done.stderr) == [
         {
@@ -56,7 +56,7 @@ def test_future_commands_are_recognized_but_do_not_change_setup(home: Path, args
     ],
 )
 def test_bad_future_command_syntax_is_a_usage_error(home: Path, args: list[str]) -> None:
-    done = cbm(*args)
+    done = cbm(*args, cwd=home / "checkout")
     assert done.returncode == 2
     [error] = events(done.stderr)
     assert error["code"] == "invalid_usage"
@@ -70,7 +70,7 @@ def test_usage_message_is_independent_of_terminal_width(
     home: Path, monkeypatch: pytest.MonkeyPatch, columns: str
 ) -> None:
     monkeypatch.setenv("COLUMNS", columns)
-    done = cbm("accept")
+    done = cbm("accept", cwd=home / "checkout")
     assert done.returncode == 2
     [error] = events(done.stderr)
     assert error["code"] == "invalid_usage"
@@ -82,7 +82,7 @@ def test_usage_message_is_independent_of_terminal_width(
 def test_verify_detects_a_corrupt_reused_build_unless_explicitly_replaced(
     home: Path, upgrade_home: dict[str, Path], *, force: bool
 ) -> None:
-    assert cbm("install", cwd=upgrade_home["worktree"]).returncode == 0
+    assert cbm("install", cwd=upgrade_home["dotfiles"]).returncode == 0
     tool = "github:DeusData/codebase-memory-mcp@9.9.10"
     provision(home, tool)
     selected = link(home).parent.parent / "9.9.10"
@@ -121,7 +121,7 @@ def test_setup_keeps_the_global_build_and_live_context(
     monkeypatch.setenv("CBM_TEST_SENTINEL", "preserve this value")
     provisioned = (home / "mise-calls.jsonl").read_bytes()
 
-    installed = cbm("install", cwd=upgrade_home["worktree"])
+    installed = cbm("install", cwd=upgrade_home["dotfiles"])
     assert installed.returncode == 0, installed.stdout + installed.stderr
     verified = cbm("verify", cwd=upgrade_home["worktree"])
     assert verified.returncode == 0, verified.stdout + verified.stderr
