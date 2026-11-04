@@ -6,7 +6,7 @@
   "microskills": "envfacts+distiller",
   "microskills_max_facts": 12,
   "microskills_max_tokens": 600,
-  "microskills_propose_every": 1,
+  "microskills_propose_every": 3,
   "toolprune": "propose",
   "toolprune_protect": [
     "AskUserQuestion",
