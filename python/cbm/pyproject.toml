@@ -41,6 +41,10 @@ build-backend = "uv_build"
 # The tests run the installed cbm command as a child process, the way a user does; measure it there.
 patch = ["subprocess"]
 
+[tool.coverage.paths]
+# The CLI provenance tests load unchanged source copies in temporary Git checkouts.
+source = ["src/cbm", "*/python/cbm/src/cbm"]
+
 # Flags live here, so the codegen task stays one line (zero-bash rule).
 [tool.datamodel-codegen]
 input = "schema/cbm.schema.json"

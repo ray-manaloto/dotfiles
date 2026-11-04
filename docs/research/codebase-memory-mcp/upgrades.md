@@ -46,18 +46,24 @@ So the pin is exact (`version = "0.12.1"`) and kept out of bulk upgrades:
 ## Manual upgrade, today
 
 1. Read the release notes for the new tag; note index-format changes and installer changes.
-2. Close every Claude and Codex session (and anything else that runs CBM).
-3. Stop the old daemon with the old binary: `codebase-memory-mcp daemon stop` through the launcher, before the pin
+2. Prepare and merge the pin bump in `unix/home/.config/mise/config.toml`, then fast-forward the primary
+   checkout to the merged `origin/main`. Run the remaining steps from that checkout on `main`.
+3. Close every Claude and Codex session (and anything else that runs CBM).
+4. Stop the old daemon with the old binary: `codebase-memory-mcp daemon stop` through the launcher, before the pin
    moves. It refuses while sessions are attached. Confirm no `--cbm-daemon-internal` process is left.
-4. Bump the pin in `unix/home/.config/mise/config.toml`, apply it, and run `mise install`. The global link moves.
-5. `mise run //cbm:install`, never CBM's own `install`, `update` or `install.sh` (see `install.md`) (the installer rewrites the agent setup for the new build; configs keep the launcher
-   path).
-6. Start one session; check one executable path in `ps`, no new conflict lines, and the tools in `/mcp`.
-7. Reindex each project once: index-format changes force a full rebuild (0.12.0, and again 0.12.1).
-8. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+5. Apply the merged pin and run `mise install`. The global link moves.
+6. Run `mise run //cbm:install`. Use this task, never CBM's own `install`, `update`
+   or `install.sh` (see `install.md`). The installer rewrites the agent setup for the new build; configs keep
+   the launcher path.
+7. Start one session; check one executable path in `ps`, no new conflict lines, and the tools in `/mcp`.
+8. Reindex each project once: index-format changes force a full rebuild (0.12.0, and again 0.12.1).
+9. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+
+For deliberate qualification from another checkout, explicitly opt in with
+`CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup.
 
 The daemon runs from the resolved install folder (`~/.local/share/mise/installs/codebase-memory-mcp-<hash>/`), not
-from the link. Moving the link does not move a running daemon, which is why step 3 comes before step 4.
+from the link. Moving the link does not move a running daemon, which is why step 4 comes before step 5.
 
 ## Facts for the automation PR
 
