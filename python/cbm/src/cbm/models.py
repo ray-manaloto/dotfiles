@@ -35,34 +35,15 @@ class ErrorCode(StrEnum):
     invalid_json = "invalid_json"
     invalid_toml = "invalid_toml"
     invalid_mcp_response = "invalid_mcp_response"
-    update_check_incomplete = "update_check_incomplete"
-    live_state_changed = "live_state_changed"
-    unexpected_write = "unexpected_write"
-    provenance_mismatch = "provenance_mismatch"
-    artifact_changed = "artifact_changed"
-    trial_check_failed = "trial_check_failed"
-    policy_violation = "policy_violation"
-    source_unclassified = "source_unclassified"
-    review_invalid = "review_invalid"
-    review_incomplete = "review_incomplete"
-    review_unqualified = "review_unqualified"
-    changes_unaccepted = "changes_unaccepted"
-    acceptance_stale = "acceptance_stale"
-    acceptance_unknown = "acceptance_unknown"
-    skill_sync_unqualified = "skill_sync_unqualified"
-    worktree_dirty = "worktree_dirty"
 
 
 class Outcome(StrEnum):
     """
-    Completion outcomes shared by install, verify and the upgrade flow.
+    Completion outcomes of install and verify.
     """
 
     done = "done"
     failed = "failed"
-    up_to_date = "up_to_date"
-    needs_review = "needs_review"
-    pr_prepared = "pr_prepared"
 
 
 class Command(StrEnum):
@@ -72,19 +53,6 @@ class Command(StrEnum):
 
     install = "install"
     verify = "verify"
-    upgrade = "upgrade"
-    accept = "accept"
-
-
-class UpgradeStep(StrEnum):
-    """
-    Upgrade steps that can also be requested individually.
-    """
-
-    check = "check"
-    trial = "trial"
-    review = "review"
-    prepare = "prepare"
 
 
 class Client(StrEnum):
