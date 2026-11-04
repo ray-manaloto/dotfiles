@@ -13,8 +13,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from . import process
 from .models import CommitText, Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
@@ -22,19 +23,25 @@ CITATION_OPEN = "<oai-mem-citation>"
 CITATION_CLOSE = "</oai-mem-citation>"
 
 
-def git(*args: str, stdin: str | None = None) -> str:
-    return subprocess.run(["git", *args], input=stdin, capture_output=True, check=True, text=True).stdout
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, check=True, text=True).stdout
 
 
 def hashed(data: bytes) -> str:
     # Bytes, not text: Python's text mode would turn a body's CRLF into LF before hashing.
+    # Git 2.56.0 builtin/hash-object.c:23-35, read offline: hashes stdin before output; fingerprints stay read-only.
+    # ast-grep-ignore: no-captured-stdin
     done = subprocess.run(["git", "hash-object", "--stdin"], input=data, capture_output=True, check=True)
     return done.stdout.decode().strip()
 
 
 def stripped(path: str) -> str:
     # git commit cleans the message the same way before it is stored, so a trailing blank line changes nothing.
-    return git("stripspace", stdin=Path(path).read_text())
+    # Git 2.56.0 builtin/stripspace.c:61-70, read offline: reads to EOF before output; fingerprints stay read-only.
+    # ast-grep-ignore: no-captured-stdin
+    return subprocess.run(
+        ["git", "stripspace"], input=Path(path).read_text(), capture_output=True, check=True, text=True
+    ).stdout
 
 
 def fingerprint(text: CommitText | PrText, body: bytes | None = None) -> str:
@@ -227,5 +234,6 @@ def create(text: PrText) -> None:
     body = Path(text.body_file).read_bytes()
     check(text, body)
     command = ["gh", "pr", "create", "--base", "main", "--title", text.title, "--body-file", "-"]
-    done = subprocess.run(command, input=body, stderr=subprocess.PIPE, check=True)
-    sys.stderr.write(done.stderr.decode(errors="replace"))
+    done = process.run(command, body, capture_stdout=False)
+    # The helper always captures stderr; only stdout may be None.
+    sys.stderr.write(cast("bytes", done.stderr).decode(errors="replace"))
