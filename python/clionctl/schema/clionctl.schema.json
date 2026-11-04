@@ -1,0 +1,368 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "clionctl",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of clion-ctl; mise run //clionctl:codegen writes src/clionctl/models.py from this file.",
+  "properties": {
+    "command": {
+      "$ref": "#/$defs/Command"
+    },
+    "options": {
+      "$ref": "#/$defs/Options"
+    },
+    "ide": {
+      "$ref": "#/$defs/Ide"
+    },
+    "done": {
+      "$ref": "#/$defs/Done"
+    },
+    "failure": {
+      "$ref": "#/$defs/Failure"
+    },
+    "exit_request": {
+      "$ref": "#/$defs/ExitRequest"
+    }
+  },
+  "$defs": {
+    "Command": {
+      "description": "The clion-ctl subcommands.",
+      "type": "string",
+      "enum": [
+        "status",
+        "start",
+        "stop",
+        "restart"
+      ]
+    },
+    "Pid": {
+      "description": "A process id.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "Port": {
+      "description": "A TCP port.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "Timeout": {
+      "description": "Seconds to wait.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "Status": {
+      "description": "List the running IDEs: each live station socket whose process has it open.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "Start": {
+      "description": "Launch an IDE app bundle with open -n, then wait for its station socket and, when given, its MCP port.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "The IDE's .app bundle"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A project folder for the IDE to open"
+        },
+        "mcp_port": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Port"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Also wait until the IDE listens on this port"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Timeout",
+          "default": 120,
+          "description": "Seconds to wait for the IDE"
+        }
+      },
+      "required": [
+        "app"
+      ],
+      "additionalProperties": false
+    },
+    "Stop": {
+      "description": "Ask an IDE to quit as File | Exit does, and wait for its process to end. It is never killed.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IDE's process id; needed with --app when more than one IDE runs"
+        },
+        "app": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IDE's .app bundle"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Timeout",
+          "default": 60,
+          "description": "Seconds to wait for the process to end"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Restart": {
+      "description": "Ask an IDE to restart as File | Restart IDE does, then wait for the new process and, when given, its MCP port.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IDE's process id; needed with --app when more than one IDE runs"
+        },
+        "app": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IDE's .app bundle"
+        },
+        "mcp_port": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Port"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Also wait until the new process listens on this port"
+        },
+        "timeout": {
+          "$ref": "#/$defs/Timeout",
+          "default": 120,
+          "description": "Seconds to wait for the new process"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Options": {
+      "description": "What a clion-ctl command parses from its arguments.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Status"
+        },
+        {
+          "$ref": "#/$defs/Start"
+        },
+        {
+          "$ref": "#/$defs/Stop"
+        },
+        {
+          "$ref": "#/$defs/Restart"
+        }
+      ]
+    },
+    "Ide": {
+      "description": "A running IDE, one JSON line of status.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "$ref": "#/$defs/Pid"
+        },
+        "app": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The .app bundle its command line runs from, or null"
+        },
+        "socket": {
+          "type": "string",
+          "description": "Its station socket"
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Port"
+          },
+          "description": "The TCP ports it listens on, the MCP server's among them"
+        }
+      },
+      "required": [
+        "pid",
+        "app",
+        "socket",
+        "ports"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "description": "What a command did.",
+      "type": "string",
+      "enum": [
+        "started",
+        "stopped",
+        "restarted"
+      ]
+    },
+    "Done": {
+      "description": "The JSON line start, stop and restart print when they finish.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/Event"
+        },
+        "pid": {
+          "$ref": "#/$defs/Pid",
+          "description": "The IDE's process id; for stop, the process that ended"
+        },
+        "previous_pid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For restart, the process that ended"
+        },
+        "app": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Port"
+          },
+          "description": "The TCP ports the IDE listens on; empty for stop"
+        }
+      },
+      "required": [
+        "event",
+        "pid",
+        "previous_pid",
+        "app",
+        "ports"
+      ],
+      "additionalProperties": false
+    },
+    "Reason": {
+      "description": "Why a command stopped.",
+      "type": "string",
+      "enum": [
+        "usage",
+        "no-ide",
+        "ambiguous",
+        "running",
+        "no-app",
+        "station",
+        "still-running",
+        "not-started"
+      ]
+    },
+    "Failure": {
+      "description": "Why a command stopped, printed as a JSON line on stderr with exit 1.",
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/Reason"
+        },
+        "detail": {
+          "type": "string",
+          "description": "The message"
+        },
+        "pid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Pid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The IDE it concerns, if one"
+        }
+      },
+      "required": [
+        "error",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "ExitRequest": {
+      "description": "The body of the station's POST /exit (IdeExitRequest in CLion's station plugin).",
+      "type": "object",
+      "properties": {
+        "userInitiated": {
+          "type": "boolean",
+          "description": "Passed to Application.exit as exitConfirmed: true skips the Exit confirmation, not the IDE's other checks"
+        },
+        "force": {
+          "type": "boolean",
+          "description": "True force-exits without the IDE's checks; clion-ctl always sends false"
+        },
+        "restart": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "userInitiated",
+        "force",
+        "restart"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

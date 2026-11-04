@@ -25,6 +25,10 @@ local linters = new Mapping<String, Step> {
         glob = List("python/workflow/**")
         check = "mise run //workflow:check"
     }
+    ["clionctl"] {
+        glob = List("python/clionctl/**")
+        check = "mise run //clionctl:check"
+    }
     // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
     ["frontmatter"] {
         glob = List("**/*.md", "**/*.yml", "**/*.yaml")
