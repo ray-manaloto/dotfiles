@@ -17,6 +17,9 @@ these steps:
 4. Take an explicit owner acceptance of every change.
 5. Prepare the pin and lock in a worktree.
 
+Runtime qualification (the skill-sync and review-tab runs) is pending; until each passes, the trial refuses
+(`skill_sync_unqualified`) or the review refuses (`review_unqualified`), so no upgrade reaches prepare.
+
 We chose this because every CBM process in one runtime namespace (one per account by default; a private
 `CBM_RUNTIME_DIR` gives the trial its own) must be one build. Open sessions keep their server process and its
 build until they end, so an in-place pin change leaves old and new builds side by side until every session is
@@ -46,7 +49,8 @@ agents and permissions reviewed in a diff before anything live moves.
      runs no config hooks and refuses tool `postinstall` and other code-bearing options (`src/hooks.rs:309-319`,
      `src/toolset/tool_request.rs:552-578`). Before it, the trial refuses (`live_state_changed`) unless the
      live `tool-purgatory.json` is absent or empty, because nearly every mise command first runs the due
-     deferred removals and no setting turns that off; an entry queued after the check is caught by the after-check (`src/cli/mod.rs:1228-1237`, `src/tool_purgatory.rs:156-190`).
+     deferred removals; only `--version`, dry runs, `MISE_NO_CONFIG` (which would also drop the configs the install
+     needs) and a few named commands skip them (`src/cli/mod.rs:477-491`). An entry queued after the check is caught by the after-check (`src/cli/mod.rs:1228-1237`, `src/tool_purgatory.rs:156-190`).
 
   The install keeps its incomplete-install markers and its per-version lock where live mise sees them
   (`src/toolset/install_state.rs:1398-1525`), so an interrupted trial install never looks complete to live
@@ -55,7 +59,8 @@ agents and permissions reviewed in a diff before anything live moves.
   adds tracked-config links for the worktree's package and root configs, and possibly the root's derived
   `.monorepo` trust marker, to the live state; while the worktree exists that link also keeps a live `mise prune` from removing the candidate.
   `mise use` is not used: it cannot refuse to install (`src/cli/use.rs:365-380`), and it rebuilds runtime
-  links and syncs skills. No trial call sets `MISE_GLOBAL_CONFIG_FILE` or its alias `MISE_CONFIG_FILE`: with
+  links and syncs skills. No trial call sets `MISE_GLOBAL_CONFIG_FILE` or its alias `MISE_CONFIG_FILE` (prepare's
+  config check and lock are the only calls that do, and neither rebuilds links): with
   that override a link rebuild takes `global` from the one file named and drops `config.local.toml` and
   `conf.d` (`src/config/mod.rs:3720-3752`, `src/runtime_symlinks.rs:48-72`). The install's rebuild uses the
   live selection, so the `global` link the launcher follows stays put while the candidate's install and
@@ -71,10 +76,23 @@ agents and permissions reviewed in a diff before anything live moves.
   preventing it. It keeps one store, so an existing install of the candidate can be reused; the trial's own
   archive check still downloads the archive. A qualification run records what each step writes for this mise
   version, lockfiles included.
-- **Prepare writes the global pin and lock with `mise lock`, never `mise use`.** It points mise at the
-  worktree's global config file and an empty system config, with the trial's private state and cache dirs. `mise lock` installs nothing, and `mise use` would
-  rebuild links in the shared store. `mise lock TOOL@VERSION` also rewrites the request in that config file,
-  which is the pin change prepare wants (mise v2026.11.0 `src/cli/lock.rs:170-180`). Prepare does not
+- **Prepare edits the global pin as a file and writes its lock with `mise lock --global`, never `mise use`.**
+  `mise lock` installs nothing, and `mise use` would rebuild links in the shared store. `mise lock TOOL@VERSION`
+  does not rewrite a global config's request (mise v2026.11.0 `src/toolset/outdated_info.rs:386-400` skips
+  global configs, and `MISE_GLOBAL_CONFIG_FILE` makes the worktree copy global), so prepare changes the pin with
+  a plain file edit, as the trial does for the package config. It then runs
+  `mise lock --global TOOL@<new> --platform macos-arm64,linux-x64,linux-arm64`: without `--global` the global
+  config is out of the lock's scope (`src/cli/lock.rs:2203-2222`). The lock points mise at the worktree's global
+  config file and an empty system config, with the trial's private state and cache dirs, and runs from a fresh
+  empty folder under `$TMPDIR`, outside `$HOME` and any repository. Inside the worktree the `[monorepo].lockfile`
+  root would route the global config's entry to the root `mise.lock` (`src/lockfile.rs:2580-2588`). Under
+  `$HOME`, mise's upward config walk would load the live `~/.config/mise/config.toml` as a project config,
+  because the override makes the worktree copy the only global config (`src/config/mod.rs:2556-2571`,
+  `:3473-3490`, `:3506-3520`). Before the lock, prepare runs `mise config ls --json` in the same
+  environment and refuses (`trial_check_failed`) unless it lists the worktree's global config and no other path,
+  with the system config folder confirmed empty. A live `miserc.toml` entry that ignored the worktree config
+  (`src/config/miserc.rs:40-49`, applied at load by `src/config/mod.rs:3497`, `:3687-3700`) would drop it from that list, so the same check catches it. The pin diff may touch only the CBM line, and the
+  lock diff only the CBM entries of the global config's sibling `mise.lock`, so a format migration or unrelated churn refuses (`worktree_dirty`) instead of landing in the PR. Prepare does not
   run `mise unuse`: it restores the trial's pin by bytes, below, because `unuse` can rebuild shims and runtime
   links and regenerate lockfiles (`src/cli/unuse.rs:147-181`).
 - **Every change needs an explicit owner acceptance.** A change can be an observed setup difference or a changed

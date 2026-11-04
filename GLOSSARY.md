@@ -80,8 +80,8 @@ _Avoid_: Sandbox run, dry run, test install
 
 **Live setup**:
 The CBM build, launcher and client integrations (configs, hooks, agents, skills) that open sessions use.
-A trial or prepare that changes it has failed; the allowlisted writes to the shared mise store are not changes
-to it.
+A trial or prepare that changes it has failed; the allowlisted writes to the shared mise store, and
+the install step's allowlisted writes to mise's state and cache folders, are not changes to it.
 _Avoid_: Production, real install
 
 **Upgrade change**:

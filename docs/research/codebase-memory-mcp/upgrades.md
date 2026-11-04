@@ -17,7 +17,7 @@ sources:
     title: "install quiesce and --reset-indexes (lines 10642-10667, 11192-11229, 11557-11561)"
   - id: mise-lock
     resource: "https://github.com/jdx/mise/blob/v2026.11.0/src/cli/lock.rs"
-    title: "mise lock TOOL@VERSION locks without installing and updates the request (lines 170-180)"
+    title: "mise lock locks without installing (lines 170-180); --global selects global configs (lines 2203-2222)"
   - id: adr-0001
     resource: "repo:docs/adr/0001-cbm-upgrade-trial-pr-apply.md"
     title: "CBM upgrades go through a trial PR, then a separate apply"
@@ -107,7 +107,8 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
      change only the package `mise.toml` and exactly one lockfile, whose path and hashes are recorded; no
      changed lockfile is `provenance_mismatch`.
    - Refuse (`live_state_changed`) unless the live `tool-purgatory.json` is absent or empty: nearly every mise
-     command first runs the due deferred removals, and no setting turns that off.
+     command first runs the due deferred removals; only `--version`, dry runs, `MISE_NO_CONFIG` (which would also
+     drop the configs the install needs) and a few named commands skip them (`src/cli/mod.rs:477-491`, `:1228-1237`).
    - Refuse (`trial_check_failed`) if any config sets `locked_require_checksum`, and unset
      `MISE_LOCKED_REQUIRE_CHECKSUM`, so the locked checksum rule keeps its default.
    - From the worktree's `python/cbm`, where the package config that declares the candidate is loaded and
@@ -144,10 +145,16 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
    the run's digests, and stale or unknown ones are rejected.
 6. **Prepare.** Re-check the release asset and host entry against the trial's binding. Restore the pin file
    and the recorded lockfile to their pre-pin bytes (deleting one that did not exist), each only if it still has the trial's post-pin hash,
-   and require the worktree to match the base. Then run `mise lock --global
-   TOOL@<new>` for three platforms against the worktree's global config file and an empty system config,
-   with the trial's private state and cache dirs.
-   The lock may change only the global pin and lock, and its host entry must match the binding
+   and require the worktree to match the base. Then edit the global pin to `<new>` as a plain file edit
+   (`mise lock` never rewrites a global config's request) and run
+   `mise lock --global TOOL@<new> --platform macos-arm64,linux-x64,linux-arm64` from a fresh empty folder under
+   `$TMPDIR`, outside `$HOME` and any repository (inside the worktree the monorepo root would take the entry;
+   under `$HOME` the live global config would load as a project config), against the worktree's global config
+   file and an empty system config, with the trial's private state and cache dirs. Before the lock, `mise config ls --json`
+   in the same environment must list the worktree's global config and no other path, with the system config
+   folder confirmed empty (`trial_check_failed` otherwise).
+   The pin diff may touch only the CBM line and the lock diff only the CBM entries of the global config's
+   sibling `mise.lock` (`worktree_dirty` otherwise), and the host entry must match the binding
    (`artifact_changed` otherwise). Then write and stage the pin, the lock, the
    baseline, the acceptance receipts and the upgrade report.
 
