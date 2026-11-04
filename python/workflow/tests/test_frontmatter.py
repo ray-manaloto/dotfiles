@@ -19,8 +19,8 @@ def test_good_files_pass(repo: Path, capsys: pytest.CaptureFixture[str]) -> None
         repo,
         {
             "skills/grill/SKILL.md": SKILL,
-            "docs/workflow/plan.md": CONCEPT,
-            "docs/workflow/index.md": "a map\n",
+            "unix/home/.config/agents/workflow/plan.md": CONCEPT,
+            "unix/home/.config/agents/workflow/index.md": "a map\n",
             "docs/research/log.md": "",
             "README.md": "no block\n",
             "a.yml": "key: value\n",
@@ -52,10 +52,10 @@ def test_a_bad_skill_header_is_reported(repo: Path, capsys: pytest.CaptureFixtur
 
 
 def test_an_okf_concept_needs_a_typed_block(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    add(repo, {"docs/research/a.md": "no block\n", "docs/workflow/b.md": "---\ntitle: b\n---\n"})
+    add(repo, {"docs/research/a.md": "no block\n", "unix/home/.config/agents/workflow/b.md": "---\ntitle: b\n---\n"})
     assert report(capsys, "frontmatter") == [
         check("okf concept file has no frontmatter block", "docs/research/a.md"),
-        check("frontmatter type: Field required", "docs/workflow/b.md"),
+        check("frontmatter type: Field required", "unix/home/.config/agents/workflow/b.md"),
         {"exit": "1"},
     ]
 

@@ -1,4 +1,4 @@
-"""workflowtools skill-table, against a plugin install under a scratch HOME."""
+"""workflowtools skill-table, against a user-scope plugin install under a scratch HOME."""
 
 import json
 from pathlib import Path
@@ -10,7 +10,7 @@ from workflowtools.cli import main
 from .conftest import add, report, write
 
 SHA = "a" * 40
-TABLE = "docs/workflow/skills.md"
+TABLE = "unix/home/.config/agents/workflow/skills.md"
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def plugin(root: Path) -> dict[str, str]:
             "skills/plain/SKILL.md": "no block\n",
         },
     )
-    return {"projectPath": str(Path.cwd()), "installPath": str(root), "gitCommitSha": SHA}
+    return {"scope": "user", "installPath": str(root), "gitCommitSha": SHA}
 
 
 def table(rows: str, pin: str = SHA) -> str:
@@ -44,7 +44,7 @@ def table(rows: str, pin: str = SHA) -> str:
 
 
 def skipped() -> list[dict[str, str]]:
-    reason = "mattpocock-skills@mattpocock is not installed for this checkout"
+    reason = "mattpocock-skills@mattpocock has no user-scope install"
     return [{"check": "skill-table", "reason": reason}, {"exit": "0"}]
 
 
@@ -54,14 +54,14 @@ def test_no_install_record_skips(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 @pytest.mark.usefixtures("repo")
-def test_an_install_for_another_project_skips(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    install(home, [{"installPath": "/x"}, {"projectPath": "/elsewhere", "installPath": "/x"}])
+def test_project_scope_installs_alone_skip(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    install(home, [{"installPath": "/x"}, {"scope": "project", "projectPath": str(Path.cwd()), "installPath": "/x"}])
     assert report(capsys, "skill-table") == skipped()
 
 
 @pytest.mark.usefixtures("repo")
 def test_an_install_whose_files_are_gone_skips(home: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    install(home, [{"projectPath": str(Path.cwd()), "installPath": str(home / "gone")}])
+    install(home, [{"scope": "user", "installPath": str(home / "gone")}])
     assert report(capsys, "skill-table") == skipped()
 
 

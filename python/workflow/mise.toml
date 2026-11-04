@@ -18,7 +18,7 @@ dir = "{{ config_root }}/../.."
 run = "uv run --project python/workflow --locked workflowtools settings-local"
 
 [tasks.skill-table]
-description = "Check docs/workflow/skills.md against the mattpocock-skills plugin installed for this checkout"
+description = "Check the workflow docs' skills.md against the user-scope mattpocock-skills plugin install"
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = "uv run --project python/workflow --locked workflowtools skill-table"

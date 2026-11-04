@@ -29,7 +29,7 @@ class Frontmatter(BaseModel):
 
 class SkillTable(BaseModel):
     """
-    Check docs/workflow/skills.md against the mattpocock-skills plugin installed for this checkout.
+    Check the workflow docs' skills.md against the user-scope mattpocock-skills plugin install.
     """
 
     model_config = ConfigDict(
@@ -224,6 +224,10 @@ class PluginRecord(BaseModel):
         extra="allow",
         frozen=True,
     )
+    scope: str | None = None
+    """
+    user, project or local
+    """
     project_path: Annotated[str | None, Field(alias="projectPath")] = None
     """
     The project a project-scoped install belongs to

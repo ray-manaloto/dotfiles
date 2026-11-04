@@ -78,7 +78,7 @@
       "additionalProperties": false
     },
     "SkillTable": {
-      "description": "Check docs/workflow/skills.md against the mattpocock-skills plugin installed for this checkout.",
+      "description": "Check the workflow docs' skills.md against the user-scope mattpocock-skills plugin install.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -282,6 +282,18 @@
       "description": "One install of a plugin in ~/.claude/plugins/installed_plugins.json.",
       "type": "object",
       "properties": {
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "user, project or local"
+        },
         "projectPath": {
           "anyOf": [
             {
