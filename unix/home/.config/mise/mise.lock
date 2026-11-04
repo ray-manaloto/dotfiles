@@ -979,6 +979,29 @@ checksum = "sha256:3e7f67bda3ba0bf72f597917b17dc337ed5a1bd48224df8b747bb35ce05c5
 url = "https://github.com/ocaml/opam/releases/download/2.6.1/opam-2.6.1-arm64-macos"
 url_api = "https://api.github.com/repos/ocaml/opam/releases/assets/618597847"
 
+[[tools."github:vercel-labs/agent-desktop"]]
+version = "1.1.0"
+backend = "github:vercel-labs/agent-desktop"
+specifiers = ["1.1.0"]
+
+[tools."github:vercel-labs/agent-desktop"."platforms.linux-arm64"]
+checksum = "sha256:252c17e271a444352a5ba1e9f8fcbace89fa7b6b0bfcc4abebad2b35eb1f7a4d"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242465"
+provenance = "github-attestations"
+
+[tools."github:vercel-labs/agent-desktop"."platforms.linux-x64"]
+checksum = "sha256:efbdcf4caf10132e4fe915db1ec643184c947c65e0511845aeb4839445d7ea43"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242502"
+provenance = "github-attestations"
+
+[tools."github:vercel-labs/agent-desktop"."platforms.macos-arm64"]
+checksum = "sha256:3048e00aa0741bf25ffe0326f78c966408be4490ce13513f3f94ecf2a0b5270d"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242421"
+provenance = "github-attestations"
+
 [[tools."gitlab:graphviz/graphviz"]]
 version = "16.1.0"
 backend = "gitlab:graphviz/graphviz"
