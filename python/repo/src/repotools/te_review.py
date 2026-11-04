@@ -78,8 +78,8 @@ CHARGE_CLASS = {
 }
 
 
-class CollectError(Exception):
-    """A refusal; collect leaves nothing behind when it raises one.
+class TeReviewError(Exception):
+    """A refusal; collect leaves nothing behind when it raises one, and report in public mode prints only its code.
 
     The generated CodedFailure is a pydantic model, not an exception, so it can't be raised: this
     carries it to cli.main, which prints it.
@@ -88,17 +88,18 @@ class CollectError(Exception):
     def __init__(self, code: ErrorCode, error: str) -> None:
         super().__init__(error)
         self.failure = CodedFailure(code=code, error=error)
+        self.public = False  # report sets it: then only the code is printed
 
 
 def window(options: TeReviewCollect) -> Window:
     if options.until < options.since:
         msg = f"--until {options.until} is before --since {options.since}"
-        raise CollectError(ErrorCode.BAD_WINDOW, msg)
+        raise TeReviewError(ErrorCode.BAD_WINDOW, msg)
     try:
         zone = ZoneInfo(options.tz)
     # ZoneInfoNotFoundError (a KeyError) for an unknown name, ValueError for a malformed one.
     except KeyError, ValueError:
-        raise CollectError(ErrorCode.BAD_TIMEZONE, f"--tz {options.tz} is not an IANA time zone") from None
+        raise TeReviewError(ErrorCode.BAD_TIMEZONE, f"--tz {options.tz} is not an IANA time zone") from None
     return Window(
         since=options.since,
         until=options.until,
@@ -122,7 +123,7 @@ def claude_ledgers(root: Path) -> list[Path]:
     except FileNotFoundError, NotADirectoryError:
         return []
     except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{root / 'repos'}: {error.strerror}") from None
+        raise TeReviewError(ErrorCode.UNREADABLE, f"{root / 'repos'}: {error.strerror}") from None
     found = []
     for store in stores:
         path = store / "claude" / "ledger.jsonl"
@@ -131,7 +132,7 @@ def claude_ledgers(root: Path) -> list[Path]:
         except FileNotFoundError, NotADirectoryError:
             continue  # not a Claude store
         except OSError as error:
-            raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
+            raise TeReviewError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
         found.append(path)
     return found
 
@@ -140,21 +141,21 @@ def read_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()
     except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
+        raise TeReviewError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
 
 
 def parse(store: str, source: str, data: bytes) -> list[LedgerRead]:
     """Every row of one ledger, or a refusal: no line is skipped."""
     lines = data.split(b"\n")
     if lines[-1]:
-        raise CollectError(ErrorCode.TRUNCATED_LINE, f"{source}:{len(lines)} has no line end")
+        raise TeReviewError(ErrorCode.TRUNCATED_LINE, f"{source}:{len(lines)} has no line end")
     found = []
     for number, line in enumerate(lines[:-1], 1):
         try:
             raw = json.loads(line)
         # json's errors and a line that is not UTF-8 (UnicodeDecodeError) are both ValueErrors.
         except ValueError:
-            raise CollectError(ErrorCode.MALFORMED_LINE, f"{source}:{number} is not JSON") from None
+            raise TeReviewError(ErrorCode.MALFORMED_LINE, f"{source}:{number} is not JSON") from None
         place = {"source": source, "line": number}
         try:
             found.append(LedgerRead.model_validate({"store": store, "place": place, "record": raw, "row": raw}))
@@ -162,7 +163,7 @@ def parse(store: str, source: str, data: bytes) -> list[LedgerRead]:
             keys = sorted(raw) if isinstance(raw, dict) else [type(raw).__name__]
             fingerprint = hashlib.sha256(json.dumps(keys).encode()).hexdigest()[:12]
             msg = f"{source}:{number} has unknown schema fingerprint {fingerprint} for {ADAPTER}"
-            raise CollectError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
+            raise TeReviewError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
     return found
 
 
@@ -242,6 +243,17 @@ def framed(data: bytes) -> bytes:
     return len(data).to_bytes(8, "big") + data
 
 
+def collection_id(span: Window, versions: Versions, sources: dict[str, bytes], evidence: bytes) -> str:
+    """sha256 over the window, the versions, each source's path and bytes and evidence.json, each part framed."""
+    digest = hashlib.sha256(
+        framed(span.model_dump_json().encode()) + framed(versions.model_dump_json(by_alias=True).encode())
+    )
+    for source, data in sources.items():
+        digest.update(framed(source.encode()) + framed(data))
+    digest.update(framed(evidence))
+    return digest.hexdigest()
+
+
 def build(root: Path, ledgers: list[Path], span: Window, into: Path) -> str:
     """Write evidence.json, collection.json and a copy of every source into a private folder; return the
     collection id, which hashes only what the folder holds, so a reader can check it from the folder alone."""
@@ -251,23 +263,19 @@ def build(root: Path, ledgers: list[Path], span: Window, into: Path) -> str:
         source = path.relative_to(root).as_posix()
         sources[source] = read_bytes(path)
         reads.extend(parse(path.parent.parent.relative_to(root).as_posix(), source, sources[source]))
-    evidence = (Evidence(rows=classify(reads, span)).model_dump_json(indent=2) + "\n").encode()
+    # json.dumps, as TokenEconomizer's ledger.py writes rows: pydantic's JSON writes NaN and Infinity as null.
+    evidence = (json.dumps(Evidence(rows=classify(reads, span)).model_dump(), indent=2) + "\n").encode()
     write(into, "evidence.json", evidence)
     for path in ledgers:
         source = path.relative_to(root).as_posix()
         if read_bytes(path) != sources[source]:
-            raise CollectError(ErrorCode.SOURCE_CHANGED, f"{source} changed while it was read")
+            raise TeReviewError(ErrorCode.SOURCE_CHANGED, f"{source} changed while it was read")
     versions = Versions(adapter=ADAPTER, schema=SCHEMA, mirrors=list(MIRRORS))
-    digest = hashlib.sha256(
-        framed(span.model_dump_json().encode()) + framed(versions.model_dump_json(by_alias=True).encode())
-    )
     for source, data in sources.items():
         write(into, f"sources/{source}", data)
-        digest.update(framed(source.encode()) + framed(data))
-    digest.update(framed(evidence))
     collected_at = datetime.now(span.start.tzinfo)
     collection = Collection(
-        collection_id=digest.hexdigest(),
+        collection_id=collection_id(span, versions, sources, evidence),
         collected_at=collected_at,
         label=Label.INTERIM if collected_at < span.end else Label.FINAL,
         window=span,
@@ -287,17 +295,20 @@ def build(root: Path, ledgers: list[Path], span: Window, into: Path) -> str:
 
 
 def collect(options: TeReviewCollect) -> None:
+    # A relative --out would land wherever the caller runs from, a checkout under a mise task.
+    if not Path(options.out).is_absolute():
+        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--out is relative; give the collection's absolute path")
     span = window(options)
     root = state_root(options)
     ledgers = claude_ledgers(root)
     if not ledgers:
-        raise CollectError(ErrorCode.NO_LEDGER, f"{root} holds no repos/*/claude/ledger.jsonl")
-    out = Path(options.out).absolute()
+        raise TeReviewError(ErrorCode.NO_LEDGER, f"{root} holds no repos/*/claude/ledger.jsonl")
+    out = Path(options.out)
     # Reserved first, so no other collect takes the name; the build replaces this empty folder.
     try:
         out.mkdir(mode=0o700)
     except FileExistsError:
-        raise CollectError(ErrorCode.OUT_EXISTS, f"{out} exists; a collection is never rewritten") from None
+        raise TeReviewError(ErrorCode.OUT_EXISTS, f"{out} exists; a collection is never rewritten") from None
     made = [out]  # what a failure removes: the reserved folder, then the staging folder until it moves
     try:
         staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))  # 0700, and only this run's
