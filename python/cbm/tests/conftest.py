@@ -14,14 +14,18 @@
 # is not on Linux test hosts. The real installer was run end to end against the live install instead
 # (docs/research/codebase-memory-mcp/verification.md).
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from .mise_stand_in import MISE
 
 LINK = ".local/share/mise/installs/github-deus-data-codebase-memory-mcp/global/codebase-memory-mcp"
 LAUNCHER = ".local/share/codebase-memory-mcp/bin/codebase-memory-mcp"
@@ -34,6 +38,11 @@ import json, os, sys, time
 from pathlib import Path
 home = Path(os.environ["HOME"])
 args = sys.argv[1:]
+with (home / "processes.jsonl").open("a") as f:
+    f.write(json.dumps({"args": args, "version": "9.9.9", "home": str(home), "cwd": str(Path.cwd()),
+                       "runtime": os.getenv("CBM_RUNTIME_DIR"), "cache": os.getenv("CBM_CACHE_DIR"),
+                       "launcher": sys.argv[0], "executable": str(Path(sys.argv[0]).resolve()),
+                       "sentinel": os.getenv("CBM_TEST_SENTINEL")}) + "\n")
 with open(home / "calls", "a") as f:
     f.write(" ".join(args) + "\n")
 if args == ["--version"]:
@@ -147,11 +156,11 @@ def failed(out: str) -> list[str]:
     return [event["name"] for event in events(out) if event["event"] == "check" and not event["ok"]]
 
 
-def cbm(*args: str, timeout: int = TIMEOUT) -> subprocess.CompletedProcess[str]:
+def cbm(*args: str, timeout: int = TIMEOUT, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     """`cbm <args>` as a child process with this test's environment."""
     return subprocess.run(
         [str(CBM), *args], env=os.environ.copy(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
-        timeout=timeout, check=False,
+        timeout=timeout, cwd=cwd, check=False,
     )  # fmt: skip
 
 
@@ -163,8 +172,89 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(root))
     monkeypatch.setenv("MISE_DATA_DIR", str(root / ".local/share/mise"))
+    for name, folder in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                         ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"),
+                         ("XDG_RUNTIME_DIR", "runtime")):  # fmt: skip
+        (root / folder).mkdir(mode=0o700)
+        monkeypatch.setenv(name, str(root / folder))
     link(root).parent.mkdir(parents=True)
     link(root).write_text(f"#!{sys.executable} -I\n{STAND_IN}")
     link(root).chmod(0o755)
     mode(root, "ok")
     return root
+
+
+def git(folder: Path, *args: str) -> str:
+    # Real git in private repos: no inherited git-dir, hooks, signing or machine identity.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    done = subprocess.run(
+        ["git", "-c", "user.name=CBM Test", "-c", "user.email=cbm@example.invalid", *args],
+        cwd=folder, env=env, capture_output=True, text=True, check=True, timeout=TIMEOUT,
+    )  # fmt: skip
+    return done.stdout
+
+
+def provision(home: Path, *args: str) -> None:
+    """Prepare an installed test release through the fixture's mise, never the real program."""
+    subprocess.run(
+        [str(home / "bin/mise"), "install", *args], cwd=home / "worktree", env=os.environ.copy(),
+        capture_output=True, text=True, check=True, timeout=TIMEOUT,
+    )  # fmt: skip
+
+
+@pytest.fixture
+def upgrade_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    """Two local releases, a real worktree/source mirror and a PATH-only mise stand-in."""
+    paths = {name: home / name for name in ("dotfiles", "worktree", "source", "mirror", "releases")}
+    paths["dotfiles"].mkdir()
+    git(paths["dotfiles"], "init", "--initial-branch=main")
+    package = paths["dotfiles"] / "python/cbm"
+    package.mkdir(parents=True)
+    (paths["dotfiles"] / "mise.toml").write_text("monorepo_root = true\n[monorepo]\nlockfile = true\n")
+    (package / "mise.toml").write_text("# The upgrade trial writes its candidate pin here.\n")
+    global_config = paths["dotfiles"] / "unix/home/.config/mise/config.toml"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text('[tools]\n"github:DeusData/codebase-memory-mcp" = "9.9.9"\n')
+    git(paths["dotfiles"], "add", ".")
+    git(paths["dotfiles"], "commit", "-m", "Initial fixture")
+    git(paths["dotfiles"], "worktree", "add", "-b", "upgrade", str(paths["worktree"]))
+    paths["source"].mkdir()
+    git(paths["source"], "init", "--initial-branch=main")
+    releases = {}
+    for version in ("9.9.9", "9.9.10"):
+        folder = paths["releases"] / version
+        folder.mkdir(parents=True)
+        binary = folder / "codebase-memory-mcp"
+        binary.write_text(f"#!{sys.executable} -I\n{STAND_IN.replace('9.9.9', version)}")
+        binary.chmod(0o755)
+        archive = folder / "codebase-memory-mcp.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(binary, arcname=binary.name)
+        releases[version] = {
+            "binary": str(binary), "url": archive.as_uri(), "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+            "installed": str(link(home).parent.parent / version),
+        }  # fmt: skip
+        (paths["source"] / "codebase-memory-mcp.py").write_text(STAND_IN.replace("9.9.9", version))
+        git(paths["source"], "add", ".")
+        git(paths["source"], "commit", "-m", f"Release {version}")
+        git(paths["source"], "tag", f"v{version}")
+    git(home, "clone", "--mirror", str(paths["source"]), str(paths["mirror"]))
+    installed = Path(releases["9.9.9"]["installed"])
+    link(home).unlink()
+    link(home).parent.rmdir()
+    link(home).parent.symlink_to(installed, target_is_directory=True)
+    (home / "mise-fixture.json").write_text(json.dumps({
+        "releases": releases,
+        "configs": [{"path": str(paths["worktree"] / "unix/home/.config/mise/config.toml"),
+                     "tools": ["github:DeusData/codebase-memory-mcp"], "override": False}],
+        "lockfile": str(paths["worktree"] / "mise.lock"),
+    }))  # fmt: skip
+    bin_dir = home / "bin"
+    bin_dir.mkdir()
+    mise = bin_dir / "mise"
+    mise.write_text(f"#!{sys.executable} -I\n{MISE}")
+    mise.chmod(0o755)
+    monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
+    provision(home, "github:DeusData/codebase-memory-mcp@9.9.9")
+    return paths

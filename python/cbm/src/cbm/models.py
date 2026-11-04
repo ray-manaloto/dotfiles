@@ -72,6 +72,19 @@ class Command(StrEnum):
 
     install = "install"
     verify = "verify"
+    upgrade = "upgrade"
+    accept = "accept"
+
+
+class UpgradeStep(StrEnum):
+    """
+    Upgrade steps that can also be requested individually.
+    """
+
+    check = "check"
+    trial = "trial"
+    review = "review"
+    prepare = "prepare"
 
 
 class Client(StrEnum):

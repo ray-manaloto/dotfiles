@@ -55,7 +55,19 @@
       "type": "string",
       "enum": [
         "install",
-        "verify"
+        "verify",
+        "upgrade",
+        "accept"
+      ]
+    },
+    "UpgradeStep": {
+      "description": "Upgrade steps that can also be requested individually.",
+      "type": "string",
+      "enum": [
+        "check",
+        "trial",
+        "review",
+        "prepare"
       ]
     },
     "Client": {
