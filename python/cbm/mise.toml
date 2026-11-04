@@ -1,0 +1,43 @@
+# codebase-memory-mcp agent setup (DL-758): the cbm Python package does the work; one task per command.
+# No [tools]: codebase-memory-mcp itself is pinned in the global config. From the repository root the
+# tasks are //cbm:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+[tasks.install]
+description = "Run codebase-memory-mcp's installer for Claude and Codex (MCP, hooks, skills, agents), then verify"
+run = "uv run --locked cbm install"
+
+[tasks.verify]
+description = "Check the codebase-memory-mcp setup for Claude and Codex without changing it"
+run = "uv run --locked cbm verify"
+
+# Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/cbm/models.py from schema/cbm.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

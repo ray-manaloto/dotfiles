@@ -1,0 +1,482 @@
+[
+  {
+    "commentsCount": 22,
+    "createdAt": "2025-12-23T15:34:57Z",
+    "isPullRequest": false,
+    "number": 15168,
+    "state": "open",
+    "title": "[BUG] LSP plugin system not connecting to language servers - always returns \"No LSP server available\"",
+    "updatedAt": "2026-06-21T10:17:12Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15168"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-09-05T09:58:52Z",
+    "isPullRequest": false,
+    "number": 92304,
+    "state": "open",
+    "title": "[FEATURE] LSP: filename-based routing (filenameToLanguage) for extensionless canonical files such as justfile, Makefile, Dockerfile",
+    "updatedAt": "2026-10-27T10:11:26Z",
+    "url": "https://github.com/anthropics/claude-code/issues/92304"
+  },
+  {
+    "commentsCount": 24,
+    "createdAt": "2025-12-23T12:12:44Z",
+    "isPullRequest": false,
+    "number": 15148,
+    "state": "open",
+    "title": "LSP plugin lspServers config not being processed from marketplace.json",
+    "updatedAt": "2026-10-06T01:47:03Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15148"
+  },
+  {
+    "commentsCount": 20,
+    "createdAt": "2025-12-28T21:27:46Z",
+    "isPullRequest": false,
+    "number": 15619,
+    "state": "closed",
+    "title": "Enable LSP tool to connect to installed language servers",
+    "updatedAt": "2026-10-06T14:22:37Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15619"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-06-27T13:16:10Z",
+    "isPullRequest": false,
+    "number": 71800,
+    "state": "closed",
+    "title": "Plugin LSP server silently not registered when its lspServers entry declares restartOnCrash or shutdownTimeout (schema-valid fields the runtime registrar drops)",
+    "updatedAt": "2026-09-29T14:19:29Z",
+    "url": "https://github.com/anthropics/claude-code/issues/71800"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-06-10T12:25:56Z",
+    "isPullRequest": false,
+    "number": 66987,
+    "state": "closed",
+    "title": "Plugin lspServers entries declaring restartOnCrash or shutdownTimeout are silently dropped by the LSP registrar (schema-valid, no diagnostic)",
+    "updatedAt": "2026-09-29T14:19:27Z",
+    "url": "https://github.com/anthropics/claude-code/issues/66987"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-06-08T17:34:28Z",
+    "isPullRequest": false,
+    "number": 66308,
+    "state": "closed",
+    "title": "LSP tool not recognizing custom LSP server configuration (metals/Scala)",
+    "updatedAt": "2026-08-13T14:40:51Z",
+    "url": "https://github.com/anthropics/claude-code/issues/66308"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2026-04-27T09:19:14Z",
+    "isPullRequest": false,
+    "number": 53837,
+    "state": "closed",
+    "title": "ENABLE_LSP_TOOL: LSP subprocess stdin is immediately EOF, server shuts down before receiving any LSP messages",
+    "updatedAt": "2026-07-30T14:47:23Z",
+    "url": "https://github.com/anthropics/claude-code/issues/53837"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-04-24T03:52:41Z",
+    "isPullRequest": false,
+    "number": 52693,
+    "state": "closed",
+    "title": "[BUG] Built-in LSP client hangs forever on servers using dynamic capability registration — please reconsider \"not planned\"",
+    "updatedAt": "2026-07-31T14:52:29Z",
+    "url": "https://github.com/anthropics/claude-code/issues/52693"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-04-01T12:49:21Z",
+    "isPullRequest": false,
+    "number": 42013,
+    "state": "closed",
+    "title": "LSP tool hangs when calling typescript-language-server despite successful initialization",
+    "updatedAt": "2026-06-28T14:37:00Z",
+    "url": "https://github.com/anthropics/claude-code/issues/42013"
+  },
+  {
+    "commentsCount": 10,
+    "createdAt": "2026-05-14T15:59:49Z",
+    "isPullRequest": false,
+    "number": 59114,
+    "state": "closed",
+    "title": "LSP tool: uv_spawn cannot find typescript-language-server despite being in PATH (Windows)",
+    "updatedAt": "2026-09-27T14:15:42Z",
+    "url": "https://github.com/anthropics/claude-code/issues/59114"
+  },
+  {
+    "commentsCount": 54,
+    "createdAt": "2026-01-05T14:59:47Z",
+    "isPullRequest": false,
+    "number": 16360,
+    "state": "open",
+    "title": "[BUG] C# LSP (csharp-ls) not working - missing workspace/configuration and other request handlers",
+    "updatedAt": "2026-09-09T14:13:21Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16360"
+  },
+  {
+    "commentsCount": 12,
+    "createdAt": "2026-01-07T22:47:54Z",
+    "isPullRequest": false,
+    "number": 16729,
+    "state": "closed",
+    "title": "[BUG] (lsp): Malformed file:// URI Generation (v2.1.1+) [RFC-8089]",
+    "updatedAt": "2026-09-02T14:21:25Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16729"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-04-26T00:40:50Z",
+    "isPullRequest": false,
+    "number": 53399,
+    "state": "closed",
+    "title": "Third-party LSP plugins: `.lsp.json` at plugin root works on v2.1.119; marketplace.json `lspServers` alone is silently ignored",
+    "updatedAt": "2026-08-26T14:25:49Z",
+    "url": "https://github.com/anthropics/claude-code/issues/53399"
+  },
+  {
+    "commentsCount": 7,
+    "createdAt": "2025-12-31T16:39:27Z",
+    "isPullRequest": false,
+    "number": 15914,
+    "state": "closed",
+    "title": "[BUG] LSP plugins not loading servers on Windows - \"No LSP server available for file type\"",
+    "updatedAt": "2026-03-27T14:35:33Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15914"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-02-04T07:32:08Z",
+    "isPullRequest": false,
+    "number": 23006,
+    "state": "closed",
+    "title": "kotlin-lsp plugin not working: 'No LSP server available for file type: .kt'",
+    "updatedAt": "2026-03-13T14:32:27Z",
+    "url": "https://github.com/anthropics/claude-code/issues/23006"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-04-03T13:35:21Z",
+    "isPullRequest": false,
+    "number": 43100,
+    "state": "closed",
+    "title": "LSP servers lost during reinitializeLspServerManager (generation 2 loads 0 servers)",
+    "updatedAt": "2026-07-03T14:49:39Z",
+    "url": "https://github.com/anthropics/claude-code/issues/43100"
+  },
+  {
+    "commentsCount": 8,
+    "createdAt": "2026-01-04T04:12:19Z",
+    "isPullRequest": false,
+    "number": 16214,
+    "state": "closed",
+    "title": "[BUG] LSP Tool returns \"No LSP server available\" despite correct plugin configuration (v2.0.76)",
+    "updatedAt": "2026-03-09T14:37:43Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16214"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2026-03-06T13:22:18Z",
+    "isPullRequest": false,
+    "number": 31468,
+    "state": "closed",
+    "title": "LSP server manager initializes before plugins register their servers (race condition)",
+    "updatedAt": "2026-04-13T14:50:13Z",
+    "url": "https://github.com/anthropics/claude-code/issues/31468"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-01-02T17:48:05Z",
+    "isPullRequest": false,
+    "number": 16084,
+    "state": "closed",
+    "title": "[BUG] LSP plugins not recognized on Windows 11 - \"No LSP server available for file type: .rs\"",
+    "updatedAt": "2026-03-01T14:13:30Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16084"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2025-12-30T20:08:41Z",
+    "isPullRequest": false,
+    "number": 15836,
+    "state": "closed",
+    "title": "[BUG] LSP plugins installed and enabled but \"No LSP server available for file type: .js\"",
+    "updatedAt": "2026-02-22T14:20:49Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15836"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2025-12-27T20:22:55Z",
+    "isPullRequest": false,
+    "number": 15531,
+    "state": "closed",
+    "title": "System-wide LSP failure: No LSP server available for any file type despite correct configuration",
+    "updatedAt": "2026-02-12T14:29:07Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15531"
+  },
+  {
+    "commentsCount": 15,
+    "createdAt": "2026-01-04T21:38:53Z",
+    "isPullRequest": false,
+    "number": 16291,
+    "state": "closed",
+    "title": "[Bug] TypeScript LSP Plugin Not Registering with LSP Tool System",
+    "updatedAt": "2026-03-21T14:18:19Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16291"
+  },
+  {
+    "commentsCount": 73,
+    "createdAt": "2025-12-20T00:51:42Z",
+    "isPullRequest": false,
+    "number": 14803,
+    "state": "closed",
+    "title": "[BUG] LSP plugins not recognized - \"No LSP server available\" despite correct configuration",
+    "updatedAt": "2026-01-16T14:13:18Z",
+    "url": "https://github.com/anthropics/claude-code/issues/14803"
+  },
+  {
+    "commentsCount": 7,
+    "createdAt": "2025-12-26T07:15:20Z",
+    "isPullRequest": false,
+    "number": 15413,
+    "state": "closed",
+    "title": "[BUG] LSP manager never picks up server configs during startup",
+    "updatedAt": "2026-03-07T14:28:06Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15413"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-01-05T20:19:17Z",
+    "isPullRequest": false,
+    "number": 16384,
+    "state": "closed",
+    "title": "[BUG] LSP tool doesn't recognize plugin-based LSP server configurations",
+    "updatedAt": "2026-03-09T14:35:53Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16384"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-01-02T17:02:26Z",
+    "isPullRequest": false,
+    "number": 16080,
+    "state": "closed",
+    "title": "LSP server discovery fails on NixOS (assumes FHS-compliant paths)",
+    "updatedAt": "2026-03-05T14:30:38Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16080"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2025-12-30T07:21:37Z",
+    "isPullRequest": false,
+    "number": 15785,
+    "state": "closed",
+    "title": "[BUG] LSP plugin extensionToLanguage does not match compound file extensions",
+    "updatedAt": "2026-02-24T14:31:27Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15785"
+  },
+  {
+    "commentsCount": 4,
+    "createdAt": "2025-12-20T08:52:56Z",
+    "isPullRequest": false,
+    "number": 14845,
+    "state": "closed",
+    "title": "[BUG] Swift LSP plugin not detected - 'No LSP server available for file type: .swift'",
+    "updatedAt": "2025-12-28T14:08:00Z",
+    "url": "https://github.com/anthropics/claude-code/issues/14845"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-01-01T19:37:58Z",
+    "isPullRequest": false,
+    "number": 15997,
+    "state": "closed",
+    "title": "[BUG] LSP tool returns \"No LSP server available for file type: .java\" despite jdtls-lsp plugin enabled and jdtls installed",
+    "updatedAt": "2026-01-13T14:11:48Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15997"
+  },
+  {
+    "commentsCount": 7,
+    "createdAt": "2025-12-23T23:33:13Z",
+    "isPullRequest": false,
+    "number": 15202,
+    "state": "closed",
+    "title": "LSP servers from plugins not registered - timing bug in initialization",
+    "updatedAt": "2026-03-20T14:27:00Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15202"
+  },
+  {
+    "commentsCount": 10,
+    "createdAt": "2026-02-28T03:50:06Z",
+    "isPullRequest": false,
+    "number": 29501,
+    "state": "closed",
+    "title": "clangd LSP plugin: all operations fail with 'trying to get AST for non-added document'",
+    "updatedAt": "2026-06-27T14:41:08Z",
+    "url": "https://github.com/anthropics/claude-code/issues/29501"
+  },
+  {
+    "commentsCount": 8,
+    "createdAt": "2025-12-27T17:43:25Z",
+    "isPullRequest": false,
+    "number": 15521,
+    "state": "closed",
+    "title": "LSP plugins not registering servers - LSP Manager initializes before plugins load",
+    "updatedAt": "2026-03-22T14:18:01Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15521"
+  },
+  {
+    "commentsCount": 5,
+    "createdAt": "2026-01-02T08:46:06Z",
+    "isPullRequest": false,
+    "number": 16048,
+    "state": "closed",
+    "title": "[Bug] LSP plugin installation fails: path mixes POSIX and Windows formats on macOS",
+    "updatedAt": "2026-03-01T14:13:22Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16048"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-28T04:02:23Z",
+    "isPullRequest": false,
+    "number": 15560,
+    "state": "closed",
+    "title": "[BUG]",
+    "updatedAt": "2026-01-07T14:09:36Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15560"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-24T09:18:22Z",
+    "isPullRequest": false,
+    "number": 15255,
+    "state": "closed",
+    "title": "LSP plugin loading broken in v2.0.74+",
+    "updatedAt": "2026-01-04T14:07:50Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15255"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-01-04T05:25:28Z",
+    "isPullRequest": false,
+    "number": 16219,
+    "state": "closed",
+    "title": "pyright-lsp plugin: lspServers config from marketplace.json not propagated",
+    "updatedAt": "2026-01-14T14:15:35Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16219"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-01-27T21:42:48Z",
+    "isPullRequest": false,
+    "number": 21335,
+    "state": "closed",
+    "title": "[BUG] swift-lsp plugin installed but LSP tools not exposed to Claude",
+    "updatedAt": "2026-02-05T14:25:27Z",
+    "url": "https://github.com/anthropics/claude-code/issues/21335"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-29T02:45:13Z",
+    "isPullRequest": false,
+    "number": 15641,
+    "state": "closed",
+    "title": "LSP tool not detecting language servers from installed plugins",
+    "updatedAt": "2026-01-08T14:10:37Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15641"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-30T21:31:22Z",
+    "isPullRequest": false,
+    "number": 15843,
+    "state": "closed",
+    "title": "[BUG] TypeScript LSP Plugin Not Spawning Language Server",
+    "updatedAt": "2026-01-07T14:09:22Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15843"
+  },
+  {
+    "commentsCount": 6,
+    "createdAt": "2026-03-01T16:30:27Z",
+    "isPullRequest": false,
+    "number": 29858,
+    "state": "closed",
+    "title": "[BUG] TypeScript LSP plugin non-functional on v2.1.63 — race condition + missing .lsp.json in official plugin",
+    "updatedAt": "2026-04-21T14:51:18Z",
+    "url": "https://github.com/anthropics/claude-code/issues/29858"
+  },
+  {
+    "commentsCount": 2,
+    "createdAt": "2025-12-24T06:12:40Z",
+    "isPullRequest": false,
+    "number": 15235,
+    "state": "closed",
+    "title": "typescript-lsp plugin from official marketplace is incomplete (missing plugin.json)",
+    "updatedAt": "2025-12-31T14:08:19Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15235"
+  },
+  {
+    "commentsCount": 55,
+    "createdAt": "2025-12-14T10:40:33Z",
+    "isPullRequest": false,
+    "number": 13952,
+    "state": "closed",
+    "title": "[BUG] LSP servers not loading due to race condition between LSP Manager initialization and plugin loading",
+    "updatedAt": "2026-01-17T14:11:33Z",
+    "url": "https://github.com/anthropics/claude-code/issues/13952"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-29T20:31:35Z",
+    "isPullRequest": false,
+    "number": 15728,
+    "state": "closed",
+    "title": "LSP plugin servers not registered due to initialization race condition",
+    "updatedAt": "2026-01-06T14:09:12Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15728"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-25T13:04:06Z",
+    "isPullRequest": false,
+    "number": 15359,
+    "state": "closed",
+    "title": "[Bug] Official LSP plugins missing implementation code in marketplace cache",
+    "updatedAt": "2026-01-05T14:10:36Z",
+    "url": "https://github.com/anthropics/claude-code/issues/15359"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2026-01-08T19:20:37Z",
+    "isPullRequest": false,
+    "number": 16925,
+    "state": "closed",
+    "title": "[DEBUG] Tool search disabled for model 'claude-haiku-4-5-20251001': model does not support tool_reference blocks. This feature is only available on Claude Sonnet 4+, Opus 4+, and newer models.",
+    "updatedAt": "2026-01-19T14:17:47Z",
+    "url": "https://github.com/anthropics/claude-code/issues/16925"
+  },
+  {
+    "commentsCount": 3,
+    "createdAt": "2025-12-21T02:42:25Z",
+    "isPullRequest": false,
+    "number": 14932,
+    "state": "closed",
+    "title": "[Bug] LSP Server Manager initializes before plugins load, causing race condition",
+    "updatedAt": "2025-12-31T14:08:25Z",
+    "url": "https://github.com/anthropics/claude-code/issues/14932"
+  },
+  {
+    "commentsCount": 20,
+    "createdAt": "2026-03-10T01:03:35Z",
+    "isPullRequest": false,
+    "number": 32650,
+    "state": "closed",
+    "title": "[Meta] Systematic completion-integrity failures — 16 issues across 6 phases from 100+ sessions of evidence",
+    "updatedAt": "2026-06-28T14:37:25Z",
+    "url": "https://github.com/anthropics/claude-code/issues/32650"
+  }
+]

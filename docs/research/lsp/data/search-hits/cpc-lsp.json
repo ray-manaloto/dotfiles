@@ -1,0 +1,82 @@
+[
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-11-01T09:00:35Z",
+    "isPullRequest": true,
+    "number": 3019,
+    "state": "open",
+    "title": "bump(zig-lsp): 8f291414 → 538e5fca",
+    "updatedAt": "2026-11-01T09:00:35Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/3019"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-16T07:44:49Z",
+    "isPullRequest": true,
+    "number": 2572,
+    "state": "open",
+    "title": "bump(docvet-lsp): 257310e5 → e12870c2",
+    "updatedAt": "2026-10-16T07:44:49Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/2572"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-10-20T07:49:59Z",
+    "isPullRequest": true,
+    "number": 2686,
+    "state": "open",
+    "title": "bump(karellen-lsp-mcp): a811c3f1 → 45129938",
+    "updatedAt": "2026-10-20T07:49:59Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/2686"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-26T22:21:49Z",
+    "isPullRequest": true,
+    "number": 1458,
+    "state": "closed",
+    "title": "Add 6 community plugins",
+    "updatedAt": "2026-07-27T23:32:37Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/1458"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-12T15:09:15Z",
+    "isPullRequest": false,
+    "number": 1026,
+    "state": "closed",
+    "title": "Plugin approved but not syncing to community marketplace (claude-powershell-lsp)",
+    "updatedAt": "2026-07-12T15:12:44Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/issues/1026"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-07-27T23:30:11Z",
+    "isPullRequest": true,
+    "number": 1497,
+    "state": "merged",
+    "title": "Add 25 community plugins (consolidated re-batch of reviewed entries)",
+    "updatedAt": "2026-07-30T20:10:07Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/1497"
+  },
+  {
+    "commentsCount": 1,
+    "createdAt": "2026-04-08T13:42:04Z",
+    "isPullRequest": true,
+    "number": 9,
+    "state": "closed",
+    "title": "sync: 1011 plugins (+197)",
+    "updatedAt": "2026-04-08T13:43:44Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/9"
+  },
+  {
+    "commentsCount": 0,
+    "createdAt": "2026-05-01T19:58:37Z",
+    "isPullRequest": true,
+    "number": 16,
+    "state": "merged",
+    "title": "Add validate-plugins, bump-plugin-shas, and scan-plugins composite actions",
+    "updatedAt": "2026-05-04T00:40:26Z",
+    "url": "https://github.com/anthropics/claude-plugins-community/pull/16"
+  }
+]

@@ -14,6 +14,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   behaviour from `file:line`; docs are a lead, not proof. Map a setting's blast radius from the AST
   (tree-sitter, ast-grep, `graphify update`) and LSP (clangd with a compile database,
   `codebase-memory-mcp`), then confirm it with a real run. Say what stays unexplained and keep digging.
+- codebase-memory-mcp: install, reinstall and upgrade its agent setup only with `mise run //cbm:install`, never with
+  its own `install`, `update` or `install.sh` (`docs/research/codebase-memory-mcp/install.md`).
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).
