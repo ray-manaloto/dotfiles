@@ -97,7 +97,10 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # TokenEconomizer's global policy, copied (TE rewrites the file, which would break a symlink). Change it
 # with `te --host claude config set --global ...`, then capture it from the main checkout with
 # `mise dot add ~/.tokeneconomizer/config.json` before any `mise dot apply`: an apply overwrites an
-# uncaptured live change without asking. The second entry only sets the folder's mode.
+# uncaptured live change without asking. Deliver only these two entries, dry run first:
+# `mise dot apply --dry-run ~/.tokeneconomizer/config.json ~/.tokeneconomizer`, then the same
+# without `--dry-run`. A bare apply also touches every other entry here, the zsh links included.
+# The second entry only sets the folder's mode.
 "~/.tokeneconomizer/config.json" = { source = "unix/home/.tokeneconomizer/config.json", mode = "copy", permissions = "0600" }
 "~/.tokeneconomizer" = { permissions = "0700" }
 # Both files are not this repo's, so only this block is managed. Other repos get the rule from here,
