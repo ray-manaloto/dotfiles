@@ -95,21 +95,31 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
    `mise outdated --bump --global github:DeusData/codebase-memory-mcp --json`. A warning or a missing `bump`
    means the check is incomplete, which is an error, not "up to date".
 3. **Trial (no model tokens).**
-   - Refuse to run until a qualification run has recorded where `mise use` syncs skills for this mise
-     version.
-   - Create a worktree and pin the candidate temporarily in `python/cbm/mise.toml` with `mise use --path`;
-     the launcher's `global` link is built from the global config only, so it keeps the live build.
-   - Every mise call uses prepare's config overrides (the worktree's global config file, an empty system
-     config); writes to the shared mise data, state and cache dirs must stay inside a per-tool allowlist.
-   - The worktree is created beside the checkout, in a folder mise already trusts (the global config is
-     paranoid about config files), and its path is recorded.
-   - The pin and the read of its lock entry run from the worktree root (mise routes the entry only with the
-     monorepo root config loaded); the candidate, installer and MCP runs keep the outside working directory.
-   - The pin also writes the host-platform entry into a lockfile; with this repository's
-     `[monorepo].lockfile = true` that is the tracked root `mise.lock`. Hash every worktree file before the
-     pin; the pin may change only the package `mise.toml` and exactly one lockfile, whose path and hashes are
-     recorded; no changed lockfile is `provenance_mismatch`. Verify the host archive against the new entry, compare its executable with the candidate's,
-     and record the entry's URL and checksum in the trial's binding.
+   - Refuse to run (`skill_sync_unqualified`) until a qualification run has recorded, for this mise version,
+     what each trial mise step writes: skills, lockfiles and links.
+   - Create the worktree beside the checkout, in a folder mise already trusts (the global config is paranoid
+     about config files), and record its path. Hash every worktree file.
+   - Write the candidate pin into `python/cbm/mise.toml` as a plain file edit; never `mise use`, which cannot
+     refuse to install and rebuilds links.
+   - From the worktree root (mise routes the entry only with the monorepo root config loaded), with a private
+     state and cache dir, run the non-installing `mise lock TOOL@<new> --platform <host>`. With this
+     repository's `[monorepo].lockfile = true` it writes the tracked root `mise.lock`. The pin edit and lock may
+     change only the package `mise.toml` and exactly one lockfile, whose path and hashes are recorded; no
+     changed lockfile is `provenance_mismatch`.
+   - Refuse (`live_state_changed`) unless the live `tool-purgatory.json` is absent or empty: nearly every mise
+     command first runs the due deferred removals, and no setting turns that off.
+   - Refuse (`trial_check_failed`) if any config sets `locked_require_checksum`, and unset
+     `MISE_LOCKED_REQUIRE_CHECKSUM`, so the locked checksum rule keeps its default.
+   - From the worktree's `python/cbm`, where the package config that declares the candidate is loaded and
+     the root lock entry is found, with the live state and cache
+     dirs, normal config discovery and the real HOME, run `mise install TOOL@<new>` with `MISE_LOCKED=1`, `MISE_LOCKFILE_MODE=generate`, `MISE_SAFE=1`,
+     `MISE_SKILLS_AUTO_SYNC=0`, `MISE_CACHE_PRUNE_AGE=0s` and `MISE_SELF_UPDATE_AUTO=false`.
+     It installs only an archive matching the locked checksum, writes no lockfile and runs no hooks; its
+     incomplete-install markers and install lock stay where live mise sees them. No call overrides the global
+     config file, so the `global` link keeps the live build. Writes to the shared store and to the live state
+     and cache dirs must stay inside a per-tool allowlist.
+   - Verify the host archive against the new lock entry, compare its executable with the installed
+     candidate's, and record the entry's URL and checksum in the trial's binding.
    - From here on the candidate executable runs by absolute path through the trial's own launcher, never
      `global`, and its version and hash must match the binding before any result counts.
    - Run the candidate installer for every client in a private HOME and capture what it writes into a
@@ -135,7 +145,8 @@ was agreed after an adversarial review over five revisions. Two pull requests bu
 6. **Prepare.** Re-check the release asset and host entry against the trial's binding. Restore the pin file
    and the recorded lockfile to their pre-pin bytes (deleting one that did not exist), each only if it still has the trial's post-pin hash,
    and require the worktree to match the base. Then run `mise lock --global
-   TOOL@<new>` for three platforms against the worktree's global config file and an empty system config.
+   TOOL@<new>` for three platforms against the worktree's global config file and an empty system config,
+   with the trial's private state and cache dirs.
    The lock may change only the global pin and lock, and its host entry must match the binding
    (`artifact_changed` otherwise). Then write and stage the pin, the lock, the
    baseline, the acceptance receipts and the upgrade report.
