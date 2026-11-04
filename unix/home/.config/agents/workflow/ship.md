@@ -36,7 +36,8 @@ the approval and the commit belong to the coordinator or the owner.
 1. Base-branch review in the reviewer tab, with the ticket's acceptance criteria supplied.
 2. `/pr` writes the title and body to a file: summary, evidence (how it was tested), merge danger
    (one-way or two-way door, and how to undo it) and blast radius.
-3. Scan the title and body for private content, then a document review in a read-only tab.
+3. Run the home-path scan on the title and body, then a document review in a read-only tab that
+   includes the reviewer's leak check. A clean scan is not a leak check.
 4. The reviewer pane approves the pull-request fingerprint of the exact title and body; only then
    does the repository's create command open it. Edits and comments go through the same approval.
 5. Watch the checks. The owner merges on GitHub.

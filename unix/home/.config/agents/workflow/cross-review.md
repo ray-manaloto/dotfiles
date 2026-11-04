@@ -34,7 +34,9 @@ Set the effort in the tab's argv (`-c model_reasoning_effort=...`); the session 
 A document review brief names the file's absolute path and that it is read-only, then asks by
 document type: a spec for gaps, untestable criteria, missing seams and contradictions with the
 glossary and ADRs; ticket bodies for vertical slices, written seams and criteria that can fail;
-pull-request text for accuracy against the diff, a merge danger rated too safe, and private content.
+pull-request text for accuracy against the diff and a merge danger rated too safe. Every document
+review of public text, and every comment before it is posted, includes the leak check: private
+content in the exact bytes blocks approval.
 
 ## Handling findings
 

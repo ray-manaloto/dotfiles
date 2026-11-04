@@ -28,7 +28,9 @@ tags: [workflow]
    the proposed commit message to a file and stop.
 8. Spend is tracked across a ticket, not only per loop. While a person is watching, money limits are
    advisory; an external spend limit is set and verified before anything runs unattended.
-9. Text is scanned for private content before it is published, not after.
+9. Text is checked for private content before it is published, not after. The home-path scan
+   finds only the home-path strings it is configured with; a clean scan says nothing else about the
+   content. The guard for private content is the reviewer's leak check on the exact bytes.
 10. Merges stay human. No agent merges a pull request.
 11. Each step starts in a herdr-app tab: Codex as `codex-hc`, Claude through its launcher, both
     opened with `herdr-app do tab.new` and driven with `hc send`, `hc keys` and `hc read`. Inside
@@ -36,8 +38,9 @@ tags: [workflow]
     review subagent). Never start a step with `claude -p`, `codex exec`, the non-interactive
     `codex review` or `hc run`. If `herdr-app ls` fails, stop and ask the owner. Close a tab when
     its step is done.
-12. Every public write (an issue, a pull request, an edit or a comment) is sent only after a private
-    content scan and an approval on the exact bytes. Without approval the item stays local.
+12. Every public write (docs, a commit, a spec, a ticket, pull-request text, an edit or a comment)
+    is sent only after the home-path scan, the reviewer's leak check and an approval on the exact
+    bytes. Without approval the item stays local.
 13. A step is done on an observed result: the verify output, a passing test run, a finding checked
     against the diff. A read that failed is reported as unreadable, never as "nothing found".
 
@@ -53,7 +56,7 @@ Before the first ticket in a repository, `/work` runs setup once: `setup-matt-po
 | 3 | `/to-tickets` | The owner, same session | Vertical-slice ticket issues, blockers first, each with seams and criteria that can fail | Approves the breakdown | Optional document review of the ticket bodies |
 | 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | Reviewer pane approves each commit | Uncommitted-changes review before each commit |
 | 5 | Branch review | The reviewer tab, after the ticket's commits | Findings against the acceptance criteria | None: findings are hypotheses | Base-branch review with the criteria supplied |
-| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the exact bytes | Private-content scan, then a document review |
+| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the exact bytes | Home-path scan, then a document review with the leak check |
 | 7 | Close-out | The coordinator, after the owner merges | Issue closed, roadmap line ticked, worktree removed | The merge itself | None |
 | 8 | `/retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
 
