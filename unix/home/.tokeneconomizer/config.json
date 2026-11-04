@@ -1,4 +1,5 @@
 {
+  "history_import": true,
   "loopguard": "nudge",
   "loopguard_aggr": "aggressive",
   "loopguard_nudges": 1,
@@ -21,6 +22,7 @@
     "ReportFindings",
     "PushNotification",
     "LSP",
-    "mcp__*"
+    "mcp__*",
+    "Artifact*"
   ]
 }
