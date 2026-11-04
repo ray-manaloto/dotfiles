@@ -45,6 +45,8 @@ Run them from a dotfiles checkout: the tasks belong to the `python/cbm` package 
 any checkout or worktree that holds the package works, before or after the merge. Then restart Claude and Codex
 sessions. Codex lists the two new hooks under `/hooks` until they are trusted.
 `CBM_CLIENTS` overrides the client list (default `claude,codex`; Antigravity and OpenCode come later).
+One install runs at a time (`~/.local/share/codebase-memory-mcp/cbm-install.lock`); a second is refused.
+`//cbm:verify` also opens a live MCP session over stdio through the launcher.
 
 ## Only through `//cbm:install`
 

@@ -5,6 +5,7 @@
 # symlinked mise folder fails. Pointed at a folder without the binary it only writes configs, so the
 # launcher symlink is removed for the installer's run and put back on every exit path.
 
+import fcntl
 import json
 import subprocess
 import tomllib
@@ -54,16 +55,17 @@ class InstallError(Exception):
         self.path = path
 
 
-def run(cfg: Config, *args: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
-    """The launcher with these arguments; a launcher that cannot start or stalls is a failed run, not a crash."""
-    command = [str(config.launcher(cfg)), *args]
+def run(cfg: Config, *args: str, stdin: str = "", program: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """The launcher (or program) with these arguments; one that cannot start or stalls is a failed run, not a crash."""
+    path = program or config.launcher(cfg)
+    command = [str(path), *args]
     try:
         return subprocess.run(
             command, cwd=cfg.home, env=config.child_env(), input=stdin, capture_output=True, text=True,
             timeout=TIMEOUT, check=False,
         )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as error:  # one error event, then a failed run
-        emit(Error(message=f"cbm: the launcher could not run: {error}", path=config.launcher(cfg)))
+        emit(Error(message=f"cbm: {path.name} could not run: {error}", path=path))
         return subprocess.CompletedProcess(command, 127, "", str(error))
 
 
@@ -79,6 +81,20 @@ def install(cfg: Config) -> int:
         msg = "cbm: the mise global link is missing; run `mise install` for the global config first"
         raise InstallError(msg, link)
     launcher.parent.mkdir(parents=True, exist_ok=True)
+    # One install at a time: a second run would see the launcher removed and restore it under the first.
+    lock_path = launcher.parent.parent / "cbm-install.lock"
+    with lock_path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            msg = "cbm: another cbm install is running; rerun when it has finished"
+            raise InstallError(msg, lock_path) from None
+        return installed(cfg)
+
+
+def installed(cfg: Config) -> int:
+    """With the install lock held: the installer with the launcher out of the way, then auto_index off."""
+    link, launcher = config.link(cfg), config.launcher(cfg)
     mine = ours(cfg)
     if not mine and (launcher.exists() or launcher.is_symlink()):
         msg = f"cbm: the launcher is not this package's symlink to {link}; move it away and rerun"
@@ -131,7 +147,7 @@ def verify(cfg: Config) -> int:
     """Check the whole setup; returns how many checks failed."""
     link, target = config.link(cfg), str(config.launcher(cfg))
     results = [check("launcher is a symlink to the mise global link", ok=ours(cfg))]
-    linked = subprocess.run([str(link), "--version"], capture_output=True, text=True, check=False)
+    linked = run(cfg, "--version", program=link)
     via = run(cfg, "--version")
     version = via.stdout.strip()
     same = linked.returncode == 0 and via.returncode == 0 and bool(version) and version == linked.stdout.strip()
@@ -202,8 +218,10 @@ def verify_claude(cfg: Config, target: str) -> list[bool]:
 def verify_codex(cfg: Config, target: str) -> list[bool]:
     codex = cfg.home / ".codex"
     mcp = read_toml(codex / "config.toml").get("mcp_servers", {}).get("codebase-memory-mcp", {})
-    plain = mcp.get("command") == target and mcp.get("args") == []
-    results = [check("Codex MCP entry names the launcher, no args", ok=plain)]
+    # CBM 0.12.1 lists the two namespace variables for Codex to forward if set (src/cli/cli.c:3890-3912).
+    forwarded = mcp.get("env_vars") == ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]
+    plain = mcp.get("command") == target and mcp.get("args") == [] and set(mcp) <= {"command", "args", "env_vars"}
+    results = [check("Codex MCP entry names the launcher, no args or env", ok=plain and forwarded)]
     command = f"'{target}' hook-augment"
     hooks = read_json(codex / "hooks.json").get("hooks", {})
     found = [

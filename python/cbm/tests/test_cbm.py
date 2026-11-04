@@ -40,7 +40,7 @@ def test_verify_before_install_fails_and_reports_the_missing_launcher(home: Path
     assert len(failed(done.stdout)) == CHECKS - 1  # only "no CBM copy in ~/.local/bin" holds
     errors = events(done.stderr)
     assert {error["path"] for error in errors} == {str(launcher(home))}
-    assert all(error["message"].startswith("cbm: the launcher could not run") for error in errors)
+    assert all(error["message"].startswith("cbm: codebase-memory-mcp could not run") for error in errors)
     assert "install" not in calls(home)
 
 
@@ -92,6 +92,38 @@ def test_signals_during_install_restore_launcher(home: Path, sig: signal.Signals
         proc.communicate(timeout=TIMEOUT)
     assert proc.returncode == 128 + sig
     assert restored(home)
+
+
+def test_verify_without_the_global_link_fails_its_checks_without_a_crash(home: Path) -> None:
+    assert cbm("install").returncode == 0
+    link(home).unlink()
+    done = cbm("verify")
+    assert done.returncode == 1
+    assert "Traceback" not in done.stderr
+    assert str(link(home)) in {error["path"] for error in events(done.stderr)}
+    assert events(done.stdout)[-1]["event"] == "done"
+
+
+def test_a_second_install_while_one_runs_is_refused(home: Path) -> None:
+    assert cbm("install").returncode == 0
+    mode(home, "hang")
+    with subprocess.Popen(
+        [str(CBM), "install"], env=os.environ.copy(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, start_new_session=True,
+    ) as first:  # fmt: skip
+        deadline = time.monotonic() + TIMEOUT
+        while not (home / "started").exists():
+            assert time.monotonic() < deadline, "the stand-in installer never started"
+            time.sleep(0.05)
+        second = cbm("install")
+        os.killpg(first.pid, signal.SIGTERM)
+        first.communicate(timeout=TIMEOUT)
+    assert second.returncode == 1
+    [error] = events(second.stderr)
+    assert error["message"] == "cbm: another cbm install is running; rerun when it has finished"
+    assert restored(home)
+    # The refused run never reached the installer: only the first install and the hanging one did.
+    assert len([line for line in calls(home).splitlines() if line.startswith("install ")]) == 2
 
 
 def test_missing_global_link_changes_nothing(home: Path) -> None:
@@ -233,6 +265,19 @@ def test_claude_mcp_with_args_or_env_fails(home: Path, extra: dict[str, object])
         path.write_text(json.dumps({"mcpServers": {"codebase-memory-mcp": entry}}))
 
     check_after(home, edit, "Claude MCP entry names the launcher, no args or env")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda s: s + '[mcp_servers.codebase-memory-mcp.env]\nCBM_CACHE_DIR = "/elsewhere"\n',
+        lambda s: s.replace('env_vars = ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]\n', ""),
+    ],
+)
+def test_codex_mcp_with_env_or_without_the_forwarded_names_fails(home: Path, change: Callable[[str], str]) -> None:
+    path = home / ".codex/config.toml"
+    codex_mcp = "Codex MCP entry names the launcher, no args or env"
+    check_after(home, lambda: path.write_text(change(path.read_text())), codex_mcp)
 
 
 @pytest.mark.parametrize(

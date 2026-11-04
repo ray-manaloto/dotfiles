@@ -20,7 +20,7 @@ Runs on 2026-11-03 (Claude Code 2.1.317) and 2026-11-04 (Claude Code 2.1.318, Co
 
 | Check | Result |
 |---|---|
-| Package tests (`mise run //cbm:check`: ruff, ty, codegen drift, pytest with a stand-in CBM binary in a temporary HOME) | 52 pass at 100% line and branch coverage: installer failure, start error, Ctrl-C and SIGTERM restore the launcher; a foreign launcher, bad `CBM_CLIENTS` (a repeated client named as the reason, order kept), moved config folders and bad usage are refused; each weakened config fails its own check, and so does an MCP server with another version, a missing read-only tool or non-JSON output |
+| Package tests (`mise run //cbm:check`: ruff, ty, codegen drift, pytest with a stand-in CBM binary in a temporary HOME) | 56 pass at 100% line and branch coverage: installer failure, start error, Ctrl-C and SIGTERM restore the launcher; a second install while one runs is refused; verify without the mise link fails its checks without a crash; a foreign launcher, bad `CBM_CLIENTS` (a repeated client named as the reason, order kept), moved config folders and bad usage are refused; each weakened config fails its own check (a Codex MCP `env` block or a missing `env_vars` line included), and so does an MCP server with another version, a missing read-only tool or non-JSON output |
 | Installer exit, binary bytes | rc 0; binary sha256 unchanged (`a36cfa1f…`) |
 | Strict file diff against a backup (32 checks) | 31 pass. The FAIL: `enabledPlugins` gained one plugin that another session installed between the backup and the install; kept as a FAIL with that explanation |
 | Codex `hooks.state` | gained trust entries for exactly the two CBM hooks (Codex `/hooks` trust) |

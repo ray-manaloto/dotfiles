@@ -92,7 +92,8 @@ if "claude" in clients:
       del groups["PostToolUse"]
   write(".claude/settings.json", json.dumps({"hooks": groups}))
 if "codex" in clients:
-  write(".codex/config.toml", f'[mcp_servers.codebase-memory-mcp]\ncommand = "{cmd}"\nargs = []\n')
+  write(".codex/config.toml", f'[mcp_servers.codebase-memory-mcp]\ncommand = "{cmd}"\nargs = []\n'
+                              'env_vars = ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]\n')
   codex_hook = {"type": "command", "command": f"'{cmd}' hook-augment", "timeout": 5}
   write(".codex/hooks.json", json.dumps({"hooks": {
       "SessionStart": [{"matcher": "startup|resume|clear|compact", "hooks": [codex_hook]}],
