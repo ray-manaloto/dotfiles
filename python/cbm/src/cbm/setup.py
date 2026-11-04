@@ -7,8 +7,10 @@
 
 import fcntl
 import json
+import re
 import subprocess
 import tomllib
+from itertools import takewhile
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,17 @@ READ_ONLY = {
 }  # fmt: skip
 AGENTS_MD_BLOCK = ("<!-- codebase-memory-mcp:start -->", "<!-- codebase-memory-mcp:end -->")  # cli.c:3777
 CLAUDE_TOOL = "- mcp__codebase-memory-mcp__"
+# An OpenCode agent's frontmatter `permission:` map denies everything with `"*": deny`, then allows the source
+# search tools and each CBM tool by its MCP name, `"codebase-memory-mcp_<tool>": allow`. One rule per line.
+OPENCODE_TOOL = "codebase-memory-mcp_"
+OPENCODE_SEARCH = ("read", "grep", "glob", "tool_search", "tool_search_regex")
+OPENCODE_RULE = re.compile(r'  ("?)(?P<key>[^":\s]+)\1: (?P<action>\w+)')
+# JSONC as CBM reads it (yyjson's ALLOW_COMMENTS and ALLOW_TRAILING_COMMAS, cli.c:4937): strings stay, a comment
+# becomes a space, so it still separates tokens, and a comma after a value and before a closing bracket goes. Anything
+# else, an unterminated comment or `[,]` included, is left for json.loads to refuse.
+COMMENT = r"//[^\n]*|/\*(?:[^*]|\*(?!/))*\*/"  # a block comment cannot run past its first */
+JSONC_TOKEN = re.compile(rf'"(?:\\.|[^"\\])*"|{COMMENT}|,')
+JSONC_CLOSE = re.compile(rf"(?:\s|{COMMENT})*[}}\]]")
 # What an agent session sends first over stdio (src/mcp/mcp.c:1458-1489); the server exits at end of input.
 HANDSHAKE = "".join(
     json.dumps(message) + "\n"
@@ -133,10 +146,29 @@ def first_line(done: subprocess.CompletedProcess[str]) -> str:
     return lines[0] if lines else ""
 
 
-def read_json(path: Path) -> dict[str, Any]:
-    """The file's JSON object; a missing file is empty, an unreadable one an error event."""
+def strip_jsonc(text: str) -> str:
+    out: list[str] = []
+    end, last = 0, ""  # last: the last character that is not space or comment
+    for token in JSONC_TOKEN.finditer(text):
+        gap, end = text[end : token.start()], token.end()
+        last = gap.rstrip()[-1:] or last
+        if token[0] == ",":
+            trailing = last not in ("", "[", "{", ",", ":") and JSONC_CLOSE.match(text, end)
+            out += [gap, "" if trailing else ","]
+            last = last if trailing else ","
+        else:
+            out += [gap, token[0] if token[0].startswith('"') else " "]
+            last = '"' if token[0].startswith('"') else last
+    return "".join([*out, text[end:]])
+
+
+def read_json(path: Path, *, jsonc: bool = False) -> dict[str, Any]:
+    """The file's JSON (or JSONC) object; a missing file is empty, an unreadable one an error event."""
+    text = path.read_text() if path.is_file() else "{}"
+    if jsonc:
+        text = strip_jsonc(text)
     try:
-        return json.loads(path.read_text()) if path.is_file() else {}
+        return json.loads(text)
     except json.JSONDecodeError as error:
         emit(Error(code=ErrorCode.invalid_json, message=f"cbm: cannot parse JSON: {error}", path=path))
         return {}
@@ -170,6 +202,8 @@ def verify(cfg: Config) -> int:
         results += verify_claude(cfg, target)
     if Client.codex in cfg.clients:
         results += verify_codex(cfg, target)
+    if Client.opencode in cfg.clients:
+        results += verify_opencode(cfg, target)
     return results.count(False)
 
 
@@ -251,11 +285,59 @@ def verify_codex(cfg: Config, target: str) -> list[bool]:
         results.append(check(label, ok=sealed and launches and known))
     skill = (codex / "skills/codebase-memory/SKILL.md").is_file()
     results.append(check("Codex skill codebase-memory", ok=skill))
-    text = (codex / "AGENTS.md").read_text() if (codex / "AGENTS.md").is_file() else ""
+    results.append(agents_md(codex / "AGENTS.md", "Codex"))
+    return results
+
+
+def agents_md(path: Path, client: str) -> bool:
+    text = path.read_text() if path.is_file() else ""
     start, end = AGENTS_MD_BLOCK
     after = text.split(start, 1)[1] if start in text else ""
     inside = after.split(end, 1)[0] if end in after else ""
-    results.append(
-        check("Codex AGENTS.md has the CBM managed block, pointing at the skill", ok="codebase-memory" in inside)
-    )
+    return check(f"{client} AGENTS.md has the CBM managed block, pointing at the skill", ok="codebase-memory" in inside)
+
+
+def opencode_config(folder: Path) -> Path:
+    """The file CBM writes the MCP entry to: opencode.jsonc when it exists, else opencode.json (cli.c:2953-2975)."""
+    jsonc = folder / "opencode.jsonc"
+    return jsonc if jsonc.is_file() else folder / "opencode.json"
+
+
+def opencode_agent(text: str) -> bool:
+    """A subagent whose permission map is exactly: deny all first, then allow search and some read-only CBM tools.
+
+    OpenCode keeps the written key order and the last matching rule wins (OpenCode v2.2.5
+    packages/core/src/permission.ts:86), so a "*" deny written after the allows denies everything.
+    """
+    lines = text.removeprefix("---\n").split("\n---", 1)[0].splitlines()
+    start = lines.index("permission:") + 1 if lines.count("permission:") == 1 else len(lines)
+    # The block runs to the next top-level key; blank and comment lines inside it cannot end it early.
+    block = takewhile(lambda line: not line or line[0].isspace() or line.startswith("#"), lines[start:])
+    rules = [OPENCODE_RULE.fullmatch(line) for line in block if line.strip() and not line.lstrip().startswith("#")]
+    actions = {rule["key"]: rule["action"] for rule in rules if rule}
+    tools = {key.removeprefix(OPENCODE_TOOL) for key in actions if key.startswith(OPENCODE_TOOL)}
+    wanted = {"*": "deny"} | dict.fromkeys([*OPENCODE_SEARCH, *(OPENCODE_TOOL + tool for tool in tools)], "allow")
+    return (
+        text.startswith("---\n") and "mode: subagent" in lines and all(rules) and len(actions) == len(rules)
+        and actions == wanted and next(iter(actions)) == "*" and bool(tools) and tools <= READ_ONLY
+    )  # fmt: skip
+
+
+def verify_opencode(cfg: Config, target: str) -> list[bool]:
+    folder = cfg.home / ".config/opencode"
+    # CBM 0.12.1 writes the legacy `mcp` shape, which OpenCode 2 still reads (cli.c:4091-4094).
+    mcp = read_json(opencode_config(folder), jsonc=True).get("mcp", {}).get("codebase-memory-mcp") or {}
+    plain = mcp.get("command") == [target] and mcp.get("type") == "local" and set(mcp) <= {"type", "command"}
+    results = [check("OpenCode MCP entry names the launcher, no args or env", ok=plain)]
+    for name in AGENTS:
+        path = folder / "agents" / f"{name}.md"
+        ok = opencode_agent(path.read_text() if path.is_file() else "")
+        results.append(check(f"OpenCode agent {name}: a subagent, read-only CBM tools only", ok=ok))
+    skill = (folder / "skills/codebase-memory/SKILL.md").is_file()
+    results.append(check("OpenCode skill codebase-memory", ok=skill))
+    results.append(agents_md(folder / "AGENTS.md", "OpenCode"))
+    # The plugin runs `<launcher> hook-augment` around grep, glob and read; it names its binary once.
+    plugin = folder / "plugins/cbm-augment.ts"
+    names = f"const BIN = '{target}';" in (plugin.read_text().splitlines() if plugin.is_file() else [])
+    results.append(check("OpenCode plugin cbm-augment runs the launcher", ok=names))
     return results

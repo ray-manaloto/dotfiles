@@ -13,6 +13,9 @@
 # the live conflict log. The real binary also cannot fail, stall or write a broken config on demand, and
 # is not on Linux test hosts. The real installer was run end to end against the live install instead
 # (docs/research/codebase-memory-mcp/verification.md).
+#
+# cbm-augment.ts is the OpenCode plugin CBM 0.12.1's own installer wrote in a scratch HOME, with its
+# launcher path replaced by @BIN@; the stand-in writes it back with the temporary launcher.
 
 import hashlib
 import json
@@ -118,13 +121,29 @@ for name, profile in (("codebase-memory", "analysis"), ("codebase-memory-scout",
     write(f".codex/agents/{name}.toml",
           f'name = "{name}"\nsandbox_mode = "read-only"\n[mcp_servers.codebase-memory-mcp]\n'
           f'command = "{cmd}"\nargs = ["--tool-profile={profile}"]\nenabled_tools = ["search_graph"]\n')
+  if "opencode" in clients:
+    write(f".config/opencode/agents/{name}.md",
+          f'---\ndescription: {name}\nmode: subagent\npermission:\n  "*": deny\n  read: allow\n  grep: allow\n'
+          '  glob: allow\n  tool_search: allow\n  tool_search_regex: allow\n'
+          '  "codebase-memory-mcp_search_graph": allow\n---\nBody.\n')
+folders = {"claude": ".claude", "codex": ".codex", "opencode": ".config/opencode"}
 for client in clients:
-    write(f".{client}/skills/codebase-memory/SKILL.md", "skill\n")
-if "codex" in clients:
-  write(".codex/AGENTS.md", "<!-- codebase-memory-mcp:start -->\n"
-        "For structural codebase exploration, use the installed `codebase-memory` skill.\n"
-        "<!-- codebase-memory-mcp:end -->\n")
-"""
+    write(f"{folders[client]}/skills/codebase-memory/SKILL.md", "skill\n")
+for client in ("codex", "opencode"):
+  if client in clients:
+    write(f"{folders[client]}/AGENTS.md", "<!-- codebase-memory-mcp:start -->\n"
+          "For structural codebase exploration, use the installed `codebase-memory` skill.\n"
+          "<!-- codebase-memory-mcp:end -->\n")
+if "opencode" in clients:
+  # The MCP entry goes into opencode.jsonc when it exists, else opencode.json. Like CBM, it is spliced into the
+  # text, so comments and trailing commas stay (the stand-in assumes no `mcp` key yet).
+  jsonc = home / ".config/opencode/opencode.jsonc"
+  config = jsonc if jsonc.is_file() else home / ".config/opencode/opencode.json"
+  entry = json.dumps({"mcp": {"codebase-memory-mcp": {"command": [cmd], "type": "local"}}})[1:-1]
+  text = config.read_text() if config.is_file() else "{}"
+  write(str(config.relative_to(home)), text.replace("{", "{" + entry + ",", 1))
+  write(".config/opencode/plugins/cbm-augment.ts", Path(@PLUGIN@).read_text().replace("@BIN@", cmd))
+""".replace("@PLUGIN@", repr(str(Path(__file__).with_name("cbm-augment.ts"))))
 
 
 def link(home: Path) -> Path:
@@ -168,7 +187,14 @@ def cbm(*args: str, timeout: int = TIMEOUT, cwd: Path | None = None) -> subproce
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A temporary HOME with the stand-in at the mise global link, in mode ok."""
     root = tmp_path.resolve()
-    for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "CBM_CACHE_DIR", "CBM_RUNTIME_DIR"):
+    for name in (
+        "CBM_CLIENTS",
+        "CODEX_HOME",
+        "CLAUDE_CONFIG_DIR",
+        "OPENCODE_CONFIG",
+        "CBM_CACHE_DIR",
+        "CBM_RUNTIME_DIR",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HOME", str(root))
     monkeypatch.setenv("MISE_DATA_DIR", str(root / ".local/share/mise"))
