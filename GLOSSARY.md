@@ -71,6 +71,33 @@ Shell the zero-bash rule itself allows, so it is not a finding. AGENTS.md states
 the only exception is the zsh startup files under `unix/home`.
 _Avoid_: Waiver, skip, ignore
 
+### CBM upgrades
+
+**Upgrade trial**:
+A run of a candidate CBM release with private client configs and its own CBM runtime namespace, without model
+tokens, that captures what the release would change in the setup. It is the only place a candidate runs before its PR merges.
+_Avoid_: Sandbox run, dry run, test install
+
+**Live setup**:
+The CBM build, launcher and client integrations (configs, hooks, agents, skills) that open sessions use.
+A trial or prepare that changes it has failed; the allowlisted writes to the shared mise store are not changes
+to it.
+_Avoid_: Production, real install
+
+**Upgrade change**:
+One difference between a release and the reviewed baseline that is reviewed on its own: either an observed
+setup difference or a changed source file the policy marks for review.
+_Avoid_: Diff, delta, finding
+
+**Acceptance**:
+The owner's explicit approval of one upgrade change, valid only for that change as reviewed in that run.
+Nothing generates it, and a policy violation cannot have one.
+_Avoid_: Waiver, sign-off, approval record
+
+**Apply**:
+Moving the live setup to a merged release: closing sessions, installing, reindexing and restarting.
+_Avoid_: Upgrade (for this step alone), deploy, rollout
+
 ### Labels
 
 **`needs-triage`**:
