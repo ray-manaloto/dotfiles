@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from . import config
+from . import config, process
 from .events import check, emit
 from .models import Client, Config, Error, ErrorCode
 
@@ -56,14 +56,15 @@ class InstallError(Exception):
         self.code = code
 
 
-def run(cfg: Config, *args: str, stdin: str = "", program: Path | None = None) -> subprocess.CompletedProcess[str]:
+def probe(
+    cfg: Config, *args: str, input_text: str = "", program: Path | None = None
+) -> subprocess.CompletedProcess[str]:
     """The launcher (or program) with these arguments; one that cannot start or stalls is a failed run, not a crash."""
     path = program or config.launcher(cfg)
-    command = [str(path), *args]
     try:
-        return subprocess.run(
-            command, cwd=cfg.home, env=config.child_env(), input=stdin, capture_output=True, text=True,
-            timeout=TIMEOUT, check=False,
+        return process.run(
+            path, *args, cwd=cfg.home, env=config.child_env(), input_text=input_text, capture_output=True,
+            timeout=TIMEOUT,
         )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as error:  # one error event, then a failed run
         if isinstance(error, FileNotFoundError):
@@ -73,7 +74,7 @@ def run(cfg: Config, *args: str, stdin: str = "", program: Path | None = None) -
         else:
             code = ErrorCode.command_failed
         emit(Error(code=code, message=f"cbm: {path.name} could not run: {error}", path=path))
-        return subprocess.CompletedProcess(command, 127, "", str(error))
+        return subprocess.CompletedProcess([str(path), *args], 127, "", str(error))
 
 
 def ours(cfg: Config) -> bool:
@@ -110,9 +111,9 @@ def installed(cfg: Config) -> int:
     try:
         if mine:
             launcher.unlink()
-        done = subprocess.run(
-            [str(link), "install", "--skip-binary", f"--clients={clients}", f"--dir={launcher.parent}", "-y"],
-            cwd=cfg.home, env=config.child_env(), text=True, check=False,
+        done = process.run(
+            link, "install", "--skip-binary", f"--clients={clients}", f"--dir={launcher.parent}", "-y",
+            cwd=cfg.home, env=config.child_env(), input_text=None, capture_output=False, timeout=None,
         )  # fmt: skip
     except OSError as error:  # the global link exists but cannot run
         msg = f"cbm: the CBM installer could not start: {error}"
@@ -123,7 +124,7 @@ def installed(cfg: Config) -> int:
     if done.returncode != 0:
         msg = f"cbm: the CBM installer exited {done.returncode}"
         raise InstallError(msg, link, code=ErrorCode.installer_failed)
-    set_ = run(cfg, "config", "set", "auto_index", "false")
+    set_ = probe(cfg, "config", "set", "auto_index", "false")
     return int(not check("config set auto_index false", ok=set_.returncode == 0, detail=first_line(set_)))
 
 
@@ -154,13 +155,13 @@ def verify(cfg: Config) -> int:
     """Check the whole setup; returns how many checks failed."""
     link, target = config.link(cfg), str(config.launcher(cfg))
     results = [check("launcher is a symlink to the mise global link", ok=ours(cfg))]
-    linked = run(cfg, "--version", program=link)
-    via = run(cfg, "--version")
+    linked = probe(cfg, "--version", program=link)
+    via = probe(cfg, "--version")
     version = via.stdout.strip()
     same = linked.returncode == 0 and via.returncode == 0 and bool(version) and version == linked.stdout.strip()
     results.append(check("launcher runs the mise global build", ok=same, detail=version))
     results.append(serves(cfg, linked.stdout.strip()))
-    auto = run(cfg, "config", "get", "auto_index")
+    auto = probe(cfg, "config", "get", "auto_index")
     off = auto.returncode == 0 and auto.stdout.strip() == "false"
     results.append(check("auto_index is false", ok=off, detail=first_line(auto)))
     stray = (cfg.home / ".local/bin/codebase-memory-mcp").exists()
@@ -174,7 +175,7 @@ def verify(cfg: Config) -> int:
 
 def serves(cfg: Config, version: str) -> bool:
     """A live MCP session through the launcher: the mise build's version and every read-only tool."""
-    done = run(cfg, stdin=HANDSHAKE)
+    done = probe(cfg, input_text=HANDSHAKE)
     try:
         replies = {reply.get("id"): reply.get("result", {}) for reply in map(json.loads, done.stdout.splitlines())}
     except json.JSONDecodeError as error:
