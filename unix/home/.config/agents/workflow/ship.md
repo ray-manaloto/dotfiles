@@ -46,3 +46,12 @@ the approval and the commit belong to the coordinator or the owner.
 
 After the merge: close the issue with an approved comment, tick the roadmap line, remove the
 worktree, and recompute the frontier (a GitHub blocked-by link only drops when its blocker closes).
+
+A spec may let its tickets close earlier, on a shared branch, so the frontier can move before the
+one pull request merges. Then a ticket closes only after its commits are approved, pushed to the
+shared branch on the remote, and seen there. The approved comment names each commit and says it is
+not merged yet. Those commits are never rewritten: later changes are new commits, and the pull
+request merges with a merge commit, never squashed or rebased. On an early close, tick the roadmap
+line and recompute the frontier, but keep the worktree until the merge. The spec stays open until
+the merge. If the branch or pull request is abandoned, or later work undoes a ticket, reopen the
+ticket and recompute the frontier.
