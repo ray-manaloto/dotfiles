@@ -20,7 +20,13 @@ def test_install_then_verify_pass(home: Path) -> None:
     done = cbm("install")
     assert done.returncode == 0, done.stderr
     assert failed(done.stdout) == []
-    assert events(done.stdout)[-1] == {"event": "done", "command": "install", "failed": 0}
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "install",
+        "failed": 0,
+        "outcome": "done",
+        "message": "cbm: install passed",
+    }
     assert not done.stderr
     assert restored(home)
     recorded = calls(home)
@@ -29,6 +35,14 @@ def test_install_then_verify_pass(home: Path) -> None:
     verified = cbm("verify")
     assert verified.returncode == 0
     assert len(events(verified.stdout)) == CHECKS + 1
+    assert events(verified.stdout)[-1] == {
+        "event": "done",
+        "command": "verify",
+        "failed": 0,
+        "outcome": "done",
+        "message": "cbm: verify passed",
+    }
+    assert not verified.stderr
     # A second install removes this package's own launcher first and puts it back.
     assert cbm("install").returncode == 0
     assert restored(home)
@@ -41,6 +55,14 @@ def test_verify_before_install_fails_and_reports_the_missing_launcher(home: Path
     errors = events(done.stderr)
     assert {error["path"] for error in errors} == {str(launcher(home))}
     assert all(error["message"].startswith("cbm: codebase-memory-mcp could not run") for error in errors)
+    assert {error["code"] for error in errors} == {"missing_binary"}
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "verify",
+        "failed": CHECKS - 1,
+        "outcome": "failed",
+        "message": f"cbm: verify failed: {CHECKS - 1} checks failed",
+    }
     assert "install" not in calls(home)
 
 
@@ -49,7 +71,12 @@ def test_installer_failure_restores_launcher_and_exits_1(home: Path) -> None:
     done = cbm("install")
     assert done.returncode == 1
     assert events(done.stderr) == [
-        {"event": "error", "message": "cbm: the CBM installer exited 3", "path": str(link(home))}
+        {
+            "event": "error",
+            "code": "installer_failed",
+            "message": "cbm: the CBM installer exited 3",
+            "path": str(link(home)),
+        }
     ]
     assert restored(home)
 
@@ -61,6 +88,7 @@ def test_installer_that_cannot_start_restores_launcher(home: Path) -> None:
     assert done.returncode == 1
     [error] = events(done.stderr)
     assert error["message"].startswith("cbm: the CBM installer could not start")
+    assert error["code"] == "installer_start_failed"
     assert error["path"] == str(link(home))
     assert restored(home)
 
@@ -101,7 +129,20 @@ def test_verify_without_the_global_link_fails_its_checks_without_a_crash(home: P
     assert done.returncode == 1
     assert "Traceback" not in done.stderr
     assert str(link(home)) in {error["path"] for error in events(done.stderr)}
+    assert {error["code"] for error in events(done.stderr)} == {"missing_binary"}
     assert events(done.stdout)[-1]["event"] == "done"
+
+
+def test_verify_without_execute_permission_reports_command_failed(home: Path) -> None:
+    assert cbm("install").returncode == 0
+    link(home).chmod(0o644)
+    done = cbm("verify")
+    assert done.returncode == 1
+    errors = events(done.stderr)
+    assert {error["code"] for error in errors} == {"command_failed"}
+    assert {error["path"] for error in errors} == {str(link(home)), str(launcher(home))}
+    assert all("Permission denied" in error["message"] for error in errors)
+    assert failed(done.stdout) == ["launcher runs the mise global build", MCP, "auto_index is false"]
 
 
 def test_a_second_install_while_one_runs_is_refused(home: Path) -> None:
@@ -121,6 +162,7 @@ def test_a_second_install_while_one_runs_is_refused(home: Path) -> None:
     assert second.returncode == 1
     [error] = events(second.stderr)
     assert error["message"] == "cbm: another cbm install is running; rerun when it has finished"
+    assert error["code"] == "install_busy"
     assert restored(home)
     # The refused run never reached the installer: only the first install and the hanging one did.
     assert len([line for line in calls(home).splitlines() if line.startswith("install ")]) == 2
@@ -132,6 +174,7 @@ def test_missing_global_link_changes_nothing(home: Path) -> None:
     assert done.returncode == 1
     [error] = events(done.stderr)
     assert "mise install" in error["message"]
+    assert error["code"] == "missing_binary"
     assert error["path"] == str(link(home))
     assert not launcher(home).exists()
     assert not launcher(home).is_symlink()
@@ -143,6 +186,7 @@ def test_foreign_launcher_is_refused(home: Path) -> None:
     done = cbm("install")
     assert done.returncode == 1
     assert events(done.stderr)[0]["path"] == str(launcher(home))
+    assert events(done.stderr)[0]["code"] == "foreign_launcher"
     assert launcher(home).readlink() == home / "elsewhere"
     assert not calls(home)
 
@@ -162,6 +206,7 @@ def test_bad_client_lists_exit_2(home: Path, monkeypatch: pytest.MonkeyPatch, va
     assert done.returncode == 2
     [error] = events(done.stderr)
     assert "CBM_CLIENTS" in error["message"]
+    assert error["code"] == "invalid_setting"
     assert not done.stdout
     assert not calls(home)
 
@@ -185,14 +230,18 @@ def test_moved_config_folders_exit_2(home: Path, monkeypatch: pytest.MonkeyPatch
     done = cbm("install")
     assert done.returncode == 2
     assert f"unset {name}" in events(done.stderr)[0]["message"]
+    assert events(done.stderr)[0]["code"] == "invalid_setting"
     assert not calls(home)
 
 
-@pytest.mark.parametrize("argv", [[], ["nope"], ["install", "verify"]])
+@pytest.mark.parametrize("argv", [[], ["nope"], ["install", "verify"], ["--unknown"], ["verify", "--unknown"]])
 def test_bad_usage_exits_2(home: Path, argv: list[str]) -> None:
     done = cbm(*argv)
     assert done.returncode == 2
-    assert events(done.stderr) == [{"event": "error", "message": "usage: cbm {install,verify}", "path": None}]
+    assert events(done.stderr) == [
+        {"event": "error", "code": "invalid_usage", "message": "usage: cbm {install,verify}", "path": None}
+    ]
+    assert not done.stdout
     assert not calls(home)
 
 
@@ -214,7 +263,13 @@ def test_config_set_failing_fails_install(home: Path) -> None:
     done = cbm("install")
     assert done.returncode == 1
     assert {"config set auto_index false", "auto_index is false"} <= set(failed(done.stdout))
-    assert events(done.stdout)[-1]["failed"] == 2
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "install",
+        "failed": 2,
+        "outcome": "failed",
+        "message": "cbm: install failed: 2 checks failed",
+    }
 
 
 def test_installer_never_sees_the_cbm_namespace(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -233,6 +288,13 @@ def check_after(home: Path, edit: Callable[[], object], failing: str) -> subproc
     done = cbm("verify")
     assert done.returncode == 1
     assert failed(done.stdout) == [failing]
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "verify",
+        "failed": 1,
+        "outcome": "failed",
+        "message": "cbm: verify failed: 1 check failed",
+    }
     return done
 
 
@@ -243,6 +305,13 @@ def test_missing_hook_group_fails(home: Path) -> None:
     [check] = [event for event in events(done.stdout) if event["event"] == "check" and not event["ok"]]
     assert check == {"event": "check", "name": "Claude has the 7 CBM hook groups, once each", "ok": False,
                      "detail": "6 found"}  # fmt: skip
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "install",
+        "failed": 1,
+        "outcome": "failed",
+        "message": "cbm: install failed: 1 check failed",
+    }
 
 
 def test_duplicate_claude_hook_fails(home: Path) -> None:
@@ -300,6 +369,7 @@ def test_malformed_codex_role_is_an_error_event_and_fails(home: Path) -> None:
     done = check_after(home, lambda: role.write_text("not = [toml"), SCOUT)
     [error] = events(done.stderr)
     assert error["message"].startswith("cbm: cannot parse TOML")
+    assert error["code"] == "invalid_toml"
     assert error["path"] == str(role)
 
 
@@ -308,6 +378,7 @@ def test_malformed_claude_settings_is_an_error_event_and_fails(home: Path) -> No
     done = check_after(home, lambda: settings.write_text("{not json"), "Claude has the 7 CBM hook groups, once each")
     [error] = events(done.stderr)
     assert error["message"].startswith("cbm: cannot parse JSON")
+    assert error["code"] == "invalid_json"
     assert error["path"] == str(settings)
 
 
@@ -352,6 +423,26 @@ def test_auto_index_left_on_fails(home: Path) -> None:
 MCP = "MCP server answers over stdio: the mise build, every read-only tool"
 
 
+def test_mcp_server_timeout_has_its_own_error_code(home: Path) -> None:
+    assert cbm("install").returncode == 0
+    (home / "mcp-hang").touch()
+    # Exercise the real 60-second timeout; the outer test deadline leaves time for cleanup and checks.
+    done = cbm("verify", timeout=90)
+    assert done.returncode == 1
+    [error] = events(done.stderr)
+    assert error["code"] == "command_timeout"
+    assert "timed out" in error["message"]
+    assert error["path"] == str(launcher(home))
+    assert failed(done.stdout) == [MCP]
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "verify",
+        "failed": 1,
+        "outcome": "failed",
+        "message": "cbm: verify failed: 1 check failed",
+    }
+
+
 @pytest.mark.parametrize("flag", ["mcp-old", "mcp-missing-tool"])
 def test_mcp_server_with_another_version_or_a_missing_tool_fails(home: Path, flag: str) -> None:
     done = check_after(home, (home / flag).touch, MCP)
@@ -364,4 +455,5 @@ def test_mcp_server_answering_garbage_is_an_error_event_and_fails(home: Path) ->
     done = check_after(home, (home / "mcp-garbage").touch, MCP)
     [error] = events(done.stderr)
     assert error["message"].startswith("cbm: the MCP server answered something other than JSON")
+    assert error["code"] == "invalid_mcp_response"
     assert error["path"] == str(launcher(home))

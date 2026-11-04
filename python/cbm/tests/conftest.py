@@ -4,7 +4,7 @@
 # (initialize, tools/list), and on `install` writes the agent setup the way CBM 0.12.1 does, for the
 # clients and launcher folder it is given. HOME/mode picks how `install` behaves: ok, fail, hang, link
 # (it leaves a launcher behind) or missing-hook; HOME/mcp-old, mcp-missing-tool and mcp-garbage break
-# the MCP session.
+# the MCP session; HOME/mcp-hang stalls it beyond the command's real timeout.
 #
 # Why not the real CBM binary: every CBM process meets in one account-wide daemon rendezvous, whatever
 # HOME says (src/daemon/bootstrap.c:243-255 at v0.12.1; only CBM_RUNTIME_DIR moves it, and the package
@@ -47,6 +47,8 @@ if args[:2] == ["config", "set"]:
 if args[:2] == ["config", "get"]:
     print((home / "cbm-config").read_text() if (home / "cbm-config").exists() else "true"); sys.exit(0)
 if not args:  # an MCP session over stdio: answer initialize and tools/list, then exit at end of input
+    if (home / "mcp-hang").exists():
+        time.sleep(120)
     if (home / "mcp-garbage").exists():
         print("not json"); sys.exit(0)
     version = "0.0.1" if (home / "mcp-old").exists() else "9.9.9"
@@ -145,11 +147,11 @@ def failed(out: str) -> list[str]:
     return [event["name"] for event in events(out) if event["event"] == "check" and not event["ok"]]
 
 
-def cbm(*args: str) -> subprocess.CompletedProcess[str]:
+def cbm(*args: str, timeout: int = TIMEOUT) -> subprocess.CompletedProcess[str]:
     """`cbm <args>` as a child process with this test's environment."""
     return subprocess.run(
         [str(CBM), *args], env=os.environ.copy(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
-        timeout=TIMEOUT, check=False,
+        timeout=timeout, check=False,
     )  # fmt: skip
 
 

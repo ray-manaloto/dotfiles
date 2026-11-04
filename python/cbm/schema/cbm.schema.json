@@ -5,6 +5,51 @@
   "additionalProperties": false,
   "description": "Types of the cbm package; mise run //cbm:codegen writes src/cbm/models.py from this file.",
   "$defs": {
+    "ErrorCode": {
+      "description": "Stable failure names shared by cbm commands; the message explains the particular failure.",
+      "type": "string",
+      "enum": [
+        "invalid_usage",
+        "invalid_setting",
+        "missing_binary",
+        "install_busy",
+        "foreign_launcher",
+        "installer_start_failed",
+        "installer_failed",
+        "command_failed",
+        "command_timeout",
+        "invalid_json",
+        "invalid_toml",
+        "invalid_mcp_response",
+        "update_check_incomplete",
+        "live_state_changed",
+        "unexpected_write",
+        "provenance_mismatch",
+        "artifact_changed",
+        "trial_check_failed",
+        "policy_violation",
+        "source_unclassified",
+        "review_invalid",
+        "review_incomplete",
+        "review_unqualified",
+        "changes_unaccepted",
+        "acceptance_stale",
+        "acceptance_unknown",
+        "skill_sync_unqualified",
+        "worktree_dirty"
+      ]
+    },
+    "Outcome": {
+      "description": "Completion outcomes shared by install, verify and the upgrade flow.",
+      "type": "string",
+      "enum": [
+        "done",
+        "failed",
+        "up_to_date",
+        "needs_review",
+        "pr_prepared"
+      ]
+    },
     "Command": {
       "description": "The cbm subcommands, one per mise task.",
       "type": "string",
@@ -82,7 +127,7 @@
       "additionalProperties": false
     },
     "Error": {
-      "description": "A failure the command caught, on stderr; the command then exits 1, or 2 for a bad setting.",
+      "description": "A failure the command caught, on stderr; the command then exits 1, or 2 for usage or a bad setting.",
       "type": "object",
       "properties": {
         "event": {
@@ -92,7 +137,12 @@
         },
         "message": {
           "type": "string",
+          "minLength": 1,
           "description": "What went wrong and what to do"
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode",
+          "description": "The named failure"
         },
         "path": {
           "anyOf": [
@@ -109,7 +159,8 @@
         }
       },
       "required": [
-        "message"
+        "message",
+        "code"
       ],
       "additionalProperties": false
     },
@@ -130,11 +181,22 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many checks failed"
+        },
+        "outcome": {
+          "$ref": "#/$defs/Outcome",
+          "description": "The result of the command"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the command completed and whether checks failed"
         }
       },
       "required": [
         "command",
-        "failed"
+        "failed",
+        "outcome",
+        "message"
       ],
       "additionalProperties": false
     }

@@ -18,6 +18,53 @@ class Cbm(BaseModel):
     )
 
 
+class ErrorCode(StrEnum):
+    """
+    Stable failure names shared by cbm commands; the message explains the particular failure.
+    """
+
+    invalid_usage = "invalid_usage"
+    invalid_setting = "invalid_setting"
+    missing_binary = "missing_binary"
+    install_busy = "install_busy"
+    foreign_launcher = "foreign_launcher"
+    installer_start_failed = "installer_start_failed"
+    installer_failed = "installer_failed"
+    command_failed = "command_failed"
+    command_timeout = "command_timeout"
+    invalid_json = "invalid_json"
+    invalid_toml = "invalid_toml"
+    invalid_mcp_response = "invalid_mcp_response"
+    update_check_incomplete = "update_check_incomplete"
+    live_state_changed = "live_state_changed"
+    unexpected_write = "unexpected_write"
+    provenance_mismatch = "provenance_mismatch"
+    artifact_changed = "artifact_changed"
+    trial_check_failed = "trial_check_failed"
+    policy_violation = "policy_violation"
+    source_unclassified = "source_unclassified"
+    review_invalid = "review_invalid"
+    review_incomplete = "review_incomplete"
+    review_unqualified = "review_unqualified"
+    changes_unaccepted = "changes_unaccepted"
+    acceptance_stale = "acceptance_stale"
+    acceptance_unknown = "acceptance_unknown"
+    skill_sync_unqualified = "skill_sync_unqualified"
+    worktree_dirty = "worktree_dirty"
+
+
+class Outcome(StrEnum):
+    """
+    Completion outcomes shared by install, verify and the upgrade flow.
+    """
+
+    done = "done"
+    failed = "failed"
+    up_to_date = "up_to_date"
+    needs_review = "needs_review"
+    pr_prepared = "pr_prepared"
+
+
 class Command(StrEnum):
     """
     The cbm subcommands, one per mise task.
@@ -93,7 +140,7 @@ class Check(BaseModel):
 
 class Error(BaseModel):
     """
-    A failure the command caught, on stderr; the command then exits 1, or 2 for a bad setting.
+    A failure the command caught, on stderr; the command then exits 1, or 2 for usage or a bad setting.
     """
 
     model_config = ConfigDict(
@@ -104,9 +151,13 @@ class Error(BaseModel):
     """
     The event name
     """
-    message: str
+    message: Annotated[str, Field(min_length=1)]
     """
     What went wrong and what to do
+    """
+    code: ErrorCode
+    """
+    The named failure
     """
     path: Path | None = None
     """
@@ -134,4 +185,12 @@ class Done(BaseModel):
     failed: Annotated[int, Field(ge=0)]
     """
     How many checks failed
+    """
+    outcome: Outcome
+    """
+    The result of the command
+    """
+    message: Annotated[str, Field(min_length=1)]
+    """
+    What the command completed and whether checks failed
     """
