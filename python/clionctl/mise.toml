@@ -1,0 +1,37 @@
+# clion-ctl: start, stop and restart a JetBrains IDE through its station socket, for agents and people. No [tools]:
+# ruff, ty, uv and datamodel-codegen are global (DL-757). From the repository root: //clionctl:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+# Agents run the installed copy by name, from any folder.
+[tasks.install]
+description = "Install this checkout's clionctl as a uv tool, which puts clion-ctl on PATH"
+dir = "{{ config_root }}/../.."
+run = "uv tool install --reinstall ./python/clionctl"
+
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.codegen]
+description = "Generate src/clionctl/models.py from schema/clionctl.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+# clion-ctl and its tests need macOS (open -n, LaunchServices, the per-user temporary folder), so the root test
+# task passes elsewhere with a note instead of failing.
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage, on macOS"
+depends = ["sync"]
+run = "{% if os() == 'macos' %}uv run --locked pytest{% else %}echo clion-ctl runs on macOS only: tests skipped on {{ os() }}{% endif %}"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

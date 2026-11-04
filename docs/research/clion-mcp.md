@@ -1,9 +1,9 @@
 ---
 type: Reference
 title: "CLion MCP server"
-description: "How Claude Code reaches CLion's MCP server, how the clion-debugger skill is installed, what to redo when the IDE changes, and the rejected options."
+description: "How Claude Code reaches CLion's MCP server, how the clion-debugger skill is installed, how clion-ctl starts and restarts the IDE, what to redo when the IDE changes, and the rejected options."
 resource: "docs/research/clion-mcp.md"
-tags: [clion, mcp, claude-code, skills, jetbrains]
+tags: [clion, mcp, claude-code, skills, jetbrains, clion-ctl]
 generated: { by: process:claude-code-session, at: "2026-11-03T17:30:00-06:00" }
 status: stable
 stale_after: "2027-05-03T00:00:00+00:00"
@@ -85,6 +85,48 @@ Sessions started after the switch connect on their own.
   copies the folder once and reports it already installed when the folder exists, so it never
   updates a copy. A fresh export is adopted by the task on its next run.
 
+## Starting, stopping and restarting the IDE: clion-ctl
+
+`clion-ctl` (`python/clionctl`, installed with `mise run //clionctl:install`) runs on macOS only. It
+starts, stops and restarts a JetBrains IDE and lists the running ones. Each command prints JSON
+lines: an event on stdout, or a failure with a named `error` on stderr and exit 1.
+
+- `clion-ctl status` lists each running IDE: its pid, its `.app` bundle, its station socket and the
+  TCP ports it listens on. The station gives no way to list open projects, so status leaves them out.
+- `clion-ctl start --app <path.app> [--project <dir>] [--mcp-port <n>]` runs
+  `/usr/bin/open -n <app> --args <dir>`. It waits until a new process of that bundle holds a socket
+  and, when `--mcp-port` is given, listens on that port. It refuses an app that already runs (`running`):
+  a second launch hands its arguments to the running copy and quits, so no new IDE would come.
+- `clion-ctl stop` and `clion-ctl restart` pick one IDE: the only one running, or one chosen with
+  `--pid` or `--app`. When several match, they refuse with `ambiguous`.
+- **Finding the IDEs:** each IDE's bundled station plugin listens on the Unix socket
+  `jb.station.ij.<pid>.sock` in the JVM's temporary folder. On macOS that is the per-user folder
+  `confstr(_CS_DARWIN_USER_TEMP_DIR)` returns (`unistd.h`: 65537), whatever `TMPDIR` or
+  `XDG_RUNTIME_DIR` say (this Mac's shell sets `XDG_RUNTIME_DIR`). `CLION_CTL_STATION_DIR`
+  replaces the folder. The socket file stays after the IDE ends, so a socket counts only while
+  its pid is alive and holds that path (`psutil` `net_connections("unix")`).
+  `lvillis/za` (`src/command/ide/mod.rs:1974-2059`) reads the same name and checks the pid.
+- **Stopping:** `POST /exit` on that socket, plain HTTP with JSON:
+  `{"userInitiated": true, "force": false, "restart": <bool>}`, answered `200 {"immediate": false}`.
+  The station plugin (`Contents/plugins/station-plugin/lib/station-plugin.jar`,
+  `com.intellij.station.core.impl.IdeShutdownHandlerService`, read with `javap`) calls
+  `Application.exit(force, exitConfirmed = userInitiated, restart)`. `userInitiated` only skips the
+  "exit?" question. With `force: false` the IDE quits as its own menu does, saving projects and asking
+  first when a process still runs. An IDE without the endpoint answers 404 with
+  `X-Station-Failure: no-endpoint`, reported as `station`.
+- **Never killed:** when the IDE still runs at the timeout, the command reports `still-running`:
+  the IDE may be asking a question, to be answered in the IDE. It never sends a signal and never
+  sets `force`. A restart that ended the old process with no new one reports `not-started`.
+- **Restarting:** the IDE restarts through a new process (`Restarter` in `idea.log`), so the pid
+  changes; `restarted` reports both. A short restart (the one on 2026-11-03 took seconds) left a
+  running Claude Code session connected: its `clion` entry came back on its own. Claude Code
+  retries a refused connection in the background with growing waits, so after a long outage a
+  session can still show `clion (ECONNREFUSED)`; reconnect it from `/mcp`.
+- **Tests:** a stand-in IDE app bundle (`tests/standin.py`) serves the same socket and `/exit`,
+  launched by the real `open -n`, so every case runs without starting a real IDE: one that obeys,
+  one whose quit waits on a question, one that quits instead of restarting, one with no endpoint,
+  and one that hangs up.
+
 ## Rejected options and failed searches
 
 - **A Claude Code plugin or marketplace entry**: none found on 2026-11-03. A GitHub search of the
@@ -107,3 +149,7 @@ Sessions started after the switch connect on their own.
   (`AgentHomeSkillsSync`), but it is off unless the JVM property
   `intellij.aiagentextensions.skills.sync.to.agent.homes` is set, and it refuses a non-empty
   `~/.claude/skills` that it has not claimed.
+- **Killing an IDE that will not quit, or `force: true`**: rejected for clion-ctl. A blocked quit
+  is a question for the user, such as a running process or unsaved work, and a kill loses that work.
+- **The Toolbox scripts (`clion`, `clion1`, ...) to pick the IDE**: they are numbered per install,
+  not per version, so clion-ctl takes the app path or a pid.

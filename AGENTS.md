@@ -73,7 +73,8 @@ Claude Code reaches CLion's MCP server through the user-scope `clion` entry in `
 `.mcp.json`. After CLion is switched or restarted, a running session shows `clion (ECONNREFUSED)`
 until you reconnect it from `/mcp`. The `clion-debugger` skill ships inside CLion (no other source found):
 `mise run clion:skills` copies it from the CLion serving that entry, and bootstrap runs it. Never commit
-its files. See the okf note `docs/research/clion-mcp.md`.
+its files. `clion-ctl` (`mise run //clionctl:install`, macOS) lists, starts, stops and restarts the IDE through its
+station socket and never kills it. See the okf note `docs/research/clion-mcp.md`.
 
 ## Agent skills
 
