@@ -5,7 +5,7 @@ title: "Upgrading codebase-memory-mcp"
 description: "Why CBM has an exact pin that bulk upgrades skip, the manual upgrade order that keeps one build per account, what the forced-drain installer flags do to indexes, and why upgrades stay manual."
 package: "github:DeusData/codebase-memory-mcp"
 version: "0.12.1"
-timestamp: "2026-11-04T02:59:21Z"
+timestamp: "2026-11-04T23:05:00Z"
 status: "draft"
 tags: [codebase-memory-mcp, mise, upgrade, daemon]
 sources:
@@ -15,6 +15,12 @@ sources:
   - id: cbm-cli
     resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/src/cli/cli.c"
     title: "install quiesce and --reset-indexes (lines 10642-10667, 11192-11229, 11557-11561)"
+  - id: mise-links
+    resource: "https://github.com/jdx/mise/blob/v2026.11.0/src/runtime_symlinks.rs"
+    title: "global runtime links are rebuilt from installed versions (lines 48-72, 267-320)"
+  - id: cbm-runtime
+    resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/src/daemon/runtime.c"
+    title: "daemon stop refuses attached clients (1872-1895); peer fingerprint check (2074-2148)"
   - id: mise-lock
     resource: "https://github.com/jdx/mise/blob/v2026.11.0/src/cli/lock.rs"
     title: "mise lock locks without installing (lines 170-180); --global selects global configs (lines 2203-2222)"
@@ -28,7 +34,7 @@ sources:
 ## Why upgrades are deliberate
 
 Every CBM process in a runtime namespace (one per account in the default setup) must be the same build with the
-same cache root. An open Claude or Codex
+same cache root. An open Claude, Codex or OpenCode
 session holds its server process, and so the old build, until it ends. A pin change while sessions are open leaves
 old and new builds side by side, and the daemon refuses the mismatch (`fingerprint_mismatch`, logged in
 `~/.cache/codebase-memory-mcp/logs/daemon-conflicts.ndjson`).
@@ -48,19 +54,31 @@ So the pin is exact (`version = "0.12.1"`) and kept out of bulk upgrades:
 Upgrades are manual, and stay that way: they are rare and a rollback is the same steps with the previous
 version. The trial-PR pipeline of ADR 0001 (spec #412) was dropped.
 
-1. Read the release notes for the new tag; note index-format changes and installer changes.
-2. Close every Claude and Codex session (and anything else that runs CBM).
-3. Stop the old daemon with the old binary: `codebase-memory-mcp daemon stop` through the launcher, before the pin
-   moves. It refuses while sessions are attached. Confirm no `--cbm-daemon-internal` process is left.
-4. Bump the pin in `unix/home/.config/mise/config.toml`, apply it, and run `mise install`. The global link moves.
-5. `mise run //cbm:install`, never CBM's own `install`, `update` or `install.sh` (see `install.md`) (the installer rewrites the agent setup for the new build; configs keep the launcher
-   path).
-6. Start one session; check one executable path in `ps`, no new conflict lines, and the tools in `/mcp`.
-7. Reindex each project once: index-format changes force a full rebuild (0.12.0, and again 0.12.1).
-8. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+1. Review the release notes for the new tag; note index-format and installer changes. Bump the pin (and
+   `mise.lock`) in a separate worktree, then review and merge it. Leave the primary checkout alone:
+   `~/.config/mise/config.toml` links into it, so moving it moves the live pin.
+2. Close every Claude, Codex and OpenCode session (and anything else that runs CBM), and start no new one until
+   step 7.
+3. Stop the old daemon with the still-old launcher: `codebase-memory-mcp daemon stop`. It refuses while sessions
+   are attached, and success can mean "stopping" (runtime.c:1872-1895), so wait until no
+   `--cbm-daemon-internal` process is left.
+4. Fetch and fast-forward the primary checkout to `origin/main`. This moves the live pin.
+5. `mise install`, then confirm the global link and the launcher resolve to the new build. Until mise rebuilds the
+   link, the launcher still reaches the old binary (mise `runtime_symlinks.rs:48-72`, `cli/install.rs:420-455`).
+   `//cbm:install` compares the link with the launcher, not with the pin, so check the build yourself.
+6. `mise run //cbm:install` from the primary checkout on `main`, never CBM's own `install`, `update` or
+   `install.sh` (see `install.md`). It rewrites the agent setup for the new build; configs keep the launcher path.
+   Keep sessions closed: it removes the launcher for a moment and opens an MCP session to verify.
+7. Open one session. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+8. Reindex each project with the new build (index-format changes force a full rebuild: 0.12.0, and again 0.12.1)
+   and wait for it to finish; with `auto_index` off, startup proves nothing. Check the tools in `/mcp`, one
+   executable path in `ps`, and no new lines in `daemon-conflicts.ndjson`.
+9. Resume the other sessions.
 
 The daemon runs from the resolved install folder (`~/.local/share/mise/installs/codebase-memory-mcp-<hash>/`), not
-from the link. Moving the link does not move a running daemon, which is why step 3 comes before step 4.
+from the link, and running processes keep their old executable when the pin moves. A new launch after step 5 runs
+the new build; if the old daemon were still up, the daemon would refuse it (`fingerprint_mismatch`,
+runtime.c:2074-2148). That is why steps 2 and 3 come before steps 4 and 5.
 
 ## Installer facts
 
