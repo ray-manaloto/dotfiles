@@ -45,9 +45,9 @@ def test_without_receipts_the_headline_cohort_is_empty_and_its_share_unknown(
         {"session_class": "synthetic", "sessions": 0},
         {"session_class": "unknown", "sessions": 1},
     ]
-    # D1: the selected share is private only; the public excluded rows give one combined total per reason.
+    # D1: the selected share is private only; D9: the public excluded rows give counts, never tokens.
     assert "selected" not in shown
-    assert set(shown["excluded"][0]) == {"reason", "rows", "invalid_amounts", "recorded_tokens"}
+    assert {key for row in shown["excluded"] for key in row} == {"reason", "rows", "sessions"}
     # The non-headline basis: 1000 effective, 10 overhead.
     selected = private(capsys, out)["selected"]
     assert (selected["sessions"], selected["charges"]) == (1, 1)
@@ -77,11 +77,11 @@ MIXED = (
     ),
     62 / 2162,
     {
-        "UNMATCHED": (1, None),
-        "ERROR": (1, 417.0),
-        "FALLBACK_PRICING": (1, 732.0),
-        "UNCLASSIFIED": (1, 1013.0),
-        "SESSION_EXCLUDED": (4, None),
+        "UNMATCHED": (1, 0),
+        "ERROR": (1, 1),
+        "FALLBACK_PRICING": (1, 1),
+        "UNCLASSIFIED": (1, 1),
+        "SESSION_EXCLUDED": (4, 0),
     },
 )
 NO_USAGE = (
@@ -94,31 +94,60 @@ NO_USAGE = (
         charge("s3", "j2", START, tokens=7.0),
     ),
     20 / 1020,
-    {"MISSING_USAGE": (1, None), "ERROR": (1, None), "UNCLASSIFIED": (1, 1000.0), "SESSION_EXCLUDED": (2, None)},
+    {"MISSING_USAGE": (1, 1), "ERROR": (1, 1), "UNCLASSIFIED": (1, 1), "SESSION_EXCLUDED": (2, 0)},
+)
+HEADLINE_BESIDE = (
+    # D9: a receipted session and an uncharged unclassified one. Under D5/D6 the UNCLASSIFIED total, 500, was
+    # pure effective, so headline overhead / (headline effective + overhead + 500) = 10 / 1510 rebuilt the share.
+    (
+        session("s1", START, effective_tokens=1000.0),
+        charge("s1", "j1", START, tokens=10.0),
+        session("s2", START, effective_tokens=500.0),
+    ),
+    10 / 1510,
+    {"UNCLASSIFIED": (1, 1)},
 )
 
 
-@pytest.mark.parametrize(("rows", "fraction", "totals"), [MIXED, NO_USAGE], ids=["mixed-reasons", "no-usage"])
-def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
+@pytest.mark.parametrize(
+    ("case", "receipted"),
+    [(MIXED, ()), (NO_USAGE, ()), (HEADLINE_BESIDE, ("s1",))],
+    ids=["mixed-reasons", "no-usage", "headline-beside-unclassified"],
+)
+def test_no_public_number_or_ratio_of_public_numbers_gives_back_the_private_selected_share(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    rows: tuple[dict[str, Any], ...],
-    fraction: float,
-    totals: dict[str, tuple[int, float | None]],
+    case: tuple[tuple[dict[str, Any], ...], float, dict[str, tuple[int, int]]],
+    receipted: tuple[str, ...],
 ) -> None:
-    out = frozen(tmp_path, *rows)
+    rows, fraction, counts = case
+    te = tmp_path / "te"
+    ledger(te, "a-1", list(rows))
+    out = tmp_path / "out"
+    flags = (
+        ("--receipts", str(receipts(tmp_path / "r", "m.json", ("real_work", {"sessions": [*receipted]}))))
+        if receipted
+        else ()
+    )
+    run(te, out, *flags)
     full = private(capsys, out)
     assert full["selected"]["share"] == pytest.approx(fraction)
+    assert full["excluded"][0].keys() >= {"effective_tokens", "overhead_tokens"}
     shown = report(capsys, out)
-    # Each session's charges count with it (D5); a reason with no effective tokens shows no total (D6).
-    assert {row["reason"]: (row["rows"], row["recorded_tokens"]) for row in shown["excluded"] if row["rows"]} == totals
-    assert shown["withheld"] == "a reason with no effective tokens shows no total; that spend is only in --private"
+    assert shown["headline"]["sessions"] == len(receipted)
+    # D9: excluded rows carry row and session counts, never tokens; each session counts once, by its first reason.
+    assert {key for row in shown["excluded"] for key in row} == {"reason", "rows", "sessions"}
+    assert {row["reason"]: (row["rows"], row["sessions"]) for row in shown["excluded"] if row["rows"]} == counts
+    assert shown["withheld"] == "excluded rows show counts only; their spend is only in --private"
     seen = [n for n in numbers(shown) if n]
     assert not [n for n in seen if n == pytest.approx(fraction)]
     for a in seen:
         for b in seen:
             assert a / b != pytest.approx(fraction)
             assert a / (a + b) != pytest.approx(fraction)
+            for c in seen:
+                assert a / (b + c) != pytest.approx(fraction)
+                assert a / (a + b + c) != pytest.approx(fraction)
 
 
 def test_public_coverage_counts_headline_and_selected_sessions_and_those_with_no_recorded_usage(
@@ -486,7 +515,7 @@ def test_the_mise_tasks_collect_and_report_and_refuse_a_relative_path(tmp_path: 
     done = task("//repo:te-review-report", "--evidence", "out")
     assert (done.returncode, coded(done)) == (1, {"code": "RELATIVE_PATH"})
     done = task("//repo:te-review-report", "--evidence", str(out))
-    unclassified = {"reason": "UNCLASSIFIED", "rows": 1, "recorded_tokens": 1000.0, "invalid_amounts": 0}
+    unclassified = {"reason": "UNCLASSIFIED", "rows": 1, "sessions": 1}
     assert unclassified in json.loads(done.stdout)["excluded"]
     done = task("//repo:te-review-report", "--evidence", str(out), "--private")
     assert json.loads(done.stdout)["rows"][0]["session_id"] == "s1"

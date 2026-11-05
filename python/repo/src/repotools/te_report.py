@@ -14,6 +14,7 @@ from .models import (
     CadenceLabel,
     ClassCount,
     Collection,
+    ConfigSetting,
     Coverage,
     EraCandidate,
     ErrorCode,
@@ -27,6 +28,7 @@ from .models import (
     PrivateReport,
     PublicExcludedCount,
     PublicReport,
+    Review,
     RowClass,
     RowKind,
     RowReport,
@@ -39,6 +41,7 @@ from .models import (
     Verdict,
 )
 from .te_review import TeReviewError, collect, collection_id
+from .te_worksheet import review
 
 THRESHOLD = 0.05
 # The collection's row class as an exclusion; in_window and matched are none.
@@ -198,39 +201,17 @@ def share(records: list[SessionRow | OverheadRow], *, every_key: bool) -> Share:
     )
 
 
-def grouped(rows: list[EvidenceRow], reasons: list[list[Exclusion]]) -> list[Exclusion | None]:
-    """D5: the reason a row's spend goes under in public: a charge's goes with its excluded session's first
-    reason, so no reason's total is a session's overhead alone; a headline row has none."""
-    sessions: dict[tuple[str, str, str], Exclusion] = {}
-    for row, why in zip(rows, reasons, strict=True):
-        key = (row.store, row.host, row.session_id)
-        if row.kind is RowKind.session and why:
-            sessions[key] = min(why[0], sessions.get(key, why[0]), key=ORDER.index)
-    return [
-        sessions.get((row.store, row.host, row.session_id), why[0]) if why else None
-        for row, why in zip(rows, reasons, strict=True)
-    ]
-
-
 def excluded(
-    records: list[SessionRow | OverheadRow],
-    reasons: list[list[Exclusion]],
-    *,
-    every_key: bool,
-    spend: list[Exclusion | None] | None = None,
+    records: list[SessionRow | OverheadRow], reasons: list[list[Exclusion]], *, every_key: bool
 ) -> list[ExcludedCount]:
-    """Each row once, under its first reason, with the spend it recorded under that reason or the one spend
-    names."""
+    """Each row once, under its first reason, with the spend it recorded."""
     rows: Counter[Exclusion] = Counter()
     effective: dict[Exclusion, float] = defaultdict(float)
     overhead: dict[Exclusion, float] = defaultdict(float)
     invalid: Counter[Exclusion] = Counter()
-    under = spend or [why[0] if why else None for why in reasons]
     # A headline row has no reason and is not excluded.
-    for rec, row_reason, first in [
-        (rec, why[0], into) for rec, why, into in zip(records, reasons, under, strict=True) if why and into
-    ]:
-        rows[row_reason] += 1
+    for rec, first in [(rec, why[0]) for rec, why in zip(records, reasons, strict=True) if why]:
+        rows[first] += 1
         values = list(spent(rec, every_key=every_key).values())
         if isinstance(rec, SessionRow) and rec.effective_tokens is not None:
             values.append(rec.effective_tokens)
@@ -249,21 +230,18 @@ def excluded(
     ]
 
 
-def combined(counts: list[ExcludedCount]) -> list[PublicExcludedCount]:
-    """D1: public shows each reason's recorded spend as one total; the effective and overhead split would let
-    a reader rebuild the private selected share, and so would a total with no effective tokens (D6)."""
-    return [
-        PublicExcludedCount(
-            reason=count.reason,
-            rows=count.rows,
-            # D6: with no effective tokens the total is overhead alone, part of the selected numerator.
-            recorded_tokens=None
-            if not count.effective_tokens or count.overhead_tokens is None
-            else total(count.effective_tokens + count.overhead_tokens),
-            invalid_amounts=count.invalid_amounts,
-        )
-        for count in counts
-    ]
+def counted(rows: list[EvidenceRow], reasons: list[list[Exclusion]]) -> list[PublicExcludedCount]:
+    """D9: public excluded rows carry counts, never tokens: any excluded total, alone or beside the headline's,
+    can rebuild or bound the private selected share. Each row counts under its first reason, and each excluded
+    session once, under the earliest in ORDER of its rows' first reasons (D5)."""
+    first = Counter(why[0] for why in reasons if why)
+    sessions: dict[tuple[str, str, str], Exclusion] = {}
+    for row, why in zip(rows, reasons, strict=True):
+        key = (row.store, row.host, row.session_id)
+        if row.kind is RowKind.session and why:
+            sessions[key] = min(why[0], sessions.get(key, why[0]), key=ORDER.index)
+    taken = Counter(sessions.values())
+    return [PublicExcludedCount(reason=reason, rows=first[reason], sessions=taken[reason]) for reason in ORDER]
 
 
 def total(value: float) -> float | None:
@@ -281,7 +259,9 @@ def folded_on(rec: SessionRow, zone: ZoneInfo) -> date | None:
     return datetime.fromtimestamp(rec.folded_at, zone).date() if EARLIEST <= rec.folded_at <= LATEST else None
 
 
-def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
+def accounting(
+    collection: Collection, evidence: Evidence, review: Review, settings: list[ConfigSetting] | None
+) -> PrivateReport:
     rows = evidence.rows
     records = [record(row) for row in rows]
     # A session's class comes from its receipts alone (evidence.sessions); a charge has none of its own.
@@ -318,7 +298,7 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
             selected_sessions=len(sessions),
             no_recorded_usage=sum(rec.error is not None for rec in sessions),
         ),
-        excluded=combined(excluded(records, reasons, every_key=False, spend=grouped(rows, reasons))),
+        excluded=counted(rows, reasons),
         session_classes=[ClassCount(session_class=cls, sessions=classes[cls]) for cls in SessionClass],
         cadence=labels.pop() if len(labels) == 1 else Cadence.UNKNOWN,
         policy_era_candidates=[
@@ -326,7 +306,8 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
             for day, count in sorted(days.items(), key=lambda item: (item[0] is None, item[0] or date.min))
         ],
         unknown_keys=f"unknown keys: {len(unknown_keys(records))} (excluded from public totals)",
-        withheld="a reason with no effective tokens shows no total; that spend is only in --private",
+        withheld="excluded rows show counts only; their spend is only in --private",
+        review=review,
     )
     return PrivateReport(
         collection_id=collection.collection_id,
@@ -344,6 +325,7 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
             RowReport(ref=row.ref, kind=row.kind, store=row.store, session_id=row.session_id, job=row.job, reasons=why)
             for row, why in zip(rows, reasons, strict=True)
         ],
+        settings=settings,
     )
 
 
@@ -351,7 +333,9 @@ def shown(options: TeReviewReport) -> PrivateReport | PublicReport:
     """The report the mode asks for: public unless --private."""
     if options.public and options.private:
         raise TeReviewError(ErrorCode.BAD_MODE, "--public and --private exclude each other")
-    full = accounting(*bundle(Path(options.evidence)))
+    folder = Path(options.evidence)
+    collection, evidence = bundle(folder)
+    full = accounting(collection, evidence, *review(folder, collection, evidence, options.worksheet))
     return full if options.private else full.report
 
 

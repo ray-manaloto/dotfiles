@@ -103,10 +103,11 @@ description = "Print the recorded overhead share of a te-review collection, publ
 usage = '''
 flag "--evidence <dir>" required=#true help="The collection directory, an absolute path"
 flag "--private" help="Print the private report, with every row and key name"
+flag "--worksheet <file>" help="The owner's filled worksheet, an absolute path; else the collection's own"
 '''
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools te-review report --evidence "$usage_evidence" ${usage_private:+--private}'
+run = 'uv run --project python/repo --locked repotools te-review report --evidence "$usage_evidence" ${usage_worksheet:+--worksheet "$usage_worksheet"} ${usage_private:+--private}'
 
 # Development: uv runs only through these tasks.
 [tasks.sync]

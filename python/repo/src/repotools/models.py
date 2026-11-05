@@ -500,6 +500,10 @@ class ErrorCode(StrEnum):
     BAD_BUNDLE = "BAD_BUNDLE"
     HASH_MISMATCH = "HASH_MISMATCH"
     BAD_ARGUMENTS = "BAD_ARGUMENTS"
+    NO_WORKSHEET = "NO_WORKSHEET"
+    BAD_WORKSHEET = "BAD_WORKSHEET"
+    STALE_WORKSHEET = "STALE_WORKSHEET"
+    UNKNOWN_REF = "UNKNOWN_REF"
 
 
 class CodedFailure(BaseModel):
@@ -1987,6 +1991,10 @@ class TeReviewReport(BaseModel):
     """
     Print the private report, with every row and key name
     """
+    worksheet: str | None = None
+    """
+    The filled worksheet, an absolute path; default: the collection's own
+    """
 
 
 class PublicFailure(BaseModel):
@@ -2207,7 +2215,7 @@ class Coverage(BaseModel):
 
 class PublicExcludedCount(BaseModel):
     """
-    D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.
+    D1, D9: counts only, never tokens: the rows whose first reason is this one, and the sessions it takes out.
     """
 
     model_config = ConfigDict(
@@ -2217,15 +2225,11 @@ class PublicExcludedCount(BaseModel):
     reason: Exclusion
     rows: int
     """
-    Rows
+    Rows whose first reason is this one
     """
-    recorded_tokens: float | None
+    sessions: int
     """
-    Effective and overhead tokens of each session here with its charges (D5); null: not finite or no effective (D6)
-    """
-    invalid_amounts: int
-    """
-    Amounts left out of the total, not a finite number
+    Excluded sessions whose first reason is this one (D5)
     """
 
 
@@ -2264,48 +2268,289 @@ class EraCandidate(BaseModel):
     """
 
 
-class PublicReport(BaseModel):
+class AbSession(BaseModel):
     """
-    te-review report --public: aggregates, fixed codes and dates only.
+    One fresh session of the A/B and its first request's input tokens.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
-    scope: Scope
-    label: Label
-    since: date
+    session_id: str
     """
-    First day of the window
+    The session; the receipt's manifest entry must name it
     """
-    until: date
+    first_request_input_tokens: Annotated[int, Field(ge=0)]
     """
-    Last day of the window
+    Input tokens of its first request: a JSON integer of zero or more, read strictly; else not an A/B (D8a)
     """
-    headline: Share
-    coverage: Coverage
-    excluded: list[PublicExcludedCount]
+
+
+class EnvfactsEnum(StrEnum):
     """
-    Every exclusion reason, in precedence order
+    The spec's condition, stated when no paid fact is useful
     """
-    session_classes: list[ClassCount]
+
+    no_paid_fact_proved_useful__select_microskills_envfacts = "no paid fact proved useful: select microskills=envfacts"
+
+
+type Envfacts = EnvfactsEnum | None
+"""
+The spec's condition, stated when no paid fact is useful
+"""
+
+
+class FollowUpEnum(StrEnum):
     """
-    Selected sessions by class
+    The next check, named while evidence is incomplete
     """
-    cadence: Cadence
-    policy_era_candidates: list[EraCandidate]
+
+    field_2026_11_17 = "2026-11-17"
+
+
+type FollowUp = FollowUpEnum | None
+"""
+The next check, named while evidence is incomplete
+"""
+
+
+class RedirectCounts(BaseModel):
     """
-    Timestamp groups only
+    Section 1: nudges by delivery; verdicts and like_128 over the delivered ones.
     """
-    unknown_keys: Annotated[str, Field(pattern="^unknown keys: [0-9]+ \\(excluded from public totals\\)$")]
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    delivered: int
     """
-    How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out
+    delivery_confirmed with its host_delivery receipt
     """
-    withheld: Literal["a reason with no effective tokens shows no total; that spend is only in --private"]
+    delivery_unknown: int
     """
-    D6: excluded spend public leaves out, an exception to B3
+    Not shown delivered
     """
+    shadow_suppressed: int
+    """
+    Never delivered
+    """
+    right: int
+    """
+    Delivered and right
+    """
+    wrong: int
+    """
+    Delivered and wrong
+    """
+    unjudged: int
+    """
+    Delivered, judged unjudgeable
+    """
+    not_reviewed: int
+    """
+    Delivered, verdict NOT_REVIEWED
+    """
+    like_128: int
+    """
+    Delivered and like upstream #128
+    """
+    not_like_128: int
+    """
+    Delivered and not like #128
+    """
+    like_128_not_reviewed: int
+    """
+    Delivered, like_128 NOT_REVIEWED
+    """
+
+
+class AbortCounts(BaseModel):
+    """
+    D4: aborts, apart from the redirects; verdicts over the delivered ones.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    aborts: int
+    """
+    Aborts in the window
+    """
+    delivery_confirmed: int
+    """
+    With their host_delivery receipt
+    """
+    delivery_unknown: int
+    """
+    Not shown delivered
+    """
+    shadow_suppressed: int
+    """
+    Never delivered
+    """
+    right: int
+    """
+    Delivered and right
+    """
+    wrong: int
+    """
+    Delivered and wrong
+    """
+    unjudged: int
+    """
+    Delivered, judged unjudgeable
+    """
+    not_reviewed: int
+    """
+    Delivered, verdict NOT_REVIEWED
+    """
+
+
+class PaidFactCounts(BaseModel):
+    """
+    Section 2: retained paid facts by the owner's assessment.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    useful: int
+    """
+    With a paid origin and a use receipt
+    """
+    not_useful: int
+    """
+    Not useful
+    """
+    unknown: int
+    """
+    Unknown
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+    origin: Literal["owner-asserted"]
+    """
+    D8: the tool cannot prove which charge produced a fact
+    """
+
+
+class LearnedFactCounts(BaseModel):
+    """
+    Section 3: learned facts by verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    wrong: int
+    """
+    Wrong
+    """
+    ok: int
+    """
+    Ok
+    """
+    unknown: int
+    """
+    Unknown
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+
+
+class ImportCounts(BaseModel):
+    """
+    Section 4: imports and import folds by verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    proven: int
+    """
+    With a history_fold receipt
+    """
+    candidate: int
+    """
+    Time-near only
+    """
+    unknown: int
+    """
+    Unknown
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+
+
+class NotRunCounts(BaseModel):
+    """
+    Section 5: NOT_RUN items by outcome.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    run: int
+    """
+    Run, with evidence
+    """
+    re_deferred: int
+    """
+    Deferred again, with reason, owner and follow-up
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+
+
+class McpResult(StrEnum):
+    """
+    Section 6: qualified only by an ab receipt that shows a lower first-request count (D8).
+    """
+
+    qualified = "qualified"
+    protected_unchanged = "protected_unchanged"
+    failed_ab_protected_unchanged = "failed_ab_protected_unchanged"
+    NOT_REVIEWED = "NOT_REVIEWED"
+
+
+class Section(StrEnum):
+    """
+    A worksheet section, by its key.
+    """
+
+    redirects = "redirects"
+    aborts = "aborts"
+    paid_facts = "paid_facts"
+    learned_facts = "learned_facts"
+    imports = "imports"
+    not_run = "not_run"
+    mcp_ab = "mcp_ab"
+
+
+class DecisionLine(StrEnum):
+    """
+    Section 7's decision code verbatim, or PENDING while it is null.
+    """
+
+    keep = "keep"
+    change = "change"
+    insufficient = "insufficient"
+    PENDING = "PENDING"
 
 
 class AllKeys(BaseModel):
@@ -2354,43 +2599,6 @@ class RowReport(BaseModel):
     reasons: list[Exclusion]
     """
     Every reason, in precedence order; empty in the headline cohort
-    """
-
-
-class PrivateReport(BaseModel):
-    """
-    te-review report --private: the public report as it is, plus the figures with every key, every row and unknown key.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    collection_id: str
-    """
-    The collection read
-    """
-    tz: str
-    """
-    The window's time zone
-    """
-    report: PublicReport
-    selected: Share
-    """
-    Every selected non-imported session and its matched charges; not the headline; private only (D1)
-    """
-    excluded: list[ExcludedCount]
-    """
-    Every exclusion reason, in precedence order, with the effective and overhead split
-    """
-    all_keys: AllKeys
-    unknown_overhead_keys: dict[str, float | None]
-    """
-    Each unrecognized overhead key and its sum over the selected rows; null when not finite
-    """
-    rows: list[RowReport]
-    """
-    Every evidence row
     """
 
 
@@ -2544,6 +2752,152 @@ class Worksheet(BaseModel):
     """
     mcp_ab: WorksheetAb
     decision: WorksheetDecision
+
+
+class AbReceipt(BaseModel):
+    """
+    D8: an ab receipt's file, a fresh-session MCP A/B with and without the candidate denies.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    candidate_tools: Annotated[list[str], Field(min_length=1)]
+    """
+    The MCP tools the denies name
+    """
+    without_denies: AbSession
+    with_denies: AbSession
+
+
+class Review(BaseModel):
+    """
+    The owner's worksheet against the evidence: counts, fixed codes and dates only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    redirects: RedirectCounts
+    aborts: AbortCounts
+    paid_facts: PaidFactCounts
+    learned_facts: LearnedFactCounts
+    imports: ImportCounts
+    not_run: NotRunCounts
+    mcp_ab: McpResult
+    evidence_complete: bool
+    """
+    Every section judged
+    """
+    missing: list[Section]
+    """
+    The sections with a NOT_REVIEWED judgment
+    """
+    decision_recorded: bool
+    """
+    Section 7 is filled
+    """
+    decision: DecisionLine
+    envfacts: Envfacts
+    """
+    The spec's condition, stated when no paid fact is useful
+    """
+    conflict: bool
+    """
+    The decision conflicts with the envfacts condition
+    """
+    follow_up: FollowUp
+    """
+    The next check, named while evidence is incomplete
+    """
+
+
+class PublicReport(BaseModel):
+    """
+    te-review report --public: aggregates, fixed codes and dates only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    scope: Scope
+    label: Label
+    since: date
+    """
+    First day of the window
+    """
+    until: date
+    """
+    Last day of the window
+    """
+    headline: Share
+    coverage: Coverage
+    excluded: list[PublicExcludedCount]
+    """
+    Every exclusion reason, in precedence order
+    """
+    session_classes: list[ClassCount]
+    """
+    Selected sessions by class
+    """
+    cadence: Cadence
+    policy_era_candidates: list[EraCandidate]
+    """
+    Timestamp groups only
+    """
+    unknown_keys: Annotated[str, Field(pattern="^unknown keys: [0-9]+ \\(excluded from public totals\\)$")]
+    """
+    How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out
+    """
+    withheld: Literal["excluded rows show counts only; their spend is only in --private"]
+    """
+    D6, D9: excluded spend public leaves out, an exception to B3
+    """
+    review: Review
+
+
+class PrivateReport(BaseModel):
+    """
+    te-review report --private: the public report as it is, plus the figures with every key, every row and unknown key.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    collection_id: str
+    """
+    The collection read
+    """
+    tz: str
+    """
+    The window's time zone
+    """
+    report: PublicReport
+    selected: Share
+    """
+    Every selected non-imported session and its matched charges; not the headline; private only (D1)
+    """
+    excluded: list[ExcludedCount]
+    """
+    Every exclusion reason, in precedence order, with the effective and overhead split
+    """
+    all_keys: AllKeys
+    unknown_overhead_keys: dict[str, float | None]
+    """
+    Each unrecognized overhead key and its sum over the selected rows; null when not finite
+    """
+    rows: list[RowReport]
+    """
+    Every evidence row
+    """
+    settings: list[ConfigSetting] | None
+    """
+    The decision's settings, as the owner typed them
+    """
 
 
 class Repotools(BaseModel):

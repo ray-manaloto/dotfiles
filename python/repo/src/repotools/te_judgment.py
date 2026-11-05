@@ -514,7 +514,10 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
 
 
 def worksheet(collection_id: str, evidence: Evidence) -> Worksheet:
-    """The owner's template: the candidates each section judges, every judgment NOT_REVIEWED (null)."""
+    """The owner's template: the candidates each section judges, every judgment NOT_REVIEWED (null).
+
+    A redirect or abort collect confirmed carries the host_delivery receipt that confirms it.
+    """
     selected = {found.ref for found in evidence.imports if found.in_window}
     # Addendum 4: a partial import with no finished time cannot be placed in the window; it is shown too.
     partial = [
@@ -526,13 +529,24 @@ def worksheet(collection_id: str, evidence: Evidence) -> Worksheet:
         collection_id=collection_id,
         redirects=[
             WorksheetRedirect(
-                ref=found.ref, digest=found.digest, state=found.state, verdict=None, like_128=None, receipt_ref=None
+                ref=found.ref,
+                digest=found.digest,
+                state=found.state,
+                verdict=None,
+                like_128=None,
+                receipt_ref=next(iter(found.receipts), None),
             )
             for found in evidence.redirects
             if found.in_window and found.kind is RedirectKind.nudge
         ],
         aborts=[
-            WorksheetAbort(ref=found.ref, digest=found.digest, state=found.state, verdict=None, receipt_ref=None)
+            WorksheetAbort(
+                ref=found.ref,
+                digest=found.digest,
+                state=found.state,
+                verdict=None,
+                receipt_ref=next(iter(found.receipts), None),
+            )
             for found in evidence.redirects
             if found.in_window and found.kind is RedirectKind.abort
         ],

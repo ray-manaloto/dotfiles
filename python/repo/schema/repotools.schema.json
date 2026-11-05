@@ -313,7 +313,11 @@
         "NOT_COMPLETE",
         "BAD_BUNDLE",
         "HASH_MISMATCH",
-        "BAD_ARGUMENTS"
+        "BAD_ARGUMENTS",
+        "NO_WORKSHEET",
+        "BAD_WORKSHEET",
+        "STALE_WORKSHEET",
+        "UNKNOWN_REF"
       ]
     },
     "CodedFailure": {
@@ -1038,7 +1042,8 @@
       "properties": {
         "evidence": {"type": "string", "description": "The collection directory, an absolute path"},
         "public": {"type": "boolean", "default": false, "description": "Print only the public report (the default)"},
-        "private": {"type": "boolean", "default": false, "description": "Print the private report, with every row and key name"}
+        "private": {"type": "boolean", "default": false, "description": "Print the private report, with every row and key name"},
+        "worksheet": {"type": ["string", "null"], "default": null, "description": "The filled worksheet, an absolute path; default: the collection's own"}
       },
       "required": ["evidence"],
       "additionalProperties": false
@@ -1142,15 +1147,14 @@
       "additionalProperties": false
     },
     "PublicExcludedCount": {
-      "description": "D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.",
+      "description": "D1, D9: counts only, never tokens: the rows whose first reason is this one, and the sessions it takes out.",
       "type": "object",
       "properties": {
         "reason": {"$ref": "#/$defs/Exclusion"},
-        "rows": {"type": "integer", "description": "Rows"},
-        "recorded_tokens": {"type": ["number", "null"], "description": "Effective and overhead tokens of each session here with its charges (D5); null: not finite or no effective (D6)"},
-        "invalid_amounts": {"type": "integer", "description": "Amounts left out of the total, not a finite number"}
+        "rows": {"type": "integer", "description": "Rows whose first reason is this one"},
+        "sessions": {"type": "integer", "description": "Excluded sessions whose first reason is this one (D5)"}
       },
-      "required": ["reason", "rows", "recorded_tokens", "invalid_amounts"],
+      "required": ["reason", "rows", "sessions"],
       "additionalProperties": false
     },
     "ClassCount": {
@@ -1188,10 +1192,151 @@
         "cadence": {"$ref": "#/$defs/Cadence"},
         "policy_era_candidates": {"type": "array", "items": {"$ref": "#/$defs/EraCandidate"}, "description": "Timestamp groups only"},
         "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"},
-        "withheld": {"const": "a reason with no effective tokens shows no total; that spend is only in --private", "description": "D6: excluded spend public leaves out, an exception to B3"}
+        "withheld": {"const": "excluded rows show counts only; their spend is only in --private", "description": "D6, D9: excluded spend public leaves out, an exception to B3"},
+        "review": {"$ref": "#/$defs/Review"}
       },
-      "required": ["scope", "label", "since", "until", "headline", "coverage", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld"],
+      "required": ["scope", "label", "since", "until", "headline", "coverage", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld", "review"],
       "additionalProperties": false
+    },
+    "AbReceipt": {
+      "description": "D8: an ab receipt's file, a fresh-session MCP A/B with and without the candidate denies.",
+      "type": "object",
+      "properties": {
+        "candidate_tools": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "The MCP tools the denies name"},
+        "without_denies": {"$ref": "#/$defs/AbSession"},
+        "with_denies": {"$ref": "#/$defs/AbSession"}
+      },
+      "required": ["candidate_tools", "without_denies", "with_denies"],
+      "additionalProperties": false
+    },
+    "AbSession": {
+      "description": "One fresh session of the A/B and its first request's input tokens.",
+      "type": "object",
+      "properties": {
+        "session_id": {"type": "string", "description": "The session; the receipt's manifest entry must name it"},
+        "first_request_input_tokens": {"type": "integer", "minimum": 0, "description": "Input tokens of its first request: a JSON integer of zero or more, read strictly; else not an A/B (D8a)"}
+      },
+      "required": ["session_id", "first_request_input_tokens"],
+      "additionalProperties": false
+    },
+    "Review": {
+      "description": "The owner's worksheet against the evidence: counts, fixed codes and dates only.",
+      "type": "object",
+      "properties": {
+        "redirects": {"$ref": "#/$defs/RedirectCounts"},
+        "aborts": {"$ref": "#/$defs/AbortCounts"},
+        "paid_facts": {"$ref": "#/$defs/PaidFactCounts"},
+        "learned_facts": {"$ref": "#/$defs/LearnedFactCounts"},
+        "imports": {"$ref": "#/$defs/ImportCounts"},
+        "not_run": {"$ref": "#/$defs/NotRunCounts"},
+        "mcp_ab": {"$ref": "#/$defs/McpResult"},
+        "evidence_complete": {"type": "boolean", "description": "Every section judged"},
+        "missing": {"type": "array", "items": {"$ref": "#/$defs/Section"}, "description": "The sections with a NOT_REVIEWED judgment"},
+        "decision_recorded": {"type": "boolean", "description": "Section 7 is filled"},
+        "decision": {"$ref": "#/$defs/DecisionLine"},
+        "envfacts": {"anyOf": [{"const": "no paid fact proved useful: select microskills=envfacts"}, {"type": "null"}], "description": "The spec's condition, stated when no paid fact is useful"},
+        "conflict": {"type": "boolean", "description": "The decision conflicts with the envfacts condition"},
+        "follow_up": {"anyOf": [{"const": "2026-11-17"}, {"type": "null"}], "description": "The next check, named while evidence is incomplete"}
+      },
+      "required": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "evidence_complete", "missing", "decision_recorded", "decision", "envfacts", "conflict", "follow_up"],
+      "additionalProperties": false
+    },
+    "RedirectCounts": {
+      "description": "Section 1: nudges by delivery; verdicts and like_128 over the delivered ones.",
+      "type": "object",
+      "properties": {
+        "delivered": {"type": "integer", "description": "delivery_confirmed with its host_delivery receipt"},
+        "delivery_unknown": {"type": "integer", "description": "Not shown delivered"},
+        "shadow_suppressed": {"type": "integer", "description": "Never delivered"},
+        "right": {"type": "integer", "description": "Delivered and right"},
+        "wrong": {"type": "integer", "description": "Delivered and wrong"},
+        "unjudged": {"type": "integer", "description": "Delivered, judged unjudgeable"},
+        "not_reviewed": {"type": "integer", "description": "Delivered, verdict NOT_REVIEWED"},
+        "like_128": {"type": "integer", "description": "Delivered and like upstream #128"},
+        "not_like_128": {"type": "integer", "description": "Delivered and not like #128"},
+        "like_128_not_reviewed": {"type": "integer", "description": "Delivered, like_128 NOT_REVIEWED"}
+      },
+      "required": ["delivered", "delivery_unknown", "shadow_suppressed", "right", "wrong", "unjudged", "not_reviewed", "like_128", "not_like_128", "like_128_not_reviewed"],
+      "additionalProperties": false
+    },
+    "AbortCounts": {
+      "description": "D4: aborts, apart from the redirects; verdicts over the delivered ones.",
+      "type": "object",
+      "properties": {
+        "aborts": {"type": "integer", "description": "Aborts in the window"},
+        "delivery_confirmed": {"type": "integer", "description": "With their host_delivery receipt"},
+        "delivery_unknown": {"type": "integer", "description": "Not shown delivered"},
+        "shadow_suppressed": {"type": "integer", "description": "Never delivered"},
+        "right": {"type": "integer", "description": "Delivered and right"},
+        "wrong": {"type": "integer", "description": "Delivered and wrong"},
+        "unjudged": {"type": "integer", "description": "Delivered, judged unjudgeable"},
+        "not_reviewed": {"type": "integer", "description": "Delivered, verdict NOT_REVIEWED"}
+      },
+      "required": ["aborts", "delivery_confirmed", "delivery_unknown", "shadow_suppressed", "right", "wrong", "unjudged", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "PaidFactCounts": {
+      "description": "Section 2: retained paid facts by the owner's assessment.",
+      "type": "object",
+      "properties": {
+        "useful": {"type": "integer", "description": "With a paid origin and a use receipt"},
+        "not_useful": {"type": "integer", "description": "Not useful"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"},
+        "origin": {"const": "owner-asserted", "description": "D8: the tool cannot prove which charge produced a fact"}
+      },
+      "required": ["useful", "not_useful", "unknown", "not_reviewed", "origin"],
+      "additionalProperties": false
+    },
+    "LearnedFactCounts": {
+      "description": "Section 3: learned facts by verdict.",
+      "type": "object",
+      "properties": {
+        "wrong": {"type": "integer", "description": "Wrong"},
+        "ok": {"type": "integer", "description": "Ok"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+      },
+      "required": ["wrong", "ok", "unknown", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "ImportCounts": {
+      "description": "Section 4: imports and import folds by verdict.",
+      "type": "object",
+      "properties": {
+        "proven": {"type": "integer", "description": "With a history_fold receipt"},
+        "candidate": {"type": "integer", "description": "Time-near only"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+      },
+      "required": ["proven", "candidate", "unknown", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "NotRunCounts": {
+      "description": "Section 5: NOT_RUN items by outcome.",
+      "type": "object",
+      "properties": {
+        "run": {"type": "integer", "description": "Run, with evidence"},
+        "re_deferred": {"type": "integer", "description": "Deferred again, with reason, owner and follow-up"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+      },
+      "required": ["run", "re_deferred", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "McpResult": {
+      "description": "Section 6: qualified only by an ab receipt that shows a lower first-request count (D8).",
+      "type": "string",
+      "enum": ["qualified", "protected_unchanged", "failed_ab_protected_unchanged", "NOT_REVIEWED"]
+    },
+    "Section": {
+      "description": "A worksheet section, by its key.",
+      "type": "string",
+      "enum": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab"]
+    },
+    "DecisionLine": {
+      "description": "Section 7's decision code verbatim, or PENDING while it is null.",
+      "type": "string",
+      "enum": ["keep", "change", "insufficient", "PENDING"]
     },
     "AllKeys": {
       "description": "The report's figures with every overhead key counted, unrecognized ones included; private only.",
@@ -1229,9 +1374,10 @@
         "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order, with the effective and overhead split"},
         "all_keys": {"$ref": "#/$defs/AllKeys"},
         "unknown_overhead_keys": {"type": "object", "additionalProperties": {"type": ["number", "null"]}, "description": "Each unrecognized overhead key and its sum over the selected rows; null when not finite"},
-        "rows": {"type": "array", "items": {"$ref": "#/$defs/RowReport"}, "description": "Every evidence row"}
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/RowReport"}, "description": "Every evidence row"},
+        "settings": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/ConfigSetting"}}, {"type": "null"}], "description": "The decision's settings, as the owner typed them"}
       },
-      "required": ["collection_id", "tz", "report", "selected", "excluded", "all_keys", "unknown_overhead_keys", "rows"],
+      "required": ["collection_id", "tz", "report", "selected", "excluded", "all_keys", "unknown_overhead_keys", "rows", "settings"],
       "additionalProperties": false
     },
     "Failure": {
