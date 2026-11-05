@@ -2839,6 +2839,16 @@ class McpResult(StrEnum):
     NOT_REVIEWED = "NOT_REVIEWED"
 
 
+class EvidenceGap(StrEnum):
+    """
+    Evidence no judgment can supply: a host_delivery or history_fold receipt the collection lacks.
+    """
+
+    redirect_delivery_unknown = "redirect_delivery_unknown"
+    abort_delivery_unknown = "abort_delivery_unknown"
+    import_history_unknown = "import_history_unknown"
+
+
 class Section(StrEnum):
     """
     A worksheet section, by its key.
@@ -3121,11 +3131,15 @@ class Review(BaseModel):
     mcp_ab: McpResult
     evidence_complete: bool
     """
-    Every section judged
+    Every section judged, and no evidence gap
     """
     missing: list[Section]
     """
     The sections with a NOT_REVIEWED judgment
+    """
+    evidence_gaps: list[EvidenceGap]
+    """
+    What the evidence cannot show, however the worksheet is filled
     """
     decision_recorded: bool
     """

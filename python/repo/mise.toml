@@ -93,10 +93,13 @@ flag "--until <date>" required=#true help="Last calendar day, inclusive"
 flag "--tz <zone>" required=#true help="IANA time zone, such as America/Chicago"
 flag "--out <dir>" required=#true help="The new collection directory, an absolute path that must not exist"
 flag "--te-root <dir>" help="TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+flag "--receipts <file>" help="The receipt manifest, an absolute path"
+flag "--cadence-receipt <file>" help="The cadence change receipt, an absolute path"
+flag "--synthetic-manifest <file>" help="The synthetic session manifest, an absolute path"
 '''
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools te-review collect --since "$usage_since" --until "$usage_until" --tz "$usage_tz" --out "$usage_out" ${usage_te_root:+--te-root "$usage_te_root"}'
+run = 'uv run --project python/repo --locked repotools te-review collect --since "$usage_since" --until "$usage_until" --tz "$usage_tz" --out "$usage_out" ${usage_te_root:+--te-root "$usage_te_root"} ${usage_receipts:+--receipts "$usage_receipts"} ${usage_cadence_receipt:+--cadence-receipt "$usage_cadence_receipt"} ${usage_synthetic_manifest:+--synthetic-manifest "$usage_synthetic_manifest"}'
 
 [tasks.te-review-report]
 description = "Print the recorded overhead share of a te-review collection, public unless --private"

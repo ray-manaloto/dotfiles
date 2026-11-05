@@ -16,11 +16,13 @@ from .models import (
     EnvfactsEnum,
     ErrorCode,
     Evidence,
+    EvidenceGap,
     EvidenceReceipt,
     FactCandidate,
     FactVerdict,
     FollowUpEnum,
     ImportCounts,
+    ImportCoverage,
     ImportVerdict,
     LearnedFactCounts,
     McpResult,
@@ -189,16 +191,19 @@ def positive(value: object) -> float | None:
     return float(value)
 
 
+# D8b: when a charge was made; a fold writes a session's own optimizer charge into its session row.
+CHARGED = {RowKind.overhead: "at", RowKind.session: "folded_at"}
+
+
 def useful(entry: WorksheetPaidFact, refs: Refs, collection: Collection) -> None:
     """D8: an optimizer charge of the fact's store, charged before the fact first appears, and a use receipt."""
     found = refs.facts[entry.ref]
     origin = refs.rows.get(entry.origin_ref or "")
-    charged = positive(origin.row.get("at")) if origin else None
+    charged = positive(origin.row.get(CHARGED[origin.kind])) if origin else None
     if (
         origin is None
-        or origin.kind is not RowKind.overhead
         or origin.store != found.store
-        or positive(origin.row["overhead"].get(OverheadKey.optimizer_tokens)) is None
+        or positive((origin.row.get("overhead") or {}).get(OverheadKey.optimizer_tokens)) is None
         or charged is None
         or charged >= first_snapshot(found, refs, collection).timestamp()
     ):
@@ -335,6 +340,15 @@ def checked(
         Section.mcp_ab: result is McpResult.NOT_REVIEWED,
     }
     missing = [section for section in Section if unreviewed[section]]
+    # Judgments cannot fill these: only a receipt the collection lacks can.
+    gapped = {
+        EvidenceGap.redirect_delivery_unknown: nudges.delivery_unknown,
+        EvidenceGap.abort_delivery_unknown: stopped.delivery_unknown,
+        # A history_fold receipt covers only the imports it names: each listed import and fold needs its own.
+        EvidenceGap.import_history_unknown: evidence.import_coverage is ImportCoverage.observed_current_only
+        or any(not refs.imports[entry.ref] for entry in template.imports),
+    }
+    gaps = [gap for gap in EvidenceGap if gapped[gap]]
     decision, settings = sheet.decision.decision, sheet.decision.settings
     if decision is Decision.change and not settings:
         msg = "decision: change without its settings"
@@ -351,11 +365,12 @@ def checked(
         imports=folds,
         not_run=carried,
         mcp_ab=result,
-        evidence_complete=not missing,
+        evidence_complete=not missing and not gaps,
         missing=missing,
+        evidence_gaps=gaps,
         decision_recorded=decision is not None,
         decision=DecisionLine(decision) if decision else DecisionLine.PENDING,
         envfacts=EnvfactsEnum.no_paid_fact_proved_useful__select_microskills_envfacts if none_useful else None,
         conflict=conflict,
-        follow_up=None if not missing else FollowUpEnum.field_2026_11_17,
+        follow_up=None if not missing and not gaps else FollowUpEnum.field_2026_11_17,
     ), settings

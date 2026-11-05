@@ -1428,15 +1428,16 @@
         "imports": {"$ref": "#/$defs/ImportCounts"},
         "not_run": {"$ref": "#/$defs/NotRunCounts"},
         "mcp_ab": {"$ref": "#/$defs/McpResult"},
-        "evidence_complete": {"type": "boolean", "description": "Every section judged"},
+        "evidence_complete": {"type": "boolean", "description": "Every section judged, and no evidence gap"},
         "missing": {"type": "array", "items": {"$ref": "#/$defs/Section"}, "description": "The sections with a NOT_REVIEWED judgment"},
+        "evidence_gaps": {"type": "array", "items": {"$ref": "#/$defs/EvidenceGap"}, "description": "What the evidence cannot show, however the worksheet is filled"},
         "decision_recorded": {"type": "boolean", "description": "Section 7 is filled"},
         "decision": {"$ref": "#/$defs/DecisionLine"},
         "envfacts": {"anyOf": [{"const": "no paid fact proved useful: select microskills=envfacts"}, {"type": "null"}], "description": "The spec's condition, stated when no paid fact is useful"},
         "conflict": {"type": "boolean", "description": "The decision conflicts with the envfacts condition"},
         "follow_up": {"anyOf": [{"const": "2026-11-17"}, {"type": "null"}], "description": "The next check, named while evidence is incomplete"}
       },
-      "required": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "evidence_complete", "missing", "decision_recorded", "decision", "envfacts", "conflict", "follow_up"],
+      "required": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "evidence_complete", "missing", "evidence_gaps", "decision_recorded", "decision", "envfacts", "conflict", "follow_up"],
       "additionalProperties": false
     },
     "RedirectCounts": {
@@ -1525,6 +1526,11 @@
       "description": "Section 6: qualified only by an ab receipt that shows a lower first-request count (D8).",
       "type": "string",
       "enum": ["qualified", "protected_unchanged", "failed_ab_protected_unchanged", "NOT_REVIEWED"]
+    },
+    "EvidenceGap": {
+      "description": "Evidence no judgment can supply: a host_delivery or history_fold receipt the collection lacks.",
+      "type": "string",
+      "enum": ["redirect_delivery_unknown", "abort_delivery_unknown", "import_history_unknown"]
     },
     "Section": {
       "description": "A worksheet section, by its key.",
