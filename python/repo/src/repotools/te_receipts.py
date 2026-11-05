@@ -15,6 +15,7 @@ from .models import (
     ErrorCode,
     EvidenceRow,
     FactMechanism,
+    HookOutput,
     ManifestRole,
     Receipt,
     ReceiptKind,
@@ -29,7 +30,7 @@ from .models import (
     TranscriptRecord,
     Window,
 )
-from .te_io import TeReviewError, conform, json_lines, listing, read_bytes
+from .te_io import TeReviewError, conform, json_file, json_lines, listing, read_bytes
 from .te_judgment import learned_facts, manifest, redirect_events, state_files
 from .te_review import classify, claude_ledgers, parse, state_root, window
 
@@ -38,6 +39,10 @@ from .te_review import classify, claude_ledgers, parse, state_root, window
 CLOCK_S = 0.001
 HOOK_S = 60.0
 POST_TOOL = ("PostToolUse", "PostToolUseFailure")
+# How the notice plugin/controller.py post_tool returns beside a nudge's context opens, up to its reason.
+NUDGED = "TokenEconomizer nudged this turn ("
+# The heading microskills distiller.py render puts first in the manual it injects at SessionStart.
+MANUAL = "# repo operating manual ("
 
 
 def transcripts(folder: Path, wanted: set[str]) -> dict[str, list[Path]]:
@@ -68,29 +73,48 @@ def records(path: Path, data: bytes) -> list[tuple[datetime, TranscriptAttachmen
     return found
 
 
+def printed(source: str, part: TranscriptAttachment, notice: str) -> str | None:
+    """The context a hook printed beside this nudge's notice: a hook_success whose stdout, read as the hook's
+    JSON, has the notice plugin/controller.py post_tool returns as its systemMessage and a context beside it.
+    The nudge's text is never logged and a judge writes its own, so only the output that printed the notice
+    names it; the command field does not, as transcripts show the plugin's path or "command hook N"."""
+    if part.type != "hook_success" or part.stdout is None or NUDGED not in part.stdout:
+        return None
+    output = conform(HookOutput, f"{source}: {part.tool_use_id}'s hook output", json_file(source, part.stdout.encode()))
+    context = output.hook_specific_output.additional_context if output.hook_specific_output else None
+    message = output.system_message
+    return context if message is not None and message.startswith(notice) else None
+
+
 def candidates(
-    event: RedirectEvent, seen: list[tuple[datetime, TranscriptAttachment]]
+    source: str, event: RedirectEvent, seen: list[tuple[datetime, TranscriptAttachment]]
 ) -> list[tuple[datetime, str | None]]:
-    """The records that could show the host received this nudge: the notice plugin/controller.py post_tool
-    returns beside the context, and that context, on one tool call, within the hook's timeout of the event."""
-    notice = f"TokenEconomizer nudged this turn ({event.reason.split(':')[0]}):"
-    hooked = [(when, part) for when, part in seen if part.hook_event in POST_TOOL]
-    contexts = {part.tool_use_id for _, part in hooked if part.type == "hook_additional_context"}
-    return [
-        (when, part.tool_use_id)
-        for when, part in hooked
-        if part.type == "hook_system_message"
-        and isinstance(part.content, str)
-        and part.content.startswith(notice)
-        and part.tool_use_id in contexts
-        and event.at - CLOCK_S <= when.timestamp() <= event.at + HOOK_S
-    ]
+    """The hook outputs that show the host received this nudge, within the hook's timeout of the event: one
+    that printed its notice and context, where the host attached exactly that context to the same tool call."""
+    notice = f"{NUDGED}{event.reason.split(':')[0]}):"
+    hooked = [(when, part) for when, part in seen if part.hook_event in POST_TOOL and part.tool_use_id is not None]
+    attached = {
+        (part.tool_use_id, tuple(part.content))
+        for _, part in hooked
+        if part.type == "hook_additional_context" and isinstance(part.content, list)
+    }
+    found = []
+    for when, part in hooked:
+        context = printed(source, part, notice)
+        if (
+            context
+            and (part.tool_use_id, (context,)) in attached
+            and event.at - CLOCK_S <= when.timestamp() <= event.at + HOOK_S
+        ):
+            found.append((when, part.tool_use_id))
+    return found
 
 
 def told(seen: list[tuple[datetime, TranscriptAttachment]]) -> list[tuple[datetime, set[str]]]:
-    """Each SessionStart context the transcript shows the agent received, as its lines."""
+    """Each TokenEconomizer manual a SessionStart context shows the agent received, as its lines: a block
+    microskills distiller.py render opens with its heading; another hook's block is not the manual."""
     return [
-        (when, {line for text in part.content for line in text.splitlines()})
+        (when, {line for text in part.content if text.startswith(MANUAL) for line in text.splitlines()[1:]})
         for when, part in seen
         if part.type == "hook_additional_context"
         and part.hook_event == "SessionStart"
@@ -188,7 +212,7 @@ class Drafting:
         )
         seen = records(path, data)
         nudges = self.nudges(session_id)
-        found = [candidates(event, seen) for event in nudges]
+        found = [candidates(name, event, seen) for event in nudges]
         # A record two nudges could claim confirms neither: collect would count both delivered.
         claimed = Counter(record for listed in found for record in listed)
         for event, matched in zip(nudges, found, strict=True):

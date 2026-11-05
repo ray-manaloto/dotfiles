@@ -332,9 +332,31 @@
         "type": { "type": "string", "description": "hook_additional_context, hook_system_message, or another kind" },
         "content": { "description": "A list of strings for additional context, a string for a system message" },
         "toolUseID": { "type": ["string", "null"], "default": null, "description": "The tool call the hook ran on; SessionStart at session start" },
-        "hookEvent": { "type": ["string", "null"], "default": null, "description": "The hook event, such as PostToolUse" }
+        "hookEvent": { "type": ["string", "null"], "default": null, "description": "The hook event, such as PostToolUse" },
+        "stdout": { "type": ["string", "null"], "default": null, "description": "A hook_success: what the hook printed" }
       },
       "required": ["type"],
+      "additionalProperties": true
+    },
+    "HookOutput": {
+      "description": "A hook's printed JSON output; only the notice and the context the host shows are read.",
+      "type": "object",
+      "properties": {
+        "systemMessage": { "type": ["string", "null"], "default": null, "description": "The notice the host shows the user" },
+        "hookSpecificOutput": {
+          "anyOf": [{ "$ref": "#/$defs/HookSpecificOutput" }, { "type": "null" }],
+          "default": null,
+          "description": "The event's own output"
+        }
+      },
+      "additionalProperties": true
+    },
+    "HookSpecificOutput": {
+      "description": "A hook's event-specific output; only the additional context is read.",
+      "type": "object",
+      "properties": {
+        "additionalContext": { "type": ["string", "null"], "default": null, "description": "The context the host adds for the agent" }
+      },
       "additionalProperties": true
     },
     "TranscriptRecord": {

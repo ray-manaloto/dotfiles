@@ -550,6 +550,25 @@ class TranscriptAttachment(BaseModel):
     """
     The hook event, such as PostToolUse
     """
+    stdout: str | None = None
+    """
+    A hook_success: what the hook printed
+    """
+
+
+class HookSpecificOutput(BaseModel):
+    """
+    A hook's event-specific output; only the additional context is read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    additional_context: Annotated[str | None, Field(alias="additionalContext")] = None
+    """
+    The context the host adds for the agent
+    """
 
 
 class TranscriptRecord(BaseModel):
@@ -2554,6 +2573,25 @@ type Options = (
 """
 What a repotools command parses from its arguments.
 """
+
+
+class HookOutput(BaseModel):
+    """
+    A hook's printed JSON output; only the notice and the context the host shows are read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    system_message: Annotated[str | None, Field(alias="systemMessage")] = None
+    """
+    The notice the host shows the user
+    """
+    hook_specific_output: Annotated[HookSpecificOutput | None, Field(alias="hookSpecificOutput")] = None
+    """
+    The event's own output
+    """
 
 
 class Evidence(BaseModel):

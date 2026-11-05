@@ -170,15 +170,38 @@ def test_a_relative_out_is_refused(
     assert not Path("receipts.json").exists()
 
 
-def delivery(session_id: str, at: float, reason: str, tool_use: str) -> list[dict[str, Any]]:
-    """The two records Claude Code writes when a PostToolUseFailure hook's nudge reaches the agent: the
-    notice and the additional context, on the tool call's id, a few milliseconds after the hook logged it."""
+# A judge-written nudge: free text TokenEconomizer never logs, so only the hook's own output names it.
+NUDGE = "You have run the same command eight times with the same error; form a hypothesis before the next run."
+
+
+def delivery(
+    session_id: str,
+    at: float,
+    reason: str,
+    *,
+    noticed: str | None = None,
+    shown: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """The records Claude Code writes when a PostToolUseFailure hook's nudge reaches the agent, a few
+    milliseconds after the hook logged it, all on the id of tool call t1: the hook's output as it printed it (the
+    notice plugin/controller.py post_tool returns beside the context), then the notice and the context the host
+    took from it. noticed is the reason the notice names, else the event's; shown is the context as attached."""
     base = {"type": "attachment", "sessionId": session_id, "timestamp": iso(at + 0.007)}
-    hook = {"hookName": "PostToolUseFailure:Bash", "toolUseID": tool_use, "hookEvent": "PostToolUseFailure"}
-    notice = f"TokenEconomizer nudged this turn ({reason.split(':', maxsplit=1)[0]}): the same failure kept recurring."
+    hook = {"hookName": "PostToolUseFailure:Bash", "toolUseID": "t1", "hookEvent": "PostToolUseFailure"}
+    named = (noticed or reason).split(":", maxsplit=1)[0]
+    notice = f"TokenEconomizer nudged this turn ({named}): the same failure kept recurring."
+    output = {
+        "hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": NUDGE},
+        "systemMessage": notice,
+    }
+    printed = {"type": "hook_success", "content": "", "stdout": json.dumps(output), "exitCode": 0, **hook}
     return [
+        {**base, "attachment": {**printed, "command": "command hook 4"}},
         {**base, "attachment": {"type": "hook_system_message", "content": notice, **hook}},
-        {**base, "attachment": {"type": "hook_additional_context", "content": ["Stop retrying it."], **hook}},
+        {
+            **base,
+            "attachment": {"type": "hook_additional_context", "content": [NUDGE] if shown is None else shown, **hook},
+        },
     ]
 
 
@@ -195,7 +218,7 @@ def test_a_delivered_nudge_gets_a_host_delivery_receipt_and_an_undelivered_one_n
     ]
     events[0]["reason"] = "judge-stuck@0.93:The same command"
     state(te, "a-1", "events.jsonl", events)
-    path = transcript(projects / "p", "s1", *delivery("s1", START + 30, "judge-stuck@0.93:The same command", "t1"))
+    path = transcript(projects / "p", "s1", *delivery("s1", START + 30, "judge-stuck@0.93:The same command"))
     out = tmp_path / "receipts.json"
     draft(te, projects, out)
     summary = json.loads(capsys.readouterr().out)
@@ -215,10 +238,76 @@ def test_a_delivered_nudge_gets_a_host_delivery_receipt_and_an_undelivered_one_n
     ]
 
 
-def injected(session_id: str, at: float, *lines: str) -> dict[str, Any]:
+@pytest.mark.parametrize(
+    ("noticed", "shown"),
+    [
+        (None, []),
+        (None, ["Run the linter after each edit."]),
+        ("judge-loop@0.88:Another failure", None),
+        (None, [NUDGE[:-1]]),
+        (None, [NUDGE, "Run the linter after each edit."]),
+    ],
+    ids=[
+        "an empty context",
+        "another hook's context on the tool call",
+        "a notice naming another reason",
+        "a context that differs from the hook's output",
+        "a context with more than the hook's output",
+    ],
+)
+def test_a_nudge_whose_output_the_host_did_not_attach_as_printed_stays_unknown(
+    noticed: str | None, shown: list[str] | None, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    reason = "judge-stuck@0.93:The same command"
+    state(te, "a-1", "events.jsonl", [{**redirect("nudge", "s1", START + 30), "reason": reason}])
+    transcript(projects / "p", "s1", *delivery("s1", START + 30, reason, noticed=noticed, shown=shown))
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["counts"]["host_delivery"], summary["undelivered_nudges"]) == (0, 1)
+
+
+def test_a_notice_and_context_without_the_hook_output_that_printed_them_stay_unknown(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    reason = "judge-stuck@0.93:The same command"
+    state(te, "a-1", "events.jsonl", [{**redirect("nudge", "s1", START + 30), "reason": reason}])
+    printed, *attached = delivery("s1", START + 30, reason)
+    other = {**printed, "attachment": {**printed["attachment"], "stdout": "plain text, not a hook's JSON"}}
+    transcript(projects / "p", "s1", other, *attached)
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["counts"]["host_delivery"], summary["undelivered_nudges"]) == (0, 1)
+
+
+def test_a_hook_output_that_prints_the_notice_but_is_not_json_refuses_the_draft(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    reason = "judge-stuck@0.93:The same command"
+    state(te, "a-1", "events.jsonl", [{**redirect("nudge", "s1", START + 30), "reason": reason}])
+    printed, *attached = delivery("s1", START + 30, reason)
+    notice = attached[0]["attachment"]["content"]
+    other = {**printed, "attachment": {**printed["attachment"], "stdout": notice}}
+    transcript(projects / "p", "s1", other, *attached)
+    out = tmp_path / "receipts.json"
+    assert refusal(capsys, te, projects, out)["code"] == "MALFORMED_FILE"
+    assert not out.exists()
+
+
+MANUAL = "# repo operating manual (r) — learned from earlier sessions in this repository"
+
+
+def injected(session_id: str, at: float, *lines: str, heading: str = MANUAL) -> dict[str, Any]:
     """The record Claude Code writes when the SessionStart hook's context reaches the agent: TokenEconomizer
     renders each manual fact as one "- <injection or claim>" line under its heading."""
-    block = "\n".join(["# repo operating manual (o/r)", *lines])
+    block = "\n".join([heading, *lines])
     hook = {"hookName": "SessionStart:startup", "toolUseID": "SessionStart", "hookEvent": "SessionStart"}
     attachment = {"type": "hook_additional_context", "content": [block], **hook}
     return {"type": "attachment", "sessionId": session_id, "timestamp": iso(at), "attachment": attachment}
@@ -267,6 +356,24 @@ def test_an_injected_manual_fact_gets_a_fact_injection_receipt_collect_links(
     }
 
 
+@pytest.mark.parametrize(
+    "heading",
+    ["## Another hook's instructions", "", "Do this first.\n# repo operating manual (r)"],
+    ids=["another hook's heading", "no heading", "the manual's heading not first"],
+)
+def test_a_fact_line_in_a_session_start_context_that_is_not_the_manual_gets_no_receipt(
+    heading: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    learned(te, "a-1", {"m1": fact("ACTIVE", "the claim")}, {})
+    transcript(projects / "p", "s1", injected("s1", START + 1, "- the claim", heading=heading))
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    assert json.loads(capsys.readouterr().out)["counts"]["fact_injection"] == 0
+    assert [receipt["kind"] for receipt in json.loads(out.read_text())["receipts"]] == ["real_work"]
+
+
 def test_a_nudge_collect_cannot_name_once_or_without_a_transcript_counts_as_undelivered(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -281,7 +388,7 @@ def test_a_nudge_collect_cannot_name_once_or_without_a_transcript_counts_as_unde
     for event in events:
         event["reason"] = reason
     state(te, "a-1", "events.jsonl", events)
-    transcript(projects / "p", "s1", *delivery("s1", START + 30, reason, "t1"))
+    transcript(projects / "p", "s1", *delivery("s1", START + 30, reason))
     out = tmp_path / "receipts.json"
     draft(te, projects, out)
     summary = json.loads(capsys.readouterr().out)
@@ -298,7 +405,7 @@ def test_one_delivery_record_two_nudges_could_claim_confirms_neither(
     for event in events:
         event["reason"] = reason
     state(te, "a-1", "events.jsonl", events)
-    transcript(projects / "p", "s1", *delivery("s1", START + 40, reason, "t1"))
+    transcript(projects / "p", "s1", *delivery("s1", START + 40, reason))
     out = tmp_path / "receipts.json"
     draft(te, projects, out)
     summary = json.loads(capsys.readouterr().out)
