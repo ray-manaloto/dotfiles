@@ -631,6 +631,8 @@ mise bootstrap packages apply brew:ruby --yes
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "[ -e ~/.agents/skills/herdr-core ] && [ -e ~/.claude/skills/herdr-core ] || mise exec -- skills add herdrdev/herdr-core#v0.1.17 -g -a claude-code codex -s herdr-core -y </dev/null",
+  # CLion's clion-debugger skill ships only inside the IDE: copied from the installed CLion, never committed.
+  "mise run clion:skills </dev/null",
 ]
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
