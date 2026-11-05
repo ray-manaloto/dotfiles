@@ -601,7 +601,7 @@
         "imports": { "type": "array", "items": { "$ref": "#/$defs/ImportCandidate" }, "description": "Each store's current import operation" },
         "import_folds": { "type": "array", "items": { "$ref": "#/$defs/ImportFoldCandidate" }, "description": "Paid live folds near an import's end" },
         "import_coverage": { "$ref": "#/$defs/ImportCoverage" },
-        "import_note": { "type": "string", "description": "What the import evidence covers, in words" }
+        "import_note": { "$ref": "#/$defs/ImportNote" }
       },
       "required": ["rows", "receipts", "cadence_receipt", "sessions", "redirects", "facts", "imports", "import_folds", "import_coverage", "import_note"],
       "additionalProperties": false
@@ -746,7 +746,7 @@
           "description": "The sessions the proof covers, by session id; each must name exactly one collected session"
         },
         "changed_at": { "type": "string", "format": "date-time", "description": "When te config set --global changed the cadence" },
-        "before": { "anyOf": [{ "$ref": "#/$defs/ProposeEvery" }, { "type": "null" }], "description": "The proven cadence before the change, if any" },
+        "before": { "anyOf": [{ "$ref": "#/$defs/ProposeEvery" }, { "type": "null" }], "description": "The cadence asserted before the change, if any: it names a reason, never a session's cadence (D11)" },
         "after": { "$ref": "#/$defs/ProposeEvery" },
         "proof": { "$ref": "#/$defs/CadenceProof" },
         "process_started": {
@@ -1506,10 +1506,28 @@
         "proven": {"type": "integer", "description": "With a history_fold receipt"},
         "candidate": {"type": "integer", "description": "Time-near only"},
         "unknown": {"type": "integer", "description": "Unknown"},
-        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"},
+        "operations": {"$ref": "#/$defs/ImportOperations"},
+        "note": {"$ref": "#/$defs/ImportNote"}
       },
-      "required": ["proven", "candidate", "unknown", "not_reviewed"],
+      "required": ["proven", "candidate", "unknown", "not_reviewed", "operations", "note"],
       "additionalProperties": false
+    },
+    "ImportOperations": {
+      "description": "D13: section 4's import operations by how far each got.",
+      "type": "object",
+      "properties": {
+        "completed": {"type": "integer", "description": "completed"},
+        "partial": {"type": "integer", "description": "partial"},
+        "unknown": {"type": "integer", "description": "unknown"}
+      },
+      "required": ["completed", "partial", "unknown"],
+      "additionalProperties": false
+    },
+    "ImportNote": {
+      "description": "What the import evidence covers, in words.",
+      "type": "string",
+      "enum": ["observed current import state; historical operation coverage unknown", "history_fold receipts cover the operations they name; others unknown"]
     },
     "NotRunCounts": {
       "description": "Section 5: NOT_RUN items by outcome.",

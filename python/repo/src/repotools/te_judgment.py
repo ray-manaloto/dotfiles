@@ -43,6 +43,7 @@ from .models import (
     ImportCoverage,
     ImportEntry,
     ImportFoldCandidate,
+    ImportNote,
     InjectionState,
     ManifestRole,
     MechanismState,
@@ -87,8 +88,10 @@ COMPLETION = {
 CADENCE_LABEL = {1: CadenceLabel.cadence_1, 3: CadenceLabel.cadence_3}
 FACT_RECEIPTS = (ReceiptKind.fact_injection, ReceiptKind.fact_use, ReceiptKind.fact_snapshot)
 IMPORT_NOTE = {
-    ImportCoverage.observed_current_only: "observed current import state; historical operation coverage unknown",
-    ImportCoverage.history_receipts: "history_fold receipts cover the operations they name; others unknown",
+    ImportCoverage.observed_current_only: (
+        ImportNote.observed_current_import_state__historical_operation_coverage_unknown
+    ),
+    ImportCoverage.history_receipts: ImportNote.history_fold_receipts_cover_the_operations_they_name__others_unknown,
 }
 
 
@@ -334,9 +337,9 @@ def cadence(
         return CadenceLabel.unknown, CadenceReason.no_receipt
     # A process's configuration is its repository's and environment's (plugin/context.py): the proof names its sessions.
     reason = cadence_reason(row, receipt, spans) if row.session_id in receipt.sessions else CadenceReason.not_covered
-    proven = {CadenceReason.after_change: receipt.after, CadenceReason.before_change: receipt.before}
-    value = proven.get(reason)
-    return (CadenceLabel.unknown if value is None else CADENCE_LABEL[value]), reason
+    # D11: only the process the receipt proves labels a session; its asserted before labels none.
+    label = CADENCE_LABEL[receipt.after] if reason is CadenceReason.after_change else CadenceLabel.unknown
+    return label, reason
 
 
 def receipted(linked: dict[str, list[tuple[str, ReceiptKind]]], target: str, *kinds: ReceiptKind) -> list[str]:

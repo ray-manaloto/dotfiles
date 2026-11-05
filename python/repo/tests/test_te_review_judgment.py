@@ -445,7 +445,7 @@ def cadences(out: Path) -> dict[str, tuple[str, str]]:
     return {s["session_id"]: (s["cadence"], s["cadence_reason"]) for s in read(out, "evidence.json")["sessions"]}
 
 
-def test_a_session_has_a_cadence_only_when_its_end_and_fold_are_on_one_side_of_a_proven_change(tmp_path: Path) -> None:
+def test_a_session_has_a_cadence_only_when_its_end_and_fold_are_after_a_proven_change(tmp_path: Path) -> None:
     te = tmp_path / "te"
     ledger(
         te,
@@ -474,7 +474,7 @@ def test_a_session_has_a_cadence_only_when_its_end_and_fold_are_on_one_side_of_a
         str(cadence_receipt(tmp_path / "c", ["before", "after", "straddles", "open", "folded-by-import", "imported"])),
     )
     assert cadences(out) == {
-        "before": ("cadence_3", "before_change"),
+        "before": ("unknown", "before_change"),
         "after": ("cadence_1", "after_change"),
         "straddles": ("unknown", "straddles_change"),
         "open": ("unknown", "missing_end"),

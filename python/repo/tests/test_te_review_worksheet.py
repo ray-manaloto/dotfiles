@@ -163,7 +163,14 @@ def test_a_delivered_redirect_and_a_useful_paid_fact_are_accepted_and_counted(
         "origin": "owner-asserted",
     }
     assert shown["learned_facts"] == {"wrong": 0, "ok": 2, "unknown": 0, "not_reviewed": 0}
-    assert shown["imports"] == {"proven": 1, "candidate": 0, "unknown": 0, "not_reviewed": 0}
+    assert shown["imports"] == {
+        "proven": 1,
+        "candidate": 0,
+        "unknown": 0,
+        "not_reviewed": 0,
+        "operations": {"completed": 1, "partial": 0, "unknown": 0},
+        "note": RECEIPTED,
+    }
     assert shown["not_run"] == {"run": 0, "re_deferred": 0, "not_reviewed": 0}
     assert shown["mcp_ab"] == "protected_unchanged"
     assert (shown["evidence_complete"], shown["missing"], shown["evidence_gaps"]) == (True, [], [])
@@ -199,6 +206,7 @@ def refused(capsys: pytest.CaptureFixture[str], out: Path, sheet: Path | str, *m
     return json.loads(seen.err)
 
 
+RECEIPTED = "history_fold receipts cover the operations they name; others unknown"
 USEFUL = {"owner_assessment": "useful", "reason": "saved_lookup"}
 
 REFUSALS = {
@@ -430,7 +438,14 @@ def test_imports_and_not_run_items_are_counted_by_their_judgments(
         ],
     )
     shown = review(capsys, out, sheet)
-    assert shown["imports"] == {"proven": 1, "candidate": 0, "unknown": 0, "not_reviewed": 0}
+    assert shown["imports"] == {
+        "proven": 1,
+        "candidate": 0,
+        "unknown": 0,
+        "not_reviewed": 0,
+        "operations": {"completed": 1, "partial": 0, "unknown": 0},
+        "note": RECEIPTED,
+    }
     assert shown["not_run"] == {"run": 1, "re_deferred": 1, "not_reviewed": 0}
     assert "imports" not in shown["missing"]
     assert "not_run" not in shown["missing"]
@@ -611,3 +626,24 @@ def test_an_import_its_history_fold_receipt_does_not_name_is_an_evidence_gap(
     run(te, out, "--receipts", str(manifest(tmp_path / "r", ("history_fold", {"imports": covered}, PROOF))))
     assert read(out, "evidence.json")["import_coverage"] == "history_receipts"
     assert review(capsys, out, None)["evidence_gaps"] == gaps
+
+
+def test_d13_the_review_shows_the_import_note_and_the_section_4_operations_by_completion(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    for store, name, found in [
+        ("a-1", "s1", history("done", START + 100, START + 7200, 1)),
+        ("b-2", "s2", history("skipped", START + 100, START + 7200, 0)),
+        ("c-3", "s3", history("running", START + 100, None, 1)),
+        ("d-4", "s4", history("stopped", START - DAY, START - 100, 1)),
+    ]:
+        ledger(te, store, [session(name, START + 3600)])
+        state(te, store, "history.json", found)
+    out = tmp_path / "out"
+    run(te, out)
+    shown = review(capsys, out, None)["imports"]
+    # The stopped import finished before the window: section 4 does not list it, so it is not counted.
+    assert shown["operations"] == {"completed": 1, "partial": 1, "unknown": 1}
+    assert shown["note"] == "observed current import state; historical operation coverage unknown"
+    assert shown["not_reviewed"] == 3

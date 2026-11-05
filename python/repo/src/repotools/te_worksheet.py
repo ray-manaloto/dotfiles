@@ -21,8 +21,11 @@ from .models import (
     FactCandidate,
     FactVerdict,
     FollowUpEnum,
+    ImportCompletion,
     ImportCounts,
     ImportCoverage,
+    ImportEntry,
+    ImportOperations,
     ImportVerdict,
     LearnedFactCounts,
     McpResult,
@@ -47,7 +50,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import TeReviewError
+from .te_io import TeReviewError, absolute
 from .te_judgment import worksheet
 
 # spec.md user story 5: with no useful paid fact the review selects this setting.
@@ -61,9 +64,7 @@ def bad(error: str) -> TeReviewError:
 
 def read(folder: Path, given: str | None) -> Worksheet:
     """The worksheet given, else the collection's own, as its model."""
-    path = folder / "worksheet.json" if given is None else Path(given)
-    if not path.is_absolute():
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--worksheet is relative; give the worksheet's absolute path")
+    path = absolute("worksheet", folder / "worksheet.json" if given is None else given, "the worksheet's")
     try:
         data = path.read_bytes()
     except OSError:
@@ -234,7 +235,10 @@ def paid_facts(entries: list[WorksheetPaidFact], refs: Refs, collection: Collect
     )
 
 
-def imports(entries: list[WorksheetImport], template: list[WorksheetImport], refs: Refs) -> ImportCounts:
+def imports(
+    entries: list[WorksheetImport], template: list[WorksheetImport], refs: Refs, evidence: Evidence
+) -> ImportCounts:
+    """Section 4 by verdict, and (D13) its import operations by completion beside the collection's import note."""
     kinds = {entry.ref: entry.entry for entry in template}
     for entry in entries:
         receipt = refs.known("imports", entry.receipt_ref)
@@ -245,11 +249,19 @@ def imports(entries: list[WorksheetImport], template: list[WorksheetImport], ref
             msg = f"imports: {entry.ref} is proven without its history_fold receipt"
             raise bad(msg)
     verdicts = Counter(entry.verdict for entry in entries)
+    listed = {entry.ref for entry in template if entry.entry is not ImportEntry.fold}
+    completion = Counter(found.completion for found in evidence.imports if found.ref in listed)
     return ImportCounts(
         proven=verdicts[ImportVerdict.proven],
         candidate=verdicts[ImportVerdict.candidate],
         unknown=verdicts[ImportVerdict.unknown],
         not_reviewed=verdicts[None],
+        operations=ImportOperations(
+            completed=completion[ImportCompletion.completed],
+            partial=completion[ImportCompletion.partial],
+            unknown=completion[ImportCompletion.unknown],
+        ),
+        note=evidence.import_note,
     )
 
 
@@ -327,7 +339,7 @@ def checked(
         unknown=verdicts[FactVerdict.unknown],
         not_reviewed=verdicts[None],
     )
-    folds = imports(matched("imports", sheet.imports, template.imports), template.imports, refs)
+    folds = imports(matched("imports", sheet.imports, template.imports), template.imports, refs, evidence)
     carried = not_run(sheet, template, refs)
     result = mcp(sheet, folder, refs)
     unreviewed = {

@@ -30,7 +30,7 @@ from .models import (
     TranscriptRecord,
     Window,
 )
-from .te_io import TeReviewError, conform, json_file, json_lines, listing, read_bytes
+from .te_io import TeReviewError, absolute, conform, json_file, json_lines, listing, read_bytes
 from .te_judgment import learned_facts, manifest, redirect_events, state_files
 from .te_review import classify, claude_ledgers, parse, state_root, window
 
@@ -255,10 +255,7 @@ class Drafting:
 
 
 def draft(options: TeReviewReceiptsDraft) -> None:
-    out = Path(options.out)
-    # A relative path would land wherever the caller runs from, a checkout under a mise task.
-    if not out.is_absolute():
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--out is relative; give the file's absolute path")
+    out = absolute("out", options.out, "the file's")
     span = window(options)
     root = state_root(options)
     chosen, shared = sessions(root, span)

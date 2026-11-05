@@ -1255,7 +1255,7 @@ class CadenceReceipt(BaseModel):
     """
     before: ProposeEvery | None
     """
-    The proven cadence before the change, if any
+    The cadence asserted before the change, if any: it names a reason, never a session's cadence (D11)
     """
     after: ProposeEvery
     proof: CadenceProof
@@ -2778,31 +2778,40 @@ class LearnedFactCounts(BaseModel):
     """
 
 
-class ImportCounts(BaseModel):
+class ImportOperations(BaseModel):
     """
-    Section 4: imports and import folds by verdict.
+    D13: section 4's import operations by how far each got.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
-    proven: int
+    completed: int
     """
-    With a history_fold receipt
+    completed
     """
-    candidate: int
+    partial: int
     """
-    Time-near only
+    partial
     """
     unknown: int
     """
-    Unknown
+    unknown
     """
-    not_reviewed: int
+
+
+class ImportNote(StrEnum):
     """
-    NOT_REVIEWED
+    What the import evidence covers, in words.
     """
+
+    observed_current_import_state__historical_operation_coverage_unknown = (
+        "observed current import state; historical operation coverage unknown"
+    )
+    history_fold_receipts_cover_the_operations_they_name__others_unknown = (
+        "history_fold receipts cover the operations they name; others unknown"
+    )
 
 
 class NotRunCounts(BaseModel):
@@ -3021,10 +3030,7 @@ class Evidence(BaseModel):
     Paid live folds near an import's end
     """
     import_coverage: ImportCoverage
-    import_note: str
-    """
-    What the import evidence covers, in words
-    """
+    import_note: ImportNote
 
 
 class WorksheetImport(BaseModel):
@@ -3111,6 +3117,35 @@ class AbReceipt(BaseModel):
     """
     without_denies: AbSession
     with_denies: AbSession
+
+
+class ImportCounts(BaseModel):
+    """
+    Section 4: imports and import folds by verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    proven: int
+    """
+    With a history_fold receipt
+    """
+    candidate: int
+    """
+    Time-near only
+    """
+    unknown: int
+    """
+    Unknown
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+    operations: ImportOperations
+    note: ImportNote
 
 
 class Review(BaseModel):
