@@ -22,8 +22,49 @@
         "main-guard",
         "main-guard-install",
         "main-guard-remove",
-        "main-guard-armed"
+        "main-guard-armed",
+        "tools-install"
       ]
+    },
+    "ToolsInstall": {
+      "description": "Install workflowtools and repotools as uv tools from the committed trees",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ToolAction": {
+      "type": "string",
+      "enum": ["installed", "unchanged"]
+    },
+    "Healthy": {
+      "description": "A tool whose RECORD and console script passed the start probe.",
+      "type": "object",
+      "properties": {
+        "record_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "required": ["record_sha256"],
+      "additionalProperties": false
+    },
+    "ToolReceipt": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "record_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      },
+      "required": ["name", "tree", "record_sha256"],
+      "additionalProperties": false
+    },
+    "ToolInstalled": {
+      "type": "object",
+      "properties": {
+        "tool": { "type": "string" },
+        "tree": { "type": "string" },
+        "action": { "$ref": "#/$defs/ToolAction" },
+        "bin": { "type": "string", "description": "Absolute path of the console script" }
+      },
+      "required": ["tool", "tree", "action", "bin"],
+      "additionalProperties": false
     },
     "ZeroBash": {
       "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
@@ -151,7 +192,8 @@
         { "$ref": "#/$defs/MainGuard" },
         { "$ref": "#/$defs/MainGuardInstall" },
         { "$ref": "#/$defs/MainGuardRemove" },
-        { "$ref": "#/$defs/MainGuardArmed" }
+        { "$ref": "#/$defs/MainGuardArmed" },
+        { "$ref": "#/$defs/ToolsInstall" }
       ]
     },
     "Fingerprint": {
@@ -276,6 +318,11 @@
     "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
     "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
     "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
+    "tools_install": { "$ref": "#/$defs/ToolsInstall" },
+    "tool_action": { "$ref": "#/$defs/ToolAction" },
+    "healthy": { "$ref": "#/$defs/Healthy" },
+    "tool_receipt": { "$ref": "#/$defs/ToolReceipt" },
+    "tool_installed": { "$ref": "#/$defs/ToolInstalled" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

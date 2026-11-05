@@ -24,6 +24,59 @@ class Command(StrEnum):
     main_guard_install = "main-guard-install"
     main_guard_remove = "main-guard-remove"
     main_guard_armed = "main-guard-armed"
+    tools_install = "tools-install"
+
+
+class ToolsInstall(BaseModel):
+    """
+    Install workflowtools and repotools as uv tools from the committed trees
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ToolAction(StrEnum):
+    installed = "installed"
+    unchanged = "unchanged"
+
+
+class Healthy(BaseModel):
+    """
+    A tool whose RECORD and console script passed the start probe.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    record_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+
+
+class ToolReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    name: str
+    tree: Annotated[str, Field(pattern="^[0-9a-f]{40,64}$")]
+    record_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+
+
+class ToolInstalled(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    tool: str
+    tree: str
+    action: ToolAction
+    bin: str
+    """
+    Absolute path of the console script
+    """
 
 
 class ZeroBash(BaseModel):
@@ -237,6 +290,7 @@ type Options = (
     | MainGuardInstall
     | MainGuardRemove
     | MainGuardArmed
+    | ToolsInstall
 )
 """
 What a repotools command parses from its arguments.
@@ -478,6 +532,11 @@ class Repotools(BaseModel):
     main_guard_install: MainGuardInstall | None = None
     main_guard_remove: MainGuardRemove | None = None
     main_guard_armed: MainGuardArmed | None = None
+    tools_install: ToolsInstall | None = None
+    tool_action: ToolAction | None = None
+    healthy: Healthy | None = None
+    tool_receipt: ToolReceipt | None = None
+    tool_installed: ToolInstalled | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

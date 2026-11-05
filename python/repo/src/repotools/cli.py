@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, zero_bash
+from . import gates, main_guard, pane_approval, tools_install, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -22,6 +22,7 @@ from .models import (
     PrText,
     ReviewApproved,
     ReviewPython,
+    ToolsInstall,
     ZeroBash,
 )
 
@@ -40,6 +41,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
     Command.main_guard_armed: MainGuardArmed,
+    Command.tools_install: ToolsInstall,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -61,7 +63,8 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
     return command, CliApp.run(model, cli_args=list(argv[1:]), cli_settings_source=cli)
 
 
-def run(command: Command, options: Options) -> None:
+# One branch per generated option model keeps dispatch explicit; the installer adds one model.
+def run(command: Command, options: Options) -> None:  # noqa: C901
     if isinstance(options, ZeroBash):
         found = zero_bash.findings()
         sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
@@ -79,6 +82,8 @@ def run(command: Command, options: Options) -> None:
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
         pane_approval.create(options)
+    elif isinstance(options, ToolsInstall):
+        tools_install.run()
     elif command in APPROVED:
         pane_approval.check(options)
     else:
