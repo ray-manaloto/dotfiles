@@ -18,13 +18,10 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from pydantic import ValidationError
-
+from . import te_judgment
 from .models import (
-    CodedFailure,
     Collection,
     ErrorCode,
-    Evidence,
     EvidenceRow,
     Label,
     LedgerRead,
@@ -39,10 +36,10 @@ from .models import (
     Versions,
     Window,
 )
+from .te_io import ADAPTER, CollectError, conform, json_lines, listing, present, read_bytes
 
-ADAPTER = "tokeneconomizer-0.1.0"
 SCHEMA = 1
-# The TokenEconomizer 0.1.0 files whose ledger rows SessionRow and OverheadRow mirror, by sha256.
+# The TokenEconomizer 0.1.0 files whose ledger rows and state files the models mirror, by sha256.
 MIRRORS = (
     Mirror(
         path="lib/tokeneconomizer/ledger.py", sha256="24e5af172815691086857664acffe34ec8899bfa350fc09d6a541cb05f2da910"
@@ -67,6 +64,30 @@ MIRRORS = (
         path="lib/tokeneconomizer/plugin/paths.py",
         sha256="19606cf3c20b9423e214006e3cbbe04cd0833fcfad3e4700c9c74c77e5dea65b",
     ),
+    Mirror(
+        path="lib/tokeneconomizer/plugin/controller.py",
+        sha256="72cdd314665ada463a017a36f8f371de6f97d7191f1a3a5bf5ce459e01bc569f",
+    ),
+    Mirror(
+        path="lib/tokeneconomizer/plugin/history.py",
+        sha256="c897948709856734c9f1854c82fc2705c04c2bb17abbea38f2fd29811d2501aa",
+    ),
+    Mirror(
+        path="lib/tokeneconomizer/plugin/config.py",
+        sha256="35c747e91ba7506bee466459ed368ea4f2b39c7e2af109675372d67fc145af23",
+    ),
+    Mirror(
+        path="lib/tokeneconomizer/microskills/lifecycle.py",
+        sha256="cae8db6681956c35d7f73bf9e43b466f98f71c341c0c6e6c5b6ce465c216f3db",
+    ),
+    Mirror(
+        path="lib/tokeneconomizer/microskills/distiller.py",
+        sha256="9eae456df180cb1a629d3ff6a68d7e4c2fc732eb183e6ba016287e35dcf2a162",
+    ),
+    Mirror(
+        path="lib/tokeneconomizer/microskills/envfacts.py",
+        sha256="13f25143be7c5893049e811dd78df863bac908bae1e27299dcffa49c7ad7d591",
+    ),
 )
 # What a charge is, from the class of the session it names.
 CHARGE_CLASS = {
@@ -76,18 +97,6 @@ CHARGE_CLASS = {
     RowClass.conflict: RowClass.ambiguous,
     RowClass.ambiguous: RowClass.ambiguous,
 }
-
-
-class CollectError(Exception):
-    """A refusal; collect leaves nothing behind when it raises one.
-
-    The generated CodedFailure is a pydantic model, not an exception, so it can't be raised: this
-    carries it to cli.main, which prints it.
-    """
-
-    def __init__(self, code: ErrorCode, error: str) -> None:
-        super().__init__(error)
-        self.failure = CodedFailure(code=code, error=error)
 
 
 def window(options: TeReviewCollect) -> Window:
@@ -115,55 +124,20 @@ def state_root(options: TeReviewCollect) -> Path:
 
 
 def claude_ledgers(root: Path) -> list[Path]:
-    """Every repos/<label>/claude/ledger.jsonl, by label. Path.glob would skip a folder it can't read;
-    here that fails the collection, so no store goes missing unnoticed."""
-    try:
-        stores = sorted((root / "repos").iterdir())
-    except FileNotFoundError, NotADirectoryError:
-        return []
-    except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{root / 'repos'}: {error.strerror}") from None
-    found = []
-    for store in stores:
-        path = store / "claude" / "ledger.jsonl"
-        try:
-            path.stat()
-        except FileNotFoundError, NotADirectoryError:
-            continue  # not a Claude store
-        except OSError as error:
-            raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
-        found.append(path)
-    return found
-
-
-def read_bytes(path: Path) -> bytes:
-    try:
-        return path.read_bytes()
-    except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
+    """Every repos/<label>/claude/ledger.jsonl, by label; an unreadable store fails, so none goes missing."""
+    return [path for store in listing(root / "repos") if present(path := store / "claude" / "ledger.jsonl")]
 
 
 def parse(store: str, source: str, data: bytes) -> list[LedgerRead]:
     """Every row of one ledger, or a refusal: no line is skipped."""
-    lines = data.split(b"\n")
-    if lines[-1]:
-        raise CollectError(ErrorCode.TRUNCATED_LINE, f"{source}:{len(lines)} has no line end")
-    found = []
-    for number, line in enumerate(lines[:-1], 1):
-        try:
-            raw = json.loads(line)
-        # json's errors and a line that is not UTF-8 (UnicodeDecodeError) are both ValueErrors.
-        except ValueError:
-            raise CollectError(ErrorCode.MALFORMED_LINE, f"{source}:{number} is not JSON") from None
-        place = {"source": source, "line": number}
-        try:
-            found.append(LedgerRead.model_validate({"store": store, "place": place, "record": raw, "row": raw}))
-        except ValidationError:
-            keys = sorted(raw) if isinstance(raw, dict) else [type(raw).__name__]
-            fingerprint = hashlib.sha256(json.dumps(keys).encode()).hexdigest()[:12]
-            msg = f"{source}:{number} has unknown schema fingerprint {fingerprint} for {ADAPTER}"
-            raise CollectError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
-    return found
+    return [
+        conform(
+            LedgerRead,
+            f"{source}:{number}",
+            {"store": store, "place": {"source": source, "line": number}, "record": raw, "row": raw},
+        )
+        for number, raw in json_lines(source, data)
+    ]
 
 
 def session_class(variants: int, stores: int, ended: float | None, span: Window) -> RowClass:
@@ -242,19 +216,22 @@ def framed(data: bytes) -> bytes:
     return len(data).to_bytes(8, "big") + data
 
 
-def build(root: Path, ledgers: list[Path], span: Window, into: Path) -> str:
-    """Write evidence.json, collection.json and a copy of every source into a private folder; return the
-    collection id, which hashes only what the folder holds, so a reader can check it from the folder alone."""
-    sources: dict[str, bytes] = {}
+def build(root: Path, ledgers: list[Path], options: TeReviewCollect, span: Window, into: Path) -> str:
+    """Write evidence.json, collection.json, worksheet.json and a copy of every source into a private folder;
+    return the collection id, which hashes only what the folder holds (the worksheet aside, which the owner
+    fills), so a reader can check it from the folder alone."""
+    origins = {path.relative_to(root).as_posix(): path for path in ledgers}
+    origins.update(te_judgment.gather(root, options))
+    origins = dict(sorted(origins.items()))  # one order for the bundle, the id and the candidates
+    sources = {source: read_bytes(path) for source, path in origins.items()}
     reads = []
     for path in ledgers:
         source = path.relative_to(root).as_posix()
-        sources[source] = read_bytes(path)
         reads.extend(parse(path.parent.parent.relative_to(root).as_posix(), source, sources[source]))
-    evidence = (Evidence(rows=classify(reads, span)).model_dump_json(indent=2) + "\n").encode()
+    judged = te_judgment.judge(classify(reads, span), sources, origins, span)
+    evidence = (judged.model_dump_json(indent=2) + "\n").encode()
     write(into, "evidence.json", evidence)
-    for path in ledgers:
-        source = path.relative_to(root).as_posix()
+    for source, path in origins.items():
         if read_bytes(path) != sources[source]:
             raise CollectError(ErrorCode.SOURCE_CHANGED, f"{source} changed while it was read")
     versions = Versions(adapter=ADAPTER, schema=SCHEMA, mirrors=list(MIRRORS))
@@ -283,6 +260,8 @@ def build(root: Path, ledgers: list[Path], span: Window, into: Path) -> str:
         versions=versions,
     )
     write(into, "collection.json", (collection.model_dump_json(indent=2, by_alias=True) + "\n").encode())
+    sheet = te_judgment.worksheet(collection.collection_id, judged)
+    write(into, "worksheet.json", (sheet.model_dump_json(indent=2) + "\n").encode())
     return collection.collection_id
 
 
@@ -302,7 +281,7 @@ def collect(options: TeReviewCollect) -> None:
     try:
         staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))  # 0700, and only this run's
         made.append(staging)
-        collection_id = build(root, ledgers, span, staging)
+        collection_id = build(root, ledgers, options, span, staging)
         staging.rename(out)  # onto the empty reserved folder; fails if anything was put in it
         made.remove(staging)
         write(out, "COMPLETE", (collection_id + "\n").encode())
