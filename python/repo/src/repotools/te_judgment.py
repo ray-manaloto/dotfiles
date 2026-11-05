@@ -19,7 +19,7 @@ from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from .models import (
     CadenceLabel,
@@ -182,9 +182,21 @@ def store_of(source: str) -> str:
     return "/".join(source.split("/")[:2])
 
 
-def sealed[M: BaseModel](candidate: M) -> M:
-    """candidate with its digest: sha256 of its canonical JSON, without its ref and digest."""
-    body = candidate.model_dump(mode="json", exclude={"ref", "digest"})
+def content(receipt: EvidenceReceipt) -> dict[str, object]:
+    """What a receipt is, apart from the ref and copy path a collection numbers it by."""
+    return receipt.model_dump(mode="json", include={"kind", "timestamp", "sha256"})
+
+
+def sealed[M: (RedirectCandidate, FactCandidate, ImportCandidate, ImportFoldCandidate)](
+    candidate: M, receipts: dict[str, EvidenceReceipt], **named: object
+) -> M:
+    """candidate with its digest: sha256 of its canonical JSON, without its ref and digest.
+
+    A collection numbers receipts and rows in order, so one more of them renumbers the rest: the digest names
+    each receipt by its content, and each field in named (a field that holds a ref) by what that ref names.
+    """
+    body = candidate.model_dump(mode="json", exclude={"ref", "digest", "receipts", *named}) | named
+    body["receipts"] = sorted((content(receipts[ref]) for ref in candidate.receipts), key=json.dumps)
     data = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
     return candidate.model_copy(update={"digest": hashlib.sha256(data).hexdigest()})
 
@@ -343,6 +355,7 @@ def folds(
     rows: list[EvidenceRow],
     linked: dict[str, list[tuple[str, ReceiptKind]]],
     refs: Iterator[str],
+    receipts: dict[str, EvidenceReceipt],
 ) -> list[ImportFoldCandidate]:
     """The live folds an import's process ran after it finished: receipted, or paid and near (plugin/history.py)."""
     found = []
@@ -369,7 +382,10 @@ def folds(
                             folded_at=row.row["folded_at"],
                             provenance=provenance,
                             receipts=both,
-                        )
+                        ),
+                        receipts,
+                        import_ref=done.digest,
+                        session_ref=row.model_dump(mode="json", exclude={"ref"}),
                     )
                 )
     return found
@@ -452,6 +468,7 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
                 links=named,
             )
         )
+    contents = {receipt.ref: receipt for receipt in frozen}
     redirect_candidates = [
         sealed(
             RedirectCandidate(
@@ -466,7 +483,8 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
                 receipts=receipted(linked, ref, ReceiptKind.host_delivery),
                 state=redirect_state(event, receipted(linked, ref, ReceiptKind.host_delivery)),
                 event=event.model_dump(mode="json", by_alias=True, exclude_unset=True),
-            )
+            ),
+            contents,
         )
         for ref, (line, event) in redirects.items()
     ]
@@ -480,7 +498,8 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
                 if receipted(linked, ref, ReceiptKind.fact_snapshot)
                 else FactProvenance.missing,
                 **fact,
-            )
+            ),
+            contents,
         )
         for ref, fact in facts.items()
     ]
@@ -495,7 +514,8 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
                 sessions=history.imported,
                 receipts=receipted(linked, ref, ReceiptKind.history_fold),
                 history=history,
-            )
+            ),
+            contents,
         )
         for ref, (store, history) in states.items()
     ]
@@ -504,7 +524,7 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
         if any(receipt.kind is ReceiptKind.history_fold for receipt in frozen)
         else ImportCoverage.observed_current_only
     )
-    import_folds = folds(import_candidates, rows, linked, refs)
+    import_folds = folds(import_candidates, rows, linked, refs, contents)
     return Evidence(
         rows=rows,
         receipts=frozen,

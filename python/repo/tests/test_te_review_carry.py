@@ -372,3 +372,58 @@ def test_a_fold_whose_import_changed_in_b_is_not_the_same_fold(
     assert written["not_run"] == read(b, "worksheet.json")["not_run"]
     from_ref = json.loads(sheet.read_text())["not_run"][0]["ref"]
     assert summary["not_carried"] == [{"section": "not_run", "from_ref": from_ref, "reason": "ref_not_in_b"}]
+
+
+def test_a_real_work_receipt_added_in_b_leaves_every_judged_candidate_the_same(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    stores(te)
+    receipts = manifest(tmp_path / "r", USE)
+    a = tmp_path / "a"
+    run(te, a, "--receipts", str(receipts))
+    sheet = fill(a, tmp_path / "a-filled.json", "learned_facts", {"m1": "ok"})
+    # B's manifest lists a real_work receipt for s1 first: the fact's use receipt is numbered after it.
+    (tmp_path / "r" / "work.json").write_bytes(b"work\n")
+    work = {
+        "path": "work.json",
+        "sha256": hashlib.sha256(b"work\n").hexdigest(),
+        "timestamp": "2026-10-06T09:00:00-05:00",
+        "kind": "real_work",
+        "sessions": ["s1"],
+    }
+    later = tmp_path / "r" / "later.json"
+    later.write_text(json.dumps({"receipts": [work, *json.loads(receipts.read_text())["receipts"]]}))
+    b = tmp_path / "b"
+    run(te, b, "--receipts", str(later))
+    written = carry(a, b, tmp_path / "carried.json", "--worksheet", str(sheet))
+    summary = json.loads(capsys.readouterr().out)
+    (m1,) = [found for found in read(b, "evidence.json")["facts"] if found["fact_id"] == "m1"]
+    (old,) = [found for found in read(a, "evidence.json")["facts"] if found["fact_id"] == "m1"]
+    assert m1["receipts"] != old["receipts"]
+    assert summary["not_carried"] == []
+    assert {entry["ref"]: entry["verdict"] for entry in written["learned_facts"]}[m1["ref"]] == "ok"
+
+
+def test_a_judged_fold_whose_rows_are_renumbered_in_b_is_still_carried(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    a, _ = folds(te, tmp_path)
+    sheet = read(a, "worksheet.json")
+    (entry,) = [found for found in sheet["imports"] if found["entry"] == "fold"]
+    entry["verdict"] = "candidate"
+    path = tmp_path / "a-fold.json"
+    path.write_text(json.dumps(sheet))
+    # A store that sorts first, and one more event before the import: the fold's session and import refs move.
+    ledger(te, "0-new", [session("s0", START + 3600)])
+    state(te, "0-new", "events.jsonl", [redirect("nudge", "s0", START + 30)])
+    b = tmp_path / "b"
+    run(te, b, "--receipts", str(tmp_path / "r" / "manifest.json"))
+    written = carry(a, b, tmp_path / "carried.json", "--worksheet", str(path))
+    summary = json.loads(capsys.readouterr().out)
+    (fold,) = read(b, "evidence.json")["import_folds"]
+    (old,) = read(a, "evidence.json")["import_folds"]
+    assert (fold["session_ref"], fold["import_ref"]) != (old["session_ref"], old["import_ref"])
+    assert summary["not_carried"] == []
+    assert [found["verdict"] for found in written["imports"] if found["ref"] == fold["ref"]] == ["candidate"]
