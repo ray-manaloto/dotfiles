@@ -46,6 +46,8 @@ source = ["src/repotools", "*/python/repo/src/repotools"]
 [tool.datamodel-codegen]
 input = "schema/repotools.schema.json"
 input-file-type = "jsonschema"
+# Python names for the camelCase keys of a Claude Code transcript record.
+aliases = "schema/aliases.json"
 output = "src/repotools/models.py"
 output-model-type = "pydantic_v2.BaseModel"
 enable-faux-immutability = true
