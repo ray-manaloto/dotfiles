@@ -432,6 +432,7 @@ class TeReviewCommand(StrEnum):
 
     collect = "collect"
     report = "report"
+    receipts = "receipts"
 
 
 class TeReviewCollect(BaseModel):
@@ -474,6 +475,183 @@ class TeReviewCollect(BaseModel):
     synthetic_manifest: str | None = None
     """
     A receipt manifest of synthetic receipts only, naming the synthetic sessions
+    """
+
+
+class TeReviewReceiptsCommand(StrEnum):
+    """
+    The te-review receipts subcommands, the word after receipts.
+    """
+
+    draft = "draft"
+
+
+class TeReviewReceiptsDraft(BaseModel):
+    """
+    Draft, create-only, the receipt manifest collect --receipts reads; transcripts and TE state stay unchanged.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    since: date
+    """
+    First calendar day of the window, inclusive
+    """
+    until: date
+    """
+    Last calendar day of the window, inclusive
+    """
+    tz: str
+    """
+    IANA time zone the calendar days are read in, such as America/Chicago
+    """
+    out: str
+    """
+    The manifest to write, an absolute path that must not exist
+    """
+    te_root: str | None = None
+    """
+    TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)
+    """
+    transcripts: str | None = None
+    """
+    Claude Code's transcript folder (default ~/.claude/projects), searched at any depth for <session id>.jsonl
+    """
+    synthetic_manifest: str | None = None
+    """
+    The synthetic manifest collect will be given; its sessions get no real_work receipt
+    """
+
+
+class TranscriptAttachment(BaseModel):
+    """
+    A Claude Code transcript attachment; only a hook's output is read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    type: str
+    """
+    hook_additional_context, hook_system_message, or another kind
+    """
+    content: Any | None = None
+    """
+    A list of strings for additional context, a string for a system message
+    """
+    tool_use_id: Annotated[str | None, Field(alias="toolUseID")] = None
+    """
+    The tool call the hook ran on; SessionStart at session start
+    """
+    hook_event: Annotated[str | None, Field(alias="hookEvent")] = None
+    """
+    The hook event, such as PostToolUse
+    """
+    stdout: str | None = None
+    """
+    A hook_success: what the hook printed
+    """
+
+
+class HookSpecificOutput(BaseModel):
+    """
+    A hook's event-specific output; only the additional context is read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    additional_context: Annotated[str | None, Field(alias="additionalContext")] = None
+    """
+    The context the host adds for the agent
+    """
+
+
+class TranscriptRecord(BaseModel):
+    """
+    One line of a Claude Code transcript, <session id>.jsonl; only attachments are read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    type: str
+    """
+    The record type
+    """
+    timestamp: AwareDatetime | None = None
+    """
+    When it was recorded
+    """
+    attachment: TranscriptAttachment | None = None
+    """
+    An attachment record's attachment
+    """
+
+
+class DraftGap(StrEnum):
+    """
+    Why a session in the window got no real_work receipt.
+    """
+
+    synthetic = "synthetic"
+    no_transcript = "no_transcript"
+    many_transcripts = "many_transcripts"
+    ambiguous_session = "ambiguous_session"
+
+
+class DraftUncovered(BaseModel):
+    """
+    A session in the window left without a real_work receipt.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    session_id: str
+    """
+    The session
+    """
+    gap: DraftGap
+
+
+class DraftCounts(BaseModel):
+    """
+    The drafted receipts, by kind.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    real_work: int
+    host_delivery: int
+    fact_injection: int
+
+
+class DraftSummary(BaseModel):
+    """
+    What te-review receipts draft wrote, printed as one JSON line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    counts: DraftCounts
+    without_receipt: list[DraftUncovered]
+    """
+    The window's sessions with no real_work receipt, and why
+    """
+    undelivered_nudges: int
+    """
+    Non-shadow nudges of the window's sessions with no host_delivery receipt
     """
 
 
@@ -2631,10 +2809,30 @@ type Options = (
     | MainGuardArmed
     | TeReviewCollect
     | TeReviewReport
+    | TeReviewReceiptsDraft
 )
 """
 What a repotools command parses from its arguments.
 """
+
+
+class HookOutput(BaseModel):
+    """
+    A hook's printed JSON output; only the notice and the context the host shows are read.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    system_message: Annotated[str | None, Field(alias="systemMessage")] = None
+    """
+    The notice the host shows the user
+    """
+    hook_specific_output: Annotated[HookSpecificOutput | None, Field(alias="hookSpecificOutput")] = None
+    """
+    The event's own output
+    """
 
 
 class Evidence(BaseModel):
@@ -2932,6 +3130,10 @@ class Repotools(BaseModel):
     task_event: TaskEvent | None = None
     te_review_command: TeReviewCommand | None = None
     te_review_collect: TeReviewCollect | None = None
+    te_review_receipts_command: TeReviewReceiptsCommand | None = None
+    te_review_receipts_draft: TeReviewReceiptsDraft | None = None
+    transcript_record: TranscriptRecord | None = None
+    draft_summary: DraftSummary | None = None
     coded_failure: CodedFailure | None = None
     session_row: SessionRow | None = None
     overhead_row: OverheadRow | None = None

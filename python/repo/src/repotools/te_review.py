@@ -33,6 +33,7 @@ from .models import (
     SourceFile,
     SourceLine,
     TeReviewCollect,
+    TeReviewReceiptsDraft,
     Versions,
     Window,
 )
@@ -99,7 +100,7 @@ CHARGE_CLASS = {
 }
 
 
-def window(options: TeReviewCollect) -> Window:
+def window(options: TeReviewCollect | TeReviewReceiptsDraft) -> Window:
     if options.until < options.since:
         msg = f"--until {options.until} is before --since {options.since}"
         raise TeReviewError(ErrorCode.BAD_WINDOW, msg)
@@ -117,7 +118,7 @@ def window(options: TeReviewCollect) -> Window:
     )
 
 
-def state_root(options: TeReviewCollect) -> Path:
+def state_root(options: TeReviewCollect | TeReviewReceiptsDraft) -> Path:
     """--te-root, else $TOKENECONOMIZER_HOME, else TokenEconomizer's default (plugin/paths.py state_root)."""
     root = options.te_root or os.environ.get("TOKENECONOMIZER_HOME") or Path.home() / ".tokeneconomizer"
     return Path(root).absolute()

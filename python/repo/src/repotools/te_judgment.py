@@ -121,8 +121,8 @@ def entries(manifests: dict[ManifestRole, bytes]) -> list[tuple[str, ManifestRol
     return found
 
 
-def gather(root: Path, options: TeReviewCollect) -> dict[str, Path]:
-    """Every state, manifest and receipt file the collection freezes, by its path under sources/."""
+def state_files(root: Path) -> dict[str, Path]:
+    """Every store's state files: events, history, injection and mechanism states, by path under root."""
     origins: dict[str, Path] = {}
     for store in (repo / "claude" for repo in listing(root / "repos")):
         names = [name for name in STATE if present(store / name)]
@@ -133,6 +133,12 @@ def gather(root: Path, options: TeReviewCollect) -> dict[str, Path]:
             if path.suffix == ".json"
         ]
         origins.update({(store / name).relative_to(root).as_posix(): store / name for name in names})
+    return origins
+
+
+def gather(root: Path, options: TeReviewCollect) -> dict[str, Path]:
+    """Every state, manifest and receipt file the collection freezes, by its path under sources/."""
+    origins = state_files(root)
     given = {ManifestRole.receipts: options.receipts, ManifestRole.synthetic: options.synthetic_manifest}
     manifests = {}
     for role, option in given.items():

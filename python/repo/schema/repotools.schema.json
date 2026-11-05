@@ -154,7 +154,8 @@
         { "$ref": "#/$defs/MainGuardRemove" },
         { "$ref": "#/$defs/MainGuardArmed" },
         { "$ref": "#/$defs/TeReviewCollect" },
-        { "$ref": "#/$defs/TeReviewReport" }
+        { "$ref": "#/$defs/TeReviewReport" },
+        { "$ref": "#/$defs/TeReviewReceiptsDraft" }
       ]
     },
     "Fingerprint": {
@@ -258,7 +259,7 @@
     "TeReviewCommand": {
       "description": "The te-review subcommands, the word after te-review.",
       "type": "string",
-      "enum": ["collect", "report"]
+      "enum": ["collect", "report", "receipts"]
     },
     "TeReviewCollect": {
       "description": "Freeze the TokenEconomizer Claude ledger rows of a window into a new, create-only evidence collection.",
@@ -290,6 +291,131 @@
         }
       },
       "required": ["since", "until", "tz", "out"],
+      "additionalProperties": false
+    },
+    "TeReviewReceiptsCommand": {
+      "description": "The te-review receipts subcommands, the word after receipts.",
+      "type": "string",
+      "enum": ["draft"]
+    },
+    "TeReviewReceiptsDraft": {
+      "description": "Draft, create-only, the receipt manifest collect --receipts reads; transcripts and TE state stay unchanged.",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First calendar day of the window, inclusive" },
+        "until": { "type": "string", "format": "date", "description": "Last calendar day of the window, inclusive" },
+        "tz": { "type": "string", "description": "IANA time zone the calendar days are read in, such as America/Chicago" },
+        "out": { "type": "string", "description": "The manifest to write, an absolute path that must not exist" },
+        "te_root": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+        },
+        "transcripts": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Claude Code's transcript folder (default ~/.claude/projects), searched at any depth for <session id>.jsonl"
+        },
+        "synthetic_manifest": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "The synthetic manifest collect will be given; its sessions get no real_work receipt"
+        }
+      },
+      "required": ["since", "until", "tz", "out"],
+      "additionalProperties": false
+    },
+    "TranscriptAttachment": {
+      "description": "A Claude Code transcript attachment; only a hook's output is read.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "hook_additional_context, hook_system_message, or another kind" },
+        "content": { "description": "A list of strings for additional context, a string for a system message" },
+        "toolUseID": { "type": ["string", "null"], "default": null, "description": "The tool call the hook ran on; SessionStart at session start" },
+        "hookEvent": { "type": ["string", "null"], "default": null, "description": "The hook event, such as PostToolUse" },
+        "stdout": { "type": ["string", "null"], "default": null, "description": "A hook_success: what the hook printed" }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "HookOutput": {
+      "description": "A hook's printed JSON output; only the notice and the context the host shows are read.",
+      "type": "object",
+      "properties": {
+        "systemMessage": { "type": ["string", "null"], "default": null, "description": "The notice the host shows the user" },
+        "hookSpecificOutput": {
+          "anyOf": [{ "$ref": "#/$defs/HookSpecificOutput" }, { "type": "null" }],
+          "default": null,
+          "description": "The event's own output"
+        }
+      },
+      "additionalProperties": true
+    },
+    "HookSpecificOutput": {
+      "description": "A hook's event-specific output; only the additional context is read.",
+      "type": "object",
+      "properties": {
+        "additionalContext": { "type": ["string", "null"], "default": null, "description": "The context the host adds for the agent" }
+      },
+      "additionalProperties": true
+    },
+    "TranscriptRecord": {
+      "description": "One line of a Claude Code transcript, <session id>.jsonl; only attachments are read.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "The record type" },
+        "timestamp": { "type": ["string", "null"], "format": "date-time", "default": null, "description": "When it was recorded" },
+        "attachment": {
+          "anyOf": [{ "$ref": "#/$defs/TranscriptAttachment" }, { "type": "null" }],
+          "default": null,
+          "description": "An attachment record's attachment"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "DraftGap": {
+      "description": "Why a session in the window got no real_work receipt.",
+      "type": "string",
+      "enum": ["synthetic", "no_transcript", "many_transcripts", "ambiguous_session"]
+    },
+    "DraftUncovered": {
+      "description": "A session in the window left without a real_work receipt.",
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string", "description": "The session" },
+        "gap": { "$ref": "#/$defs/DraftGap" }
+      },
+      "required": ["session_id", "gap"],
+      "additionalProperties": false
+    },
+    "DraftCounts": {
+      "description": "The drafted receipts, by kind.",
+      "type": "object",
+      "properties": {
+        "real_work": { "type": "integer" },
+        "host_delivery": { "type": "integer" },
+        "fact_injection": { "type": "integer" }
+      },
+      "required": ["real_work", "host_delivery", "fact_injection"],
+      "additionalProperties": false
+    },
+    "DraftSummary": {
+      "description": "What te-review receipts draft wrote, printed as one JSON line.",
+      "type": "object",
+      "properties": {
+        "counts": { "$ref": "#/$defs/DraftCounts" },
+        "without_receipt": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DraftUncovered" },
+          "description": "The window's sessions with no real_work receipt, and why"
+        },
+        "undelivered_nudges": {
+          "type": "integer",
+          "description": "Non-shadow nudges of the window's sessions with no host_delivery receipt"
+        }
+      },
+      "required": ["counts", "without_receipt", "undelivered_nudges"],
       "additionalProperties": false
     },
     "ErrorCode": {
@@ -1414,6 +1540,10 @@
     "task_event": { "$ref": "#/$defs/TaskEvent" },
     "te_review_command": { "$ref": "#/$defs/TeReviewCommand" },
     "te_review_collect": { "$ref": "#/$defs/TeReviewCollect" },
+    "te_review_receipts_command": { "$ref": "#/$defs/TeReviewReceiptsCommand" },
+    "te_review_receipts_draft": { "$ref": "#/$defs/TeReviewReceiptsDraft" },
+    "transcript_record": { "$ref": "#/$defs/TranscriptRecord" },
+    "draft_summary": { "$ref": "#/$defs/DraftSummary" },
     "coded_failure": { "$ref": "#/$defs/CodedFailure" },
     "session_row": { "$ref": "#/$defs/SessionRow" },
     "overhead_row": { "$ref": "#/$defs/OverheadRow" },
