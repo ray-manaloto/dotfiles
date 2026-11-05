@@ -109,9 +109,13 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.claude/CLAUDE.md/agents" = { block = '''
 @~/.config/agents/AGENTS.md
 ''' }
-# The path the shared file points at (#449). Folder links: ~/.config/agents holds only what dotfiles
-# delivers, so its subfolders need not stay real folders.
+# The paths the shared file and the skills point at (#449, #453). Folder links: ~/.config/agents holds only
+# what dotfiles delivers, so its subfolders need not stay real folders.
 "~/.config/agents/workflow" = { source = "unix/home/.config/agents/workflow", mode = "symlink" }
+"~/.config/agents/skills" = { source = "unix/home/.config/agents/skills", mode = "symlink" }
+# ticket-retro (#453): the user-scope skill, one folder for both agents; the LICENSE sits beside it in the source.
+"~/.claude/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+"~/.agents/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]

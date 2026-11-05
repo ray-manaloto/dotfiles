@@ -12,12 +12,16 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 SHARED = REPO / "unix/home/.config/agents/AGENTS.md"
 WORKFLOW = REPO / "unix/home/.config/agents/workflow"
+SKILLS = REPO / "unix/home/.config/agents/skills"
 ENTRIES = (
     "~/.config/agents/AGENTS.md",
     "~/.codex/AGENTS.md",
     "~/.gemini/GEMINI.md",
     "~/.claude/CLAUDE.md/agents",
     "~/.config/agents/workflow",
+    "~/.config/agents/skills",
+    "~/.claude/skills/ticket-retro",
+    "~/.agents/skills/ticket-retro",
 )
 # Frozen from the live source ranges in #449's brief before writing the shared file.
 TABS_SHA256 = "01ac699d9ef173bcb243c4ca126fb3b4ea41e4f317907a18a354503a0b1cc5b9"
@@ -156,6 +160,14 @@ class SharedAgentsInstallTest(unittest.TestCase):
         for path in paths:
             with self.subTest(path=path):
                 self.assertTrue((self.home / path.removeprefix("~/")).exists())
+
+    def test_the_skills_folder_resolves(self) -> None:
+        self.assertTrue((self.home / ".config/agents/skills/LICENSE").is_file())
+        for relative in (".claude/skills/ticket-retro", ".agents/skills/ticket-retro"):
+            with self.subTest(relative=relative):
+                path = self.home / relative
+                self.assertTrue(path.is_symlink())
+                self.assertEqual(path.resolve(), SKILLS / "ticket-retro")
 
 
 if __name__ == "__main__":
