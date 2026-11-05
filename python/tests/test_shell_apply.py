@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 UNIX_HOME = REPO / "unix/home"
-IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__")
+IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*")
 MISE = Path(shutil.which("mise") or "mise").resolve()
 
 STARTUP = (".zshenv", ".zprofile", ".zshrc")

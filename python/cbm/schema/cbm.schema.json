@@ -17,10 +17,13 @@
         "foreign_launcher",
         "installer_start_failed",
         "installer_failed",
+        "codex_hooks_seed_failed",
+        "codex_hook_migration_refused",
         "command_failed",
         "command_timeout",
         "invalid_json",
         "invalid_toml",
+        "unreadable_file",
         "invalid_mcp_response"
       ]
     },

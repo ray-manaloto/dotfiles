@@ -29,4 +29,15 @@ The same variable works with `cbm install`; only the exact value `1` opts in. Th
 changes to the live setup; it does not isolate the installer. `cbm verify` remains read-only
 and works from any directory without an opt-in.
 
+Codex hooks are supported only in `~/.codex/hooks.json`. When Codex is a selected client and that path
+holds nothing, install first creates it as `{"hooks": {}}`. This makes CBM's installer write its hooks
+there and move any old block out of `config.toml`. An existing file or link is never replaced. If the
+installer fails while `hooks.json` is there and a CBM hook is still in `config.toml`, install fails with
+`codex_hook_migration_refused`, exit code 1 and a final `failed` Done event. The installer's own Codex
+`agent_config` line (`op=hook_preflight` or `op=hook_install`) gives the reason; with no such line,
+the installer failed before its Codex step. The hook stays for you to remove. If the empty file cannot be
+created, install fails with `codex_hooks_seed_failed` before the installer runs. `cbm verify` fails
+`Codex config.toml has no CBM hooks; hooks.json holds them` while any CBM hook is in `config.toml`.
+See `docs/research/codebase-memory-mcp/install.md`.
+
 Upgrades are manual: see `docs/research/codebase-memory-mcp/upgrades.md`.

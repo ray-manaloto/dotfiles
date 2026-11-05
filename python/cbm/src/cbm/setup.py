@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import tomllib
+from collections.abc import Iterator
 from itertools import takewhile
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,20 @@ CLAUDE_HOOKS = {("SessionStart", m) for m in ("startup", "resume", "clear", "com
 }
 CODEX_HOOKS = {("SessionStart", "startup|resume|clear|compact"), ("SubagentStart", "*")}
 HOOK_TIMEOUT = 5
+# CBM 0.12.1 writes the Codex hooks to hooks.json only when stat() finds that file, and otherwise to a block in
+# config.toml (src/cli/cli.c:9736-9738, :9786-9798). Install seeds an empty one so the JSON layout is always used.
+CODEX_SEED = '{"hooks": {}}\n'
+# A hook command CBM owns in config.toml: its binary, by basename and optionally single-quoted or behind
+# PowerShell's "& ", running hook-augment (src/cli/config_toml_edit.c:3336-3361), or one of its two released
+# SessionStart echoes (:3362-3369).
+CODEX_TOML_HOOK = re.compile(r"(?:& )?(?P<q>'?)(?:.*[/\\])?codebase-memory-mcp(?:\.exe)?(?P=q) hook-augment")
+CODEX_TOML_LEGACY = {
+    'echo "Code discovery: prefer codebase-memory-mcp"',
+    (
+        'echo "Code discovery: prefer codebase-memory-mcp (search_graph, trace_path, get_code_snippet, query_graph, '
+        'search_code) over grep/file-read; run index_repository first if the project is not indexed."'
+    ),
+}
 # Each agent and the tool profile its Codex role launches.
 AGENTS = {"codebase-memory": "analysis", "codebase-memory-scout": "scout", "codebase-memory-auditor": "analysis"}
 # The 13 read-only tools of CBM 0.12.1's analysis profile (src/mcp/mcp.c); an agent may list only these.
@@ -120,6 +135,11 @@ def installed(cfg: Config) -> int:
     if not mine and (launcher.exists() or launcher.is_symlink()):
         msg = f"cbm: the launcher is not this package's symlink to {link}; move it away and rerun"
         raise InstallError(msg, launcher, code=ErrorCode.foreign_launcher)
+    hooks_json = cfg.home / ".codex/hooks.json"
+    if Client.codex in cfg.clients:
+        seed_codex_hooks(hooks_json)
+    # What upstream's stat() sees decides its hook file (cli.c:9736-9738): a dangling link sends it to config.toml.
+    json_layout = Client.codex in cfg.clients and hooks_json.exists()
     clients = ",".join(cfg.clients)
     try:
         if mine:
@@ -135,10 +155,57 @@ def installed(cfg: Config) -> int:
         if not launcher.is_symlink():  # back on every exit path, so configs keep working
             launcher.symlink_to(link)
     if done.returncode != 0:
+        config_toml = cfg.home / ".codex/config.toml"
+        if json_layout and codex_toml_hooks(read_toml(config_toml)):
+            # With hooks.json there, upstream takes its block out of config.toml (cli.c:9791-9796) unless its
+            # preflight refuses (:9743-9764) or the hook write fails (:9800-9801); both log an agent_config line
+            # (:8485-8498). The block is the owner's; cbm never edits it.
+            msg = (f"cbm: the CBM installer exited {done.returncode} with {hooks_json} present and a CBM hook "
+                   f"still in {config_toml}; its `error: agent_config agent=Codex CLI` line above (op=hook_preflight "
+                   "or op=hook_install) gives the reason, and no such line means it failed before its Codex step. "
+                   "Remove that hook by hand and rerun")  # fmt: skip
+            raise InstallError(msg, config_toml, code=ErrorCode.codex_hook_migration_refused)
         msg = f"cbm: the CBM installer exited {done.returncode}"
         raise InstallError(msg, link, code=ErrorCode.installer_failed)
     set_ = probe(cfg, "config", "set", "auto_index", "false")
     return int(not check("config set auto_index false", ok=set_.returncode == 0, detail=first_line(set_)))
+
+
+def seed_codex_hooks(path: Path) -> None:
+    """An empty Codex hooks.json when nothing is at the path; an existing file, or any link, is left as it is."""
+    if path.exists() or path.is_symlink():  # a file, or a link, dangling or not
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x") as file:  # O_EXCL: a file or link made since the check above is refused, never replaced
+            file.write(CODEX_SEED)
+    except OSError as error:  # ~/.codex is not a folder or cannot be written, or something appeared at the path
+        msg = f"cbm: cannot create the empty Codex hooks file: {error}"
+        raise InstallError(msg, path, code=ErrorCode.codex_hooks_seed_failed) from None
+
+
+def lifecycle_hooks(hooks: object) -> Iterator[tuple[str, str, dict[str, Any]]]:
+    """Each (event, matcher, hook) under an events table of group lists, in either Codex file; a level of any other
+    shape holds no hooks. A matcher that is not text is given as its repr, so the results stay hashable and sortable."""
+    for event, groups in hooks.items() if isinstance(hooks, dict) else ():
+        for group in groups if isinstance(groups, list) else ():
+            entries = group.get("hooks") if isinstance(group, dict) else None
+            matcher = group.get("matcher") if isinstance(group, dict) else None
+            for hook in entries if isinstance(entries, list) else ():
+                if isinstance(hook, dict):
+                    yield event, matcher if isinstance(matcher, str) else repr(matcher), hook
+
+
+def codex_toml_hooks(settings: dict[str, Any]) -> list[str]:
+    """The events of every CBM hook registered in Codex's config.toml, whatever form the TOML takes."""
+    return sorted({
+        event
+        for event, _, hook in lifecycle_hooks(settings.get("hooks"))
+        if any(
+            isinstance(command, str) and (CODEX_TOML_HOOK.fullmatch(command) or command in CODEX_TOML_LEGACY)
+            for command in (hook.get("command"), hook.get("command_windows"))
+        )
+    })  # fmt: skip
 
 
 def first_line(done: subprocess.CompletedProcess[str]) -> str:
@@ -162,22 +229,45 @@ def strip_jsonc(text: str) -> str:
     return "".join([*out, text[end:]])
 
 
-def read_json(path: Path, *, jsonc: bool = False) -> dict[str, Any]:
-    """The file's JSON (or JSONC) object; a missing file is empty, an unreadable one an error event."""
-    text = path.read_text() if path.is_file() else "{}"
-    if jsonc:
-        text = strip_jsonc(text)
+def read_config(path: Path) -> str | None:
+    """A config file's text; None when it is missing, or, after an unreadable_file event, when it cannot be read."""
+    if not path.exists():  # missing, or a dangling link (exists follows links)
+        return None
+    if not path.is_file():  # a folder, or a FIFO or device, which a read could block on forever
+        emit(Error(code=ErrorCode.unreadable_file, message="cbm: cannot read: not a regular file", path=path))
+        return None
     try:
-        return json.loads(text)
+        return path.read_text()
+    except (OSError, UnicodeDecodeError) as error:  # not this user's to read, removed since the check, or not UTF-8
+        emit(Error(code=ErrorCode.unreadable_file, message=f"cbm: cannot read: {error}", path=path))
+        return None
+
+
+def read_json(path: Path, *, jsonc: bool = False) -> dict[str, Any]:
+    """The file's JSON (or JSONC) object; a missing file is empty, one that cannot be read (read_config) or parsed,
+    or whose top level is not an object, an error event and empty."""
+    text = read_config(path)
+    if text is None:
+        return {}
+    try:
+        value = json.loads(strip_jsonc(text) if jsonc else text)
     except json.JSONDecodeError as error:
         emit(Error(code=ErrorCode.invalid_json, message=f"cbm: cannot parse JSON: {error}", path=path))
         return {}
+    if isinstance(value, dict):
+        return value
+    emit(Error(code=ErrorCode.invalid_json, message="cbm: expected a JSON object at the top level", path=path))
+    return {}
 
 
 def read_toml(path: Path) -> dict[str, Any]:
-    """The file's TOML table; a missing file is empty, an unreadable one an error event."""
+    """The file's TOML table; a missing file is empty, one that cannot be read (read_config) or parsed an error event
+    and empty. A TOML document is always a table at the top (tomllib's loads returns its root dict, _parser.py:219)."""
+    text = read_config(path)
+    if text is None:
+        return {}
     try:
-        return tomllib.loads(path.read_text()) if path.is_file() else {}
+        return tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         emit(Error(code=ErrorCode.invalid_toml, message=f"cbm: cannot parse TOML: {error}", path=path))
         return {}
@@ -259,21 +349,23 @@ def verify_claude(cfg: Config, target: str) -> list[bool]:
 
 def verify_codex(cfg: Config, target: str) -> list[bool]:
     codex = cfg.home / ".codex"
-    mcp = read_toml(codex / "config.toml").get("mcp_servers", {}).get("codebase-memory-mcp", {})
+    settings = read_toml(codex / "config.toml")
+    mcp = settings.get("mcp_servers", {}).get("codebase-memory-mcp", {})
     # CBM 0.12.1 lists the two namespace variables for Codex to forward if set (src/cli/cli.c:3890-3912).
     forwarded = mcp.get("env_vars") == ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]
     plain = mcp.get("command") == target and mcp.get("args") == [] and set(mcp) <= {"command", "args", "env_vars"}
     results = [check("Codex MCP entry names the launcher, no args or env", ok=plain and forwarded)]
     command = f"'{target}' hook-augment"
-    hooks = read_json(codex / "hooks.json").get("hooks", {})
     found = [
-        (event, group.get("matcher"))
-        for event, groups in hooks.items() for group in groups for hook in group.get("hooks", [])
-        if hook.get("command") == command
-        and hook.get("type") == "command" and hook.get("timeout") == HOOK_TIMEOUT
-    ]  # fmt: skip
+        (event, matcher)
+        for event, matcher, hook in lifecycle_hooks(read_json(codex / "hooks.json").get("hooks"))
+        if hook.get("command") == command and hook.get("type") == "command" and hook.get("timeout") == HOOK_TIMEOUT
+    ]
     exact = len(found) == len(CODEX_HOOKS) and set(found) == CODEX_HOOKS
     results.append(check("Codex has the SessionStart and SubagentStart CBM hooks", ok=exact, detail=str(sorted(found))))
+    in_toml = codex_toml_hooks(settings)
+    label = "Codex config.toml has no CBM hooks; hooks.json holds them"
+    results.append(check(label, ok=not in_toml, detail=", ".join(in_toml)))
     for name, profile in AGENTS.items():
         role = read_toml(codex / "agents" / f"{name}.toml")
         server = role.get("mcp_servers", {}).get("codebase-memory-mcp", {})

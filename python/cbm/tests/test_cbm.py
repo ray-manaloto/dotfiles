@@ -10,14 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from .conftest import CBM, TIMEOUT, calls, cbm, events, failed, launcher, link, mode, restored
+from .conftest import CBM, TIMEOUT, calls, cbm, check_after, events, failed, launcher, link, mode, restored
 
 SCOUT = "Codex agent codebase-memory-scout: launcher, scout profile, read-only CBM tools only"
 OPENCODE = ".config/opencode"
 OPENCODE_MCP = "OpenCode MCP entry names the launcher, no args or env"
 # Each client's check-name prefix and the folder its setup lives in.
 CLIENTS = {"claude": ("Claude", ".claude"), "codex": ("Codex", ".codex"), "opencode": ("OpenCode", OPENCODE)}
-CHECKS = 25
+CHECKS = 26
 
 
 def test_install_then_verify_pass(home: Path) -> None:
@@ -55,7 +55,7 @@ def test_install_then_verify_pass(home: Path) -> None:
 def test_verify_before_install_fails_and_reports_the_missing_launcher(home: Path) -> None:
     done = cbm("verify", cwd=home / "checkout")
     assert done.returncode == 1
-    assert len(failed(done.stdout)) == CHECKS - 1  # only "no CBM copy in ~/.local/bin" holds
+    assert len(failed(done.stdout)) == CHECKS - 2  # only "no CBM copy" and "no CBM hooks in config.toml" hold
     errors = events(done.stderr)
     assert {error["path"] for error in errors} == {str(launcher(home))}
     assert all(error["message"].startswith("cbm: codebase-memory-mcp could not run") for error in errors)
@@ -63,9 +63,9 @@ def test_verify_before_install_fails_and_reports_the_missing_launcher(home: Path
     assert events(done.stdout)[-1] == {
         "event": "done",
         "command": "verify",
-        "failed": CHECKS - 1,
+        "failed": CHECKS - 2,
         "outcome": "failed",
-        "message": f"cbm: verify failed: {CHECKS - 1} checks failed",
+        "message": f"cbm: verify failed: {CHECKS - 2} checks failed",
     }
     assert "install" not in calls(home)
 
@@ -285,23 +285,6 @@ def test_installer_never_sees_the_cbm_namespace(home: Path, monkeypatch: pytest.
     seen = set(json.loads((home / "install-env.json").read_text()))
     assert "HOME" in seen
     assert not seen & {"CBM_RUNTIME_DIR", "CBM_CACHE_DIR"}
-
-
-def check_after(home: Path, edit: Callable[[], object], failing: str) -> subprocess.CompletedProcess[str]:
-    """Install, apply one edit to the result, and expect verify to fail exactly that check."""
-    assert cbm("install", cwd=home / "checkout").returncode == 0, calls(home)
-    edit()
-    done = cbm("verify", cwd=home / "checkout")
-    assert done.returncode == 1
-    assert failed(done.stdout) == [failing]
-    assert events(done.stdout)[-1] == {
-        "event": "done",
-        "command": "verify",
-        "failed": 1,
-        "outcome": "failed",
-        "message": "cbm: verify failed: 1 check failed",
-    }
-    return done
 
 
 def test_missing_hook_group_fails(home: Path) -> None:
