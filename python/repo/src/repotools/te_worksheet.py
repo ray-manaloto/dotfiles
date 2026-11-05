@@ -300,8 +300,14 @@ def not_run(sheet: Worksheet, template: Worksheet, refs: Refs) -> NotRunCounts:
 def review(
     folder: Path, collection: Collection, evidence: Evidence, given: str | None
 ) -> tuple[Review, list[ConfigSetting] | None]:
-    """The review the worksheet records, and the decision's settings; refused unless it fits the evidence."""
-    sheet = read(folder, given)
+    """The review the worksheet given (else the collection's own) records, and the decision's settings."""
+    return checked(folder, collection, evidence, read(folder, given))
+
+
+def checked(
+    folder: Path, collection: Collection, evidence: Evidence, sheet: Worksheet
+) -> tuple[Review, list[ConfigSetting] | None]:
+    """The review sheet records, and the decision's settings; refused unless it fits the evidence."""
     if sheet.collection_id != collection.collection_id:
         raise TeReviewError(ErrorCode.STALE_WORKSHEET, "the worksheet judges another collection")
     template = worksheet(collection.collection_id, evidence)

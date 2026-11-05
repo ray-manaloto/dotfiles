@@ -433,6 +433,7 @@ class TeReviewCommand(StrEnum):
     collect = "collect"
     report = "report"
     receipts = "receipts"
+    carry = "carry"
 
 
 class TeReviewCollect(BaseModel):
@@ -2179,6 +2180,134 @@ class TeReviewReport(BaseModel):
     """
 
 
+class TeReviewCarry(BaseModel):
+    """
+    Write a new, create-only worksheet for collection B holding the judgments of A whose candidates B holds unchanged.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    from_: Annotated[str, Field(alias="from")]
+    """
+    Collection A, whose judgments are carried, an absolute path
+    """
+    to: str
+    """
+    Collection B, the newer one, an absolute path
+    """
+    out: str
+    """
+    The worksheet to write, an absolute path that must not exist
+    """
+    worksheet: str | None = None
+    """
+    A's filled worksheet, an absolute path; default: A's own
+    """
+
+
+class CarrySection(StrEnum):
+    """
+    A worksheet section a judgment is in, the decision included.
+    """
+
+    redirects = "redirects"
+    aborts = "aborts"
+    paid_facts = "paid_facts"
+    learned_facts = "learned_facts"
+    imports = "imports"
+    not_run = "not_run"
+    mcp_ab = "mcp_ab"
+    decision = "decision"
+
+
+class CarryReason(StrEnum):
+    """
+    Why a judgment of A was not carried: candidate changed, digest ambiguous, a ref not in B, or no digest.
+    """
+
+    changed = "changed"
+    ambiguous = "ambiguous"
+    ref_not_in_b = "ref_not_in_b"
+    no_candidate = "no_candidate"
+
+
+class Carried(BaseModel):
+    """
+    A judgment of A carried into the new worksheet, by its ref in A and in B.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    section: CarrySection
+    from_ref: str
+    """
+    The candidate in A
+    """
+    to_ref: str
+    """
+    The same candidate in B
+    """
+
+
+class NotCarried(BaseModel):
+    """
+    A judgment of A left out of the new worksheet, and why.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    section: CarrySection
+    from_ref: str | None
+    """
+    The candidate in A; null for mcp_ab and decision
+    """
+    reason: CarryReason
+
+
+class CarryConflict(BaseModel):
+    """
+    A judgment of A that B's own worksheet already judges otherwise; B's judgment stays, the owner settles it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    section: CarrySection
+    from_ref: str
+    """
+    The candidate in A
+    """
+    to_ref: str
+    """
+    The same candidate in B
+    """
+
+
+class CarrySummary(BaseModel):
+    """
+    What te-review carry wrote, printed as JSON: what it carried, left out and found in conflict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    collection_id: str
+    """
+    B's collection id, which the new worksheet carries
+    """
+    carried: list[Carried]
+    not_carried: list[NotCarried]
+    conflicts: list[CarryConflict]
+
+
 class PublicFailure(BaseModel):
     """
     Why te-review report stopped, in public mode: the code only.
@@ -2814,6 +2943,7 @@ type Options = (
     | TeReviewCollect
     | TeReviewReport
     | TeReviewReceiptsDraft
+    | TeReviewCarry
 )
 """
 What a repotools command parses from its arguments.
@@ -3152,6 +3282,8 @@ class Repotools(BaseModel):
     injection_state: InjectionState | None = None
     worksheet: Worksheet | None = None
     te_review_report: TeReviewReport | None = None
+    te_review_carry: TeReviewCarry | None = None
+    carry_summary: CarrySummary | None = None
     public_failure: PublicFailure | None = None
     public_report: PublicReport | None = None
     private_report: PrivateReport | None = None

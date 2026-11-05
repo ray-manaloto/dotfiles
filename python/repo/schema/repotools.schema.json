@@ -155,7 +155,8 @@
         { "$ref": "#/$defs/MainGuardArmed" },
         { "$ref": "#/$defs/TeReviewCollect" },
         { "$ref": "#/$defs/TeReviewReport" },
-        { "$ref": "#/$defs/TeReviewReceiptsDraft" }
+        { "$ref": "#/$defs/TeReviewReceiptsDraft" },
+        { "$ref": "#/$defs/TeReviewCarry" }
       ]
     },
     "Fingerprint": {
@@ -259,7 +260,7 @@
     "TeReviewCommand": {
       "description": "The te-review subcommands, the word after te-review.",
       "type": "string",
-      "enum": ["collect", "report", "receipts"]
+      "enum": ["collect", "report", "receipts", "carry"]
     },
     "TeReviewCollect": {
       "description": "Freeze the TokenEconomizer Claude ledger rows of a window into a new, create-only evidence collection.",
@@ -1178,6 +1179,73 @@
       "required": ["evidence"],
       "additionalProperties": false
     },
+    "TeReviewCarry": {
+      "description": "Write a new, create-only worksheet for collection B holding the judgments of A whose candidates B holds unchanged.",
+      "type": "object",
+      "properties": {
+        "from": {"type": "string", "description": "Collection A, whose judgments are carried, an absolute path"},
+        "to": {"type": "string", "description": "Collection B, the newer one, an absolute path"},
+        "out": {"type": "string", "description": "The worksheet to write, an absolute path that must not exist"},
+        "worksheet": {"type": ["string", "null"], "default": null, "description": "A's filled worksheet, an absolute path; default: A's own"}
+      },
+      "required": ["from", "to", "out"],
+      "additionalProperties": false
+    },
+    "CarrySection": {
+      "description": "A worksheet section a judgment is in, the decision included.",
+      "type": "string",
+      "enum": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"]
+    },
+    "CarryReason": {
+      "description": "Why a judgment of A was not carried: candidate changed, digest ambiguous, a ref not in B, or no digest.",
+      "type": "string",
+      "enum": ["changed", "ambiguous", "ref_not_in_b", "no_candidate"]
+    },
+    "Carried": {
+      "description": "A judgment of A carried into the new worksheet, by its ref in A and in B.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": "string", "description": "The candidate in A"},
+        "to_ref": {"type": "string", "description": "The same candidate in B"}
+      },
+      "required": ["section", "from_ref", "to_ref"],
+      "additionalProperties": false
+    },
+    "NotCarried": {
+      "description": "A judgment of A left out of the new worksheet, and why.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": ["string", "null"], "description": "The candidate in A; null for mcp_ab and decision"},
+        "reason": {"$ref": "#/$defs/CarryReason"}
+      },
+      "required": ["section", "from_ref", "reason"],
+      "additionalProperties": false
+    },
+    "CarryConflict": {
+      "description": "A judgment of A that B's own worksheet already judges otherwise; B's judgment stays, the owner settles it.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": "string", "description": "The candidate in A"},
+        "to_ref": {"type": "string", "description": "The same candidate in B"}
+      },
+      "required": ["section", "from_ref", "to_ref"],
+      "additionalProperties": false
+    },
+    "CarrySummary": {
+      "description": "What te-review carry wrote, printed as JSON: what it carried, left out and found in conflict.",
+      "type": "object",
+      "properties": {
+        "collection_id": {"type": "string", "description": "B's collection id, which the new worksheet carries"},
+        "carried": {"type": "array", "items": {"$ref": "#/$defs/Carried"}},
+        "not_carried": {"type": "array", "items": {"$ref": "#/$defs/NotCarried"}},
+        "conflicts": {"type": "array", "items": {"$ref": "#/$defs/CarryConflict"}}
+      },
+      "required": ["collection_id", "carried", "not_carried", "conflicts"],
+      "additionalProperties": false
+    },
     "PublicFailure": {
       "description": "Why te-review report stopped, in public mode: the code only.",
       "type": "object",
@@ -1562,6 +1630,8 @@
     "injection_state": { "$ref": "#/$defs/InjectionState" },
     "worksheet": { "$ref": "#/$defs/Worksheet" },
     "te_review_report": { "$ref": "#/$defs/TeReviewReport" },
+    "te_review_carry": { "$ref": "#/$defs/TeReviewCarry" },
+    "carry_summary": { "$ref": "#/$defs/CarrySummary" },
     "public_failure": { "$ref": "#/$defs/PublicFailure" },
     "public_report": { "$ref": "#/$defs/PublicReport" },
     "private_report": { "$ref": "#/$defs/PrivateReport" }
