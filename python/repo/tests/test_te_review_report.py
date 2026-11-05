@@ -62,12 +62,9 @@ def test_without_receipts_the_headline_cohort_is_empty_and_its_share_unknown(
     assert sum(first.values()) == 2
 
 
-def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+MIXED = (
     # D1 and D5: unclassified, fallback-priced and failed sessions with their charges, and an unmatched charge.
-    out = frozen(
-        tmp_path,
+    (
         session("s1", START, effective_tokens=1000.0),
         charge("s1", "j1", START, tokens=13.0),
         session("s2", START, priced_by="fallback", effective_tokens=700.0),
@@ -76,20 +73,45 @@ def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
         session("s3", START, error="Traceback", effective_tokens=400.0),
         charge("s3", "j4", START, tokens=17.0),
         charge("gone", "j5", START, tokens=5.0),
-    )
-    full = private(capsys, out)
-    fraction = full["selected"]["share"]
-    assert fraction == pytest.approx(62 / 2162)
-    shown = report(capsys, out)
-    # Each session's charges count with it, so no reason's total is overhead alone; rows stay per row.
-    totals = {row["reason"]: (row["rows"], row["recorded_tokens"]) for row in shown["excluded"] if row["rows"]}
-    assert totals == {
-        "UNMATCHED": (1, 5.0),
+    ),
+    62 / 2162,
+    {
+        "UNMATCHED": (1, None),
         "ERROR": (1, 417.0),
         "FALLBACK_PRICING": (1, 732.0),
         "UNCLASSIFIED": (1, 1013.0),
-        "SESSION_EXCLUDED": (4, 0.0),
-    }
+        "SESSION_EXCLUDED": (4, None),
+    },
+)
+NO_USAGE = (
+    # D6: sessions with no recorded usage bring only their charges, which alone would be the selected numerator.
+    (
+        session("s1", START, effective_tokens=1000.0),
+        session("s2", START, priced_by="no_usage", effective_tokens=None),
+        charge("s2", "j1", START, tokens=13.0),
+        session("s3", START, error="transcript unreadable", effective_tokens=None),
+        charge("s3", "j2", START, tokens=7.0),
+    ),
+    20 / 1020,
+    {"MISSING_USAGE": (1, None), "ERROR": (1, None), "UNCLASSIFIED": (1, 1000.0), "SESSION_EXCLUDED": (2, None)},
+)
+
+
+@pytest.mark.parametrize(("rows", "fraction", "totals"), [MIXED, NO_USAGE], ids=["mixed-reasons", "no-usage"])
+def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    rows: tuple[dict[str, Any], ...],
+    fraction: float,
+    totals: dict[str, tuple[int, float | None]],
+) -> None:
+    out = frozen(tmp_path, *rows)
+    full = private(capsys, out)
+    assert full["selected"]["share"] == pytest.approx(fraction)
+    shown = report(capsys, out)
+    # Each session's charges count with it (D5); a reason with no effective tokens shows no total (D6).
+    assert {row["reason"]: (row["rows"], row["recorded_tokens"]) for row in shown["excluded"] if row["rows"]} == totals
+    assert shown["withheld"] == "a reason with no effective tokens shows no total; that spend is only in --private"
     seen = [n for n in numbers(shown) if n]
     assert not [n for n in seen if n == pytest.approx(fraction)]
     for a in seen:

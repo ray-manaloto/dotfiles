@@ -1115,7 +1115,7 @@
       "properties": {
         "reason": {"$ref": "#/$defs/Exclusion"},
         "rows": {"type": "integer", "description": "Rows"},
-        "recorded_tokens": {"type": ["number", "null"], "description": "Finite effective and recognized overhead tokens of each session here with its charges (D5); null if not finite"},
+        "recorded_tokens": {"type": ["number", "null"], "description": "Effective and overhead tokens of each session here with its charges (D5); null: not finite or no effective (D6)"},
         "invalid_amounts": {"type": "integer", "description": "Amounts left out of the total, not a finite number"}
       },
       "required": ["reason", "rows", "recorded_tokens", "invalid_amounts"],
@@ -1154,9 +1154,10 @@
         "session_classes": {"type": "array", "items": {"$ref": "#/$defs/ClassCount"}, "description": "Selected sessions by class"},
         "cadence": {"$ref": "#/$defs/Cadence"},
         "policy_era_candidates": {"type": "array", "items": {"$ref": "#/$defs/EraCandidate"}, "description": "Timestamp groups only"},
-        "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"}
+        "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"},
+        "withheld": {"const": "a reason with no effective tokens shows no total; that spend is only in --private", "description": "D6: excluded spend public leaves out, an exception to B3"}
       },
-      "required": ["scope", "label", "since", "until", "headline", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys"],
+      "required": ["scope", "label", "since", "until", "headline", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld"],
       "additionalProperties": false
     },
     "AllKeys": {

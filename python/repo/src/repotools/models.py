@@ -2221,7 +2221,7 @@ class PublicExcludedCount(BaseModel):
     """
     recorded_tokens: float | None
     """
-    Finite effective and recognized overhead tokens of each session here with its charges (D5); null if not finite
+    Effective and overhead tokens of each session here with its charges (D5); null: not finite or no effective (D6)
     """
     invalid_amounts: int
     """
@@ -2300,6 +2300,10 @@ class PublicReport(BaseModel):
     unknown_keys: Annotated[str, Field(pattern="^unknown keys: [0-9]+ \\(excluded from public totals\\)$")]
     """
     How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out
+    """
+    withheld: Literal["a reason with no effective tokens shows no total; that spend is only in --private"]
+    """
+    D6: excluded spend public leaves out, an exception to B3
     """
 
 

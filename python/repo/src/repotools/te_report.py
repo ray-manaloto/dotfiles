@@ -240,13 +240,14 @@ def excluded(
 
 def combined(counts: list[ExcludedCount]) -> list[PublicExcludedCount]:
     """D1: public shows each reason's recorded spend as one total; the effective and overhead split would let
-    a reader rebuild the private selected share."""
+    a reader rebuild the private selected share, and so would a total with no effective tokens (D6)."""
     return [
         PublicExcludedCount(
             reason=count.reason,
             rows=count.rows,
+            # D6: with no effective tokens the total is overhead alone, part of the selected numerator.
             recorded_tokens=None
-            if count.effective_tokens is None or count.overhead_tokens is None
+            if not count.effective_tokens or count.overhead_tokens is None
             else total(count.effective_tokens + count.overhead_tokens),
             invalid_amounts=count.invalid_amounts,
         )
@@ -303,6 +304,7 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
             for day, count in sorted(days.items(), key=lambda item: (item[0] is None, item[0] or date.min))
         ],
         unknown_keys=f"unknown keys: {len(unknown_keys(records))} (excluded from public totals)",
+        withheld="a reason with no effective tokens shows no total; that spend is only in --private",
     )
     return PrivateReport(
         collection_id=collection.collection_id,
