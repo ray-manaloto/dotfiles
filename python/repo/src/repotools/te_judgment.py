@@ -67,7 +67,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import CollectError, conform, json_file, json_lines, listing, present, read_bytes
+from .te_io import TeReviewError, conform, json_file, json_lines, listing, present, read_bytes
 
 # How long after an import finishes its process still folds live sessions: plugin/history.py _run_locked
 # sets finished, then folds the sessions that waited for the fold lock in the same process.
@@ -90,8 +90,8 @@ IMPORT_NOTE = {
 }
 
 
-def refuse(error: str) -> CollectError:
-    return CollectError(ErrorCode.BAD_RECEIPT, error)
+def refuse(error: str) -> TeReviewError:
+    return TeReviewError(ErrorCode.BAD_RECEIPT, error)
 
 
 def manifest(role: ManifestRole, data: bytes) -> ReceiptManifest:
@@ -419,7 +419,7 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
     for _, _, receipt, bundle in receipts:
         if hashlib.sha256(sources[bundle]).hexdigest() != receipt.sha256:
             msg = f"receipt {origins[bundle]} does not have sha256 {receipt.sha256}"
-            raise CollectError(ErrorCode.RECEIPT_MISMATCH, msg)
+            raise TeReviewError(ErrorCode.RECEIPT_MISMATCH, msg)
     proof = cadence_receipt(sources)
     start, end = span.start.timestamp(), span.end.timestamp()
     refs = (f"C{number:05d}" for number in itertools.count(1))

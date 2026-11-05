@@ -431,6 +431,7 @@ class TeReviewCommand(StrEnum):
     """
 
     collect = "collect"
+    report = "report"
 
 
 class TeReviewCollect(BaseModel):
@@ -478,7 +479,7 @@ class TeReviewCollect(BaseModel):
 
 class ErrorCode(StrEnum):
     """
-    Why te-review collect stopped; it writes nothing when it does.
+    Why a te-review command stopped; collect writes nothing when it does.
     """
 
     OUT_EXISTS = "OUT_EXISTS"
@@ -493,6 +494,12 @@ class ErrorCode(StrEnum):
     MALFORMED_FILE = "MALFORMED_FILE"
     RECEIPT_MISMATCH = "RECEIPT_MISMATCH"
     BAD_RECEIPT = "BAD_RECEIPT"
+    RELATIVE_PATH = "RELATIVE_PATH"
+    BAD_MODE = "BAD_MODE"
+    NOT_COMPLETE = "NOT_COMPLETE"
+    BAD_BUNDLE = "BAD_BUNDLE"
+    HASH_MISMATCH = "HASH_MISMATCH"
+    BAD_ARGUMENTS = "BAD_ARGUMENTS"
 
 
 class CodedFailure(BaseModel):
@@ -1009,7 +1016,7 @@ class ManifestRole(StrEnum):
     synthetic = "synthetic"
 
 
-class Cadence(IntEnum):
+class ProposeEvery(IntEnum):
     """
     microskills_propose_every: sessions between proposer runs.
     """
@@ -1059,11 +1066,11 @@ class CadenceReceipt(BaseModel):
     """
     When te config set --global changed the cadence
     """
-    before: Cadence | None
+    before: ProposeEvery | None
     """
     The proven cadence before the change, if any
     """
-    after: Cadence
+    after: ProposeEvery
     proof: CadenceProof
     process_started: AwareDatetime
     """
@@ -1982,6 +1989,378 @@ class Worksheet(BaseModel):
     decision: WorksheetDecision
 
 
+class TeReviewReport(BaseModel):
+    """
+    Print the overhead accounting of a frozen te-review collection.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    evidence: str
+    """
+    The collection directory, an absolute path
+    """
+    public: bool = False
+    """
+    Print only the public report (the default)
+    """
+    private: bool = False
+    """
+    Print the private report, with every row and key name
+    """
+
+
+class PublicFailure(BaseModel):
+    """
+    Why te-review report stopped, in public mode: the code only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    code: ErrorCode
+
+
+class OverheadKey(StrEnum):
+    """
+    The overhead token fields TokenEconomizer 0.1.0's ledger.py OVERHEAD_KEYS names; each counts toward the total.
+    """
+
+    optimizer_tokens = "optimizer_tokens"
+    untool_classify_tokens = "untool_classify_tokens"
+    untool_judge_tokens = "untool_judge_tokens"
+    codex_untool_adapt_tokens = "codex_untool_adapt_tokens"
+    spiral_judge_tokens = "spiral_judge_tokens"
+    spiral_nudge_writer_tokens = "spiral_nudge_writer_tokens"
+
+
+class SessionClass(StrEnum):
+    """
+    What a session was, from receipts; without one it is unknown.
+    """
+
+    real_work = "real_work"
+    synthetic = "synthetic"
+    unknown = "unknown"
+
+
+class Exclusion(StrEnum):
+    """
+    Why a row is outside the headline cohort; a row is counted under the first of its reasons in this order.
+    """
+
+    NOT_SELECTED = "NOT_SELECTED"
+    MISSING_END = "MISSING_END"
+    CONFLICT = "CONFLICT"
+    AMBIGUOUS = "AMBIGUOUS"
+    UNMATCHED = "UNMATCHED"
+    IMPORTED = "IMPORTED"
+    MISSING_USAGE = "MISSING_USAGE"
+    ERROR = "ERROR"
+    FALLBACK_PRICING = "FALLBACK_PRICING"
+    UNKNOWN_PRICING_STATUS = "UNKNOWN_PRICING_STATUS"
+    BAD_AMOUNT = "BAD_AMOUNT"
+    SYNTHETIC = "SYNTHETIC"
+    UNCLASSIFIED = "UNCLASSIFIED"
+    SESSION_EXCLUDED = "SESSION_EXCLUDED"
+    CHARGE_EXCLUDED = "CHARGE_EXCLUDED"
+
+
+class ShareStatus(StrEnum):
+    """
+    KNOWN, or UNKNOWN for a zero or non-finite denominator.
+    """
+
+    KNOWN = "KNOWN"
+    UNKNOWN = "UNKNOWN"
+
+
+class Verdict(StrEnum):
+    """
+    Whether the share is above the threshold.
+    """
+
+    YES = "YES"
+    NO = "NO"
+    UNKNOWN = "UNKNOWN"
+
+
+class Cadence(StrEnum):
+    """
+    The fold cadence; UNKNOWN unless a cadence receipt proves the fold process's effective policy.
+    """
+
+    field_1 = "1"
+    field_3 = "3"
+    UNKNOWN = "UNKNOWN"
+
+
+type Scope = Literal["recorded charges"]
+"""
+What the numbers are: charges the ledger recorded, not a billing audit.
+"""
+
+
+class OverheadComponents(BaseModel):
+    """
+    Overhead tokens by recognized key; a sum is null when it is not finite.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    optimizer_tokens: float | None
+    """
+    Sum of optimizer_tokens
+    """
+    untool_classify_tokens: float | None
+    """
+    Sum of untool_classify_tokens
+    """
+    untool_judge_tokens: float | None
+    """
+    Sum of untool_judge_tokens
+    """
+    codex_untool_adapt_tokens: float | None
+    """
+    Sum of codex_untool_adapt_tokens
+    """
+    spiral_judge_tokens: float | None
+    """
+    Sum of spiral_judge_tokens
+    """
+    spiral_nudge_writer_tokens: float | None
+    """
+    Sum of spiral_nudge_writer_tokens
+    """
+
+
+class Share(BaseModel):
+    """
+    overhead / (effective + overhead) over a set of rows, as TE's plugin/accounting.py summarize has it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    sessions: int
+    """
+    Session rows counted
+    """
+    charges: int
+    """
+    Overhead charge rows counted
+    """
+    effective_tokens: float | None
+    """
+    Sum of the sessions' effective tokens; null when not finite
+    """
+    overhead_tokens: float | None
+    """
+    Sum of the recognized overhead keys, and in all_keys of every key; null when not finite
+    """
+    components: OverheadComponents
+    unknown_overhead_keys: int
+    """
+    How many distinct unrecognized overhead keys were counted
+    """
+    share: float | None
+    """
+    The share; null when UNKNOWN
+    """
+    status: ShareStatus
+    above_5_percent: Verdict
+
+
+class ExcludedCount(BaseModel):
+    """
+    The rows whose first exclusion reason is this one, and their recorded spend.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    reason: Exclusion
+    rows: int
+    """
+    Rows
+    """
+    effective_tokens: float | None
+    """
+    Sum of their finite recorded effective tokens; null when the sum is not finite
+    """
+    overhead_tokens: float | None
+    """
+    Their finite recorded tokens of the recognized keys, in all_keys of every key; null when not finite
+    """
+    invalid_amounts: int
+    """
+    Amounts left out of the sums, not a finite number; of the recognized keys, and in all_keys of every key
+    """
+
+
+class ClassCount(BaseModel):
+    """
+    Selected sessions of one class.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    session_class: SessionClass
+    sessions: int
+    """
+    Sessions
+    """
+
+
+class EraCandidate(BaseModel):
+    """
+    A policy-era candidate: selected sessions folded on one calendar day; a timestamp group, not a proven cadence.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folded_on: date | None
+    """
+    The fold's calendar day in the window's time zone; null for a fold time no calendar holds
+    """
+    sessions: int
+    """
+    Sessions
+    """
+
+
+class PublicReport(BaseModel):
+    """
+    te-review report --public: aggregates, fixed codes and dates only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    scope: Scope
+    label: Label
+    since: date
+    """
+    First day of the window
+    """
+    until: date
+    """
+    Last day of the window
+    """
+    headline: Share
+    selected: Share
+    """
+    Every selected non-imported session and its matched charges, whatever its class; not the headline
+    """
+    excluded: list[ExcludedCount]
+    """
+    Every exclusion reason, in precedence order
+    """
+    session_classes: list[ClassCount]
+    """
+    Selected sessions by class
+    """
+    cadence: Cadence
+    policy_era_candidates: list[EraCandidate]
+    """
+    Timestamp groups only
+    """
+    unknown_keys: Annotated[str, Field(pattern="^unknown keys: [0-9]+ \\(excluded from public totals\\)$")]
+    """
+    How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out
+    """
+
+
+class AllKeys(BaseModel):
+    """
+    The report's figures with every overhead key counted, unrecognized ones included; private only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    headline: Share
+    selected: Share
+    excluded: list[ExcludedCount]
+    """
+    Every exclusion reason, in precedence order
+    """
+
+
+class RowReport(BaseModel):
+    """
+    One evidence row in the private report, with all its exclusion reasons.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ref: str
+    """
+    The evidence row's ref
+    """
+    kind: RowKind
+    store: str
+    """
+    The repository store
+    """
+    session_id: str
+    """
+    The session
+    """
+    job: str | None
+    """
+    The charge's judge job
+    """
+    reasons: list[Exclusion]
+    """
+    Every reason, in precedence order; empty in the headline cohort
+    """
+
+
+class PrivateReport(BaseModel):
+    """
+    te-review report --private: the public report as it is, plus the figures with every key, every row and unknown key.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    collection_id: str
+    """
+    The collection read
+    """
+    tz: str
+    """
+    The window's time zone
+    """
+    report: PublicReport
+    all_keys: AllKeys
+    unknown_overhead_keys: dict[str, float | None]
+    """
+    Each unrecognized overhead key and its sum over the selected rows; null when not finite
+    """
+    rows: list[RowReport]
+    """
+    Every evidence row
+    """
+
+
 class Failure(BaseModel):
     """
     Why a command stopped, printed as a JSON line on stderr.
@@ -2010,6 +2389,7 @@ type Options = (
     | MainGuardRemove
     | MainGuardArmed
     | TeReviewCollect
+    | TeReviewReport
 )
 """
 What a repotools command parses from its arguments.
@@ -2109,3 +2489,7 @@ class Repotools(BaseModel):
     mechanism_state: MechanismState | None = None
     injection_state: InjectionState | None = None
     worksheet: Worksheet | None = None
+    te_review_report: TeReviewReport | None = None
+    public_failure: PublicFailure | None = None
+    public_report: PublicReport | None = None
+    private_report: PrivateReport | None = None

@@ -153,7 +153,8 @@
         { "$ref": "#/$defs/MainGuardInstall" },
         { "$ref": "#/$defs/MainGuardRemove" },
         { "$ref": "#/$defs/MainGuardArmed" },
-        { "$ref": "#/$defs/TeReviewCollect" }
+        { "$ref": "#/$defs/TeReviewCollect" },
+        { "$ref": "#/$defs/TeReviewReport" }
       ]
     },
     "Fingerprint": {
@@ -257,7 +258,7 @@
     "TeReviewCommand": {
       "description": "The te-review subcommands, the word after te-review.",
       "type": "string",
-      "enum": ["collect"]
+      "enum": ["collect", "report"]
     },
     "TeReviewCollect": {
       "description": "Freeze the TokenEconomizer Claude ledger rows of a window into a new, create-only evidence collection.",
@@ -292,7 +293,7 @@
       "additionalProperties": false
     },
     "ErrorCode": {
-      "description": "Why te-review collect stopped; it writes nothing when it does.",
+      "description": "Why a te-review command stopped; collect writes nothing when it does.",
       "type": "string",
       "enum": [
         "OUT_EXISTS",
@@ -306,7 +307,13 @@
         "SOURCE_CHANGED",
         "MALFORMED_FILE",
         "RECEIPT_MISMATCH",
-        "BAD_RECEIPT"
+        "BAD_RECEIPT",
+        "RELATIVE_PATH",
+        "BAD_MODE",
+        "NOT_COMPLETE",
+        "BAD_BUNDLE",
+        "HASH_MISMATCH",
+        "BAD_ARGUMENTS"
       ]
     },
     "CodedFailure": {
@@ -574,7 +581,7 @@
       "type": "string",
       "enum": ["receipts", "synthetic"]
     },
-    "Cadence": {
+    "ProposeEvery": {
       "description": "microskills_propose_every: sessions between proposer runs.",
       "type": "integer",
       "enum": [1, 3]
@@ -604,8 +611,8 @@
           "description": "The sessions the proof covers, by session id; each must name exactly one collected session"
         },
         "changed_at": { "type": "string", "format": "date-time", "description": "When te config set --global changed the cadence" },
-        "before": { "anyOf": [{ "$ref": "#/$defs/Cadence" }, { "type": "null" }], "description": "The proven cadence before the change, if any" },
-        "after": { "$ref": "#/$defs/Cadence" },
+        "before": { "anyOf": [{ "$ref": "#/$defs/ProposeEvery" }, { "type": "null" }], "description": "The proven cadence before the change, if any" },
+        "after": { "$ref": "#/$defs/ProposeEvery" },
         "proof": { "$ref": "#/$defs/CadenceProof" },
         "process_started": {
           "type": "string",
@@ -1004,6 +1011,182 @@
       "required": ["collection_id", "redirects", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"],
       "additionalProperties": false
     },
+    "TeReviewReport": {
+      "description": "Print the overhead accounting of a frozen te-review collection.",
+      "type": "object",
+      "properties": {
+        "evidence": {"type": "string", "description": "The collection directory, an absolute path"},
+        "public": {"type": "boolean", "default": false, "description": "Print only the public report (the default)"},
+        "private": {"type": "boolean", "default": false, "description": "Print the private report, with every row and key name"}
+      },
+      "required": ["evidence"],
+      "additionalProperties": false
+    },
+    "PublicFailure": {
+      "description": "Why te-review report stopped, in public mode: the code only.",
+      "type": "object",
+      "properties": {
+        "code": {"$ref": "#/$defs/ErrorCode"}
+      },
+      "required": ["code"],
+      "additionalProperties": false
+    },
+    "OverheadKey": {
+      "description": "The overhead token fields TokenEconomizer 0.1.0's ledger.py OVERHEAD_KEYS names; each counts toward the total.",
+      "type": "string",
+      "enum": ["optimizer_tokens", "untool_classify_tokens", "untool_judge_tokens", "codex_untool_adapt_tokens", "spiral_judge_tokens", "spiral_nudge_writer_tokens"]
+    },
+    "SessionClass": {
+      "description": "What a session was, from receipts; without one it is unknown.",
+      "type": "string",
+      "enum": ["real_work", "synthetic", "unknown"]
+    },
+    "Exclusion": {
+      "description": "Why a row is outside the headline cohort; a row is counted under the first of its reasons in this order.",
+      "type": "string",
+      "enum": ["NOT_SELECTED", "MISSING_END", "CONFLICT", "AMBIGUOUS", "UNMATCHED", "IMPORTED", "MISSING_USAGE", "ERROR", "FALLBACK_PRICING", "UNKNOWN_PRICING_STATUS", "BAD_AMOUNT", "SYNTHETIC", "UNCLASSIFIED", "SESSION_EXCLUDED", "CHARGE_EXCLUDED"]
+    },
+    "ShareStatus": {
+      "description": "KNOWN, or UNKNOWN for a zero or non-finite denominator.",
+      "type": "string",
+      "enum": ["KNOWN", "UNKNOWN"]
+    },
+    "Verdict": {
+      "description": "Whether the share is above the threshold.",
+      "type": "string",
+      "enum": ["YES", "NO", "UNKNOWN"]
+    },
+    "Cadence": {
+      "description": "The fold cadence; UNKNOWN unless a cadence receipt proves the fold process's effective policy.",
+      "type": "string",
+      "enum": ["1", "3", "UNKNOWN"]
+    },
+    "Scope": {
+      "description": "What the numbers are: charges the ledger recorded, not a billing audit.",
+      "const": "recorded charges"
+    },
+    "OverheadComponents": {
+      "description": "Overhead tokens by recognized key; a sum is null when it is not finite.",
+      "type": "object",
+      "properties": {
+        "optimizer_tokens": {"type": ["number", "null"], "description": "Sum of optimizer_tokens"},
+        "untool_classify_tokens": {"type": ["number", "null"], "description": "Sum of untool_classify_tokens"},
+        "untool_judge_tokens": {"type": ["number", "null"], "description": "Sum of untool_judge_tokens"},
+        "codex_untool_adapt_tokens": {"type": ["number", "null"], "description": "Sum of codex_untool_adapt_tokens"},
+        "spiral_judge_tokens": {"type": ["number", "null"], "description": "Sum of spiral_judge_tokens"},
+        "spiral_nudge_writer_tokens": {"type": ["number", "null"], "description": "Sum of spiral_nudge_writer_tokens"}
+      },
+      "required": ["optimizer_tokens", "untool_classify_tokens", "untool_judge_tokens", "codex_untool_adapt_tokens", "spiral_judge_tokens", "spiral_nudge_writer_tokens"],
+      "additionalProperties": false
+    },
+    "Share": {
+      "description": "overhead / (effective + overhead) over a set of rows, as TE's plugin/accounting.py summarize has it.",
+      "type": "object",
+      "properties": {
+        "sessions": {"type": "integer", "description": "Session rows counted"},
+        "charges": {"type": "integer", "description": "Overhead charge rows counted"},
+        "effective_tokens": {"type": ["number", "null"], "description": "Sum of the sessions' effective tokens; null when not finite"},
+        "overhead_tokens": {"type": ["number", "null"], "description": "Sum of the recognized overhead keys, and in all_keys of every key; null when not finite"},
+        "components": {"$ref": "#/$defs/OverheadComponents"},
+        "unknown_overhead_keys": {"type": "integer", "description": "How many distinct unrecognized overhead keys were counted"},
+        "share": {"type": ["number", "null"], "description": "The share; null when UNKNOWN"},
+        "status": {"$ref": "#/$defs/ShareStatus"},
+        "above_5_percent": {"$ref": "#/$defs/Verdict"}
+      },
+      "required": ["sessions", "charges", "effective_tokens", "overhead_tokens", "components", "unknown_overhead_keys", "share", "status", "above_5_percent"],
+      "additionalProperties": false
+    },
+    "ExcludedCount": {
+      "description": "The rows whose first exclusion reason is this one, and their recorded spend.",
+      "type": "object",
+      "properties": {
+        "reason": {"$ref": "#/$defs/Exclusion"},
+        "rows": {"type": "integer", "description": "Rows"},
+        "effective_tokens": {"type": ["number", "null"], "description": "Sum of their finite recorded effective tokens; null when the sum is not finite"},
+        "overhead_tokens": {"type": ["number", "null"], "description": "Their finite recorded tokens of the recognized keys, in all_keys of every key; null when not finite"},
+        "invalid_amounts": {"type": "integer", "description": "Amounts left out of the sums, not a finite number; of the recognized keys, and in all_keys of every key"}
+      },
+      "required": ["reason", "rows", "effective_tokens", "overhead_tokens", "invalid_amounts"],
+      "additionalProperties": false
+    },
+    "ClassCount": {
+      "description": "Selected sessions of one class.",
+      "type": "object",
+      "properties": {
+        "session_class": {"$ref": "#/$defs/SessionClass"},
+        "sessions": {"type": "integer", "description": "Sessions"}
+      },
+      "required": ["session_class", "sessions"],
+      "additionalProperties": false
+    },
+    "EraCandidate": {
+      "description": "A policy-era candidate: selected sessions folded on one calendar day; a timestamp group, not a proven cadence.",
+      "type": "object",
+      "properties": {
+        "folded_on": {"type": ["string", "null"], "format": "date", "description": "The fold's calendar day in the window's time zone; null for a fold time no calendar holds"},
+        "sessions": {"type": "integer", "description": "Sessions"}
+      },
+      "required": ["folded_on", "sessions"],
+      "additionalProperties": false
+    },
+    "PublicReport": {
+      "description": "te-review report --public: aggregates, fixed codes and dates only.",
+      "type": "object",
+      "properties": {
+        "scope": {"$ref": "#/$defs/Scope"},
+        "label": {"$ref": "#/$defs/Label"},
+        "since": {"type": "string", "format": "date", "description": "First day of the window"},
+        "until": {"type": "string", "format": "date", "description": "Last day of the window"},
+        "headline": {"$ref": "#/$defs/Share"},
+        "selected": {"$ref": "#/$defs/Share", "description": "Every selected non-imported session and its matched charges, whatever its class; not the headline"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order"},
+        "session_classes": {"type": "array", "items": {"$ref": "#/$defs/ClassCount"}, "description": "Selected sessions by class"},
+        "cadence": {"$ref": "#/$defs/Cadence"},
+        "policy_era_candidates": {"type": "array", "items": {"$ref": "#/$defs/EraCandidate"}, "description": "Timestamp groups only"},
+        "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"}
+      },
+      "required": ["scope", "label", "since", "until", "headline", "selected", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys"],
+      "additionalProperties": false
+    },
+    "AllKeys": {
+      "description": "The report's figures with every overhead key counted, unrecognized ones included; private only.",
+      "type": "object",
+      "properties": {
+        "headline": {"$ref": "#/$defs/Share"},
+        "selected": {"$ref": "#/$defs/Share"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order"}
+      },
+      "required": ["headline", "selected", "excluded"],
+      "additionalProperties": false
+    },
+    "RowReport": {
+      "description": "One evidence row in the private report, with all its exclusion reasons.",
+      "type": "object",
+      "properties": {
+        "ref": {"type": "string", "description": "The evidence row's ref"},
+        "kind": {"$ref": "#/$defs/RowKind"},
+        "store": {"type": "string", "description": "The repository store"},
+        "session_id": {"type": "string", "description": "The session"},
+        "job": {"type": ["string", "null"], "description": "The charge's judge job"},
+        "reasons": {"type": "array", "items": {"$ref": "#/$defs/Exclusion"}, "description": "Every reason, in precedence order; empty in the headline cohort"}
+      },
+      "required": ["ref", "kind", "store", "session_id", "job", "reasons"],
+      "additionalProperties": false
+    },
+    "PrivateReport": {
+      "description": "te-review report --private: the public report as it is, plus the figures with every key, every row and unknown key.",
+      "type": "object",
+      "properties": {
+        "collection_id": {"type": "string", "description": "The collection read"},
+        "tz": {"type": "string", "description": "The window's time zone"},
+        "report": {"$ref": "#/$defs/PublicReport"},
+        "all_keys": {"$ref": "#/$defs/AllKeys"},
+        "unknown_overhead_keys": {"type": "object", "additionalProperties": {"type": ["number", "null"]}, "description": "Each unrecognized overhead key and its sum over the selected rows; null when not finite"},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/RowReport"}, "description": "Every evidence row"}
+      },
+      "required": ["collection_id", "tz", "report", "all_keys", "unknown_overhead_keys", "rows"],
+      "additionalProperties": false
+    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -1050,6 +1233,10 @@
     "redirect_event": { "$ref": "#/$defs/RedirectEvent" },
     "mechanism_state": { "$ref": "#/$defs/MechanismState" },
     "injection_state": { "$ref": "#/$defs/InjectionState" },
-    "worksheet": { "$ref": "#/$defs/Worksheet" }
+    "worksheet": { "$ref": "#/$defs/Worksheet" },
+    "te_review_report": { "$ref": "#/$defs/TeReviewReport" },
+    "public_failure": { "$ref": "#/$defs/PublicFailure" },
+    "public_report": { "$ref": "#/$defs/PublicReport" },
+    "private_report": { "$ref": "#/$defs/PrivateReport" }
   }
 }

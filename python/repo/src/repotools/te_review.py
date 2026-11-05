@@ -36,7 +36,7 @@ from .models import (
     Versions,
     Window,
 )
-from .te_io import ADAPTER, CollectError, conform, json_lines, listing, present, read_bytes
+from .te_io import ADAPTER, TeReviewError, conform, json_lines, listing, present, read_bytes
 
 SCHEMA = 1
 # The TokenEconomizer 0.1.0 files whose ledger rows and state files the models mirror, by sha256.
@@ -102,12 +102,12 @@ CHARGE_CLASS = {
 def window(options: TeReviewCollect) -> Window:
     if options.until < options.since:
         msg = f"--until {options.until} is before --since {options.since}"
-        raise CollectError(ErrorCode.BAD_WINDOW, msg)
+        raise TeReviewError(ErrorCode.BAD_WINDOW, msg)
     try:
         zone = ZoneInfo(options.tz)
     # ZoneInfoNotFoundError (a KeyError) for an unknown name, ValueError for a malformed one.
     except KeyError, ValueError:
-        raise CollectError(ErrorCode.BAD_TIMEZONE, f"--tz {options.tz} is not an IANA time zone") from None
+        raise TeReviewError(ErrorCode.BAD_TIMEZONE, f"--tz {options.tz} is not an IANA time zone") from None
     return Window(
         since=options.since,
         until=options.until,
@@ -216,6 +216,17 @@ def framed(data: bytes) -> bytes:
     return len(data).to_bytes(8, "big") + data
 
 
+def collection_id(span: Window, versions: Versions, sources: dict[str, bytes], evidence: bytes) -> str:
+    """sha256 over the window, the versions, each source's path and bytes and evidence.json, each part framed."""
+    digest = hashlib.sha256(
+        framed(span.model_dump_json().encode()) + framed(versions.model_dump_json(by_alias=True).encode())
+    )
+    for source, data in sources.items():
+        digest.update(framed(source.encode()) + framed(data))
+    digest.update(framed(evidence))
+    return digest.hexdigest()
+
+
 def build(root: Path, ledgers: list[Path], options: TeReviewCollect, span: Window, into: Path) -> str:
     """Write evidence.json, collection.json, worksheet.json and a copy of every source into a private folder;
     return the collection id, which hashes only what the folder holds (the worksheet aside, which the owner
@@ -229,22 +240,18 @@ def build(root: Path, ledgers: list[Path], options: TeReviewCollect, span: Windo
         source = path.relative_to(root).as_posix()
         reads.extend(parse(path.parent.parent.relative_to(root).as_posix(), source, sources[source]))
     judged = te_judgment.judge(classify(reads, span), sources, origins, span)
-    evidence = (judged.model_dump_json(indent=2) + "\n").encode()
+    # json.dumps, as TokenEconomizer's ledger.py writes rows: pydantic's JSON writes NaN and Infinity as null.
+    evidence = (json.dumps(judged.model_dump(), indent=2, default=datetime.isoformat) + "\n").encode()
     write(into, "evidence.json", evidence)
     for source, path in origins.items():
         if read_bytes(path) != sources[source]:
-            raise CollectError(ErrorCode.SOURCE_CHANGED, f"{source} changed while it was read")
+            raise TeReviewError(ErrorCode.SOURCE_CHANGED, f"{source} changed while it was read")
     versions = Versions(adapter=ADAPTER, schema=SCHEMA, mirrors=list(MIRRORS))
-    digest = hashlib.sha256(
-        framed(span.model_dump_json().encode()) + framed(versions.model_dump_json(by_alias=True).encode())
-    )
     for source, data in sources.items():
         write(into, f"sources/{source}", data)
-        digest.update(framed(source.encode()) + framed(data))
-    digest.update(framed(evidence))
     collected_at = datetime.now(span.start.tzinfo)
     collection = Collection(
-        collection_id=digest.hexdigest(),
+        collection_id=collection_id(span, versions, sources, evidence),
         collected_at=collected_at,
         label=Label.INTERIM if collected_at < span.end else Label.FINAL,
         window=span,
@@ -266,17 +273,20 @@ def build(root: Path, ledgers: list[Path], options: TeReviewCollect, span: Windo
 
 
 def collect(options: TeReviewCollect) -> None:
+    # A relative --out would land wherever the caller runs from, a checkout under a mise task.
+    if not Path(options.out).is_absolute():
+        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--out is relative; give the collection's absolute path")
     span = window(options)
     root = state_root(options)
     ledgers = claude_ledgers(root)
     if not ledgers:
-        raise CollectError(ErrorCode.NO_LEDGER, f"{root} holds no repos/*/claude/ledger.jsonl")
-    out = Path(options.out).absolute()
+        raise TeReviewError(ErrorCode.NO_LEDGER, f"{root} holds no repos/*/claude/ledger.jsonl")
+    out = Path(options.out)
     # Reserved first, so no other collect takes the name; the build replaces this empty folder.
     try:
         out.mkdir(mode=0o700)
     except FileExistsError:
-        raise CollectError(ErrorCode.OUT_EXISTS, f"{out} exists; a collection is never rewritten") from None
+        raise TeReviewError(ErrorCode.OUT_EXISTS, f"{out} exists; a collection is never rewritten") from None
     made = [out]  # what a failure removes: the reserved folder, then the staging folder until it moves
     try:
         staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))  # 0700, and only this run's

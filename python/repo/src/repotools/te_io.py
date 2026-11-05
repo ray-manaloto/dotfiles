@@ -11,8 +11,8 @@ from .models import CodedFailure, ErrorCode
 ADAPTER = "tokeneconomizer-0.1.0"
 
 
-class CollectError(Exception):
-    """A refusal; collect leaves nothing behind when it raises one.
+class TeReviewError(Exception):
+    """A refusal; collect leaves nothing behind when it raises one, and report in public mode prints only its code.
 
     The generated CodedFailure is a pydantic model, not an exception, so it can't be raised: this
     carries it to cli.main, which prints it.
@@ -21,13 +21,14 @@ class CollectError(Exception):
     def __init__(self, code: ErrorCode, error: str) -> None:
         super().__init__(error)
         self.failure = CodedFailure(code=code, error=error)
+        self.public = False  # report sets it: then only the code is printed
 
 
 def read_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()
     except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
+        raise TeReviewError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
 
 
 def present(path: Path) -> bool:
@@ -37,7 +38,7 @@ def present(path: Path) -> bool:
     except FileNotFoundError, NotADirectoryError:
         return False
     except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
+        raise TeReviewError(ErrorCode.UNREADABLE, f"{path}: {error.strerror}") from None
     return True
 
 
@@ -48,21 +49,21 @@ def listing(folder: Path) -> list[Path]:
     except FileNotFoundError, NotADirectoryError:
         return []
     except OSError as error:
-        raise CollectError(ErrorCode.UNREADABLE, f"{folder}: {error.strerror}") from None
+        raise TeReviewError(ErrorCode.UNREADABLE, f"{folder}: {error.strerror}") from None
 
 
 def json_lines(source: str, data: bytes) -> list[tuple[int, object]]:
     """Every line of a JSONL file with its number, or a refusal: no line is skipped."""
     lines = data.split(b"\n")
     if lines[-1]:
-        raise CollectError(ErrorCode.TRUNCATED_LINE, f"{source}:{len(lines)} has no line end")
+        raise TeReviewError(ErrorCode.TRUNCATED_LINE, f"{source}:{len(lines)} has no line end")
     found = []
     for number, line in enumerate(lines[:-1], 1):
         try:
             found.append((number, json.loads(line)))
         # json's errors and a line that is not UTF-8 (UnicodeDecodeError) are both ValueErrors.
         except ValueError:
-            raise CollectError(ErrorCode.MALFORMED_LINE, f"{source}:{number} is not JSON") from None
+            raise TeReviewError(ErrorCode.MALFORMED_LINE, f"{source}:{number} is not JSON") from None
     return found
 
 
@@ -71,7 +72,7 @@ def json_file(source: str, data: bytes) -> object:
         return json.loads(data)
     # As in json_lines: bad JSON and bytes that are not UTF-8 are both ValueErrors.
     except ValueError:
-        raise CollectError(ErrorCode.MALFORMED_FILE, f"{source} is not JSON") from None
+        raise TeReviewError(ErrorCode.MALFORMED_FILE, f"{source} is not JSON") from None
 
 
 def conform[M: BaseModel](model: type[M], where: str, raw: object) -> M:
@@ -82,4 +83,4 @@ def conform[M: BaseModel](model: type[M], where: str, raw: object) -> M:
         keys = sorted(raw) if isinstance(raw, dict) else [type(raw).__name__]
         fingerprint = hashlib.sha256(json.dumps(keys).encode()).hexdigest()[:12]
         msg = f"{where} has unknown schema fingerprint {fingerprint} for {ADAPTER}"
-        raise CollectError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
+        raise TeReviewError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
