@@ -2614,7 +2614,7 @@ The spec's condition, stated when no paid fact is useful
 
 class FollowUpEnum(StrEnum):
     """
-    The next check, named while evidence is incomplete
+    The next check, named while a section is not reviewed
     """
 
     field_2026_11_17 = "2026-11-17"
@@ -2622,7 +2622,7 @@ class FollowUpEnum(StrEnum):
 
 type FollowUp = FollowUpEnum | None
 """
-The next check, named while evidence is incomplete
+The next check, named while a section is not reviewed
 """
 
 
@@ -3166,7 +3166,7 @@ class Review(BaseModel):
     mcp_ab: McpResult
     evidence_complete: bool
     """
-    Every section judged, and no evidence gap
+    Every section judged; evidence gaps are listed beside it and do not change it
     """
     missing: list[Section]
     """
@@ -3174,7 +3174,7 @@ class Review(BaseModel):
     """
     evidence_gaps: list[EvidenceGap]
     """
-    What the evidence cannot show, however the worksheet is filled
+    What the evidence cannot show, however the worksheet is filled: a caveat, not a missing judgment
     """
     decision_recorded: bool
     """
@@ -3191,7 +3191,7 @@ class Review(BaseModel):
     """
     follow_up: FollowUp
     """
-    The next check, named while evidence is incomplete
+    The next check, named while a section is not reviewed
     """
 
 

@@ -352,7 +352,7 @@ def checked(
         Section.mcp_ab: result is McpResult.NOT_REVIEWED,
     }
     missing = [section for section in Section if unreviewed[section]]
-    # Judgments cannot fill these: only a receipt the collection lacks can.
+    # Judgments cannot fill these: only a receipt the collection lacks can. A caveat, not a blocker (D14).
     gapped = {
         EvidenceGap.redirect_delivery_unknown: nudges.delivery_unknown,
         EvidenceGap.abort_delivery_unknown: stopped.delivery_unknown,
@@ -377,12 +377,12 @@ def checked(
         imports=folds,
         not_run=carried,
         mcp_ab=result,
-        evidence_complete=not missing and not gaps,
+        evidence_complete=not missing,
         missing=missing,
         evidence_gaps=gaps,
         decision_recorded=decision is not None,
         decision=DecisionLine(decision) if decision else DecisionLine.PENDING,
         envfacts=EnvfactsEnum.no_paid_fact_proved_useful__select_microskills_envfacts if none_useful else None,
         conflict=conflict,
-        follow_up=None if not missing and not gaps else FollowUpEnum.field_2026_11_17,
+        follow_up=None if not missing else FollowUpEnum.field_2026_11_17,
     ), settings
