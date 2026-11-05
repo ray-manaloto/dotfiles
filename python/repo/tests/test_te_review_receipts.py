@@ -234,7 +234,7 @@ def test_a_delivered_nudge_gets_a_host_delivery_receipt_and_an_undelivered_one_n
         (30, "delivery_confirmed"),
         (90, "delivery_unknown"),
         (150, "shadow_suppressed"),
-        (200, "observed_event"),
+        (200, "delivery_unknown"),  # #435: an abort is delivered or not like a nudge; observed_event is gone
     ]
 
 

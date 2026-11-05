@@ -180,7 +180,11 @@ def write(path: Path, model: ReceiptManifest) -> None:
 
 
 class Drafting:
-    """The state a draft reads once, and the receipts and gaps it finds session by session."""
+    """The state a draft reads once, and the receipts and gaps it finds session by session.
+
+    Not a model: it is one draft run's working state, built from the generated RedirectEvent and Receipt and
+    never read or written as JSON; what the run writes is the generated ReceiptManifest. pydantic has no place
+    to keep a lookup like keys or a running count like undelivered while sessions are read one at a time."""
 
     def __init__(self, root: Path) -> None:
         state = {source: read_bytes(path) for source, path in state_files(root).items()}

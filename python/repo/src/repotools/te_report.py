@@ -10,8 +10,12 @@ from zoneinfo import ZoneInfo
 
 from .models import (
     AllKeys,
+    Cadence,
+    CadenceLabel,
     ClassCount,
     Collection,
+    ConfigSetting,
+    Coverage,
     EraCandidate,
     ErrorCode,
     Evidence,
@@ -22,7 +26,9 @@ from .models import (
     OverheadKey,
     OverheadRow,
     PrivateReport,
+    PublicExcludedCount,
     PublicReport,
+    Review,
     RowClass,
     RowKind,
     RowReport,
@@ -35,6 +41,7 @@ from .models import (
     Verdict,
 )
 from .te_review import TeReviewError, collect, collection_id
+from .te_worksheet import review
 
 THRESHOLD = 0.05
 # The collection's row class as an exclusion; in_window and matched are none.
@@ -50,8 +57,8 @@ ROW_REASON = {
 # and anything else, a missing value included, is UNKNOWN_PRICING_STATUS.
 PRICING = {"no_usage": Exclusion.MISSING_USAGE, "fallback": Exclusion.FALLBACK_PRICING}
 CLASS_REASON = {SessionClass.synthetic: Exclusion.SYNTHETIC, SessionClass.unknown: Exclusion.UNCLASSIFIED}
-# Receipts (T3) will classify a session; until then every session is unknown.
-UNCLASSIFIED = SessionClass.unknown
+# A session's cadence as the report labels it; unknown stays UNKNOWN.
+CADENCE = {CadenceLabel.cadence_1: Cadence.field_1, CadenceLabel.cadence_3: Cadence.field_3}
 ORDER = list(Exclusion)
 KNOWN = set(OverheadKey)
 # Fold times a date holds in any tz, a day in from each end of datetime's range; NaN compares false.
@@ -106,7 +113,7 @@ def record(row: EvidenceRow) -> SessionRow | OverheadRow:
     return model.model_validate(row.row)
 
 
-def own_reasons(row: EvidenceRow, rec: SessionRow | OverheadRow) -> set[Exclusion]:
+def own_reasons(row: EvidenceRow, rec: SessionRow | OverheadRow, cohort: SessionClass) -> set[Exclusion]:
     """A row's reasons from itself alone, before its session or its charges count."""
     reasons = {ROW_REASON[row.row_class]} if row.row_class in ROW_REASON else set()
     if any(amount(value) is None for value in rec.overhead.values()):
@@ -120,25 +127,33 @@ def own_reasons(row: EvidenceRow, rec: SessionRow | OverheadRow) -> set[Exclusio
             reasons.add(PRICING.get(str(rec.priced_by), Exclusion.UNKNOWN_PRICING_STATUS))
         if (rec.effective_tokens is not None or rec.priced_by == "model") and amount(rec.effective_tokens) is None:
             reasons.add(Exclusion.BAD_AMOUNT)
-        reasons.add(CLASS_REASON[UNCLASSIFIED])
+        if cohort in CLASS_REASON:
+            reasons.add(CLASS_REASON[cohort])
     return reasons
 
 
-def reasons_of(rows: list[EvidenceRow], records: list[SessionRow | OverheadRow]) -> list[list[Exclusion]]:
+def reasons_of(
+    rows: list[EvidenceRow], records: list[SessionRow | OverheadRow], cohorts: dict[str, SessionClass]
+) -> list[list[Exclusion]]:
     """Every row's reasons in precedence order: a session goes with all its charges, or none of them."""
-    own = [own_reasons(row, rec) for row, rec in zip(rows, records, strict=True)]
+    own = [
+        own_reasons(row, rec, cohorts.get(row.ref, SessionClass.unknown))
+        for row, rec in zip(rows, records, strict=True)
+    ]
     session_out: dict[tuple[str, str, str], bool] = defaultdict(bool)
     charge_out: dict[tuple[str, str, str], bool] = defaultdict(bool)
     for row, reasons in zip(rows, own, strict=True):
         key = (row.store, row.host, row.session_id)
         flags = session_out if row.kind is RowKind.session else charge_out
         flags[key] = flags[key] or bool(reasons)
+    sessions = {(row.store, row.host, row.session_id) for row in rows if row.kind is RowKind.session}
     found = []
     for row, reasons in zip(rows, own, strict=True):
         key = (row.store, row.host, row.session_id)
         if row.kind is RowKind.session and charge_out[key]:
             reasons.add(Exclusion.CHARGE_EXCLUDED)
-        if row.kind is RowKind.overhead and session_out[key]:
+        # A charge's session is out for its own reasons or for any of its charges', which takes every charge.
+        if row.kind is RowKind.overhead and key in sessions and (session_out[key] or charge_out[key]):
             reasons.add(Exclusion.SESSION_EXCLUDED)
         found.append(sorted(reasons, key=ORDER.index))
     return found
@@ -215,6 +230,20 @@ def excluded(
     ]
 
 
+def counted(rows: list[EvidenceRow], reasons: list[list[Exclusion]]) -> list[PublicExcludedCount]:
+    """D9: public excluded rows carry counts, never tokens: any excluded total, alone or beside the headline's,
+    can rebuild or bound the private selected share. Each row counts under its first reason, and each excluded
+    session once, under the earliest in ORDER of its rows' first reasons (D5)."""
+    first = Counter(why[0] for why in reasons if why)
+    sessions: dict[tuple[str, str, str], Exclusion] = {}
+    for row, why in zip(rows, reasons, strict=True):
+        key = (row.store, row.host, row.session_id)
+        if row.kind is RowKind.session and why:
+            sessions[key] = min(why[0], sessions.get(key, why[0]), key=ORDER.index)
+    taken = Counter(sessions.values())
+    return [PublicExcludedCount(reason=reason, rows=first[reason], sessions=taken[reason]) for reason in ORDER]
+
+
 def total(value: float) -> float | None:
     """A sum as the report shows it: JSON has no Infinity or NaN, so a non-finite sum is null."""
     return value if math.isfinite(value) else None
@@ -230,46 +259,62 @@ def folded_on(rec: SessionRow, zone: ZoneInfo) -> date | None:
     return datetime.fromtimestamp(rec.folded_at, zone).date() if EARLIEST <= rec.folded_at <= LATEST else None
 
 
-def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
+def accounting(
+    collection: Collection, evidence: Evidence, review: Review, settings: list[ConfigSetting] | None
+) -> PrivateReport:
     rows = evidence.rows
     records = [record(row) for row in rows]
-    reasons = reasons_of(rows, records)
+    # A session's class comes from its receipts alone (evidence.sessions); a charge has none of its own.
+    cohorts = {found.ref: SessionClass(found.cohort.value) for found in evidence.sessions}
+    reasons = reasons_of(rows, records, cohorts)
     imported = {
         (row.store, row.host, row.session_id)
         for row, rec in zip(rows, records, strict=True)
         if isinstance(rec, SessionRow) and rec.imported
     }
-    selected = [
-        rec
+    chosen = [
+        (row, rec)
         for row, rec in zip(rows, records, strict=True)
         if row.row_class in {RowClass.in_window, RowClass.matched}
         and (row.store, row.host, row.session_id) not in imported
     ]
+    selected = [rec for _, rec in chosen]
     sessions = [rec for rec in selected if isinstance(rec, SessionRow)]
-    classes = Counter(UNCLASSIFIED for _ in sessions)
+    classes = Counter(cohorts.get(row.ref, SessionClass.unknown) for row, rec in chosen if isinstance(rec, SessionRow))
     zone = ZoneInfo(collection.window.tz)
     days = Counter(folded_on(rec, zone) for rec in sessions)
     cohort = [rec for rec, why in zip(records, reasons, strict=True) if not why]
+    headline = {row.ref for row, why in zip(rows, reasons, strict=True) if not why and row.kind is RowKind.session}
+    # The report's cadence is the one every headline session was proven folded under, else UNKNOWN.
+    labels = {CADENCE.get(found.cadence, Cadence.UNKNOWN) for found in evidence.sessions if found.ref in headline}
     public = PublicReport(
         scope="recorded charges",
         label=collection.label,
         since=collection.window.since,
         until=collection.window.until,
         headline=share(cohort, every_key=False),
-        selected=share(selected, every_key=False),
-        excluded=excluded(records, reasons, every_key=False),
+        coverage=Coverage(
+            headline_sessions=sum(isinstance(rec, SessionRow) for rec in cohort),
+            selected_sessions=len(sessions),
+            no_recorded_usage=sum(rec.error is not None for rec in sessions),
+        ),
+        excluded=counted(rows, reasons),
         session_classes=[ClassCount(session_class=cls, sessions=classes[cls]) for cls in SessionClass],
-        cadence="UNKNOWN",  # needs a cadence receipt (T3)
+        cadence=labels.pop() if len(labels) == 1 else Cadence.UNKNOWN,
         policy_era_candidates=[
             EraCandidate(folded_on=day, sessions=count)
             for day, count in sorted(days.items(), key=lambda item: (item[0] is None, item[0] or date.min))
         ],
         unknown_keys=f"unknown keys: {len(unknown_keys(records))} (excluded from public totals)",
+        withheld="excluded rows show counts only; their spend is only in --private",
+        review=review,
     )
     return PrivateReport(
         collection_id=collection.collection_id,
         tz=collection.window.tz,
         report=public,
+        selected=share(selected, every_key=False),
+        excluded=excluded(records, reasons, every_key=False),
         all_keys=AllKeys(
             headline=share(cohort, every_key=True),
             selected=share(selected, every_key=True),
@@ -280,6 +325,7 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
             RowReport(ref=row.ref, kind=row.kind, store=row.store, session_id=row.session_id, job=row.job, reasons=why)
             for row, why in zip(rows, reasons, strict=True)
         ],
+        settings=settings,
     )
 
 
@@ -287,7 +333,9 @@ def shown(options: TeReviewReport) -> PrivateReport | PublicReport:
     """The report the mode asks for: public unless --private."""
     if options.public and options.private:
         raise TeReviewError(ErrorCode.BAD_MODE, "--public and --private exclude each other")
-    full = accounting(*bundle(Path(options.evidence)))
+    folder = Path(options.evidence)
+    collection, evidence = bundle(folder)
+    full = accounting(collection, evidence, *review(folder, collection, evidence, options.worksheet))
     return full if options.private else full.report
 
 
