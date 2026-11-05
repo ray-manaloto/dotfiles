@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-11-04
+* **Decision**: the upgrade automation is dropped. Upgrades stay manual (`upgrades.md`); ADR 0001 is
+  superseded and spec #412's tickets are closed as wontfix.
 * **Design**: the upgrade automation is agreed (ADR 0001) after a grill with the owner and an adversarial Codex
   review over five revisions: a PR that touches nothing live (check, trial, review, accept, prepare), then a
   separate apply PR.

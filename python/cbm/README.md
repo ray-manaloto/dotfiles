@@ -1,6 +1,7 @@
 # cbm commands
 
-`cbm install` installs and verifies the live agent setup. `cbm verify` checks it.
+`cbm install` installs and verifies the live agent setup. `cbm verify` checks it. Any other
+arguments return `invalid_usage` with exit code 2.
 
 Install runs only when both the current directory and the loaded Python package are in primary
 Git checkouts on `main`. Running a linked worktree's CLI from a primary checkout does not bypass the guard.
@@ -28,16 +29,4 @@ The same variable works with `cbm install`; only the exact value `1` opts in. Th
 changes to the live setup; it does not isolate the installer. `cbm verify` remains read-only
 and works from any directory without an opt-in.
 
-The upgrade interface currently recognizes these forms but returns a `command_failed`
-error with exit code 1; execution arrives in later tickets of #412:
-
-```text
-cbm upgrade
-cbm upgrade check|trial|review|prepare
-cbm upgrade trial --candidate VERSION
-cbm accept CHANGE_ID --reason TEXT --public-reason TEXT
-```
-
-Both acceptance reasons are required. For values beginning with a hyphen, use the equals
-form, for example `--reason=-x --public-reason=-y`. Invalid syntax returns `invalid_usage`
-with exit code 2. Existing install/verify usage messages remain unchanged.
+Upgrades are manual: see `docs/research/codebase-memory-mcp/upgrades.md`.

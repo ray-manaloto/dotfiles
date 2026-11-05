@@ -2,10 +2,10 @@
 okf_version: "0.2"
 type: "concept"
 title: "Upgrading codebase-memory-mcp"
-description: "Why CBM has an exact pin that bulk upgrades skip, the manual upgrade order that keeps one build per account, what the forced-drain installer flags do to indexes, and the agreed design of the upgrade automation."
+description: "Why CBM has an exact pin that bulk upgrades skip, the manual upgrade order that keeps one build per account, what the forced-drain installer flags do to indexes, and why upgrades stay manual."
 package: "github:DeusData/codebase-memory-mcp"
 version: "0.12.1"
-timestamp: "2026-11-04T02:59:21Z"
+timestamp: "2026-11-04T23:05:00Z"
 status: "draft"
 tags: [codebase-memory-mcp, mise, upgrade, daemon]
 sources:
@@ -15,12 +15,18 @@ sources:
   - id: cbm-cli
     resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/src/cli/cli.c"
     title: "install quiesce and --reset-indexes (lines 10642-10667, 11192-11229, 11557-11561)"
+  - id: mise-links
+    resource: "https://github.com/jdx/mise/blob/v2026.11.0/src/runtime_symlinks.rs"
+    title: "global runtime links are rebuilt from installed versions (lines 48-72, 267-320)"
+  - id: cbm-runtime
+    resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/src/daemon/runtime.c"
+    title: "daemon stop refuses attached clients (1872-1895); peer fingerprint check (2074-2148)"
   - id: mise-lock
     resource: "https://github.com/jdx/mise/blob/v2026.11.0/src/cli/lock.rs"
     title: "mise lock locks without installing (lines 170-180); --global selects global configs (lines 2203-2222)"
   - id: adr-0001
     resource: "repo:docs/adr/0001-cbm-upgrade-trial-pr-apply.md"
-    title: "CBM upgrades go through a trial PR, then a separate apply"
+    title: "Superseded: the upgrade pipeline was dropped for the manual upgrade"
 ---
 
 # Upgrading codebase-memory-mcp
@@ -28,7 +34,7 @@ sources:
 ## Why upgrades are deliberate
 
 Every CBM process in a runtime namespace (one per account in the default setup) must be the same build with the
-same cache root. An open Claude or Codex
+same cache root. An open Claude, Codex or OpenCode
 session holds its server process, and so the old build, until it ends. A pin change while sessions are open leaves
 old and new builds side by side, and the daemon refuses the mismatch (`fingerprint_mismatch`, logged in
 `~/.cache/codebase-memory-mcp/logs/daemon-conflicts.ndjson`).
@@ -43,29 +49,41 @@ So the pin is exact (`version = "0.12.1"`) and kept out of bulk upgrades:
 - New releases: `mise outdated --bump github:DeusData/codebase-memory-mcp`, or the `updates` set in
   `data/saved-searches.json`. `update:check` does not show bump-only updates.
 
-## Manual upgrade, today
+## Manual upgrade
 
-1. Read the release notes for the new tag; note index-format changes and installer changes.
-2. Prepare and merge the pin bump in `unix/home/.config/mise/config.toml`, then fast-forward the primary
-   checkout to the merged `origin/main`. Run the remaining steps from that checkout on `main`.
-3. Close every Claude and Codex session (and anything else that runs CBM).
-4. Stop the old daemon with the old binary: `codebase-memory-mcp daemon stop` through the launcher, before the pin
-   moves. It refuses while sessions are attached. Confirm no `--cbm-daemon-internal` process is left.
-5. Apply the merged pin and run `mise install`. The global link moves.
-6. Run `mise run //cbm:install`. Use this task, never CBM's own `install`, `update`
-   or `install.sh` (see `install.md`). The installer rewrites the agent setup for the new build; configs keep
-   the launcher path.
-7. Start one session; check one executable path in `ps`, no new conflict lines, and the tools in `/mcp`.
-8. Reindex each project once: index-format changes force a full rebuild (0.12.0, and again 0.12.1).
-9. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+Upgrades are manual, and stay that way: they are rare and a rollback is the same steps with the previous
+version. The trial-PR pipeline of ADR 0001 (spec #412) was dropped.
 
-For deliberate qualification from another checkout, explicitly opt in with
-`CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup.
+1. Review the release notes for the new tag; note index-format and installer changes. Bump the pin (and
+   `mise.lock`) in a separate worktree, then review and merge it. Leave the primary checkout alone:
+   `~/.config/mise/config.toml` links into it, so moving it moves the live pin.
+2. Close every Claude, Codex and OpenCode session (and anything else that runs CBM), and start no new one until
+   step 7.
+3. Stop the old daemon with the still-old launcher: `codebase-memory-mcp daemon stop`. It refuses while sessions
+   are attached, and success can mean "stopping" (runtime.c:1872-1895), so wait until no
+   `--cbm-daemon-internal` process is left.
+4. Fetch and fast-forward the primary checkout to `origin/main`. This moves the live pin.
+5. `mise install`, then confirm the global link and the launcher resolve to the new build. Until mise rebuilds the
+   link, the launcher still reaches the old binary (mise `runtime_symlinks.rs:48-72`, `cli/install.rs:420-455`).
+   `//cbm:install` compares the link with the launcher, not with the pin, so check the build yourself.
+6. `mise run //cbm:install` from the primary checkout on `main`, never CBM's own `install`, `update` or
+   `install.sh` (see `install.md`). It rewrites the agent setup for the new build; configs keep the launcher path.
+   Keep sessions closed: it removes the launcher for a moment and opens an MCP session to verify.
+7. Open one session. Codex: re-trust in `/hooks` if it lists the CBM hooks as changed.
+8. Reindex each project with the new build (index-format changes force a full rebuild: 0.12.0, and again 0.12.1)
+   and wait for it to finish; with `auto_index` off, startup proves nothing. Check the tools in `/mcp`, one
+   executable path in `ps`, and no new lines in `daemon-conflicts.ndjson`.
+9. Resume the other sessions.
 
 The daemon runs from the resolved install folder (`~/.local/share/mise/installs/codebase-memory-mcp-<hash>/`), not
-from the link. Moving the link does not move a running daemon, which is why step 4 comes before step 5.
+from the link, and running processes keep their old executable when the pin moves. A new launch after step 5 runs
+the new build; if the old daemon were still up, the daemon would refuse it (`fingerprint_mismatch`,
+runtime.c:2074-2148). That is why steps 2 and 3 come before steps 4 and 5.
 
-## Facts for the automation PR
+For a deliberate install from another checkout, opt in for that invocation with
+`CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup.
+
+## Installer facts
 
 - `install --skip-binary` alone does not drain sessions: it quiesces only when it validates a binary or deletes
   indexes (`quiesce_required = has_binary_validator || delete_indexes`, cli.c:11557-11561).
@@ -83,114 +101,7 @@ from the link. Moving the link does not move a running daemon, which is why step
   offers `/mcp reconnect <server>|all`; Codex needs a restart. Automatic respawn should not be assumed.
 - The `//cbm:install` checks expect exactly what 0.12.1 writes: 7 Claude hooks with a 5 s timeout, 2 Codex hooks,
   each agent's tool profile and the 13 read-only analysis tools. A release that adds a tool, renames a hook trigger
-  or changes a timeout fails them even when the setup works. The automation replaces those constants with a
-  reviewed baseline per version, captured from the candidate's installer, plus an owner-owned policy, and treats a
-  check FAIL after an upgrade as "needs review", not "broken".
+  or changes a timeout fails them even when the setup works: read the failure against the release notes, then
+  update the constants in `python/cbm/src/cbm/setup.py`.
 - Codex re-trust: the configs name the launcher, so hook commands do not change on upgrade. Whether Codex still
   asks for a re-trust after the installer rewrites `hooks.json` is untested.
-
-## Upgrade automation (designed, not built)
-
-The decision and its alternatives are in ADR 0001 (`docs/adr/0001-cbm-upgrade-trial-pr-apply.md`). The design
-was agreed after an adversarial review over five revisions. Two pull requests build it.
-
-**PR1, prepare (touches nothing live).** `cbm upgrade` in `python/cbm`:
-1. **Context.** Create the trial context, and snapshot the live launcher, links, client configs and skill
-   dirs. Every later step re-checks them.
-2. **Check.** Confirm the CBM pin comes from the dotfiles global config, then run
-   `mise outdated --bump --global github:DeusData/codebase-memory-mcp --json`. A warning or a missing `bump`
-   means the check is incomplete, which is an error, not "up to date".
-3. **Trial (no model tokens).**
-   - Refuse to run (`skill_sync_unqualified`) until a qualification run has recorded, for this mise version,
-     what each trial mise step writes: skills, lockfiles and links.
-   - Create the worktree beside the checkout, in a folder mise already trusts (the global config is paranoid
-     about config files), and record its path. Hash every worktree file.
-   - Write the candidate pin into `python/cbm/mise.toml` as a plain file edit; never `mise use`, which cannot
-     refuse to install and rebuilds links.
-   - From the worktree root (mise routes the entry only with the monorepo root config loaded), with a private
-     state and cache dir, run the non-installing `mise lock TOOL@<new> --platform <host>`. With this
-     repository's `[monorepo].lockfile = true` it writes the tracked root `mise.lock`. The pin edit and lock may
-     change only the package `mise.toml` and exactly one lockfile, whose path and hashes are recorded; no
-     changed lockfile is `provenance_mismatch`.
-   - Refuse (`live_state_changed`) unless the live `tool-purgatory.json` is absent or empty: nearly every mise
-     command first runs the due deferred removals; only `--version`, dry runs, `MISE_NO_CONFIG` (which would also
-     drop the configs the install needs) and a few named commands skip them (`src/cli/mod.rs:477-491`, `:1228-1237`).
-   - Refuse (`trial_check_failed`) if any config sets `locked_require_checksum`, and unset
-     `MISE_LOCKED_REQUIRE_CHECKSUM`, so the locked checksum rule keeps its default.
-   - From the worktree's `python/cbm`, where the package config that declares the candidate is loaded and
-     the root lock entry is found, with the live state and cache
-     dirs, normal config discovery and the real HOME, run `mise install TOOL@<new>` with `MISE_LOCKED=1`, `MISE_LOCKFILE_MODE=generate`, `MISE_SAFE=1`,
-     `MISE_SKILLS_AUTO_SYNC=0`, `MISE_CACHE_PRUNE_AGE=0s` and `MISE_SELF_UPDATE_AUTO=false`.
-     It installs only an archive matching the locked checksum, writes no lockfile and runs no hooks; its
-     incomplete-install markers and install lock stay where live mise sees them. No call overrides the global
-     config file, so the `global` link keeps the live build. Writes to the shared store and to the live state
-     and cache dirs must stay inside a per-tool allowlist.
-   - Verify the host archive against the new lock entry, compare its executable with the installed
-     candidate's, and record the entry's URL and checksum in the trial's binding.
-   - From here on the candidate executable runs by absolute path through the trial's own launcher, never
-     `global`, and its version and hash must match the binding before any result counts.
-   - Run the candidate installer for every client in a private HOME and capture what it writes into a
-     versioned baseline (`expected/<version>.json`).
-   - Classify every difference from the previous baseline into upgrade changes with content ids.
-   - Every source file changed between the two tags must match a policy path class (`source_unclassified`
-     otherwise); only `review`-class files become upgrade changes, `not_capability` files are listed.
-   - Index and handshake in the sandbox.
-4. **Review.** One read-only `codex-hc` tab opened through herdr-app (never `claude -p` or `codex exec`), with
-   a fixed model, effort and token budget (watched while the turn runs; past it the tab is closed as a budget
-   stop), given a `/review` brief over the hashed release notes, the source
-   diff of review-class files and the changes. Its final answer is read from the Codex rollout, and the tab is
-   closed. It assesses each change. A valid review is stored under the hashes of its inputs, the review policy
-   and the brief, and reused while all three are unchanged. Invalid, refused or over-budget output stops
-   the run and cannot be accepted. A valid review that flags omissions or uncertainty on review-class files
-   stops it until those files are accepted. A negative assessment means "needs review".
-   Until a qualification run on this machine records how the tab answers (success, refusal, error, budget
-   stop) and shows no MCP server or hook loads in it, the review refuses with `review_unqualified`, and no
-   upgrade reaches prepare. Both qualification runs (skill sync and the review tab) are tickets of PR1.
-5. **Accept.** After a valid review, the owner runs `cbm accept <change-id> --reason ... --public-reason ...` for each change; only
-   the public reason is committed. Records are bound to
-   the run's digests, and stale or unknown ones are rejected.
-6. **Prepare.** Re-check the release asset and host entry against the trial's binding. Restore the pin file
-   and the recorded lockfile to their pre-pin bytes (deleting one that did not exist), each only if it still has the trial's post-pin hash,
-   and require the worktree to match the base. Then edit the global pin to `<new>` as a plain file edit
-   (`mise lock` never rewrites a global config's request) and run
-   `mise lock --global TOOL@<new> --platform macos-arm64,linux-x64,linux-arm64` from a fresh empty folder under
-   `$TMPDIR`, outside `$HOME` and any repository (inside the worktree the monorepo root would take the entry;
-   under `$HOME` the live global config would load as a project config), against the worktree's global config
-   file and an empty system config, with the trial's private state and cache dirs. Before the lock, `mise config ls --json`
-   in the same environment must list the worktree's global config and no other path, with the system config
-   folder confirmed empty (`trial_check_failed` otherwise).
-   The pin diff may touch only the CBM line and the lock diff only the CBM entries of the global config's
-   sibling `mise.lock` (`worktree_dirty` otherwise), and the host entry must match the binding
-   (`artifact_changed` otherwise). Then write and stage the pin, the lock, the
-   baseline, the acceptance receipts and the upgrade report.
-
-Commit, push and opening the PR stay manual, through the reviewer-pane approval and `//repo:pr-create`; the
-pane's reading of the whole diff is the leak check for the report's free text, the owner's public reasons
-included. Errors carry generated, descriptive error codes; exits are 0
-(done or up to date), 1 (failure) and 2 (usage or setting).
-
-**Upgrade report.** An OKF bundle under `upgrades/v<version>/` in this directory. It is built only from
-allowlisted fields with symbolic path labels, and links by hash to a full private report under
-`~/.local/state/dotfiles/cbm-upgrade/`. It records:
-- the mise version and the current, bump and latest versions;
-- RFC 3339 UTC timestamps with nine fractional digits, and monotonic durations;
-- the review inputs and their hashes, the requested and observed model and effort, tokens, the token budget
-  and whether it was hit;
-- the changes and their acceptance;
-- release provenance: tag and commit, publish date, archive and executable hashes;
-- the trial results, environment and outcome.
-
-**Not decided in PR1.** Scheduling (PR1 runs by hand), tracking `~/.config/mise/scripts/` in this repository
-(its own PR), and the PR2 items below.
-
-**PR2, apply (own design round later).** Message every open Claude and Codex pane to finish and close, then
-wait until no CBM connector runs. Back up the index files, `mise install`, rerun `//cbm:install` and reindex.
-Verify against the merged baseline, then restart each session. Rollback pins the previous version in the
-untracked global `config.local.toml`, followed by a revert PR. Still open:
-- keeping the previous version's lock entry, so a rollback pin installs a checksum-verified build;
-- the wait timeout;
-- sessions outside herdr;
-- mapping a pane to its session;
-- stuck sessions;
-- which projects to reindex;
-- whether sessions recover without a restart (`/mcp reconnect` for Claude Code, a restart for Codex).

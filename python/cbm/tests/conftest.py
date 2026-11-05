@@ -14,7 +14,6 @@
 # is not on Linux test hosts. The real installer was run end to end against the live install instead
 # (docs/research/codebase-memory-mcp/verification.md).
 
-import hashlib
 import json
 import os
 import shutil
@@ -221,32 +220,21 @@ def git(folder: Path, *args: str) -> str:
 def provision(home: Path, *args: str) -> None:
     """Prepare an installed test release through the fixture's mise, never the real program."""
     subprocess.run(
-        [str(home / "bin/mise"), "install", *args], cwd=home / "worktree", env=os.environ.copy(),
+        [str(home / "bin/mise"), "install", *args], cwd=home, env=os.environ.copy(),
         capture_output=True, text=True, check=True, timeout=TIMEOUT,
     )  # fmt: skip
 
 
 @pytest.fixture
-def upgrade_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
-    """Two local releases, a real worktree/source mirror and a PATH-only mise stand-in."""
-    paths = {name: home / name for name in ("dotfiles", "worktree", "source", "mirror", "releases")}
-    paths["dotfiles"].mkdir()
-    git(paths["dotfiles"], "init", "--initial-branch=main")
-    package = paths["dotfiles"] / "python/cbm"
-    package.mkdir(parents=True)
-    (paths["dotfiles"] / "mise.toml").write_text("monorepo_root = true\n[monorepo]\nlockfile = true\n")
-    (package / "mise.toml").write_text("# The upgrade trial writes its candidate pin here.\n")
-    global_config = paths["dotfiles"] / "unix/home/.config/mise/config.toml"
-    global_config.parent.mkdir(parents=True)
-    global_config.write_text('[tools]\n"github:DeusData/codebase-memory-mcp" = "9.9.9"\n')
-    git(paths["dotfiles"], "add", ".")
-    git(paths["dotfiles"], "commit", "-m", "Initial fixture")
-    git(paths["dotfiles"], "worktree", "add", "-b", "upgrade", str(paths["worktree"]))
-    paths["source"].mkdir()
-    git(paths["source"], "init", "--initial-branch=main")
-    releases = {}
+def releases(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Two local releases installed through a PATH-only mise stand-in; returns a clean git checkout to run in."""
+    checkout = home / "checkout"
+    (checkout / "mise.toml").write_text('[tools]\n"github:DeusData/codebase-memory-mcp" = "9.9.9"\n')
+    git(checkout, "add", ".")
+    git(checkout, "commit", "-m", "Initial fixture")
+    found = {}
     for version in ("9.9.9", "9.9.10"):
-        folder = paths["releases"] / version
+        folder = home / "releases" / version
         folder.mkdir(parents=True)
         binary = folder / "codebase-memory-mcp"
         binary.write_text(f"#!{sys.executable} -I\n{STAND_IN.replace('9.9.9', version)}")
@@ -254,25 +242,12 @@ def upgrade_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]
         archive = folder / "codebase-memory-mcp.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
             tar.add(binary, arcname=binary.name)
-        releases[version] = {
-            "binary": str(binary), "url": archive.as_uri(), "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
-            "installed": str(link(home).parent.parent / version),
-        }  # fmt: skip
-        (paths["source"] / "codebase-memory-mcp.py").write_text(STAND_IN.replace("9.9.9", version))
-        git(paths["source"], "add", ".")
-        git(paths["source"], "commit", "-m", f"Release {version}")
-        git(paths["source"], "tag", f"v{version}")
-    git(home, "clone", "--mirror", str(paths["source"]), str(paths["mirror"]))
-    installed = Path(releases["9.9.9"]["installed"])
+        found[version] = {"url": archive.as_uri(), "installed": str(link(home).parent.parent / version)}
+    installed = Path(found["9.9.9"]["installed"])
     link(home).unlink()
     link(home).parent.rmdir()
     link(home).parent.symlink_to(installed, target_is_directory=True)
-    (home / "mise-fixture.json").write_text(json.dumps({
-        "releases": releases,
-        "configs": [{"path": str(paths["worktree"] / "unix/home/.config/mise/config.toml"),
-                     "tools": ["github:DeusData/codebase-memory-mcp"], "override": False}],
-        "lockfile": str(paths["worktree"] / "mise.lock"),
-    }))  # fmt: skip
+    (home / "mise-fixture.json").write_text(json.dumps({"releases": found}))
     bin_dir = home / "bin"
     bin_dir.mkdir()
     mise = bin_dir / "mise"
@@ -280,4 +255,4 @@ def upgrade_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]
     mise.chmod(0o755)
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
     provision(home, "github:DeusData/codebase-memory-mcp@9.9.9")
-    return paths
+    return checkout
