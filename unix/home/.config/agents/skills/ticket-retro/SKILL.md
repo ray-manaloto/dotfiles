@@ -1,29 +1,24 @@
 ---
 name: ticket-retro
-description: "Conduct a retrospective on a finished ticket or spec and record what it taught in the ticket plan. Started by the owner only."
-disable-model-invocation: true
+description: "Use after the current ticket or spec is finished, or when the owner asks for a retrospective: propose environment improvements and record the ones the owner keeps in the ticket plan."
+disable-model-invocation: false
 ---
 
-The owner has asked for a **retrospective** on a finished ticket or spec. You are suggesting improvements to the
+A **retrospective** is due on a finished ticket or spec. You are suggesting improvements to the
 coding agent's **environment** to improve future runs. You propose changes and record the ones the owner keeps in
 the ticket plan; you change nothing else yourself.
 
 ## Before you start
 
-Stop and tell the owner what is missing, without reading the sources or writing anything, when:
-
-- `workflowtools` is not on PATH (it is installed by `mise run //repo:tools-install` from a dotfiles checkout);
-- `PLAN_ID` is not set, or `workflowtools tickets --plan` exits non-zero: print its finding;
-- the ticket or spec the owner named is not a GitHub issue of this repository (`gh issue view <N>` fails);
-- the plan is for another issue: the `issue` and the repository in `url` of the `PlanResolved` line that
-  `workflowtools tickets --plan` prints differ from the number and repository of the issue the owner named. Print
-  both and stop.
+Take the ticket from the `PlanResolved` line of `workflowtools tickets --plan`. Stop and ask the owner, writing
+nothing, when that command fails, when the owner named a different ticket, or when the owner named none and that
+ticket is not the one this session just finished.
 
 ## Steps
 
-1. Call the Skill tool with `writing-for-agents` for the writing style guide.
+1. Load the `writing-for-agents` skill for the writing style guide.
 
-2. Read the primary sources for the ticket or spec the owner names: its issue, its plan's `task_plan.md`,
+2. Read the primary sources for that ticket or spec: its issue, its plan's `task_plan.md`,
    `findings.md` and `progress.md` (the folder `workflowtools tickets --plan` prints), its pull requests and their
    review comments, and the session logs on this machine. If the owner names no session, default to the current one.
 
@@ -42,18 +37,6 @@ Stop and tell the owner what is missing, without reading the sources or writing 
 5. Record the ones the owner keeps under a `## Retro <YYYY-MM-DD>` heading at the end of the plan's `findings.md`,
    one bullet each: the category, what happened, and the proposed change. Add one line to `progress.md`:
    `ticket-retro: <n> lessons recorded`. Write nothing else.
-
-## Departures from upstream
-
-- The output goes to the ticket plan, not to the conversation only.
-- Only the owner starts it (`disable-model-invocation: true`, and `allow_implicit_invocation: false` for Codex).
-- A change it proposes is made later as a normal pull request, through the usual pane approval. ticket-retro itself
-  edits no file outside the plan's `findings.md` and `progress.md`, makes no commit, and opens no issue or pull
-  request.
-- Nothing it writes is published without the home-path scan, the reviewer's leak check and approval on the exact
-  bytes (workflow.md rule 12).
-- Tickets and specs are GitHub issues. The plan is found by `workflowtools tickets --plan`, and must be the plan of
-  the issue the owner named.
 
 ## Reference
 

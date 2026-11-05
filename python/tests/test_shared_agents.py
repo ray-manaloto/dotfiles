@@ -1,6 +1,7 @@
 """Shared agent rules: exact source blocks and real links in a scratch home."""
 
 import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -168,6 +169,21 @@ class SharedAgentsInstallTest(unittest.TestCase):
                 path = self.home / relative
                 self.assertTrue(path.is_symlink())
                 self.assertEqual(path.resolve(), SKILLS / "ticket-retro")
+
+    def test_each_skill_has_a_loadable_frontmatter(self) -> None:
+        for skill in sorted(SKILLS.glob("*/SKILL.md")):
+            with self.subTest(skill=skill.parent.name):
+                # yq, from the global mise config, is the YAML parser; a malformed block exits 1.
+                fields = json.loads(
+                    subprocess.run(
+                        ["yq", "--front-matter=extract", "-o", "json", ".", str(skill)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout
+                )
+                self.assertEqual(fields["name"], skill.parent.name)
+                self.assertTrue(fields["description"])
 
 
 if __name__ == "__main__":
