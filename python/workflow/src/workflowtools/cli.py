@@ -44,8 +44,14 @@ def run(options: Options) -> None:
     """Print each finding as a JSON line and exit 1 when there is one."""
     match options:
         case Tickets():
-            found, selected = tickets.run(options)
-            emit([*found, *selected])
+            lines, markdown = tickets.run(options)
+            if markdown:
+                sys.stdout.write(markdown)
+            else:
+                emit(lines)
+            if status := tickets.code(lines, require_github=options.require_github):
+                raise SystemExit(status)
+            return
         case SkillTable():
             result = skill_table.findings()
             found = [] if isinstance(result, BaseModel) else result

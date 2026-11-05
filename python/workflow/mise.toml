@@ -24,7 +24,7 @@ dir = "{{ config_root }}/../.."
 run = "uv run --project python/workflow --locked workflowtools skill-table"
 
 [tasks.tickets]
-description = "Check .scratch/<feature>/issues/ tickets; --listing frontier or open lists them after a clean check"
+description = "Check the roadmap's ticket lines against GitHub; list, rebuild or resolve a plan"
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = "uv run --project python/workflow --locked workflowtools tickets"
