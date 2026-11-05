@@ -428,3 +428,171 @@ def test_a_relative_transcripts_folder_gives_receipts_collect_finds_from_another
     assert receipt["path"] == str(path)
     (row,) = collect(te, tmp_path / "c", "--receipts", str(out))["sessions"]
     assert row["cohort"] == "real_work"
+
+
+# The stop hint ClaudeCode gives an interactive session (plugin/hosts.py ClaudeCode.interrupt).
+HINT = "Press Esc to interrupt it."
+
+
+def stuck(reason: str, tool_calls: int) -> str:
+    """The abort notice plugin/controller.py post_tool returns: its reason up to the colon, the turn's calls."""
+    short = reason.split(":", maxsplit=1)[0]
+    return f"TokenEconomizer: this turn still looks stuck after a redirect ({short}, {tool_calls} tool calls). {HINT}"
+
+
+def relayed(text: str) -> str:
+    """The context plugin/hosts.py Host.relay asks the model with, so it passes the abort notice on."""
+    return (
+        "TokenEconomizer, a plugin the user runs, has a notice for them, and their main view does not show plugin "
+        "messages. Put this line, word for word, in your next message to the user, and again in your final reply:"
+        f"\n\n{text}\n\nIt is for the user to act on; it does not change your task."
+    )
+
+
+def stopping(session_id: str, at: float, notice: str, *, tool: str = "t2") -> list[dict[str, Any]]:
+    """The records Claude Code writes when an abort's notice reaches the agent on tool call `tool`: ClaudeCode
+    relays notices, so the hook prints the notice and its relay as context (controller.py post_tool)."""
+    base = {"type": "attachment", "sessionId": session_id, "timestamp": iso(at + 0.009)}
+    hook = {"hookName": "PostToolUseFailure:Bash", "toolUseID": tool, "hookEvent": "PostToolUseFailure"}
+    context = relayed(notice)
+    output = {
+        "systemMessage": notice,
+        "hookSpecificOutput": {"hookEventName": "PostToolUseFailure", "additionalContext": context},
+    }
+    printed = {"type": "hook_success", "content": "", "stdout": json.dumps(output), "exitCode": 0, **hook}
+    return [
+        {**base, "attachment": {**printed, "command": "command hook 4"}},
+        {**base, "attachment": {"type": "hook_system_message", "content": notice, **hook}},
+        {**base, "attachment": {"type": "hook_additional_context", "content": [context], **hook}},
+    ]
+
+
+def test_a_delivered_abort_gets_a_host_delivery_receipt_and_the_report_shows_it_confirmed_on_the_abort_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    events = [redirect("nudge", "s1", START + 30), redirect("abort", "s1", START + 200)]
+    state(te, "a-1", "events.jsonl", events)
+    path = transcript(projects / "p", "s1", *stopping("s1", START + 200, stuck("loop", 9)))
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["counts"] == {"real_work": 1, "host_delivery": 1, "fact_injection": 0}
+    assert (summary["undelivered_nudges"], summary["undelivered_aborts"]) == (1, 0)
+    receipt = json.loads(out.read_text())["receipts"][1]
+    assert (receipt["kind"], receipt["path"]) == ("host_delivery", str(path))
+    assert receipt["redirects"] == [{"session_id": "s1", "at": START + 200}]
+    assert datetime.fromisoformat(receipt["timestamp"]) == datetime.fromisoformat(iso(START + 200.009))
+    collection = tmp_path / "c"
+    evidence = collect(te, collection, "--receipts", str(out))
+    assert [(r["kind"], r["state"]) for r in evidence["redirects"]] == [
+        ("nudge", "delivery_unknown"),
+        ("abort", "delivery_confirmed"),
+    ]
+    main(["te-review", "report", "--evidence", str(collection)])
+    shown = json.loads(capsys.readouterr().out)["review"]
+    assert (shown["aborts"]["aborts"], shown["aborts"]["delivery_confirmed"]) == (1, 1)
+    # D4: an abort is never a delivered redirect.
+    assert (shown["redirects"]["delivered"], shown["redirects"]["delivery_unknown"]) == (0, 1)
+
+
+@pytest.mark.parametrize(
+    "records",
+    [
+        [],
+        stopping("s1", START + 200, stuck("loop", 12)),
+        stopping("s1", START + 200, stuck("judge-loop", 9)),
+        stopping("s1", START + 270, stuck("loop", 9)),
+        stopping("s1", START + 200, stuck("loop", 9))[:2],
+    ],
+    ids=[
+        "no record of the notice",
+        "a notice counting other tool calls",
+        "a notice naming another reason",
+        "a notice after the hook's timeout",
+        "a notice without its relayed context",
+    ],
+)
+def test_an_abort_the_transcript_does_not_show_delivered_gets_no_receipt_and_stays_unknown(
+    records: list[dict[str, Any]], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    state(te, "a-1", "events.jsonl", [redirect("abort", "s1", START + 200)])
+    transcript(projects / "p", "s1", *records)
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["counts"]["host_delivery"] == 0
+    assert (summary["undelivered_nudges"], summary["undelivered_aborts"]) == (0, 1)
+    (row,) = collect(te, tmp_path / "c", "--receipts", str(out))["redirects"]
+    assert row["state"] == "delivery_unknown"
+
+
+def test_a_shadow_abort_gets_no_receipt_and_is_not_undelivered(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    state(te, "a-1", "events.jsonl", [redirect("abort", "s1", START + 200, shadow=True)])
+    # Even beside a record that would match it: a shadow abort was never sent.
+    transcript(projects / "p", "s1", *stopping("s1", START + 200, stuck("loop", 9)))
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["counts"]["host_delivery"], summary["undelivered_aborts"]) == (0, 0)
+    (row,) = collect(te, tmp_path / "c", "--receipts", str(out))["redirects"]
+    assert row["state"] == "shadow_suppressed"
+
+
+def test_one_notice_record_two_aborts_could_claim_confirms_neither(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    state(te, "a-1", "events.jsonl", [redirect("abort", "s1", START + 200), redirect("abort", "s1", START + 230)])
+    transcript(projects / "p", "s1", *stopping("s1", START + 230, stuck("loop", 9)))
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["counts"]["host_delivery"], summary["undelivered_aborts"]) == (0, 2)
+    assert [r["state"] for r in collect(te, tmp_path / "c", "--receipts", str(out))["redirects"]] == [
+        "delivery_unknown",
+        "delivery_unknown",
+    ]
+
+
+def test_a_nudge_and_an_abort_each_delivered_get_their_own_receipts_and_count_on_their_own_lines(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600), session("s2", START + 7200)])
+    reason = "judge-stuck@0.93:The same command"
+    events = [
+        {**redirect("nudge", "s1", START + 30), "reason": reason},
+        {**redirect("abort", "s1", START + 200), "reason": reason},
+        redirect("abort", "s2", START + 300),
+    ]
+    state(te, "a-1", "events.jsonl", events)
+    records = [*delivery("s1", START + 30, reason), *stopping("s1", START + 200, stuck(reason, 9))]
+    transcript(projects / "p", "s1", *records)
+    out = tmp_path / "receipts.json"
+    draft(te, projects, out)
+    summary = json.loads(capsys.readouterr().out)
+    # s2 has no transcript, so its abort is undelivered, apart from the nudges.
+    assert summary["counts"]["host_delivery"] == 2
+    assert (summary["undelivered_nudges"], summary["undelivered_aborts"]) == (0, 1)
+    collection = tmp_path / "c"
+    evidence = collect(te, collection, "--receipts", str(out))
+    assert [r["state"] for r in evidence["redirects"]] == [
+        "delivery_confirmed",
+        "delivery_confirmed",
+        "delivery_unknown",
+    ]
+    main(["te-review", "report", "--evidence", str(collection)])
+    shown = json.loads(capsys.readouterr().out)["review"]
+    # The redirect line counts the one nudge only; the aborts are their own line.
+    assert (shown["redirects"]["delivered"], shown["redirects"]["delivery_unknown"]) == (1, 0)
+    assert (shown["aborts"]["aborts"], shown["aborts"]["delivery_confirmed"]) == (2, 1)
+    assert shown["aborts"]["delivery_unknown"] == 1

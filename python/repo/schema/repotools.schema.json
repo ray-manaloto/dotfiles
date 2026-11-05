@@ -413,9 +413,13 @@
         "undelivered_nudges": {
           "type": "integer",
           "description": "Non-shadow nudges of the window's sessions with no host_delivery receipt"
+        },
+        "undelivered_aborts": {
+          "type": "integer",
+          "description": "Non-shadow aborts of the window's sessions with no host_delivery receipt"
         }
       },
-      "required": ["counts", "without_receipt", "undelivered_nudges"],
+      "required": ["counts", "without_receipt", "undelivered_nudges", "undelivered_aborts"],
       "additionalProperties": false
     },
     "ErrorCode": {
