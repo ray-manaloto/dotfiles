@@ -94,6 +94,9 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
+# A skill written here: Codex reads ~/.agents/skills and Claude ~/.claude/skills, so both link to it.
+"~/.agents/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
+"~/.claude/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
 # TokenEconomizer's global policy, copied (TE rewrites the file, which would break a symlink). Change it
 # with `te --host claude config set --global ...`, then capture it from the main checkout with
 # `mise dot add ~/.tokeneconomizer/config.json` before any `mise dot apply`: an apply overwrites an
