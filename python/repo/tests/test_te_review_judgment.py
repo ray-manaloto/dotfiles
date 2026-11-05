@@ -27,6 +27,7 @@ def test_a_collection_without_receipts_carries_an_unjudged_worksheet(tmp_path: P
     assert worksheet == {
         "collection_id": read(out, "collection.json")["collection_id"],
         "redirects": [],
+        "aborts": [],
         "paid_facts": [],
         "learned_facts": [],
         "imports": [],
@@ -94,13 +95,24 @@ def test_redirects_are_candidates_and_only_receipted_delivery_counts(tmp_path: P
     assert found == [
         ("nudge", 20, True, "shadow_suppressed", 2),
         ("nudge", 30, True, "delivery_unknown", 3),
-        ("abort", 40, True, "observed_event", 4),
+        ("abort", 40, True, "delivery_unknown", 4),
         ("nudge", -50, False, "delivery_unknown", 5),
     ]
     assert evidence["redirects"][1]["event"] == redirect("nudge", "s1", START + 30)
-    sheet = read(out, "worksheet.json")["redirects"]
-    assert [(r["ref"], r["state"], r["verdict"], r["like_128"]) for r in sheet] == [
-        (c["ref"], c["state"], None, None) for c in evidence["redirects"][:3]
+    sheet = read(out, "worksheet.json")
+    assert [(r["ref"], r["state"], r["verdict"], r["like_128"], r["receipt_ref"]) for r in sheet["redirects"]] == [
+        (c["ref"], c["state"], None, None, None) for c in evidence["redirects"][:2]
+    ]
+    # D4: an abort is never a delivered redirect; it has its own entries.
+    abort = evidence["redirects"][2]
+    assert sheet["aborts"] == [
+        {
+            "ref": abort["ref"],
+            "digest": abort["digest"],
+            "state": "delivery_unknown",
+            "verdict": None,
+            "receipt_ref": None,
+        }
     ]
     assert (out / "sources" / "repos" / "a-1" / "claude" / "events.jsonl").read_bytes() == events.read_bytes()
     assert "repos/a-1/claude/events.jsonl" in [s["path"] for s in read(out, "collection.json")["sources"]]
@@ -147,6 +159,21 @@ def test_a_host_delivery_receipt_confirms_a_nudge_and_is_frozen_into_the_bundle(
     assert (out / "sources" / "manifests" / "receipts.json").read_bytes() == manifest.read_bytes()
     paths = [s["path"] for s in read(out, "collection.json")["sources"]]
     assert {"manifests/receipts.json", receipt["path"]} <= set(paths)
+
+
+def test_a_host_delivery_receipt_confirms_an_abort_delivered_to_the_host(tmp_path: Path) -> None:
+    te = tmp_path / "te"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    state(te, "a-1", "events.jsonl", [redirect("abort", "s1", START + 40)])
+    manifest = receipts(
+        tmp_path / "r", "m.json", ("host_delivery", {"redirects": [{"session_id": "s1", "at": START + 40}]})
+    )
+    out = tmp_path / "out"
+    run(te, out, "--receipts", str(manifest))
+    (candidate,) = read(out, "evidence.json")["redirects"]
+    assert candidate["state"] == "delivery_confirmed"
+    sheet = read(out, "worksheet.json")
+    assert (sheet["redirects"], [a["state"] for a in sheet["aborts"]]) == ([], ["delivery_confirmed"])
 
 
 def test_a_receipt_whose_file_does_not_match_its_sha256_is_refused(
@@ -311,16 +338,32 @@ def test_imports_are_current_state_candidates_and_a_near_paid_fold_is_only_time_
     )
     assert evidence["import_coverage"] == "observed_current_only"
     assert evidence["import_note"] == "observed current import state; historical operation coverage unknown"
+    # Addendum 4: an import with no finished time is listed as partial; the window cannot place it.
+    done_import, partial_import = evidence["imports"][1], evidence["imports"][2]
     sheet = read(out, "worksheet.json")["imports"]
-    assert sheet == [
-        {
-            "ref": evidence["imports"][1]["ref"],
-            "digest": evidence["imports"][1]["digest"],
-            "verdict": None,
-            "receipt_ref": None,
-        },
-        {"ref": fold["ref"], "digest": fold["digest"], "verdict": None, "receipt_ref": None},
+    assert [(entry["ref"], entry["digest"], entry["entry"]) for entry in sheet] == [
+        (done_import["ref"], done_import["digest"], "finished_in_window"),
+        (partial_import["ref"], partial_import["digest"], "partial"),
+        (fold["ref"], fold["digest"], "fold"),
     ]
+    assert {(entry["verdict"], entry["receipt_ref"]) for entry in sheet} == {(None, None)}
+
+
+def test_a_partial_import_with_a_finished_time_is_windowed_by_it_and_listed_once(tmp_path: Path) -> None:
+    te = tmp_path / "te"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    state(te, "a-1", "history.json", history("partial", START + 100, START + 7200, 2))
+    ledger(te, "b-2", [session("s2", START + 3600)])
+    state(te, "b-2", "history.json", history("stopped", START - DAY, START - 100, 2))
+    out = tmp_path / "out"
+    run(te, out)
+    found = read(out, "evidence.json")["imports"]
+    assert [(i["store"], i["completion"], i["in_window"]) for i in found] == [
+        ("repos/a-1", "partial", True),
+        ("repos/b-2", "partial", False),
+    ]
+    sheet = read(out, "worksheet.json")["imports"]
+    assert [(entry["ref"], entry["entry"]) for entry in sheet] == [(found[0]["ref"], "finished_in_window")]
 
 
 def test_the_state_of_a_store_without_a_ledger_is_still_collected(tmp_path: Path) -> None:
@@ -508,6 +551,8 @@ def test_an_import_that_never_started_leaves_a_later_session_proven(tmp_path: Pa
     run(te, out, "--cadence-receipt", str(cadence_receipt(tmp_path / "c", ["after"])))
     assert cadences(out) == {"after": ("cadence_1", "after_change")}
     assert read(out, "evidence.json")["imports"][0]["completion"] == "unknown"
+    # It never ran, so section 4 has nothing to judge; only a partial run is listed without a finished time.
+    assert read(out, "worksheet.json")["imports"] == []
 
 
 @pytest.mark.parametrize(
@@ -578,7 +623,7 @@ def test_a_cohort_comes_from_receipts_and_synthetic_only_from_the_synthetic_mani
 
 
 SHADOW = {"redirects": [{"session_id": "s1", "at": START + 20}]}
-ABORT = {"redirects": [{"session_id": "s1", "at": START + 40}]}
+SHADOW_ABORT = {"redirects": [{"session_id": "s1", "at": START + 50}]}
 
 
 @pytest.mark.parametrize(
@@ -592,7 +637,7 @@ ABORT = {"redirects": [{"session_id": "s1", "at": START + 40}]}
         ("--receipts", ("host_delivery", {}), "a host_delivery receipt must name what it shows"),
         ("--receipts", ("fact_use", {"facts": ["twice"]}), "a fact_use receipt must name what it shows"),
         ("--receipts", ("host_delivery", SHADOW), "host_delivery of a shadow nudge"),
-        ("--receipts", ("host_delivery", ABORT), "host_delivery of a abort"),
+        ("--receipts", ("host_delivery", SHADOW_ABORT), "host_delivery of a shadow abort"),
     ],
 )
 def test_a_receipt_that_does_not_name_exactly_what_it_shows_is_refused(
@@ -605,7 +650,7 @@ def test_a_receipt_that_does_not_name_exactly_what_it_shows_is_refused(
         te,
         "a-1",
         "events.jsonl",
-        [redirect("nudge", "s1", START + 20, shadow=True), redirect("abort", "s1", START + 40)],
+        [redirect("nudge", "s1", START + 20, shadow=True), redirect("abort", "s1", START + 50, shadow=True)],
     )
     learned(te, "a-1", {"twice": fact("ACTIVE")}, {})
     learned(te, "b-2", {"twice": fact("ACTIVE")}, {})

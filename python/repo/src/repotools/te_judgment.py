@@ -41,6 +41,7 @@ from .models import (
     ImportCandidate,
     ImportCompletion,
     ImportCoverage,
+    ImportEntry,
     ImportFoldCandidate,
     InjectionState,
     ManifestRole,
@@ -60,6 +61,7 @@ from .models import (
     Window,
     Worksheet,
     WorksheetAb,
+    WorksheetAbort,
     WorksheetDecision,
     WorksheetFact,
     WorksheetImport,
@@ -276,7 +278,8 @@ def links(
         ]
         ref = one(matches, f"redirect {link.session_id}@{link.at}", receipt)
         event = redirects[ref]
-        if receipt.kind is ReceiptKind.host_delivery and (event.shadow or event.kind is not RedirectKind.nudge):
+        # D4: an abort can reach the host too; a shadow event never does.
+        if receipt.kind is ReceiptKind.host_delivery and event.shadow:
             what = f"{'shadow ' * event.shadow}{event.kind}"
             msg = f"receipt {receipt.path}: host_delivery of a {what}, which is never delivered"
             raise refuse(msg)
@@ -326,8 +329,6 @@ def receipted(linked: dict[str, list[tuple[str, ReceiptKind]]], target: str, *ki
 def redirect_state(event: RedirectEvent, delivered: list[str]) -> RedirectState:
     if event.shadow:
         return RedirectState.shadow_suppressed
-    if event.kind is RedirectKind.abort:
-        return RedirectState.observed_event
     return RedirectState.delivery_confirmed if delivered else RedirectState.delivery_unknown
 
 
@@ -515,12 +516,25 @@ def judge(rows: list[EvidenceRow], sources: dict[str, bytes], origins: dict[str,
 def worksheet(collection_id: str, evidence: Evidence) -> Worksheet:
     """The owner's template: the candidates each section judges, every judgment NOT_REVIEWED (null)."""
     selected = {found.ref for found in evidence.imports if found.in_window}
+    # Addendum 4: a partial import with no finished time cannot be placed in the window; it is shown too.
+    partial = [
+        found
+        for found in evidence.imports
+        if found.completion is ImportCompletion.partial and found.history.finished is None
+    ]
     return Worksheet(
         collection_id=collection_id,
         redirects=[
-            WorksheetRedirect(ref=found.ref, digest=found.digest, state=found.state, verdict=None, like_128=None)
+            WorksheetRedirect(
+                ref=found.ref, digest=found.digest, state=found.state, verdict=None, like_128=None, receipt_ref=None
+            )
             for found in evidence.redirects
-            if found.in_window
+            if found.in_window and found.kind is RedirectKind.nudge
+        ],
+        aborts=[
+            WorksheetAbort(ref=found.ref, digest=found.digest, state=found.state, verdict=None, receipt_ref=None)
+            for found in evidence.redirects
+            if found.in_window and found.kind is RedirectKind.abort
         ],
         paid_facts=[
             WorksheetPaidFact(
@@ -531,10 +545,19 @@ def worksheet(collection_id: str, evidence: Evidence) -> Worksheet:
         ],
         learned_facts=[WorksheetFact(ref=found.ref, digest=found.digest, verdict=None) for found in evidence.facts],
         imports=[
-            WorksheetImport(ref=ref, digest=digest, verdict=None, receipt_ref=None)
-            for ref, digest in [
-                *((found.ref, found.digest) for found in evidence.imports if found.ref in selected),
-                *((found.ref, found.digest) for found in evidence.import_folds if found.import_ref in selected),
+            WorksheetImport(ref=ref, digest=digest, entry=entry, verdict=None, receipt_ref=None)
+            for ref, digest, entry in [
+                *(
+                    (found.ref, found.digest, ImportEntry.finished_in_window)
+                    for found in evidence.imports
+                    if found.ref in selected
+                ),
+                *((found.ref, found.digest, ImportEntry.partial) for found in partial),
+                *(
+                    (found.ref, found.digest, ImportEntry.fold)
+                    for found in evidence.import_folds
+                    if found.import_ref in selected
+                ),
             ]
         ],
         not_run=[

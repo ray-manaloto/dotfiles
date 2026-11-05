@@ -1419,10 +1419,9 @@ class SessionEvidence(BaseModel):
 
 class RedirectState(StrEnum):
     """
-    What is known of a redirect's delivery: only delivery_confirmed, with a host_delivery receipt, counts as delivered.
+    A redirect's delivery: only delivery_confirmed (a host_delivery receipt) is delivered; shadow never is.
     """
 
-    observed_event = "observed_event"
     shadow_suppressed = "shadow_suppressed"
     delivery_confirmed = "delivery_confirmed"
     delivery_unknown = "delivery_unknown"
@@ -1764,7 +1763,7 @@ class ConfigSetting(BaseModel):
 
 class WorksheetRedirect(BaseModel):
     """
-    Section 1: a redirect in the window.
+    Section 1: a nudge in the window.
     """
 
     model_config = ConfigDict(
@@ -1787,6 +1786,38 @@ class WorksheetRedirect(BaseModel):
     like_128: bool | None
     """
     Like #128; null: NOT_REVIEWED
+    """
+    receipt_ref: str | None
+    """
+    The host_delivery receipt a delivery_confirmed state rests on
+    """
+
+
+class WorksheetAbort(BaseModel):
+    """
+    D4: an abort in the window; never a delivered redirect, judged on its own.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ref: str
+    """
+    The candidate
+    """
+    digest: str
+    """
+    The candidate's digest
+    """
+    state: RedirectState
+    verdict: RedirectVerdict | None
+    """
+    null: NOT_REVIEWED
+    """
+    receipt_ref: str | None
+    """
+    The host_delivery receipt a delivery_confirmed state rests on
     """
 
 
@@ -1848,31 +1879,14 @@ class WorksheetFact(BaseModel):
     """
 
 
-class WorksheetImport(BaseModel):
+class ImportEntry(StrEnum):
     """
-    Section 4: an import completed in the window, or a paid live fold near it.
+    Why a section 4 entry is there: partial has no finished time, so the window cannot place it.
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    ref: str
-    """
-    The candidate
-    """
-    digest: str
-    """
-    The candidate's digest
-    """
-    verdict: ImportVerdict | None
-    """
-    null: NOT_REVIEWED
-    """
-    receipt_ref: str | None
-    """
-    The receipt a proven verdict rests on
-    """
+    finished_in_window = "finished_in_window"
+    partial = "partial"
+    fold = "fold"
 
 
 class WorksheetNotRun(BaseModel):
@@ -1950,43 +1964,6 @@ class WorksheetDecision(BaseModel):
     """
     For change: the exact settings
     """
-
-
-class Worksheet(BaseModel):
-    """
-    worksheet.json: the template the owner fills; outside the collection id, which it carries.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    collection_id: str
-    """
-    The collection it judges
-    """
-    redirects: list[WorksheetRedirect]
-    """
-    Section 1
-    """
-    paid_facts: list[WorksheetPaidFact]
-    """
-    Section 2
-    """
-    learned_facts: list[WorksheetFact]
-    """
-    Section 3
-    """
-    imports: list[WorksheetImport]
-    """
-    Section 4
-    """
-    not_run: list[WorksheetNotRun]
-    """
-    Section 5
-    """
-    mcp_ab: WorksheetAb
-    decision: WorksheetDecision
 
 
 class TeReviewReport(BaseModel):
@@ -2205,6 +2182,29 @@ class ExcludedCount(BaseModel):
     """
 
 
+class Coverage(BaseModel):
+    """
+    D3: how much of the selection the headline covers, in sessions.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    headline_sessions: int
+    """
+    Sessions in the headline cohort
+    """
+    selected_sessions: int
+    """
+    Selected non-imported sessions, whatever their class
+    """
+    no_recorded_usage: int
+    """
+    Selected sessions whose transcript failed (ERROR), so no usage was recorded
+    """
+
+
 class PublicExcludedCount(BaseModel):
     """
     D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.
@@ -2284,6 +2284,7 @@ class PublicReport(BaseModel):
     Last day of the window
     """
     headline: Share
+    coverage: Coverage
     excluded: list[PublicExcludedCount]
     """
     Every exclusion reason, in precedence order
@@ -2474,6 +2475,75 @@ class Evidence(BaseModel):
     """
     What the import evidence covers, in words
     """
+
+
+class WorksheetImport(BaseModel):
+    """
+    Section 4: an import finished in the window or partial with no finished time, or a paid live fold.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ref: str
+    """
+    The candidate
+    """
+    digest: str
+    """
+    The candidate's digest
+    """
+    entry: ImportEntry
+    verdict: ImportVerdict | None
+    """
+    null: NOT_REVIEWED
+    """
+    receipt_ref: str | None
+    """
+    The receipt a proven verdict rests on
+    """
+
+
+class Worksheet(BaseModel):
+    """
+    worksheet.json: the template the owner fills; outside the collection id, which it carries.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    collection_id: str
+    """
+    The collection it judges
+    """
+    redirects: list[WorksheetRedirect]
+    """
+    Section 1
+    """
+    aborts: list[WorksheetAbort]
+    """
+    Aborts, apart from section 1 (D4)
+    """
+    paid_facts: list[WorksheetPaidFact]
+    """
+    Section 2
+    """
+    learned_facts: list[WorksheetFact]
+    """
+    Section 3
+    """
+    imports: list[WorksheetImport]
+    """
+    Section 4
+    """
+    not_run: list[WorksheetNotRun]
+    """
+    Section 5
+    """
+    mcp_ab: WorksheetAb
+    decision: WorksheetDecision
 
 
 class Repotools(BaseModel):

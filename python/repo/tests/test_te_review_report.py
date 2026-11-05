@@ -13,6 +13,7 @@ from repotools.cli import main
 from repotools.models import PrivateReport
 
 from .test_te_review import START, WINDOW, charge, collect, ledger, session
+from .test_te_review_judgment import DAY, cadence_receipt, receipts, run
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -120,6 +121,56 @@ def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
             assert a / (a + b) != pytest.approx(fraction)
 
 
+def test_public_coverage_counts_headline_and_selected_sessions_and_those_with_no_recorded_usage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # D3: two selected sessions, one whose transcript failed; none is in the headline without a real_work receipt.
+    out = frozen(tmp_path, session("s1", START), session("s2", START, error="Traceback"), charge("s2", "j1", START))
+    assert report(capsys, out)["coverage"] == {"headline_sessions": 0, "selected_sessions": 2, "no_recorded_usage": 1}
+
+
+def test_receipted_real_work_makes_the_headline_and_its_proven_cadence_labels_the_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    rows = [session("work", START + DAY + 3600), charge("work", "j1", START + DAY + 3700, tokens=100.0)]
+    ledger(te, "a-1", [*rows, session("probe", START + DAY + 3600), session("other", START + DAY + 3600)])
+    real = receipts(tmp_path / "r", "m.json", ("real_work", {"sessions": ["work"]}))
+    synthetic = receipts(tmp_path / "s", "m.json", ("synthetic", {"sessions": ["probe"]}))
+    proof = cadence_receipt(tmp_path / "c", ["work", "probe", "other"])
+    out = tmp_path / "out"
+    run(te, out, "--receipts", str(real), "--synthetic-manifest", str(synthetic), "--cadence-receipt", str(proof))
+    shown = report(capsys, out)
+    headline = shown["headline"]
+    assert (headline["sessions"], headline["charges"], headline["share"]) == (1, 1, pytest.approx(100 / 1100))
+    assert headline["above_5_percent"] == "YES"
+    assert shown["session_classes"] == [
+        {"session_class": "real_work", "sessions": 1},
+        {"session_class": "synthetic", "sessions": 1},
+        {"session_class": "unknown", "sessions": 1},
+    ]
+    assert {row["reason"]: row["rows"] for row in shown["excluded"] if row["rows"]} == {
+        "SYNTHETIC": 1,
+        "UNCLASSIFIED": 1,
+    }
+    # Every headline session was folded under the proven cadence 1.
+    assert shown["cadence"] == "1"
+    assert shown["coverage"] == {"headline_sessions": 1, "selected_sessions": 3, "no_recorded_usage": 0}
+
+
+def test_headline_sessions_under_different_or_unproven_cadences_leave_the_cadence_unknown(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    ledger(te, "a-1", [session("before", START + 3600), session("after", START + DAY + 3600)])
+    real = receipts(tmp_path / "r", "m.json", ("real_work", {"sessions": ["before", "after"]}))
+    out = tmp_path / "out"
+    run(
+        te, out, "--receipts", str(real), "--cadence-receipt", str(cadence_receipt(tmp_path / "c", ["before", "after"]))
+    )
+    assert report(capsys, out)["cadence"] == "UNKNOWN"
+
+
 def private(capsys: pytest.CaptureFixture[str], evidence: Path) -> dict[str, Any]:
     return report(capsys, evidence, "--private")
 
@@ -173,6 +224,23 @@ def test_a_negative_charge_excludes_itself_and_its_session_but_its_spend_stays_v
         "overhead_tokens": -5.0,
         "invalid_amounts": 0,
     }
+
+
+def test_a_bad_charge_takes_its_receipted_session_and_every_sibling_charge_out_of_the_headline(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    at = START + DAY + 3600
+    ledger(
+        te, "a-1", [session("work", at), charge("work", "j1", at, tokens=-5.0), charge("work", "j2", at, tokens=13.0)]
+    )
+    out = tmp_path / "out"
+    run(te, out, "--receipts", str(receipts(tmp_path / "r", "m.json", ("real_work", {"sessions": ["work"]}))))
+    shown = private(capsys, out)
+    assert reasons(shown) == [["CHARGE_EXCLUDED"], ["BAD_AMOUNT", "SESSION_EXCLUDED"], ["SESSION_EXCLUDED"]]
+    headline = shown["report"]["headline"]
+    assert (headline["sessions"], headline["charges"], headline["share"]) == (0, 0, None)
+    assert headline["above_5_percent"] == "UNKNOWN"
 
 
 def test_a_non_finite_amount_is_bad_and_makes_the_selected_share_unknown(

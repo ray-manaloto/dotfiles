@@ -775,9 +775,9 @@
       "additionalProperties": false
     },
     "RedirectState": {
-      "description": "What is known of a redirect's delivery: only delivery_confirmed, with a host_delivery receipt, counts as delivered.",
+      "description": "A redirect's delivery: only delivery_confirmed (a host_delivery receipt) is delivered; shadow never is.",
       "type": "string",
-      "enum": ["observed_event", "shadow_suppressed", "delivery_confirmed", "delivery_unknown"]
+      "enum": ["shadow_suppressed", "delivery_confirmed", "delivery_unknown"]
     },
     "RedirectCandidate": {
       "description": "A redirect event to judge.",
@@ -908,16 +908,30 @@
       "additionalProperties": false
     },
     "WorksheetRedirect": {
-      "description": "Section 1: a redirect in the window.",
+      "description": "Section 1: a nudge in the window.",
       "type": "object",
       "properties": {
         "ref": { "type": "string", "description": "The candidate" },
         "digest": { "type": "string", "description": "The candidate's digest" },
         "state": { "$ref": "#/$defs/RedirectState" },
         "verdict": { "anyOf": [{ "$ref": "#/$defs/RedirectVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
-        "like_128": { "type": ["boolean", "null"], "description": "Like #128; null: NOT_REVIEWED" }
+        "like_128": { "type": ["boolean", "null"], "description": "Like #128; null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "The host_delivery receipt a delivery_confirmed state rests on" }
       },
-      "required": ["ref", "digest", "state", "verdict", "like_128"],
+      "required": ["ref", "digest", "state", "verdict", "like_128", "receipt_ref"],
+      "additionalProperties": false
+    },
+    "WorksheetAbort": {
+      "description": "D4: an abort in the window; never a delivered redirect, judged on its own.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "state": { "$ref": "#/$defs/RedirectState" },
+        "verdict": { "anyOf": [{ "$ref": "#/$defs/RedirectVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "The host_delivery receipt a delivery_confirmed state rests on" }
+      },
+      "required": ["ref", "digest", "state", "verdict", "receipt_ref"],
       "additionalProperties": false
     },
     "WorksheetPaidFact": {
@@ -946,16 +960,22 @@
       "additionalProperties": false
     },
     "WorksheetImport": {
-      "description": "Section 4: an import completed in the window, or a paid live fold near it.",
+      "description": "Section 4: an import finished in the window or partial with no finished time, or a paid live fold.",
       "type": "object",
       "properties": {
         "ref": { "type": "string", "description": "The candidate" },
         "digest": { "type": "string", "description": "The candidate's digest" },
+        "entry": { "$ref": "#/$defs/ImportEntry" },
         "verdict": { "anyOf": [{ "$ref": "#/$defs/ImportVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
         "receipt_ref": { "type": ["string", "null"], "description": "The receipt a proven verdict rests on" }
       },
-      "required": ["ref", "digest", "verdict", "receipt_ref"],
+      "required": ["ref", "digest", "entry", "verdict", "receipt_ref"],
       "additionalProperties": false
+    },
+    "ImportEntry": {
+      "description": "Why a section 4 entry is there: partial has no finished time, so the window cannot place it.",
+      "type": "string",
+      "enum": ["finished_in_window", "partial", "fold"]
     },
     "WorksheetNotRun": {
       "description": "Section 5: a NOT_RUN item carried over, by its not_run receipt.",
@@ -1001,6 +1021,7 @@
       "properties": {
         "collection_id": { "type": "string", "description": "The collection it judges" },
         "redirects": { "type": "array", "items": { "$ref": "#/$defs/WorksheetRedirect" }, "description": "Section 1" },
+        "aborts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetAbort" }, "description": "Aborts, apart from section 1 (D4)" },
         "paid_facts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetPaidFact" }, "description": "Section 2" },
         "learned_facts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetFact" }, "description": "Section 3" },
         "imports": { "type": "array", "items": { "$ref": "#/$defs/WorksheetImport" }, "description": "Section 4" },
@@ -1008,7 +1029,7 @@
         "mcp_ab": { "$ref": "#/$defs/WorksheetAb" },
         "decision": { "$ref": "#/$defs/WorksheetDecision" }
       },
-      "required": ["collection_id", "redirects", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"],
+      "required": ["collection_id", "redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"],
       "additionalProperties": false
     },
     "TeReviewReport": {
@@ -1109,6 +1130,17 @@
       "required": ["reason", "rows", "effective_tokens", "overhead_tokens", "invalid_amounts"],
       "additionalProperties": false
     },
+    "Coverage": {
+      "description": "D3: how much of the selection the headline covers, in sessions.",
+      "type": "object",
+      "properties": {
+        "headline_sessions": {"type": "integer", "description": "Sessions in the headline cohort"},
+        "selected_sessions": {"type": "integer", "description": "Selected non-imported sessions, whatever their class"},
+        "no_recorded_usage": {"type": "integer", "description": "Selected sessions whose transcript failed (ERROR), so no usage was recorded"}
+      },
+      "required": ["headline_sessions", "selected_sessions", "no_recorded_usage"],
+      "additionalProperties": false
+    },
     "PublicExcludedCount": {
       "description": "D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.",
       "type": "object",
@@ -1150,6 +1182,7 @@
         "since": {"type": "string", "format": "date", "description": "First day of the window"},
         "until": {"type": "string", "format": "date", "description": "Last day of the window"},
         "headline": {"$ref": "#/$defs/Share"},
+        "coverage": {"$ref": "#/$defs/Coverage"},
         "excluded": {"type": "array", "items": {"$ref": "#/$defs/PublicExcludedCount"}, "description": "Every exclusion reason, in precedence order"},
         "session_classes": {"type": "array", "items": {"$ref": "#/$defs/ClassCount"}, "description": "Selected sessions by class"},
         "cadence": {"$ref": "#/$defs/Cadence"},
@@ -1157,7 +1190,7 @@
         "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"},
         "withheld": {"const": "a reason with no effective tokens shows no total; that spend is only in --private", "description": "D6: excluded spend public leaves out, an exception to B3"}
       },
-      "required": ["scope", "label", "since", "until", "headline", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld"],
+      "required": ["scope", "label", "since", "until", "headline", "coverage", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld"],
       "additionalProperties": false
     },
     "AllKeys": {
