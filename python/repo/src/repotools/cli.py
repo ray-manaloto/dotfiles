@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, te_report, te_review, zero_bash
+from . import gates, main_guard, pane_approval, te_receipts, te_report, te_review, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -26,6 +26,8 @@ from .models import (
     ReviewPython,
     TeReviewCollect,
     TeReviewCommand,
+    TeReviewReceiptsCommand,
+    TeReviewReceiptsDraft,
     TeReviewReport,
     ZeroBash,
 )
@@ -46,10 +48,11 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_remove: MainGuardRemove,
     Command.main_guard_armed: MainGuardArmed,
 }
-# te-review takes a subcommand word first; each has its own model.
-TE_REVIEW: dict[TeReviewCommand, type[Options]] = {
-    TeReviewCommand.collect: TeReviewCollect,
-    TeReviewCommand.report: TeReviewReport,
+# te-review takes a subcommand first, one word or receipts and its own word; each has its own model.
+TE_REVIEW: dict[tuple[str, ...], type[Options]] = {
+    (TeReviewCommand.collect,): TeReviewCollect,
+    (TeReviewCommand.report,): TeReviewReport,
+    (TeReviewCommand.receipts, TeReviewReceiptsCommand.draft): TeReviewReceiptsDraft,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -60,10 +63,11 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
         raise ValueError(msg)
     command, words = Command(argv[0]), 1
     if command is Command.te_review:
-        if len(argv) < 2 or argv[1] not in set(TeReviewCommand):  # noqa: PLR2004 -- te-review and its word
-            msg = f"repotools te-review: the next argument is one of {', '.join(TeReviewCommand)}"
+        given = [key for key in TE_REVIEW if tuple(argv[1 : 1 + len(key)]) == key]
+        if not given:
+            msg = f"repotools te-review: the next arguments are one of {', '.join(map(' '.join, TE_REVIEW))}"
             raise ValueError(msg)
-        model, words = TE_REVIEW[TeReviewCommand(argv[1])], 2
+        model, words = TE_REVIEW[given[0]], 1 + len(given[0])
     else:
         model = OPTIONS[command]
     cli = CliSettingsSource(
@@ -98,6 +102,8 @@ def run(command: Command, options: Options) -> None:
         main_guard.dispatch(options)
     elif isinstance(options, TeReviewCollect | TeReviewReport):
         te_report.dispatch(options)
+    elif isinstance(options, TeReviewReceiptsDraft):
+        te_receipts.draft(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
