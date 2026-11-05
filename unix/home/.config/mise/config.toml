@@ -345,7 +345,7 @@ ty = { version = "0.0.97", minimum_release_age = "0s" }
 # agent-desktop drives macOS apps through the Accessibility tree (vercel-labs/agent-desktop, Apache-2.0). On trial:
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
-"github:vercel-labs/agent-desktop" = { version = "1.1.0", minimum_release_age = "0s" }
+"github:vercel-labs/agent-desktop" = { version = "1.2.0", minimum_release_age = "0s" }
 
 #[tool_alias]
 #devcontainer = "npm:@devcontainers/cli"
