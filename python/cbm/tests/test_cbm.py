@@ -13,7 +13,11 @@ import pytest
 from .conftest import CBM, TIMEOUT, calls, cbm, events, failed, launcher, link, mode, restored
 
 SCOUT = "Codex agent codebase-memory-scout: launcher, scout profile, read-only CBM tools only"
-CHECKS = 18
+OPENCODE = ".config/opencode"
+OPENCODE_MCP = "OpenCode MCP entry names the launcher, no args or env"
+# Each client's check-name prefix and the folder its setup lives in.
+CLIENTS = {"claude": ("Claude", ".claude"), "codex": ("Codex", ".codex"), "opencode": ("OpenCode", OPENCODE)}
+CHECKS = 25
 
 
 def test_install_then_verify_pass(home: Path) -> None:
@@ -30,7 +34,7 @@ def test_install_then_verify_pass(home: Path) -> None:
     assert not done.stderr
     assert restored(home)
     recorded = calls(home)
-    assert f"install --skip-binary --clients=claude,codex --dir={launcher(home).parent} -y" in recorded
+    assert f"install --skip-binary --clients=claude,codex,opencode --dir={launcher(home).parent} -y" in recorded
     assert "config set auto_index false" in recorded
     verified = cbm("verify", cwd=home / "checkout")
     assert verified.returncode == 0
@@ -224,7 +228,7 @@ def test_client_order_is_kept(home: Path, monkeypatch: pytest.MonkeyPatch) -> No
     assert "--clients=codex,claude " in calls(home)
 
 
-@pytest.mark.parametrize("name", ["CODEX_HOME", "CLAUDE_CONFIG_DIR"])
+@pytest.mark.parametrize("name", ["CODEX_HOME", "CLAUDE_CONFIG_DIR", "OPENCODE_CONFIG"])
 def test_moved_config_folders_exit_2(home: Path, monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     monkeypatch.setenv(name, str(home / "other"))
     done = cbm("install", cwd=home / "checkout")
@@ -245,17 +249,19 @@ def test_bad_usage_exits_2(home: Path, argv: list[str]) -> None:
     assert not calls(home)
 
 
-@pytest.mark.parametrize(("client", "other"), [("claude", "codex"), ("codex", "claude")])
+@pytest.mark.parametrize("client", list(CLIENTS))
 def test_one_client_installs_and_checks_only_that_client(
-    home: Path, monkeypatch: pytest.MonkeyPatch, client: str, other: str
+    home: Path, monkeypatch: pytest.MonkeyPatch, client: str
 ) -> None:
     monkeypatch.setenv("CBM_CLIENTS", client)
     done = cbm("install", cwd=home / "checkout")
     assert done.returncode == 0, done.stdout + done.stderr
     assert f"--clients={client} " in calls(home)
     names = [event["name"] for event in events(done.stdout) if event["event"] == "check"]
-    assert not [name for name in names if name.startswith(other.capitalize())]
-    assert not (home / f".{other}").exists()
+    for other, (label, folder) in CLIENTS.items():
+        if other != client:
+            assert not [name for name in names if name.startswith(f"{label} ")]
+            assert not (home / folder).exists()
 
 
 def test_config_set_failing_fails_install(home: Path) -> None:
@@ -399,11 +405,97 @@ def test_unknown_or_duplicate_claude_agent_tool_fails(home: Path, change: Callab
     )  # fmt: skip
 
 
-def test_empty_agents_md_block_fails(home: Path) -> None:
-    agents_md = home / ".codex/AGENTS.md"
+@pytest.mark.parametrize("client", ["codex", "opencode"])
+def test_empty_agents_md_block_fails(home: Path, client: str) -> None:
+    label, folder = CLIENTS[client]
+    agents_md = home / folder / "AGENTS.md"
     empty = "<!-- codebase-memory-mcp:start -->\n<!-- codebase-memory-mcp:end -->\n"
     check_after(
-        home, lambda: agents_md.write_text(empty), "Codex AGENTS.md has the CBM managed block, pointing at the skill"
+        home, lambda: agents_md.write_text(empty), f"{label} AGENTS.md has the CBM managed block, pointing at the skill"
+    )
+
+
+def test_verify_reads_the_opencode_entry_from_an_existing_jsonc(home: Path) -> None:
+    jsonc = home / OPENCODE / "opencode.jsonc"
+    jsonc.parent.mkdir(parents=True)
+    jsonc.write_text('{\n  // the default model\n  "model": "opencode/crouton-alpha-free", /* free */\n}\n')
+    done = cbm("install", cwd=home / "checkout")
+    assert done.returncode == 0, done.stdout
+    assert [event["ok"] for event in events(done.stdout) if event.get("name") == OPENCODE_MCP] == [True]
+
+
+def test_opencode_entry_in_json_is_not_read_once_a_jsonc_exists(home: Path) -> None:
+    check_after(home, lambda: (home / OPENCODE / "opencode.jsonc").write_text("{}"), OPENCODE_MCP)
+
+
+@pytest.mark.parametrize(
+    "extra", [{"enabled": False}, {"environment": {"CBM_RUNTIME_DIR": "/elsewhere"}}, {"command": ["other"]}]
+)
+def test_opencode_mcp_disabled_with_env_or_another_command_fails(home: Path, extra: dict[str, object]) -> None:
+    path = home / OPENCODE / "opencode.json"
+
+    def edit() -> None:
+        config = json.loads(path.read_text().replace(",}", "}"))  # the stand-in splices, as CBM does
+        config["mcp"]["codebase-memory-mcp"].update(extra)
+        path.write_text(json.dumps(config))
+
+    check_after(home, edit, OPENCODE_MCP)
+
+
+# A comment still separates tokens, and only a comma after a value may trail, as in yyjson.
+@pytest.mark.parametrize("text", ["{not json", '{"a": tr/*c*/ue}', '{"a": 1/*c*/2}', '{"a": [,]}', '{"a": 1,,}', "{,}"])
+def test_malformed_opencode_config_is_an_error_event_and_fails(home: Path, text: str) -> None:
+    path = home / OPENCODE / "opencode.json"
+    done = check_after(home, lambda: path.write_text(text), OPENCODE_MCP)
+    [error] = events(done.stderr)
+    assert error["code"] == "invalid_json"
+    assert error["path"] == str(path)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda s: s.replace('  "*": deny\n', ""),
+        lambda s: s.replace('  "*": deny\n', "").replace("\n---\n", '\n  "*": deny\n---\n'),
+        lambda s: s.replace("mode: subagent", "mode: primary"),
+        lambda s: s.replace("codebase-memory-mcp_search_graph", "codebase-memory-mcp_index_repository"),
+        lambda s: s.replace('"codebase-memory-mcp_search_graph": allow\n', ""),
+        lambda s: s.replace("  read: allow\n", "  read: allow\n  codebase-memory-mcp_index_repository: allow\n"),
+        lambda s: s.replace("  read: allow\n", '  read: allow\n  "codebase-memory-*": allow\n'),
+        lambda s: s.replace('"codebase-memory-mcp_search_graph": allow', '"codebase-memory-mcp_search_graph": deny'),
+        lambda s: s.replace("  grep: allow\n", ""),
+        lambda s: s.replace("  grep: allow\n", "  grep allow\n"),
+        lambda s: s.replace("---\ndescription", "description"),
+        lambda s: s.replace("\n---\n", '\n\n  "codebase-memory-mcp_index_repository": allow\n---\n'),
+        lambda s: s.replace("\n---\n", '\n# note\n  "codebase-memory-mcp_index_repository": allow\n---\n'),
+        lambda s: s.replace("\n---\n", '\npermission:\n  "*": allow\n---\n'),
+        lambda _: "",
+        lambda s: s.replace(
+            '  "codebase-memory-mcp_search_graph": allow\n', '  "codebase-memory-mcp_search_graph": allow\n' * 2
+        ),
+    ],
+)
+def test_wrong_opencode_agent_fails(home: Path, change: Callable[[str], str]) -> None:
+    agent = home / OPENCODE / "agents/codebase-memory-scout.md"
+    check_after(
+        home, lambda: agent.write_text(change(agent.read_text())),
+        "OpenCode agent codebase-memory-scout: a subagent, read-only CBM tools only",
+    )  # fmt: skip
+
+
+def test_opencode_agent_with_blank_and_comment_lines_in_its_permissions_passes(home: Path) -> None:
+    assert cbm("install", cwd=home / "checkout").returncode == 0
+    agent = home / OPENCODE / "agents/codebase-memory-scout.md"
+    agent.write_text(agent.read_text().replace("  read: allow\n", "\n  # search tools\n  read: allow\n"))
+    done = cbm("verify", cwd=home / "checkout")
+    assert done.returncode == 0, done.stdout
+
+
+@pytest.mark.parametrize("change", [lambda s: s.replace("const BIN = '", "const BIN = '/elsewhere"), lambda _: ""])
+def test_opencode_plugin_that_runs_another_binary_fails(home: Path, change: Callable[[str], str]) -> None:
+    plugin = home / OPENCODE / "plugins/cbm-augment.ts"
+    check_after(
+        home, lambda: plugin.write_text(change(plugin.read_text())), "OpenCode plugin cbm-augment runs the launcher"
     )
 
 

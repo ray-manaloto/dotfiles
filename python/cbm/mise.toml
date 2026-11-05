@@ -7,11 +7,11 @@
 _.python.venv = { path = ".venv" }
 
 [tasks.install]
-description = "Run codebase-memory-mcp's installer for Claude and Codex (MCP, hooks, skills, agents), then verify"
+description = "Run codebase-memory-mcp's installer for Claude, Codex and OpenCode (MCP, hooks, plugin, skills, agents), then verify"
 run = "uv run --locked cbm install"
 
 [tasks.verify]
-description = "Check the codebase-memory-mcp setup for Claude and Codex without changing it"
+description = "Check the codebase-memory-mcp setup for Claude, Codex and OpenCode without changing it"
 run = "uv run --locked cbm verify"
 
 # Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.

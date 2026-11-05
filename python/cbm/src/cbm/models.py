@@ -63,6 +63,7 @@ class Client(StrEnum):
 
     claude = "claude"
     codex = "codex"
+    opencode = "opencode"
 
 
 class Config(BaseModel):

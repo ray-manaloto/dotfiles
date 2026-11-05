@@ -45,7 +45,8 @@
       "type": "string",
       "enum": [
         "claude",
-        "codex"
+        "codex",
+        "opencode"
       ]
     },
     "Config": {
