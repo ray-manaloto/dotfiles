@@ -26,6 +26,9 @@ sources:
   - id: codanna
     resource: "https://github.com/bartolli/codanna/tree/v0.17.1"
     title: "codanna source at the pinned tag"
+  - id: tree-sitter-rust
+    resource: "https://github.com/tree-sitter/tree-sitter-rust/tree/v0.24.2"
+    title: "tree-sitter-rust grammar at the version codanna 0.17.1 pins"
   - id: cbm
     resource: "https://github.com/DeusData/codebase-memory-mcp/tree/v0.12.1"
     title: "Graph store, export and compare_graphs source at the pinned tag"
@@ -312,5 +315,39 @@ Blast at depth 4, same 110 touched functions:
 | tool | 0 | 1 | 0 |
 
 - **Verdict:** codanna is more precise than cbm on Rust but misses 38% of SCIP's edges, so it doesn't
-  replace SCIP for blast radius. **Why `install` is 0 is unexplained.** The 8% of codanna edges not in
-  SCIP were not spot-checked.
+  replace SCIP for blast radius. The 8% of codanna edges not in SCIP were not spot-checked.
+
+**Why `install` is 0** (read from codanna v0.17.1 and tree-sitter-rust 0.24.2, its pinned grammar,
+then confirmed with a real run). Each of SCIP's 14 caller chains (depth 4) from the 8 touched
+functions enters src/cli/install.rs at one of three call sites: :720 (9 chains), :395 (4) or :199
+(1). codanna has no edge for any of the three, so no chain can reach `install`:
+
+| call site | code | why codanna drops it |
+|---|---|---|
+| :395 | `ts.install_all_versions(…)`, with `let mut ts: Toolset = trs.filter_by_tool(tools).into();` at :375 | The type annotation is never read: `find_variable_types_in_node` (src/parsing/rust/parser.rs:1030-1081) takes the type from the `value` only, and `extract_value_type` returns None for a method call such as `.into()` (:1122-1141). |
+| :720 | `ts.install_all_versions_with_progress(…)`, inside `measure!("install_all_versions", { … })` | The grammar parses a macro body as a `token_tree`, not as expressions (grammar.js:978-986), and codanna's Rust parser has no `macro_invocation` or `token_tree` case, so the call is never seen. None of the method's other calls between :718 and :725 has an edge either. |
+| :199 | `config.tasks_with_context(…)`, with `config: &Arc<Config>` (:193) | `reduce_type_to_name` (src/parsing/rust/behavior.rs:34-45) strips `&` and then takes the generic's base type, so the receiver is typed `Arc`, not `Config`, and no method of `Arc` matches. |
+
+The `Task::default` chain (`inferred_workspace_tasks` → `load_all_tasks_with_context` →
+`tasks_with_context` → `collect_task_tool_requests`) also breaks twice before :199, in
+src/config/mod.rs:
+
+| call site | code | why codanna drops it |
+|---|---|---|
+| :1200 | `self.load_all_tasks_with_context(…)`, inside `measure!("config::load_all_tasks_with_context", { … })` | Same as :720: a macro body is never parsed. |
+| :5724 | `..Default::default()` in a `Task { … }` literal | The receiver stays `Default`. The match (src/parsing/rust/behavior.rs:238-252) needs the candidate's class to equal the receiver, or its module path to end in `::Default`. `impl Default for Task` is class `Task`, so nothing matches. An explicit `Task::default()` does link, which is why codanna finds 34 callers of `Task::default` to SCIP's 160. |
+
+- An untyped or wrongly typed receiver is dropped on purpose, not guessed. The resolver says "a
+  receiver whose type is unknown fails closed" (src/indexing/pipeline/stages/resolve.rs:593-643),
+  and with a known type it keeps only methods of that type (:1606-1625). It gives up recall to
+  avoid wrong edges.
+- `let mut` is not a cause: the grammar puts `mut` in its own `mutable_specifier` node, and the
+  `pattern` is still a plain identifier (grammar.js:602-605).
+- **Confirmed** on an 8-case crate indexed with codanna 0.17.1 (semantic search off). Three cases got
+  a Calls edge: the value-typed `let ts = Toolset::from(1); ts.m()`, the `config: &Config`
+  parameter and an explicit `Task::default()`. Five got none: the annotated `let`, a `ts.m()` and a
+  `self.m()` inside a `macro_rules!` macro, the `&Arc<Config>` parameter, and `..Default::default()`
+  against a hand-written `impl Default for Task`.
+- The macro miss is codanna's own. graphify 0.9.102 (graphify/extractors/rust.py:215-240, 917-943)
+  and cbm 0.12.1 (internal/cbm/lsp/rust_lsp.c:2827) both have code that walks macro token trees.
+  §4.8 gives graphify's reason for missing :720. cbm's reason was not traced.

@@ -64,5 +64,7 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
 - **scip-clang on cbm's own C** (§4.9): 2 s, 46 MB. cbm's C call edges score recall 0.919 and
   precision 0.787 against it (~0.936 without cbm's libc wrappers), far closer than on Rust.
 - **codanna on mise** (§4.10): 12.6 s, precision 0.920 but recall 0.620 against SCIP; it doesn't
-  replace SCIP for blast radius.
+  replace SCIP for blast radius. Its `install` blast is 0 because it drops all three call sites
+  where SCIP's chains enter src/cli/install.rs: a receiver typed only by annotation, a call inside `measure!`, and an
+  `&Arc<Config>` parameter it types as `Arc`. Its resolver drops untyped receivers rather than guess.
 - **Design confirmed (Q19):** the owner confirmed proposal items 1-7 on 2026-11-05.

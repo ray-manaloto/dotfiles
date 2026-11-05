@@ -129,7 +129,7 @@ change none of these items.
   clippy-sarif, clang-tidy, clang static analyzer; Qodana stays out). SARIF carries findings only, no
   symbol graph, so it adds to blast, it doesn't replace it.
 - Why cbm misses `cbm_arena_alloc` / `cbm_ts_child_by_field_name` / `cbm_log` calls (§4.9).
-- Why codanna's `install` blast is 0, and its 8% non-SCIP edges (§4.10).
+- codanna's 8% non-SCIP edges (§4.10). Its `install` blast of 0 is explained there.
 - `blast` depth 4 was chosen ad hoc; it is not calibrated against a known breaking change.
 - The SCIP blast counts all references, not only calls; the cbm/SCIP deltas were spot-checked once
   (`auto_sync_skills`, `install_all_versions_with_progress`), not line by line.

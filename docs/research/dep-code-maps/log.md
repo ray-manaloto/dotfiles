@@ -7,5 +7,8 @@
 * **Addition**: scip-clang pilot on cbm's own C sources and codanna pilot scored against SCIP.
 * **Rejected**: cbm `compare_graphs` for version diffs, graphify/REAgraph and codanna as blast
   engines, JetBrains indexes and Qodana SARIF as maps, mise dotfiles' private repo as map storage.
+* **Addition**: §4.10 explains codanna's 0 `install` blast from its v0.17.1 source and a probe
+  crate: annotation-only `let` types, macro bodies, `&Arc<T>` parameters and `..Default::default()`
+  leave the receiver untyped or mistyped, and the resolver drops those calls.
 * **Deferred**: `depmaps lint-diff` (SARIF findings diff), the upstream cbm issue, blast-depth
   calibration.
