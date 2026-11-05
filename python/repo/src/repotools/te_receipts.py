@@ -41,6 +41,8 @@ HOOK_S = 60.0
 POST_TOOL = ("PostToolUse", "PostToolUseFailure")
 # How the notice plugin/controller.py post_tool returns beside a nudge's context opens, up to its reason.
 NUDGED = "TokenEconomizer nudged this turn ("
+# How its notice of an abort opens, up to its reason; ClaudeCode relays it as context too (plugin/hosts.py).
+STUCK = "TokenEconomizer: this turn still looks stuck after a redirect ("
 # The heading microskills distiller.py render puts first in the manual it injects at SessionStart.
 MANUAL = "# repo operating manual ("
 
@@ -73,12 +75,22 @@ def records(path: Path, data: bytes) -> list[tuple[datetime, TranscriptAttachmen
     return found
 
 
-def printed(source: str, part: TranscriptAttachment, notice: str) -> str | None:
-    """The context a hook printed beside this nudge's notice: a hook_success whose stdout, read as the hook's
+def notice(event: RedirectEvent) -> tuple[str, str]:
+    """How the notice plugin/controller.py post_tool returns for this event opens, and that opening up to the
+    event's own reason: a nudge's names its reason; an abort's, its reason and the turn's tool calls."""
+    short = event.reason.split(":")[0]
+    if event.kind is RedirectKind.abort:
+        return STUCK, f"{STUCK}{short}, {event.tool_calls} tool calls). "
+    return NUDGED, f"{NUDGED}{short}):"
+
+
+def printed(source: str, part: TranscriptAttachment, opener: str, notice: str) -> str | None:
+    """The context a hook printed beside this event's notice: a hook_success whose stdout, read as the hook's
     JSON, has the notice plugin/controller.py post_tool returns as its systemMessage and a context beside it.
-    The nudge's text is never logged and a judge writes its own, so only the output that printed the notice
-    names it; the command field does not, as transcripts show the plugin's path or "command hook N"."""
-    if part.type != "hook_success" or part.stdout is None or NUDGED not in part.stdout:
+    A nudge's text is never logged and a judge writes its own, and an abort's context is the host's relay of
+    its notice, so only the output that printed the notice names it; the command field does not, as
+    transcripts show the plugin's path or "command hook N"."""
+    if part.type != "hook_success" or part.stdout is None or opener not in part.stdout:
         return None
     output = conform(HookOutput, f"{source}: {part.tool_use_id}'s hook output", json_file(source, part.stdout.encode()))
     context = output.hook_specific_output.additional_context if output.hook_specific_output else None
@@ -89,9 +101,9 @@ def printed(source: str, part: TranscriptAttachment, notice: str) -> str | None:
 def candidates(
     source: str, event: RedirectEvent, seen: list[tuple[datetime, TranscriptAttachment]]
 ) -> list[tuple[datetime, str | None]]:
-    """The hook outputs that show the host received this nudge, within the hook's timeout of the event: one
-    that printed its notice and context, where the host attached exactly that context to the same tool call."""
-    notice = f"{NUDGED}{event.reason.split(':')[0]}):"
+    """The hook outputs that show the host received this nudge or abort, within the hook's timeout of the event:
+    one that printed its notice and context, where the host attached exactly that context to the same tool call."""
+    opener, named = notice(event)
     hooked = [(when, part) for when, part in seen if part.hook_event in POST_TOOL and part.tool_use_id is not None]
     attached = {
         (part.tool_use_id, tuple(part.content))
@@ -100,7 +112,7 @@ def candidates(
     }
     found = []
     for when, part in hooked:
-        context = printed(source, part, notice)
+        context = printed(source, part, opener, named)
         if (
             context
             and (part.tool_use_id, (context,)) in attached
@@ -195,18 +207,15 @@ class Drafting:
         self.work: list[Receipt] = []
         self.deliveries: list[Receipt] = []
         self.injections: list[Receipt] = []
-        self.undelivered = 0
+        self.undelivered: Counter[RedirectKind] = Counter()
 
-    def nudges(self, session_id: str) -> list[RedirectEvent]:
-        """The session's nudges a host could have received: a shadow one was never sent."""
-        return [
-            event
-            for event in self.events
-            if event.session_id == session_id and event.kind is RedirectKind.nudge and not event.shadow
-        ]
+    def sent(self, session_id: str) -> list[RedirectEvent]:
+        """The session's nudges and aborts a host could have received: a shadow one was never sent."""
+        return [event for event in self.events if event.session_id == session_id and not event.shadow]
 
     def session(self, row: EvidenceRow, path: Path) -> None:
-        """The receipts one session's transcript gives: its real work, its delivered nudges, its injected facts."""
+        """The receipts one session's transcript gives: its real work, its delivered nudges and aborts, its
+        injected facts."""
         session_id, data = row.session_id, read_bytes(path)
         # Every receipt here is the transcript as read for this draft.
         name, sha = str(path), hashlib.sha256(data).hexdigest()
@@ -215,13 +224,13 @@ class Drafting:
             Receipt(path=name, sha256=sha, timestamp=mtime, kind=ReceiptKind.real_work, sessions=[session_id])
         )
         seen = records(path, data)
-        nudges = self.nudges(session_id)
-        found = [candidates(name, event, seen) for event in nudges]
-        # A record two nudges could claim confirms neither: collect would count both delivered.
+        events = self.sent(session_id)
+        found = [candidates(name, event, seen) for event in events]
+        # A record two events could claim confirms neither: collect would count both delivered.
         claimed = Counter(record for listed in found for record in listed)
-        for event, matched in zip(nudges, found, strict=True):
+        for event, matched in zip(events, found, strict=True):
             if self.keys[(session_id, event.at)] != 1 or len(matched) != 1 or claimed[matched[0]] != 1:
-                self.undelivered += 1
+                self.undelivered[event.kind] += 1
                 continue
             link = RedirectLink(session_id=session_id, at=event.at)
             self.deliveries.append(
@@ -268,7 +277,7 @@ def draft(options: TeReviewReceiptsDraft) -> None:
         else:
             gap = DraftGap.many_transcripts if paths else DraftGap.no_transcript
             without.append(DraftUncovered(session_id=session_id, gap=gap))
-            drafting.undelivered += len(drafting.nudges(session_id))
+            drafting.undelivered.update(event.kind for event in drafting.sent(session_id))
     receipts = drafting.work + drafting.deliveries + drafting.injections
     write(out, ReceiptManifest(receipts=receipts))
     counts = DraftCounts(
@@ -279,6 +288,7 @@ def draft(options: TeReviewReceiptsDraft) -> None:
     summary = DraftSummary(
         counts=counts,
         without_receipt=without,
-        undelivered_nudges=drafting.undelivered,
+        undelivered_nudges=drafting.undelivered[RedirectKind.nudge],
+        undelivered_aborts=drafting.undelivered[RedirectKind.abort],
     )
     sys.stdout.write(summary.model_dump_json() + "\n")
