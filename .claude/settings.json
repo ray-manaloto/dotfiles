@@ -31,5 +31,8 @@
   "agentPushNotifEnabled": true,
   "effortLevel": "medium",
   "fastMode": false,
-  "remoteControlAtStartup": true
+  "remoteControlAtStartup": true,
+  "attribution": {
+    "sessionUrl": false
+  }
 }
