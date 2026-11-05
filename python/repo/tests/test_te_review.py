@@ -89,7 +89,13 @@ def test_a_session_ended_in_the_window_is_collected_into_a_private_complete_dir(
     source = ledger(tmp_path / "te", "a-1", [session("s1", START + 3600)])
     out = tmp_path / "out"
     collect(tmp_path / "te", out)
-    assert sorted(path.name for path in out.iterdir()) == ["COMPLETE", "collection.json", "evidence.json", "sources"]
+    assert sorted(path.name for path in out.iterdir()) == [
+        "COMPLETE",
+        "collection.json",
+        "evidence.json",
+        "sources",
+        "worksheet.json",
+    ]
     files = [path for path in out.rglob("*") if path.is_file()]
     assert {stat.S_IMODE(path.stat().st_mode) for path in files} == {0o600}
     folders = [out, *(path for path in out.rglob("*") if path.is_dir())]
