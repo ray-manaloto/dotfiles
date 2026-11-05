@@ -100,14 +100,18 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # uncaptured live change without asking. The second entry only sets the folder's mode.
 "~/.tokeneconomizer/config.json" = { source = "unix/home/.tokeneconomizer/config.json", mode = "copy", permissions = "0600" }
 "~/.tokeneconomizer" = { permissions = "0700" }
-# Both files are not this repo's, so only this block is managed. Other repos get the rule from here,
-# until ~/.claude/CLAUDE.md imports the shared ~/.config/agents/AGENTS.md and the rule moves there.
-"~/.codex/AGENTS.md/hc-codex" = { block = '''
-Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: plain `codex` has no keys and no `--no-daemon`. `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
+# The shared agent rules (#449): one tracked file, linked where an agent reads a plain file, imported by
+# Claude Code. codebase-memory-mcp's block in it is verbatim, so its installer rewrites nothing; ctx7 setup
+# never runs against it (decision 40).
+"~/.config/agents/AGENTS.md" = { source = "unix/home/.config/agents/AGENTS.md", mode = "symlink" }
+"~/.codex/AGENTS.md" = { source = "unix/home/.config/agents/AGENTS.md", mode = "symlink" }
+"~/.gemini/GEMINI.md" = { source = "unix/home/.config/agents/AGENTS.md", mode = "symlink" }
+"~/.claude/CLAUDE.md/agents" = { block = '''
+@~/.config/agents/AGENTS.md
 ''' }
-"~/.claude/CLAUDE.md/hc-codex" = { block = '''
-Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: plain `codex` has no keys and no `--no-daemon`. `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
-''' }
+# The path the shared file points at (#449). Folder links: ~/.config/agents holds only what dotfiles
+# delivers, so its subfolders need not stay real folders.
+"~/.config/agents/workflow" = { source = "unix/home/.config/agents/workflow", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]

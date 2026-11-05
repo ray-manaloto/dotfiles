@@ -7,6 +7,11 @@ their docs by a repository path, so they worked in only one repository. A skill 
 project and user scope also loads twice in Claude Code, and in Codex a bare mention of its name
 then selects neither copy.
 
+OpenCode comes later: this wave links Claude Code, Codex and Gemini only. When OpenCode is added,
+note that codebase-memory-mcp's installer also writes OpenCode's `~/.config/opencode/AGENTS.md`
+(cli.c:9819) whenever OpenCode is one of its clients, so that file needs the same verbatim-block
+treatment as the Codex one.
+
 Each repository states only its workflow facts, in its own AGENTS.md. Those facts are its check,
 how a change ships, where research goes and how a review is approved. Tickets are GitHub issues in
 every repository, the source project's too. Each one has a line in the planning-with-files roadmap

@@ -25,7 +25,12 @@ POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
 [TAG] = re.findall(r"herdrdev/herdr-core#(\S+)", " ".join(POST_TOOLS))
-BLOCKS = ("~/.claude/CLAUDE.md/hc-codex", "~/.codex/AGENTS.md/hc-codex")
+ENTRIES = (
+    "~/.config/agents/AGENTS.md",
+    "~/.codex/AGENTS.md",
+    "~/.gemini/GEMINI.md",
+    "~/.claude/CLAUDE.md/agents",
+)
 
 # What `skills add herdrdev/herdr` installed in September, as the skills lock records it.
 OLD = ("herdr", "herdr-pre-release-audit", "herdr-throwaway-repro", "triage")
@@ -161,15 +166,18 @@ class HerdrAppTest(unittest.TestCase):
         )
 
     def test_claude_and_codex_open_watched_agents_as_tabs(self) -> None:
-        done = self.scratch("mise", "dot", "apply", *BLOCKS)
+        done = self.scratch("mise", "dot", "apply", *ENTRIES)
         self.assertEqual(done.returncode, 0, done.stderr)
         claude = (self.home / ".claude/CLAUDE.md").read_text()
         codex = (self.home / ".codex/AGENTS.md").read_text()
-        self.assertEqual(claude, codex)
-        self.assertIn("herdr-app do tab.new --space ", claude)
-        self.assertIn('--argv \'["codex-hc"', claude)
-        self.assertIn("If `herdr-app ls` fails, stop and ask the user", claude)
-        self.assertNotIn("hc run --bg", claude)
+        self.assertEqual(claude.splitlines().count("@~/.config/agents/AGENTS.md"), 1)
+        imported = (self.home / ".config/agents/AGENTS.md").read_text()
+        self.assertEqual(imported, codex)
+        for text in (codex, imported):
+            self.assertIn("herdr-app do tab.new --space ", text)
+            self.assertIn('--argv \'["codex-hc"', text)
+            self.assertIn("If `herdr-app ls` fails, stop and ask the user", text)
+            self.assertNotIn("hc run --bg", text)
 
 
 if __name__ == "__main__":
