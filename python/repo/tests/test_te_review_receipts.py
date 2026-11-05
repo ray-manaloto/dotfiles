@@ -303,3 +303,21 @@ def test_one_delivery_record_two_nudges_could_claim_confirms_neither(
     draft(te, projects, out)
     summary = json.loads(capsys.readouterr().out)
     assert (summary["counts"]["host_delivery"], summary["undelivered_nudges"]) == (0, 2)
+
+
+def test_a_relative_transcripts_folder_gives_receipts_collect_finds_from_another_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    te = tmp_path / "te"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    path = transcript(tmp_path / "projects" / "p", "s1")
+    out = tmp_path / "elsewhere" / "receipts.json"
+    out.parent.mkdir()
+    # collect reads a relative receipt path from the manifest's folder, not the folder the draft ran in.
+    monkeypatch.chdir(tmp_path)
+    draft(te, Path("projects"), out)
+    capsys.readouterr()
+    (receipt,) = json.loads(out.read_text())["receipts"]
+    assert receipt["path"] == str(path)
+    (row,) = collect(te, tmp_path / "c", "--receipts", str(out))["sessions"]
+    assert row["cohort"] == "real_work"

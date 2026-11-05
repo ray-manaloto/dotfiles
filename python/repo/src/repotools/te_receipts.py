@@ -226,7 +226,8 @@ def draft(options: TeReviewReceiptsDraft) -> None:
     root = state_root(options)
     chosen, shared = sessions(root, span)
     drafting = Drafting(root)
-    projects = Path(options.transcripts or Path.home() / ".claude" / "projects")
+    # collect reads a relative receipt path from the manifest's folder, so every receipt path is absolute.
+    projects = Path(options.transcripts or Path.home() / ".claude" / "projects").absolute()
     found = transcripts(projects, set(chosen))
     synthetic = synthetic_sessions(options)
     without = [DraftUncovered(session_id=sid, gap=DraftGap.ambiguous_session) for sid in shared]
