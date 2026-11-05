@@ -654,6 +654,10 @@ class DraftSummary(BaseModel):
     """
     Non-shadow nudges of the window's sessions with no host_delivery receipt
     """
+    undelivered_aborts: int
+    """
+    Non-shadow aborts of the window's sessions with no host_delivery receipt
+    """
 
 
 class ErrorCode(StrEnum):
