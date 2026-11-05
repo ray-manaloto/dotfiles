@@ -109,6 +109,18 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools te-review report --evidence "$usage_evidence" ${usage_worksheet:+--worksheet "$usage_worksheet"} ${usage_private:+--private}'
 
+[tasks.te-review-carry]
+description = "Carry the owner's judgments of an older collection into a new worksheet for a newer one"
+usage = '''
+flag "--from <dir>" required=#true help="The older collection, an absolute path"
+flag "--to <dir>" required=#true help="The newer collection, an absolute path"
+flag "--out <file>" required=#true help="The new worksheet, an absolute path that must not exist"
+flag "--worksheet <file>" help="The owner's filled worksheet of --from, an absolute path; else its own"
+'''
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'uv run --project python/repo --locked repotools te-review carry --from "$usage_from" --to "$usage_to" --out "$usage_out" ${usage_worksheet:+--worksheet "$usage_worksheet"}'
+
 # Development: uv runs only through these tasks.
 [tasks.sync]
 description = "Install the locked dependencies into .venv"

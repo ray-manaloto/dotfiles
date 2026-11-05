@@ -2,11 +2,11 @@
 
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, te_receipts, te_report, te_review, zero_bash
+from . import gates, main_guard, pane_approval, te_carry, te_receipts, te_report, te_review, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -24,6 +24,7 @@ from .models import (
     PublicFailure,
     ReviewApproved,
     ReviewPython,
+    TeReviewCarry,
     TeReviewCollect,
     TeReviewCommand,
     TeReviewReceiptsCommand,
@@ -53,6 +54,12 @@ TE_REVIEW: dict[tuple[str, ...], type[Options]] = {
     (TeReviewCommand.collect,): TeReviewCollect,
     (TeReviewCommand.report,): TeReviewReport,
     (TeReviewCommand.receipts, TeReviewReceiptsCommand.draft): TeReviewReceiptsDraft,
+    (TeReviewCommand.carry,): TeReviewCarry,
+}
+# The te-review subcommands each one module's function runs.
+TE_REVIEW_RUNS: dict[type[TeReviewReceiptsDraft | TeReviewCarry], Callable[..., None]] = {
+    TeReviewReceiptsDraft: te_receipts.draft,
+    TeReviewCarry: te_carry.carry,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -102,8 +109,8 @@ def run(command: Command, options: Options) -> None:
         main_guard.dispatch(options)
     elif isinstance(options, TeReviewCollect | TeReviewReport):
         te_report.dispatch(options)
-    elif isinstance(options, TeReviewReceiptsDraft):
-        te_receipts.draft(options)
+    elif isinstance(options, TeReviewReceiptsDraft | TeReviewCarry):
+        TE_REVIEW_RUNS[type(options)](options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
