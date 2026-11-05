@@ -1637,9 +1637,9 @@ uv = { path = "locks/pipx-datamodel-code-generator/0.89.0~6617cedc", digest = "s
 python = "3.14.8"
 
 [[tools."pipx:graphifyy"]]
-version = "0.9.102"
+version = "0.9.103"
 backend = "pipx:graphifyy"
-specifiers = ["0.9.102"]
+specifiers = ["0.9.103"]
 
 [tools."pipx:graphifyy".options]
 extras = "all"
