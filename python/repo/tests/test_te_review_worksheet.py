@@ -590,8 +590,12 @@ def test_d8b_a_useful_facts_origin_may_be_a_session_row_whose_fold_ran_the_propo
             assert refused(capsys, out, sheet)["code"] == code
 
 
-def test_evidence_gaps_keep_the_evidence_incomplete_when_every_judgment_is_filled(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [("protected_unchanged", (True, [], None)), (None, (False, ["mcp_ab"], "2026-11-17"))],
+)
+def test_evidence_gaps_are_listed_but_only_a_not_reviewed_section_keeps_the_evidence_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], outcome: str | None, expected: tuple[object, ...]
 ) -> None:
     # No host_delivery receipt for the nudge or the abort, and no history_fold receipt for the import.
     out = collected(tmp_path, USE, imported=True)
@@ -602,13 +606,12 @@ def test_evidence_gaps_keep_the_evidence_incomplete_when_every_judgment_is_fille
         paid_facts=judged(**USEFUL, origin_ref=ref["opt-s1"], use_ref=ref["fact_use"]),
         learned_facts=judged(verdict="ok"),
         imports=judged(verdict="unknown"),
-        mcp_ab=lambda _: {"outcome": "protected_unchanged", "receipt_ref": None},
+        mcp_ab=lambda _: {"outcome": outcome, "receipt_ref": None},
         decision=lambda _: {"decision": "keep", "settings": None},
     )
     shown = review(capsys, out, sheet)
-    assert shown["missing"] == []
     assert shown["evidence_gaps"] == ["redirect_delivery_unknown", "abort_delivery_unknown", "import_history_unknown"]
-    assert (shown["evidence_complete"], shown["follow_up"]) == (False, "2026-11-17")
+    assert (shown["evidence_complete"], shown["missing"], shown["follow_up"]) == expected
     assert (shown["decision_recorded"], shown["decision"]) == (True, "keep")
 
 

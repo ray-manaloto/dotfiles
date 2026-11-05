@@ -1428,14 +1428,14 @@
         "imports": {"$ref": "#/$defs/ImportCounts"},
         "not_run": {"$ref": "#/$defs/NotRunCounts"},
         "mcp_ab": {"$ref": "#/$defs/McpResult"},
-        "evidence_complete": {"type": "boolean", "description": "Every section judged, and no evidence gap"},
+        "evidence_complete": {"type": "boolean", "description": "Every section judged; evidence gaps are listed beside it and do not change it"},
         "missing": {"type": "array", "items": {"$ref": "#/$defs/Section"}, "description": "The sections with a NOT_REVIEWED judgment"},
-        "evidence_gaps": {"type": "array", "items": {"$ref": "#/$defs/EvidenceGap"}, "description": "What the evidence cannot show, however the worksheet is filled"},
+        "evidence_gaps": {"type": "array", "items": {"$ref": "#/$defs/EvidenceGap"}, "description": "What the evidence cannot show, however the worksheet is filled: a caveat, not a missing judgment"},
         "decision_recorded": {"type": "boolean", "description": "Section 7 is filled"},
         "decision": {"$ref": "#/$defs/DecisionLine"},
         "envfacts": {"anyOf": [{"const": "no paid fact proved useful: select microskills=envfacts"}, {"type": "null"}], "description": "The spec's condition, stated when no paid fact is useful"},
         "conflict": {"type": "boolean", "description": "The decision conflicts with the envfacts condition"},
-        "follow_up": {"anyOf": [{"const": "2026-11-17"}, {"type": "null"}], "description": "The next check, named while evidence is incomplete"}
+        "follow_up": {"anyOf": [{"const": "2026-11-17"}, {"type": "null"}], "description": "The next check, named while a section is not reviewed"}
       },
       "required": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "evidence_complete", "missing", "evidence_gaps", "decision_recorded", "decision", "envfacts", "conflict", "follow_up"],
       "additionalProperties": false
