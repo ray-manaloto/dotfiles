@@ -2205,6 +2205,30 @@ class ExcludedCount(BaseModel):
     """
 
 
+class PublicExcludedCount(BaseModel):
+    """
+    D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    reason: Exclusion
+    rows: int
+    """
+    Rows
+    """
+    recorded_tokens: float | None
+    """
+    Finite effective and recognized overhead tokens of each session here with its charges (D5); null if not finite
+    """
+    invalid_amounts: int
+    """
+    Amounts left out of the total, not a finite number
+    """
+
+
 class ClassCount(BaseModel):
     """
     Selected sessions of one class.
@@ -2260,11 +2284,7 @@ class PublicReport(BaseModel):
     Last day of the window
     """
     headline: Share
-    selected: Share
-    """
-    Every selected non-imported session and its matched charges, whatever its class; not the headline
-    """
-    excluded: list[ExcludedCount]
+    excluded: list[PublicExcludedCount]
     """
     Every exclusion reason, in precedence order
     """
@@ -2350,6 +2370,14 @@ class PrivateReport(BaseModel):
     The window's time zone
     """
     report: PublicReport
+    selected: Share
+    """
+    Every selected non-imported session and its matched charges; not the headline; private only (D1)
+    """
+    excluded: list[ExcludedCount]
+    """
+    Every exclusion reason, in precedence order, with the effective and overhead split
+    """
     all_keys: AllKeys
     unknown_overhead_keys: dict[str, float | None]
     """

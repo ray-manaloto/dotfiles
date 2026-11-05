@@ -22,6 +22,7 @@ from .models import (
     OverheadKey,
     OverheadRow,
     PrivateReport,
+    PublicExcludedCount,
     PublicReport,
     RowClass,
     RowKind,
@@ -186,17 +187,39 @@ def share(records: list[SessionRow | OverheadRow], *, every_key: bool) -> Share:
     )
 
 
+def grouped(rows: list[EvidenceRow], reasons: list[list[Exclusion]]) -> list[Exclusion | None]:
+    """D5: the reason a row's spend goes under in public: a charge's goes with its excluded session's first
+    reason, so no reason's total is a session's overhead alone; a headline row has none."""
+    sessions: dict[tuple[str, str, str], Exclusion] = {}
+    for row, why in zip(rows, reasons, strict=True):
+        key = (row.store, row.host, row.session_id)
+        if row.kind is RowKind.session and why:
+            sessions[key] = min(why[0], sessions.get(key, why[0]), key=ORDER.index)
+    return [
+        sessions.get((row.store, row.host, row.session_id), why[0]) if why else None
+        for row, why in zip(rows, reasons, strict=True)
+    ]
+
+
 def excluded(
-    records: list[SessionRow | OverheadRow], reasons: list[list[Exclusion]], *, every_key: bool
+    records: list[SessionRow | OverheadRow],
+    reasons: list[list[Exclusion]],
+    *,
+    every_key: bool,
+    spend: list[Exclusion | None] | None = None,
 ) -> list[ExcludedCount]:
-    """Each row once, under its first reason, with the spend it recorded."""
+    """Each row once, under its first reason, with the spend it recorded under that reason or the one spend
+    names."""
     rows: Counter[Exclusion] = Counter()
     effective: dict[Exclusion, float] = defaultdict(float)
     overhead: dict[Exclusion, float] = defaultdict(float)
     invalid: Counter[Exclusion] = Counter()
+    under = spend or [why[0] if why else None for why in reasons]
     # A headline row has no reason and is not excluded.
-    for rec, first in [(rec, why[0]) for rec, why in zip(records, reasons, strict=True) if why]:
-        rows[first] += 1
+    for rec, row_reason, first in [
+        (rec, why[0], into) for rec, why, into in zip(records, reasons, under, strict=True) if why and into
+    ]:
+        rows[row_reason] += 1
         values = list(spent(rec, every_key=every_key).values())
         if isinstance(rec, SessionRow) and rec.effective_tokens is not None:
             values.append(rec.effective_tokens)
@@ -212,6 +235,22 @@ def excluded(
             invalid_amounts=invalid[reason],
         )
         for reason in ORDER
+    ]
+
+
+def combined(counts: list[ExcludedCount]) -> list[PublicExcludedCount]:
+    """D1: public shows each reason's recorded spend as one total; the effective and overhead split would let
+    a reader rebuild the private selected share."""
+    return [
+        PublicExcludedCount(
+            reason=count.reason,
+            rows=count.rows,
+            recorded_tokens=None
+            if count.effective_tokens is None or count.overhead_tokens is None
+            else total(count.effective_tokens + count.overhead_tokens),
+            invalid_amounts=count.invalid_amounts,
+        )
+        for count in counts
     ]
 
 
@@ -256,8 +295,7 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
         since=collection.window.since,
         until=collection.window.until,
         headline=share(cohort, every_key=False),
-        selected=share(selected, every_key=False),
-        excluded=excluded(records, reasons, every_key=False),
+        excluded=combined(excluded(records, reasons, every_key=False, spend=grouped(rows, reasons))),
         session_classes=[ClassCount(session_class=cls, sessions=classes[cls]) for cls in SessionClass],
         cadence="UNKNOWN",  # needs a cadence receipt (T3)
         policy_era_candidates=[
@@ -270,6 +308,8 @@ def accounting(collection: Collection, evidence: Evidence) -> PrivateReport:
         collection_id=collection.collection_id,
         tz=collection.window.tz,
         report=public,
+        selected=share(selected, every_key=False),
+        excluded=excluded(records, reasons, every_key=False),
         all_keys=AllKeys(
             headline=share(cohort, every_key=True),
             selected=share(selected, every_key=True),

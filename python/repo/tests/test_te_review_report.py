@@ -44,8 +44,11 @@ def test_without_receipts_the_headline_cohort_is_empty_and_its_share_unknown(
         {"session_class": "synthetic", "sessions": 0},
         {"session_class": "unknown", "sessions": 1},
     ]
+    # D1: the selected share is private only; the public excluded rows give one combined total per reason.
+    assert "selected" not in shown
+    assert set(shown["excluded"][0]) == {"reason", "rows", "invalid_amounts", "recorded_tokens"}
     # The non-headline basis: 1000 effective, 10 overhead.
-    selected = shown["selected"]
+    selected = private(capsys, out)["selected"]
     assert (selected["sessions"], selected["charges"]) == (1, 1)
     assert (selected["effective_tokens"], selected["overhead_tokens"]) == (1000.0, 10.0)
     assert selected["share"] == pytest.approx(10 / 1010)
@@ -57,6 +60,42 @@ def test_without_receipts_the_headline_cohort_is_empty_and_its_share_unknown(
     assert first["UNCLASSIFIED"] == 1
     assert first["SESSION_EXCLUDED"] == 1
     assert sum(first.values()) == 2
+
+
+def test_no_public_number_or_pair_of_them_gives_back_the_private_selected_share(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # D1 and D5: unclassified, fallback-priced and failed sessions with their charges, and an unmatched charge.
+    out = frozen(
+        tmp_path,
+        session("s1", START, effective_tokens=1000.0),
+        charge("s1", "j1", START, tokens=13.0),
+        session("s2", START, priced_by="fallback", effective_tokens=700.0),
+        charge("s2", "j2", START, tokens=29.0),
+        charge("s2", "j3", START, tokens=3.0),
+        session("s3", START, error="Traceback", effective_tokens=400.0),
+        charge("s3", "j4", START, tokens=17.0),
+        charge("gone", "j5", START, tokens=5.0),
+    )
+    full = private(capsys, out)
+    fraction = full["selected"]["share"]
+    assert fraction == pytest.approx(62 / 2162)
+    shown = report(capsys, out)
+    # Each session's charges count with it, so no reason's total is overhead alone; rows stay per row.
+    totals = {row["reason"]: (row["rows"], row["recorded_tokens"]) for row in shown["excluded"] if row["rows"]}
+    assert totals == {
+        "UNMATCHED": (1, 5.0),
+        "ERROR": (1, 417.0),
+        "FALLBACK_PRICING": (1, 732.0),
+        "UNCLASSIFIED": (1, 1013.0),
+        "SESSION_EXCLUDED": (4, 0.0),
+    }
+    seen = [n for n in numbers(shown) if n]
+    assert not [n for n in seen if n == pytest.approx(fraction)]
+    for a in seen:
+        for b in seen:
+            assert a / b != pytest.approx(fraction)
+            assert a / (a + b) != pytest.approx(fraction)
 
 
 def private(capsys: pytest.CaptureFixture[str], evidence: Path) -> dict[str, Any]:
@@ -79,7 +118,7 @@ def test_a_finite_positive_fallback_priced_session_stays_outside_the_headline(
     shown = private(capsys, out)
     assert reasons(shown) == [["FALLBACK_PRICING", "UNCLASSIFIED"]]
     assert shown["report"]["headline"]["effective_tokens"] == 0.0
-    assert first(shown["report"]) == {
+    assert first(shown) == {
         "FALLBACK_PRICING": {"rows": 1, "effective_tokens": 500.0, "overhead_tokens": 0.0, "invalid_amounts": 0}
     }
 
@@ -93,10 +132,10 @@ def test_a_row_with_overlapping_reasons_is_counted_once_under_the_first(
         ["IMPORTED", "MISSING_USAGE", "UNCLASSIFIED"],
         ["UNKNOWN_PRICING_STATUS", "UNCLASSIFIED"],
     ]
-    counts = first(shown["report"])
+    counts = first(shown)
     assert {reason: count["rows"] for reason, count in counts.items()} == {"IMPORTED": 1, "UNKNOWN_PRICING_STATUS": 1}
     # The imported session is out of the selected basis too, as TokenEconomizer's summarize leaves it out.
-    assert shown["report"]["selected"]["sessions"] == 1
+    assert shown["selected"]["sessions"] == 1
     assert shown["report"]["session_classes"][2] == {"session_class": "unknown", "sessions": 1}
 
 
@@ -106,7 +145,7 @@ def test_a_negative_charge_excludes_itself_and_its_session_but_its_spend_stays_v
     out = frozen(tmp_path, session("s1", START), charge("s1", "j1", START, tokens=-5.0))
     shown = private(capsys, out)
     assert reasons(shown) == [["UNCLASSIFIED", "CHARGE_EXCLUDED"], ["BAD_AMOUNT", "SESSION_EXCLUDED"]]
-    assert first(shown["report"])["BAD_AMOUNT"] == {
+    assert first(shown)["BAD_AMOUNT"] == {
         "rows": 1,
         "effective_tokens": 0.0,
         "overhead_tokens": -5.0,
@@ -120,15 +159,15 @@ def test_a_non_finite_amount_is_bad_and_makes_the_selected_share_unknown(
     # json.dumps writes Infinity and NaN, as TokenEconomizer's fold would.
     out = frozen(tmp_path, session("s1", START, effective_tokens=math.inf), session("s2", START, effective_tokens=-1))
     shown = private(capsys, out)
-    assert PrivateReport.model_validate(shown).report.selected.effective_tokens is None
+    assert PrivateReport.model_validate(shown).selected.effective_tokens is None
     assert reasons(shown) == [["BAD_AMOUNT", "UNCLASSIFIED"], ["BAD_AMOUNT", "UNCLASSIFIED"]]
-    assert first(shown["report"])["BAD_AMOUNT"] == {
+    assert first(shown)["BAD_AMOUNT"] == {
         "rows": 2,
         "effective_tokens": -1.0,
         "overhead_tokens": 0.0,
         "invalid_amounts": 1,
     }
-    selected = shown["report"]["selected"]
+    selected = shown["selected"]
     assert (selected["status"], selected["share"], selected["above_5_percent"]) == ("UNKNOWN", None, "UNKNOWN")
     # JSON has no Infinity: the sum shows as null, which the report's own schema accepts.
     assert selected["effective_tokens"] is None
@@ -140,13 +179,13 @@ def test_a_session_whose_transcript_failed_is_counted_as_an_error_with_its_spend
     out = frozen(tmp_path, session("s1", START, error="Traceback", effective_tokens=700.0))
     shown = private(capsys, out)
     assert reasons(shown) == [["ERROR", "UNCLASSIFIED"]]
-    assert first(shown["report"]) == {
+    assert first(shown) == {
         "ERROR": {"rows": 1, "effective_tokens": 700.0, "overhead_tokens": 0.0, "invalid_amounts": 0}
     }
 
 
 def test_a_zero_denominator_gives_an_unknown_share(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = report(capsys, frozen(tmp_path, session("s1", START, effective_tokens=0.0)))
+    shown = private(capsys, frozen(tmp_path, session("s1", START, effective_tokens=0.0)))
     assert (shown["selected"]["sessions"], shown["selected"]["status"]) == (1, "UNKNOWN")
 
 
@@ -155,7 +194,7 @@ def test_an_unclassified_session_is_excluded_as_unclassified_not_imported(
 ) -> None:
     shown = private(capsys, frozen(tmp_path, session("s1", START, imported=False)))
     assert reasons(shown) == [["UNCLASSIFIED"]]
-    assert first(shown["report"]) == {
+    assert first(shown) == {
         "UNCLASSIFIED": {"rows": 1, "effective_tokens": 1000.0, "overhead_tokens": 0.0, "invalid_amounts": 0}
     }
 
@@ -164,7 +203,7 @@ def test_another_recognized_overhead_key_counts_toward_the_total_on_its_own_line
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     row = session("s1", START, overhead={"untool_classify_tokens": 40.0, "optimizer_tokens": 10})
-    selected = report(capsys, frozen(tmp_path, row, charge("s1", "j1", START, tokens=50.0)))["selected"]
+    selected = private(capsys, frozen(tmp_path, row, charge("s1", "j1", START, tokens=50.0)))["selected"]
     assert selected["components"] == {
         "optimizer_tokens": 10.0,
         "untool_classify_tokens": 40.0,
@@ -202,7 +241,7 @@ def test_public_totals_leave_unknown_keys_out_and_show_only_how_many(
     plain = report(capsys, frozen(tmp_path / "b", session("s1", START, overhead=spend), rows[1]))
     assert plain.pop("unknown_keys") == "unknown keys: 0 (excluded from public totals)"
     for shown in (public, plain):
-        for basis in (shown["headline"], shown["selected"]):
+        for basis in (shown["headline"],):
             basis.pop("unknown_overhead_keys")
     assert public == plain
     assert not {7777.0, 7788.0} & set(numbers(public))
@@ -211,7 +250,7 @@ def test_public_totals_leave_unknown_keys_out_and_show_only_how_many(
     assert full["all_keys"]["selected"]["overhead_tokens"] == 7788.0
     assert full["all_keys"]["selected"]["share"] == pytest.approx(7788 / 8788)
     assert first(full["all_keys"])["UNCLASSIFIED"]["overhead_tokens"] == 7778.0
-    assert full["report"]["selected"]["overhead_tokens"] == 11.0
+    assert full["selected"]["overhead_tokens"] == 11.0
 
 
 def test_sessions_are_grouped_by_fold_day_only_as_policy_era_candidates(
@@ -322,7 +361,7 @@ def test_secret_like_strings_never_reach_any_public_channel(tmp_path: Path, caps
     collect(tmp_path / f"te-{CANARY}", out)
     main(["te-review", "report", "--evidence", str(out)])
     seen = capsys.readouterr()
-    assert json.loads(seen.out)["selected"]["unknown_overhead_keys"] == 1
+    assert json.loads(seen.out)["unknown_keys"] == "unknown keys: 1 (excluded from public totals)"
     assert CANARY not in seen.out + seen.err
     # Errors: a missing folder, a tampered bundle and a bad mode name their paths only in private mode.
     for evidence, mode in ((tmp_path / f"{CANARY}-none", ()), (out, ("--public", "--private"))):
@@ -357,6 +396,7 @@ def test_the_mise_tasks_collect_and_report_and_refuse_a_relative_path(tmp_path: 
     done = task("//repo:te-review-report", "--evidence", "out")
     assert (done.returncode, coded(done)) == (1, {"code": "RELATIVE_PATH"})
     done = task("//repo:te-review-report", "--evidence", str(out))
-    assert json.loads(done.stdout)["selected"]["sessions"] == 1
+    unclassified = {"reason": "UNCLASSIFIED", "rows": 1, "recorded_tokens": 1000.0, "invalid_amounts": 0}
+    assert unclassified in json.loads(done.stdout)["excluded"]
     done = task("//repo:te-review-report", "--evidence", str(out), "--private")
     assert json.loads(done.stdout)["rows"][0]["session_id"] == "s1"

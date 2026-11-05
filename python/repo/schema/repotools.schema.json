@@ -1109,6 +1109,18 @@
       "required": ["reason", "rows", "effective_tokens", "overhead_tokens", "invalid_amounts"],
       "additionalProperties": false
     },
+    "PublicExcludedCount": {
+      "description": "D1, D5: the rows whose first reason is this one, and as one total the spend of rows grouped under it.",
+      "type": "object",
+      "properties": {
+        "reason": {"$ref": "#/$defs/Exclusion"},
+        "rows": {"type": "integer", "description": "Rows"},
+        "recorded_tokens": {"type": ["number", "null"], "description": "Finite effective and recognized overhead tokens of each session here with its charges (D5); null if not finite"},
+        "invalid_amounts": {"type": "integer", "description": "Amounts left out of the total, not a finite number"}
+      },
+      "required": ["reason", "rows", "recorded_tokens", "invalid_amounts"],
+      "additionalProperties": false
+    },
     "ClassCount": {
       "description": "Selected sessions of one class.",
       "type": "object",
@@ -1138,14 +1150,13 @@
         "since": {"type": "string", "format": "date", "description": "First day of the window"},
         "until": {"type": "string", "format": "date", "description": "Last day of the window"},
         "headline": {"$ref": "#/$defs/Share"},
-        "selected": {"$ref": "#/$defs/Share", "description": "Every selected non-imported session and its matched charges, whatever its class; not the headline"},
-        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/PublicExcludedCount"}, "description": "Every exclusion reason, in precedence order"},
         "session_classes": {"type": "array", "items": {"$ref": "#/$defs/ClassCount"}, "description": "Selected sessions by class"},
         "cadence": {"$ref": "#/$defs/Cadence"},
         "policy_era_candidates": {"type": "array", "items": {"$ref": "#/$defs/EraCandidate"}, "description": "Timestamp groups only"},
         "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"}
       },
-      "required": ["scope", "label", "since", "until", "headline", "selected", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys"],
+      "required": ["scope", "label", "since", "until", "headline", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys"],
       "additionalProperties": false
     },
     "AllKeys": {
@@ -1180,11 +1191,13 @@
         "collection_id": {"type": "string", "description": "The collection read"},
         "tz": {"type": "string", "description": "The window's time zone"},
         "report": {"$ref": "#/$defs/PublicReport"},
+        "selected": {"$ref": "#/$defs/Share", "description": "Every selected non-imported session and its matched charges; not the headline; private only (D1)"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order, with the effective and overhead split"},
         "all_keys": {"$ref": "#/$defs/AllKeys"},
         "unknown_overhead_keys": {"type": "object", "additionalProperties": {"type": ["number", "null"]}, "description": "Each unrecognized overhead key and its sum over the selected rows; null when not finite"},
         "rows": {"type": "array", "items": {"$ref": "#/$defs/RowReport"}, "description": "Every evidence row"}
       },
-      "required": ["collection_id", "tz", "report", "all_keys", "unknown_overhead_keys", "rows"],
+      "required": ["collection_id", "tz", "report", "selected", "excluded", "all_keys", "unknown_overhead_keys", "rows"],
       "additionalProperties": false
     },
     "Failure": {
