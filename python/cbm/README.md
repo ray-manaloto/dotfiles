@@ -40,4 +40,9 @@ created, install fails with `codex_hooks_seed_failed` before the installer runs.
 `Codex config.toml has no CBM hooks; hooks.json holds them` while any CBM hook is in `config.toml`.
 See `docs/research/codebase-memory-mcp/install.md`.
 
+`cbm verify` reads each client config's hooks and CBM MCP entry level by level. A level that parses but is
+not the expected table or list (such as `"SessionStart": 4` in Claude's `settings.json`, or `mcp_servers = 4`
+in a Codex config) holds no CBM entry: the check that reads it fails by name, with no error event, and verify
+still ends with its Done event. Malformed entries beside the CBM ones are skipped, so they do not fail a check.
+
 Upgrades are manual: see `docs/research/codebase-memory-mcp/upgrades.md`.

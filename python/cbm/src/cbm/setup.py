@@ -185,8 +185,9 @@ def seed_codex_hooks(path: Path) -> None:
 
 
 def lifecycle_hooks(hooks: object) -> Iterator[tuple[str, str, dict[str, Any]]]:
-    """Each (event, matcher, hook) under an events table of group lists, in either Codex file; a level of any other
-    shape holds no hooks. A matcher that is not text is given as its repr, so the results stay hashable and sortable."""
+    """Each (event, matcher, hook) under an events table of group lists, in Claude's settings.json or either Codex file;
+    a level of any other shape holds no hooks. A matcher that is not text is given as its repr, so the results stay
+    hashable and sortable."""
     for event, groups in hooks.items() if isinstance(hooks, dict) else ():
         for group in groups if isinstance(groups, list) else ():
             entries = group.get("hooks") if isinstance(group, dict) else None
@@ -194,6 +195,18 @@ def lifecycle_hooks(hooks: object) -> Iterator[tuple[str, str, dict[str, Any]]]:
             for hook in entries if isinstance(entries, list) else ():
                 if isinstance(hook, dict):
                     yield event, matcher if isinstance(matcher, str) else repr(matcher), hook
+
+
+def table(parent: dict[str, Any], key: str) -> dict[str, Any]:
+    """The table (a JSON object or TOML table) at this key of a parsed config table. A value of any other shape, or a
+    missing key, is an empty table: it holds no CBM entry, so only the check reading it fails."""
+    value = parent.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def tool_names(value: object) -> list[str]:
+    """The list of tool names as it stands; anything but a list of text holds none (set() fails on a table in it)."""
+    return value if isinstance(value, list) and all(isinstance(name, str) for name in value) else []
 
 
 def codex_toml_hooks(settings: dict[str, Any]) -> list[str]:
@@ -315,19 +328,15 @@ def serves(cfg: Config, version: str) -> bool:
 
 
 def verify_claude(cfg: Config, target: str) -> list[bool]:
-    mcp = read_json(cfg.home / ".claude.json").get("mcpServers", {}).get("codebase-memory-mcp") or {}
+    mcp = table(table(read_json(cfg.home / ".claude.json"), "mcpServers"), "codebase-memory-mcp")
     plain = mcp.get("command") == target and mcp.get("args") == [] and set(mcp) <= {"type", "command", "args"}
     results = [
         check("Claude MCP entry names the launcher, no args or env", ok=plain and mcp.get("type", "stdio") == "stdio")
     ]
     want = {"type": "command", "command": target, "args": ["hook-augment"], "timeout": HOOK_TIMEOUT}
-    hooks = read_json(cfg.home / ".claude/settings.json").get("hooks", {})
     # Every hook that runs the launcher, so a duplicate or a changed one counts too.
-    cbm = [
-        ((event, group.get("matcher")), hook)
-        for event, groups in hooks.items() for group in groups for hook in group.get("hooks", [])
-        if hook.get("command") == target
-    ]  # fmt: skip
+    hooks = read_json(cfg.home / ".claude/settings.json").get("hooks")
+    cbm = [((event, matcher), hook) for event, matcher, hook in lifecycle_hooks(hooks) if hook.get("command") == target]
     exact = len(cbm) == len(CLAUDE_HOOKS) and {key for key, _ in cbm} == CLAUDE_HOOKS
     results.append(check(
         "Claude has the 7 CBM hook groups, once each", ok=exact and all(h == want for _, h in cbm),
@@ -350,7 +359,7 @@ def verify_claude(cfg: Config, target: str) -> list[bool]:
 def verify_codex(cfg: Config, target: str) -> list[bool]:
     codex = cfg.home / ".codex"
     settings = read_toml(codex / "config.toml")
-    mcp = settings.get("mcp_servers", {}).get("codebase-memory-mcp", {})
+    mcp = table(table(settings, "mcp_servers"), "codebase-memory-mcp")
     # CBM 0.12.1 lists the two namespace variables for Codex to forward if set (src/cli/cli.c:3890-3912).
     forwarded = mcp.get("env_vars") == ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]
     plain = mcp.get("command") == target and mcp.get("args") == [] and set(mcp) <= {"command", "args", "env_vars"}
@@ -368,10 +377,10 @@ def verify_codex(cfg: Config, target: str) -> list[bool]:
     results.append(check(label, ok=not in_toml, detail=", ".join(in_toml)))
     for name, profile in AGENTS.items():
         role = read_toml(codex / "agents" / f"{name}.toml")
-        server = role.get("mcp_servers", {}).get("codebase-memory-mcp", {})
-        tools = server.get("enabled_tools")
+        server = table(table(role, "mcp_servers"), "codebase-memory-mcp")
+        tools = tool_names(server.get("enabled_tools"))
         launches = server.get("command") == target and server.get("args") == [f"--tool-profile={profile}"]
-        known = isinstance(tools, list) and bool(tools) and len(set(tools)) == len(tools) and set(tools) <= READ_ONLY
+        known = bool(tools) and len(set(tools)) == len(tools) and set(tools) <= READ_ONLY
         sealed = role.get("name") == name and role.get("sandbox_mode") == "read-only"
         label = f"Codex agent {name}: launcher, {profile} profile, read-only CBM tools only"
         results.append(check(label, ok=sealed and launches and known))
@@ -418,7 +427,7 @@ def opencode_agent(text: str) -> bool:
 def verify_opencode(cfg: Config, target: str) -> list[bool]:
     folder = cfg.home / ".config/opencode"
     # CBM 0.12.1 writes the legacy `mcp` shape, which OpenCode 2 still reads (cli.c:4091-4094).
-    mcp = read_json(opencode_config(folder), jsonc=True).get("mcp", {}).get("codebase-memory-mcp") or {}
+    mcp = table(table(read_json(opencode_config(folder), jsonc=True), "mcp"), "codebase-memory-mcp")
     plain = mcp.get("command") == [target] and mcp.get("type") == "local" and set(mcp) <= {"type", "command"}
     results = [check("OpenCode MCP entry names the launcher, no args or env", ok=plain)]
     for name in AGENTS:
