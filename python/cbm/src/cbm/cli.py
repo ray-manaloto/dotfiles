@@ -65,6 +65,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             failed = setup.install(cfg)
         except setup.InstallError as error:
             emit(Error(code=error.code, message=str(error), path=error.path))
+            message = f"cbm: install failed: {error.code.value}"
+            emit(Done(command=command, failed=1, outcome=Outcome.failed, message=message))
             raise SystemExit(1) from None
     failed += setup.verify(cfg)
     if failed:

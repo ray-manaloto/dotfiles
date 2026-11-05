@@ -14,6 +14,11 @@
 # is not on Linux test hosts. The real installer was run end to end against the live install instead
 # (docs/research/codebase-memory-mcp/verification.md).
 #
+# Codex hooks follow CBM 0.12.1's choice of file: hooks.json when it exists, else a marked block in
+# config.toml, with a marked block that is not exactly CBM's refused (see the Codex step below). The Codex
+# text comes from codex_text.py, which the stand-in inlines; HOME/codex-hooks-seen keeps the hooks.json bytes
+# the installer found.
+#
 # cbm-augment.ts is the OpenCode plugin CBM 0.12.1's own installer wrote in a scratch HOME, with its
 # launcher path replaced by @BIN@; the stand-in writes it back with the temporary launcher.
 
@@ -23,6 +28,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +43,9 @@ CBM = Path(sys.executable).parent / "cbm"
 TIMEOUT = 30
 
 STAND_IN = r"""
-import json, os, sys, time
+import json, os, re, sys, time
 from pathlib import Path
+@SHARED@
 home = Path(os.environ["HOME"])
 args = sys.argv[1:]
 with (home / "processes.jsonl").open("a") as f:
@@ -105,19 +112,72 @@ if "claude" in clients:
   if mode == "missing-hook":
       del groups["PostToolUse"]
   write(".claude/settings.json", json.dumps({"hooks": groups}))
+failures = 0
+codex_ok = "codex" in clients
 if "codex" in clients:
-  write(".codex/config.toml", f'[mcp_servers.codebase-memory-mcp]\ncommand = "{cmd}"\nargs = []\n'
-                              'env_vars = ["CBM_CACHE_DIR", "CBM_RUNTIME_DIR"]\n')
-  codex_hook = {"type": "command", "command": f"'{cmd}' hook-augment", "timeout": 5}
-  write(".codex/hooks.json", json.dumps({"hooks": {
-      "SessionStart": [{"matcher": "startup|resume|clear|compact", "hooks": [codex_hook]}],
-      "SubagentStart": [{"matcher": "*", "hooks": [codex_hook]}]}}))
+  # CBM 0.12.1's Codex step (src/cli/cli.c:9719-9812). The AGENTS.md pointer comes first (:9732).
+  write(".codex/AGENTS.md", AGENTS_POINTER)
+  config_toml, hooks_json = home / ".codex/config.toml", home / ".codex/hooks.json"
+  # The hook file: hooks.json when stat() finds it, so a dangling symlink counts as missing (cli.c:9736-9738,
+  # src/foundation/platform.c:309-312), else the TOML block in config.toml.
+  use_json = hooks_json.exists()
+  if use_json:
+      (home / "codex-hooks-seen").write_bytes(hooks_json.read_bytes())
+  command, windows = codex_commands(cmd)
+  text = config_toml.read_text() if config_toml.is_file() else ""
+  text = text.replace(codex_mcp(cmd), "")
+  # The preflight (cli.c:9743-9764): a marked block is only CBM's when both its commands are CBM's and it is
+  # exactly the block upstream renders for them (src/cli/config_toml_edit.c:3490-3497, :3654-3659); otherwise
+  # the Codex step stops with this error line (cli.c:8492-8498) and the installer fails (cli.c:10581, :11180-11186).
+  owned = ""
+  if CODEX_BEGIN in text:
+      span = CODEX_BEGIN + text.split(CODEX_BEGIN, 1)[1].split(CODEX_END, 1)[0] + CODEX_END + "\n"
+      found = {}
+      for key, value in re.findall(r'^(command|command_windows) = "(.*)"$', span, re.M):
+          found.setdefault(key, value)
+      pair = found.get("command", ""), found.get("command_windows", "")
+      owned = span if all(map(codex_owned, pair)) and span == codex_marked(*pair) else ""
+      if not owned:  # the agent's header goes to stdout first (cli.c:9751-9753)
+          print("Codex CLI:", flush=True)
+          print(f"error: agent_config agent=Codex CLI op=hook_preflight path={config_toml} "
+                "reason=ambiguous_hook_ownership", file=sys.stderr)
+          failures += 1
+          codex_ok = False
+if codex_ok:
+  # The MCP table is written before the hooks (cli.c:9766-9767), both appended after the owner's text. The
+  # installer reports it on stdout (cli.c:8735, :8744), and cbm passes that output through.
+  print(f"Codex CLI:\n  mcp: {config_toml}")
+  text = text.replace(owned, "")
+  text += ("\n" if text and not text.endswith("\n") else "") + codex_mcp(cmd)
+  if use_json:  # each event's CBM hooks are replaced by one canonical entry (cli.c:6427-6450, :4781-4900)
+      hook = {"type": "command", "command": command, "command_windows": windows, "timeout": 5}
+      settings = json.loads(hooks_json.read_text())
+      events = settings.setdefault("hooks", {})
+      for event, matcher in (("SessionStart", "startup|resume|clear|compact"), ("SubagentStart", "*")):
+          kept = []
+          for group in events.get(event, []):
+              # A hook is CBM's only under the same matcher, as a command hook with exactly this command and no
+              # args (cli.c:4625-4680). Only those go; their entry goes too once empty and canonical (:4693-4725).
+              theirs = group.get("matcher") == matcher and isinstance(group.get("hooks"), list)
+              left = [each for each in group["hooks"] if not (isinstance(each, dict) and "args" not in each
+                      and each.get("type") == "command" and each.get("command") == command)] if theirs else []
+              if not theirs or len(left) == len(group["hooks"]):
+                  kept.append(group)
+              elif left or set(group) != {"matcher", "hooks"}:
+                  kept.append({**group, "hooks": left})
+          events[event] = [*kept, {"matcher": matcher, "hooks": [hook]}]
+      hooks_json.write_text(json.dumps(settings, indent=4))
+  else:  # the marked block appended at the end (config_toml_edit.c:3725-3735)
+      text += codex_marked(command, windows)
+  write(".codex/config.toml", text)
+  print("  hooks: SessionStart + SubagentStart (dynamic graph context)\n"  # cli.c:9802-9805
+        "  note: non-managed hooks require /hooks trust; definition changes require re-trust", flush=True)
 for name, profile in (("codebase-memory", "analysis"), ("codebase-memory-scout", "scout"),
                       ("codebase-memory-auditor", "analysis")):
   if "claude" in clients:
     write(f".claude/agents/{name}.md",
           f"---\nname: {name}\ntools:\n  - Read\n  - mcp__codebase-memory-mcp__search_graph\n---\nBody.\n")
-  if "codex" in clients:
+  if codex_ok:
     write(f".codex/agents/{name}.toml",
           f'name = "{name}"\nsandbox_mode = "read-only"\n[mcp_servers.codebase-memory-mcp]\n'
           f'command = "{cmd}"\nargs = ["--tool-profile={profile}"]\nenabled_tools = ["search_graph"]\n')
@@ -128,13 +188,10 @@ for name, profile in (("codebase-memory", "analysis"), ("codebase-memory-scout",
           '  "codebase-memory-mcp_search_graph": allow\n---\nBody.\n')
 folders = {"claude": ".claude", "codex": ".codex", "opencode": ".config/opencode"}
 for client in clients:
-    write(f"{folders[client]}/skills/codebase-memory/SKILL.md", "skill\n")
-for client in ("codex", "opencode"):
-  if client in clients:
-    write(f"{folders[client]}/AGENTS.md", "<!-- codebase-memory-mcp:start -->\n"
-          "For structural codebase exploration, use the installed `codebase-memory` skill.\n"
-          "<!-- codebase-memory-mcp:end -->\n")
+    if client != "codex" or codex_ok:
+        write(f"{folders[client]}/skills/codebase-memory/SKILL.md", "skill\n")
 if "opencode" in clients:
+  write(".config/opencode/AGENTS.md", AGENTS_POINTER)
   # The MCP entry goes into opencode.jsonc when it exists, else opencode.json. Like CBM, it is spliced into the
   # text, so comments and trailing commas stay (the stand-in assumes no `mcp` key yet).
   jsonc = home / ".config/opencode/opencode.jsonc"
@@ -143,7 +200,12 @@ if "opencode" in clients:
   text = config.read_text() if config.is_file() else "{}"
   write(str(config.relative_to(home)), text.replace("{", "{" + entry + ",", 1))
   write(".config/opencode/plugins/cbm-augment.ts", Path(@PLUGIN@).read_text().replace("@BIN@", cmd))
-""".replace("@PLUGIN@", repr(str(Path(__file__).with_name("cbm-augment.ts"))))
+# Another agent step's config error fails the whole install too (cli.c:10581, :11173-11186).
+failures += mode == "other-fails"
+sys.exit(1 if failures else 0)
+""".replace("@PLUGIN@", repr(str(Path(__file__).with_name("cbm-augment.ts")))).replace(
+    "@SHARED@", Path(__file__).with_name("codex_text.py").read_text()
+)
 
 
 def link(home: Path) -> Path:
@@ -168,11 +230,29 @@ def mode(home: Path, value: str) -> None:
 
 
 def events(text: str) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in text.splitlines()]
+    """cbm's JSON records; the installer's own plain lines pass through between them on both streams."""
+    return [json.loads(line) for line in text.splitlines() if line.startswith("{")]
 
 
 def failed(out: str) -> list[str]:
     return [event["name"] for event in events(out) if event["event"] == "check" and not event["ok"]]
+
+
+def check_after(home: Path, edit: Callable[[], object], failing: str) -> subprocess.CompletedProcess[str]:
+    """Install, apply one edit to the result, and expect verify to fail exactly that check."""
+    assert cbm("install", cwd=home / "checkout").returncode == 0, calls(home)
+    edit()
+    done = cbm("verify", cwd=home / "checkout")
+    assert done.returncode == 1
+    assert failed(done.stdout) == [failing]
+    assert events(done.stdout)[-1] == {
+        "event": "done",
+        "command": "verify",
+        "failed": 1,
+        "outcome": "failed",
+        "message": "cbm: verify failed: 1 check failed",
+    }
+    return done
 
 
 def cbm(*args: str, cwd: Path, timeout: int = TIMEOUT) -> subprocess.CompletedProcess[str]:

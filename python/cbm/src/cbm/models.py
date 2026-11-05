@@ -31,10 +31,13 @@ class ErrorCode(StrEnum):
     foreign_launcher = "foreign_launcher"
     installer_start_failed = "installer_start_failed"
     installer_failed = "installer_failed"
+    codex_hooks_seed_failed = "codex_hooks_seed_failed"
+    codex_hook_migration_refused = "codex_hook_migration_refused"
     command_failed = "command_failed"
     command_timeout = "command_timeout"
     invalid_json = "invalid_json"
     invalid_toml = "invalid_toml"
+    unreadable_file = "unreadable_file"
     invalid_mcp_response = "invalid_mcp_response"
 
 

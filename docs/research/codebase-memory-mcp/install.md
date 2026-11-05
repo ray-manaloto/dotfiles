@@ -98,13 +98,30 @@ session-reminder,subagent-reminder}`, `~/.claude/skills/codebase-memory/SKILL.md
 `~/.config/opencode/agents/codebase-memory{,-scout,-auditor}.md`, `~/.config/opencode/skills/codebase-memory/SKILL.md`,
 `~/.config/opencode/plugins/cbm-augment.ts`.
 Edited: `~/.claude.json` (one `mcpServers` entry), `~/.claude/settings.json` (7 hook groups), `~/.codex/config.toml`
-(one `mcp_servers` table forwarding `CBM_CACHE_DIR` and `CBM_RUNTIME_DIR`), `~/.codex/hooks.json` (2 hooks),
+(one `mcp_servers` table forwarding `CBM_CACHE_DIR` and `CBM_RUNTIME_DIR`), `~/.codex/hooks.json` (2 hooks; see below),
 `~/.codex/AGENTS.md` (a managed pointer), OpenCode's `opencode.jsonc` if it exists, else `opencode.json` (one
 `mcp` entry with the launcher as its whole command; cli.c:2953-2975), `~/.config/opencode/AGENTS.md` (a managed
 pointer). `OPENCODE_CONFIG` would move that file, so `//cbm:install` refuses it like `CODEX_HOME`. `config set auto_index false` creates CBM's `config.json`.
 
 A rollback removes those created files and only CBM's entries from the edited ones. Copying a backup back would also
 undo unrelated changes made since (another session enabled a plugin between the backup and the install here).
+
+### Codex hooks: `hooks.json` only
+
+`hooks.json` is the only supported layout for Codex hooks. CBM writes its two hooks there only if the file
+already exists. Otherwise it puts a managed block in `config.toml` (cli.c:9736-9738, :9786-9798), and Codex warns
+about the two layouts. `//cbm:install` creates `~/.codex/hooks.json` as `{"hooks": {}}` before it runs the
+installer. It does that only when Codex is a selected client and nothing is at that path. An existing file or link
+is never replaced. Once `hooks.json` exists, the installer moves its old block out of `config.toml` (:9791-9796).
+If the block no longer matches what CBM wrote, the installer refuses (:9743-9764): it logs an `agent_config ...
+op=hook_preflight` line (:8485-8498), keeps the hook block and skips the rest of its Codex steps (MCP entry,
+skill, agent profiles and hooks, :9766-9806). The `AGENTS.md` activation pointer is already written by then (:9733). When the installer fails while `hooks.json` was there
+and a CBM hook is still in `config.toml`, install fails with `codex_hook_migration_refused`. The reason is in the
+installer's Codex `agent_config` line: `op=hook_preflight` for a refusal, `op=hook_install` when writing
+`hooks.json` or removing the block fails (:9800-9801). No such line means the installer failed before its Codex
+step. You then remove the hook by hand; cbm never edits it. Any other installer failure stays `installer_failed`. `//cbm:verify`
+fails `Codex config.toml has no CBM hooks; hooks.json holds them` when a CBM hook is still in `config.toml`. That
+covers a marked block, an unmarked one and an inline table alike.
 
 ## Settings
 
