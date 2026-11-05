@@ -24,6 +24,16 @@ class TeReviewError(Exception):
         self.public = False  # report sets it: then only the code is printed
 
 
+def absolute(flag: str, given: str | Path, whose: str = "its") -> Path:
+    """given as a path, refused unless absolute: a relative one would resolve wherever the caller runs from,
+    a checkout under a mise task."""
+    path = Path(given)
+    if not path.is_absolute():
+        msg = f"--{flag} is relative; give {whose} absolute path"
+        raise TeReviewError(ErrorCode.RELATIVE_PATH, msg)
+    return path
+
+
 def read_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()

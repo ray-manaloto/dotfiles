@@ -14,6 +14,7 @@ from repotools.models import PrivateReport
 
 from .test_te_review import START, WINDOW, charge, collect, ledger, session
 from .test_te_review_judgment import DAY, cadence_receipt, receipts, run
+from .test_te_review_worksheet import manifest
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -519,3 +520,19 @@ def test_the_mise_tasks_collect_and_report_and_refuse_a_relative_path(tmp_path: 
     assert unclassified in json.loads(done.stdout)["excluded"]
     done = task("//repo:te-review-report", "--evidence", str(out), "--private")
     assert json.loads(done.stdout)["rows"][0]["session_id"] == "s1"
+
+
+def test_the_mise_collect_task_forwards_the_receipts_the_cadence_receipt_and_the_synthetic_manifest(
+    tmp_path: Path,
+) -> None:
+    ledger(tmp_path / "te", "a-1", [session("s1", START + 3600), session("s2", START + 7200)])
+    work = manifest(tmp_path / "work", ("real_work", {"sessions": ["s1"]}, b"work\n"))
+    synthetic = manifest(tmp_path / "synthetic", ("synthetic", {"sessions": ["s2"]}, b"harness\n"))
+    flags = ["--receipts", str(work), "--synthetic-manifest", str(synthetic)]
+    flags += ["--cadence-receipt", str(cadence_receipt(tmp_path / "c", ["s1"]))]
+    out = tmp_path / "out"
+    done = task("//repo:te-review-collect", *WINDOW, "--te-root", str(tmp_path / "te"), "--out", str(out), *flags)
+    assert done.returncode == 0, done.stderr
+    shown = {found["session_id"]: found for found in json.loads((out / "evidence.json").read_text())["sessions"]}
+    assert (shown["s1"]["cohort"], shown["s2"]["cohort"]) == ("real_work", "synthetic")
+    assert shown["s1"]["cadence_reason"] != "no_receipt"

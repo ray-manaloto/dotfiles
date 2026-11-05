@@ -40,6 +40,7 @@ from .models import (
     TeReviewReport,
     Verdict,
 )
+from .te_io import absolute
 from .te_review import TeReviewError, collect, collection_id
 from .te_worksheet import review
 
@@ -68,8 +69,7 @@ LATEST = (datetime.max.replace(tzinfo=UTC) - timedelta(days=1)).timestamp()
 
 def bundle(folder: Path) -> tuple[Collection, Evidence]:
     """The collection and its evidence, once COMPLETE is there and every hash matches collection.json."""
-    if not folder.is_absolute():
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--evidence is relative; give the collection's absolute path")
+    absolute("evidence", folder, "the collection's")
     try:
         complete = (folder / "COMPLETE").read_bytes()
     except OSError:

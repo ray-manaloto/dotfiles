@@ -1255,7 +1255,7 @@ class CadenceReceipt(BaseModel):
     """
     before: ProposeEvery | None
     """
-    The proven cadence before the change, if any
+    The cadence asserted before the change, if any: it names a reason, never a session's cadence (D11)
     """
     after: ProposeEvery
     proof: CadenceProof
@@ -2778,31 +2778,40 @@ class LearnedFactCounts(BaseModel):
     """
 
 
-class ImportCounts(BaseModel):
+class ImportOperations(BaseModel):
     """
-    Section 4: imports and import folds by verdict.
+    D13: section 4's import operations by how far each got.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
-    proven: int
+    completed: int
     """
-    With a history_fold receipt
+    completed
     """
-    candidate: int
+    partial: int
     """
-    Time-near only
+    partial
     """
     unknown: int
     """
-    Unknown
+    unknown
     """
-    not_reviewed: int
+
+
+class ImportNote(StrEnum):
     """
-    NOT_REVIEWED
+    What the import evidence covers, in words.
     """
+
+    observed_current_import_state__historical_operation_coverage_unknown = (
+        "observed current import state; historical operation coverage unknown"
+    )
+    history_fold_receipts_cover_the_operations_they_name__others_unknown = (
+        "history_fold receipts cover the operations they name; others unknown"
+    )
 
 
 class NotRunCounts(BaseModel):
@@ -2837,6 +2846,16 @@ class McpResult(StrEnum):
     protected_unchanged = "protected_unchanged"
     failed_ab_protected_unchanged = "failed_ab_protected_unchanged"
     NOT_REVIEWED = "NOT_REVIEWED"
+
+
+class EvidenceGap(StrEnum):
+    """
+    Evidence no judgment can supply: a host_delivery or history_fold receipt the collection lacks.
+    """
+
+    redirect_delivery_unknown = "redirect_delivery_unknown"
+    abort_delivery_unknown = "abort_delivery_unknown"
+    import_history_unknown = "import_history_unknown"
 
 
 class Section(StrEnum):
@@ -3011,10 +3030,7 @@ class Evidence(BaseModel):
     Paid live folds near an import's end
     """
     import_coverage: ImportCoverage
-    import_note: str
-    """
-    What the import evidence covers, in words
-    """
+    import_note: ImportNote
 
 
 class WorksheetImport(BaseModel):
@@ -3103,6 +3119,35 @@ class AbReceipt(BaseModel):
     with_denies: AbSession
 
 
+class ImportCounts(BaseModel):
+    """
+    Section 4: imports and import folds by verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    proven: int
+    """
+    With a history_fold receipt
+    """
+    candidate: int
+    """
+    Time-near only
+    """
+    unknown: int
+    """
+    Unknown
+    """
+    not_reviewed: int
+    """
+    NOT_REVIEWED
+    """
+    operations: ImportOperations
+    note: ImportNote
+
+
 class Review(BaseModel):
     """
     The owner's worksheet against the evidence: counts, fixed codes and dates only.
@@ -3121,11 +3166,15 @@ class Review(BaseModel):
     mcp_ab: McpResult
     evidence_complete: bool
     """
-    Every section judged
+    Every section judged, and no evidence gap
     """
     missing: list[Section]
     """
     The sections with a NOT_REVIEWED judgment
+    """
+    evidence_gaps: list[EvidenceGap]
+    """
+    What the evidence cannot show, however the worksheet is filled
     """
     decision_recorded: bool
     """

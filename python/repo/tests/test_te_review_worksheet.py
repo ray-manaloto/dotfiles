@@ -11,7 +11,7 @@ import pytest
 from repotools.cli import main
 
 from .test_te_review import START, charge, ledger, session
-from .test_te_review_judgment import DAY, fact, history, learned, read, redirect, run, state
+from .test_te_review_judgment import DAY, fact, history, learned, paid, read, redirect, run, state
 
 
 def optimizer(session_id: str, at: float, tokens: float = 40.0, job: str | None = None) -> dict[str, Any]:
@@ -72,6 +72,7 @@ def collected(tmp_path: Path, *entries: tuple[str, dict[str, Any], bytes], impor
 
 
 DELIVERY = ("host_delivery", {"redirects": [{"session_id": "s1", "at": START + 30}]}, PROOF)
+ABORT = ("host_delivery", {"redirects": [{"session_id": "s1", "at": START + 40}]}, PROOF)
 USE = ("fact_use", {"facts": ["m1"], "sessions": ["s1"]}, PROOF)
 # Recorded 2026-10-06 09:00 Chicago: after opt-s1, before opt-late.
 SNAPSHOT = ("fact_snapshot", {"facts": ["m1"]}, PROOF)
@@ -114,16 +115,19 @@ def review(capsys: pytest.CaptureFixture[str], out: Path, sheet: Path | None, *m
 def test_a_delivered_redirect_and_a_useful_paid_fact_are_accepted_and_counted(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    out = collected(tmp_path, DELIVERY, USE)
+    out = collected(tmp_path, DELIVERY, ABORT, USE, FOLD, imported=True)
     ref = refs(out)
     sheet = filled(
         out,
         tmp_path,
-        redirects=judged(state="delivery_confirmed", receipt_ref=ref["host_delivery"], verdict="right", like_128=False),
+        # collect fills in each delivery's state and host_delivery receipt.
+        redirects=judged(verdict="right", like_128=False),
+        aborts=judged(verdict="right"),
         paid_facts=judged(
             owner_assessment="useful", reason="saved_lookup", origin_ref=ref["opt-s1"], use_ref=ref["fact_use"]
         ),
         learned_facts=judged(verdict="ok"),
+        imports=judged(verdict="proven", receipt_ref=ref["history_fold"]),
         mcp_ab=lambda _: {"outcome": "protected_unchanged", "receipt_ref": None},
         decision=lambda _: {"decision": "keep", "settings": None},
     )
@@ -140,13 +144,13 @@ def test_a_delivered_redirect_and_a_useful_paid_fact_are_accepted_and_counted(
         "not_like_128": 1,
         "like_128_not_reviewed": 0,
     }
-    # D4: the abort is its own line; with no receipt it is not delivered, so it takes no verdict.
+    # D4: the abort is its own line, apart from the redirects.
     assert shown["aborts"] == {
         "aborts": 1,
-        "delivery_confirmed": 0,
-        "delivery_unknown": 1,
+        "delivery_confirmed": 1,
+        "delivery_unknown": 0,
         "shadow_suppressed": 0,
-        "right": 0,
+        "right": 1,
         "wrong": 0,
         "unjudged": 0,
         "not_reviewed": 0,
@@ -159,10 +163,17 @@ def test_a_delivered_redirect_and_a_useful_paid_fact_are_accepted_and_counted(
         "origin": "owner-asserted",
     }
     assert shown["learned_facts"] == {"wrong": 0, "ok": 2, "unknown": 0, "not_reviewed": 0}
-    assert shown["imports"] == {"proven": 0, "candidate": 0, "unknown": 0, "not_reviewed": 0}
+    assert shown["imports"] == {
+        "proven": 1,
+        "candidate": 0,
+        "unknown": 0,
+        "not_reviewed": 0,
+        "operations": {"completed": 1, "partial": 0, "unknown": 0},
+        "note": RECEIPTED,
+    }
     assert shown["not_run"] == {"run": 0, "re_deferred": 0, "not_reviewed": 0}
     assert shown["mcp_ab"] == "protected_unchanged"
-    assert (shown["evidence_complete"], shown["missing"]) == (True, [])
+    assert (shown["evidence_complete"], shown["missing"], shown["evidence_gaps"]) == (True, [], [])
     assert (shown["decision_recorded"], shown["decision"]) == (True, "keep")
     assert (shown["envfacts"], shown["conflict"], shown["follow_up"]) == (None, False, None)
 
@@ -195,6 +206,7 @@ def refused(capsys: pytest.CaptureFixture[str], out: Path, sheet: Path | str, *m
     return json.loads(seen.err)
 
 
+RECEIPTED = "history_fold receipts cover the operations they name; others unknown"
 USEFUL = {"owner_assessment": "useful", "reason": "saved_lookup"}
 
 REFUSALS = {
@@ -313,7 +325,7 @@ REFUSALS = {
         "BAD_WORKSHEET",
         "is useful without an optimizer charge of its store before it first appears",
     ),
-    "a useful fact whose origin is a session": (
+    "a useful fact whose origin is a session whose fold ran no proposer": (
         (USE,),
         lambda ref: {"paid_facts": judged(**USEFUL, origin_ref=ref["s1"], use_ref=ref["fact_use"])},
         "BAD_WORKSHEET",
@@ -426,7 +438,14 @@ def test_imports_and_not_run_items_are_counted_by_their_judgments(
         ],
     )
     shown = review(capsys, out, sheet)
-    assert shown["imports"] == {"proven": 1, "candidate": 0, "unknown": 0, "not_reviewed": 0}
+    assert shown["imports"] == {
+        "proven": 1,
+        "candidate": 0,
+        "unknown": 0,
+        "not_reviewed": 0,
+        "operations": {"completed": 1, "partial": 0, "unknown": 0},
+        "note": RECEIPTED,
+    }
     assert shown["not_run"] == {"run": 1, "re_deferred": 1, "not_reviewed": 0}
     assert "imports" not in shown["missing"]
     assert "not_run" not in shown["missing"]
@@ -547,3 +566,84 @@ def test_a_decision_filled_while_evidence_is_missing_is_recorded_beside_the_miss
     assert shown["evidence_complete"] is False
     assert shown["missing"] == ["redirects", "paid_facts", "learned_facts", "mcp_ab"]
     assert (shown["decision_recorded"], shown["decision"], shown["follow_up"]) == (True, "insufficient", "2026-11-17")
+
+
+def test_d8b_a_useful_facts_origin_may_be_a_session_row_whose_fold_ran_the_proposer_before_the_fact_appeared(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # As the interim evidence holds it: the optimizer charge sits in the session row, timed by folded_at.
+    te = tmp_path / "te"
+    folded = paid("s1", START + 3600, START + 3660, 40)
+    late = paid("late", START + 3 * DAY, START + 3 * DAY + 60, 40)
+    ledger(te, "a-1", [folded, late, session("unpaid", START + 3600)])
+    state(te, "a-1", "events.jsonl", [])
+    learned(te, "a-1", {"m1": fact("ACTIVE")}, {})
+    out = tmp_path / "out"
+    run(te, out, "--receipts", str(manifest(tmp_path / "r", USE, SNAPSHOT)))
+    ref = refs(out)
+    assert "at" not in read(out, "evidence.json")["rows"][0]["row"]
+    for origin, code in (("s1", None), ("late", "BAD_WORKSHEET"), ("unpaid", "BAD_WORKSHEET")):
+        sheet = filled(out, tmp_path, paid_facts=judged(**USEFUL, origin_ref=ref[origin], use_ref=ref["fact_use"]))
+        if code is None:
+            assert review(capsys, out, sheet)["paid_facts"]["useful"] == 1
+        else:
+            assert refused(capsys, out, sheet)["code"] == code
+
+
+def test_evidence_gaps_keep_the_evidence_incomplete_when_every_judgment_is_filled(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # No host_delivery receipt for the nudge or the abort, and no history_fold receipt for the import.
+    out = collected(tmp_path, USE, imported=True)
+    ref = refs(out)
+    sheet = filled(
+        out,
+        tmp_path,
+        paid_facts=judged(**USEFUL, origin_ref=ref["opt-s1"], use_ref=ref["fact_use"]),
+        learned_facts=judged(verdict="ok"),
+        imports=judged(verdict="unknown"),
+        mcp_ab=lambda _: {"outcome": "protected_unchanged", "receipt_ref": None},
+        decision=lambda _: {"decision": "keep", "settings": None},
+    )
+    shown = review(capsys, out, sheet)
+    assert shown["missing"] == []
+    assert shown["evidence_gaps"] == ["redirect_delivery_unknown", "abort_delivery_unknown", "import_history_unknown"]
+    assert (shown["evidence_complete"], shown["follow_up"]) == (False, "2026-11-17")
+    assert (shown["decision_recorded"], shown["decision"]) == (True, "keep")
+
+
+@pytest.mark.parametrize(
+    ("covered", "gaps"), [(["repos/b-2"], ["import_history_unknown"]), (["repos/a-1", "repos/b-2"], [])]
+)
+def test_an_import_its_history_fold_receipt_does_not_name_is_an_evidence_gap(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], covered: list[str], gaps: list[str]
+) -> None:
+    te = tmp_path / "te"
+    for store, name in [("a-1", "s1"), ("b-2", "s2")]:
+        ledger(te, store, [session(name, START + 3600)])
+        state(te, store, "history.json", history("done", START + 100, START + 7200, 1))
+    out = tmp_path / "out"
+    run(te, out, "--receipts", str(manifest(tmp_path / "r", ("history_fold", {"imports": covered}, PROOF))))
+    assert read(out, "evidence.json")["import_coverage"] == "history_receipts"
+    assert review(capsys, out, None)["evidence_gaps"] == gaps
+
+
+def test_d13_the_review_shows_the_import_note_and_the_section_4_operations_by_completion(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te = tmp_path / "te"
+    for store, name, found in [
+        ("a-1", "s1", history("done", START + 100, START + 7200, 1)),
+        ("b-2", "s2", history("skipped", START + 100, START + 7200, 0)),
+        ("c-3", "s3", history("running", START + 100, None, 1)),
+        ("d-4", "s4", history("stopped", START - DAY, START - 100, 1)),
+    ]:
+        ledger(te, store, [session(name, START + 3600)])
+        state(te, store, "history.json", found)
+    out = tmp_path / "out"
+    run(te, out)
+    shown = review(capsys, out, None)["imports"]
+    # The stopped import finished before the window: section 4 does not list it, so it is not counted.
+    assert shown["operations"] == {"completed": 1, "partial": 1, "unknown": 1}
+    assert shown["note"] == "observed current import state; historical operation coverage unknown"
+    assert shown["not_reviewed"] == 3

@@ -37,7 +37,7 @@ from .models import (
     Versions,
     Window,
 )
-from .te_io import ADAPTER, TeReviewError, conform, json_lines, listing, present, read_bytes
+from .te_io import ADAPTER, TeReviewError, absolute, conform, json_lines, listing, present, read_bytes
 
 SCHEMA = 1
 # The TokenEconomizer 0.1.0 files whose ledger rows and state files the models mirror, by sha256.
@@ -274,9 +274,7 @@ def build(root: Path, ledgers: list[Path], options: TeReviewCollect, span: Windo
 
 
 def collect(options: TeReviewCollect) -> None:
-    # A relative --out would land wherever the caller runs from, a checkout under a mise task.
-    if not Path(options.out).is_absolute():
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--out is relative; give the collection's absolute path")
+    absolute("out", options.out, "the collection's")
     span = window(options)
     root = state_root(options)
     ledgers = claude_ledgers(root)

@@ -31,7 +31,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import TeReviewError
+from .te_io import TeReviewError, absolute
 from .te_judgment import worksheet
 from .te_report import bundle
 from .te_review import write
@@ -96,14 +96,6 @@ class Translation:
     def ref(self, ref: str) -> str | None:
         found = self.b.get(self.a[ref], [])
         return found[0] if len(found) == 1 else None
-
-
-def absolute(flag: str, given: str) -> Path:
-    path = Path(given)
-    if not path.is_absolute():
-        msg = f"--{flag} is relative; give its absolute path"
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, msg)
-    return path
 
 
 def judged(folder: Path, collection: Collection, evidence: Evidence, sheet: Worksheet) -> Worksheet:

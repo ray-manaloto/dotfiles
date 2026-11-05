@@ -16,11 +16,16 @@ from .models import (
     EnvfactsEnum,
     ErrorCode,
     Evidence,
+    EvidenceGap,
     EvidenceReceipt,
     FactCandidate,
     FactVerdict,
     FollowUpEnum,
+    ImportCompletion,
     ImportCounts,
+    ImportCoverage,
+    ImportEntry,
+    ImportOperations,
     ImportVerdict,
     LearnedFactCounts,
     McpResult,
@@ -45,7 +50,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import TeReviewError
+from .te_io import TeReviewError, absolute
 from .te_judgment import worksheet
 
 # spec.md user story 5: with no useful paid fact the review selects this setting.
@@ -59,9 +64,7 @@ def bad(error: str) -> TeReviewError:
 
 def read(folder: Path, given: str | None) -> Worksheet:
     """The worksheet given, else the collection's own, as its model."""
-    path = folder / "worksheet.json" if given is None else Path(given)
-    if not path.is_absolute():
-        raise TeReviewError(ErrorCode.RELATIVE_PATH, "--worksheet is relative; give the worksheet's absolute path")
+    path = absolute("worksheet", folder / "worksheet.json" if given is None else given, "the worksheet's")
     try:
         data = path.read_bytes()
     except OSError:
@@ -189,16 +192,19 @@ def positive(value: object) -> float | None:
     return float(value)
 
 
+# D8b: when a charge was made; a fold writes a session's own optimizer charge into its session row.
+CHARGED = {RowKind.overhead: "at", RowKind.session: "folded_at"}
+
+
 def useful(entry: WorksheetPaidFact, refs: Refs, collection: Collection) -> None:
     """D8: an optimizer charge of the fact's store, charged before the fact first appears, and a use receipt."""
     found = refs.facts[entry.ref]
     origin = refs.rows.get(entry.origin_ref or "")
-    charged = positive(origin.row.get("at")) if origin else None
+    charged = positive(origin.row.get(CHARGED[origin.kind])) if origin else None
     if (
         origin is None
-        or origin.kind is not RowKind.overhead
         or origin.store != found.store
-        or positive(origin.row["overhead"].get(OverheadKey.optimizer_tokens)) is None
+        or positive((origin.row.get("overhead") or {}).get(OverheadKey.optimizer_tokens)) is None
         or charged is None
         or charged >= first_snapshot(found, refs, collection).timestamp()
     ):
@@ -229,7 +235,10 @@ def paid_facts(entries: list[WorksheetPaidFact], refs: Refs, collection: Collect
     )
 
 
-def imports(entries: list[WorksheetImport], template: list[WorksheetImport], refs: Refs) -> ImportCounts:
+def imports(
+    entries: list[WorksheetImport], template: list[WorksheetImport], refs: Refs, evidence: Evidence
+) -> ImportCounts:
+    """Section 4 by verdict, and (D13) its import operations by completion beside the collection's import note."""
     kinds = {entry.ref: entry.entry for entry in template}
     for entry in entries:
         receipt = refs.known("imports", entry.receipt_ref)
@@ -240,11 +249,19 @@ def imports(entries: list[WorksheetImport], template: list[WorksheetImport], ref
             msg = f"imports: {entry.ref} is proven without its history_fold receipt"
             raise bad(msg)
     verdicts = Counter(entry.verdict for entry in entries)
+    listed = {entry.ref for entry in template if entry.entry is not ImportEntry.fold}
+    completion = Counter(found.completion for found in evidence.imports if found.ref in listed)
     return ImportCounts(
         proven=verdicts[ImportVerdict.proven],
         candidate=verdicts[ImportVerdict.candidate],
         unknown=verdicts[ImportVerdict.unknown],
         not_reviewed=verdicts[None],
+        operations=ImportOperations(
+            completed=completion[ImportCompletion.completed],
+            partial=completion[ImportCompletion.partial],
+            unknown=completion[ImportCompletion.unknown],
+        ),
+        note=evidence.import_note,
     )
 
 
@@ -322,7 +339,7 @@ def checked(
         unknown=verdicts[FactVerdict.unknown],
         not_reviewed=verdicts[None],
     )
-    folds = imports(matched("imports", sheet.imports, template.imports), template.imports, refs)
+    folds = imports(matched("imports", sheet.imports, template.imports), template.imports, refs, evidence)
     carried = not_run(sheet, template, refs)
     result = mcp(sheet, folder, refs)
     unreviewed = {
@@ -335,6 +352,15 @@ def checked(
         Section.mcp_ab: result is McpResult.NOT_REVIEWED,
     }
     missing = [section for section in Section if unreviewed[section]]
+    # Judgments cannot fill these: only a receipt the collection lacks can.
+    gapped = {
+        EvidenceGap.redirect_delivery_unknown: nudges.delivery_unknown,
+        EvidenceGap.abort_delivery_unknown: stopped.delivery_unknown,
+        # A history_fold receipt covers only the imports it names: each listed import and fold needs its own.
+        EvidenceGap.import_history_unknown: evidence.import_coverage is ImportCoverage.observed_current_only
+        or any(not refs.imports[entry.ref] for entry in template.imports),
+    }
+    gaps = [gap for gap in EvidenceGap if gapped[gap]]
     decision, settings = sheet.decision.decision, sheet.decision.settings
     if decision is Decision.change and not settings:
         msg = "decision: change without its settings"
@@ -351,11 +377,12 @@ def checked(
         imports=folds,
         not_run=carried,
         mcp_ab=result,
-        evidence_complete=not missing,
+        evidence_complete=not missing and not gaps,
         missing=missing,
+        evidence_gaps=gaps,
         decision_recorded=decision is not None,
         decision=DecisionLine(decision) if decision else DecisionLine.PENDING,
         envfacts=EnvfactsEnum.no_paid_fact_proved_useful__select_microskills_envfacts if none_useful else None,
         conflict=conflict,
-        follow_up=None if not missing else FollowUpEnum.field_2026_11_17,
+        follow_up=None if not missing and not gaps else FollowUpEnum.field_2026_11_17,
     ), settings
