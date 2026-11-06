@@ -57,7 +57,7 @@
     the gate skips, because llvm-cov can leave out files but not lines (llvm-project#33625). No line is marked.
   * `jbctl coverage-gate` requires every other `Sources/JBAXKit/*.swift` file to be in the export. A missing or
     empty file fails.
-  * Everything else that a run cannot reach stays visible as uncovered, under measured #502 MVP floors: jbctl 98.20%
+  * Everything else that a run cannot reach stays visible as uncovered, under measured #502 MVP floors: jbctl 98.08%
     (three guards, among them a jbax crash, and the move to the page asked for), jbax 87% of lines and regions (AX and JSON failure fallbacks, plus states no working IDE
     produces).
   * The owner rejected a stand-in `agent-desktop` for the debug route, so the real route is proven only by

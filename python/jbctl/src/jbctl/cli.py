@@ -62,21 +62,13 @@ def emit(event: Event) -> None:
     sys.stdout.write(event.model_dump_json(exclude_none=True) + "\n")
 
 
-def require_settings(pid: int) -> str:
-    window = ide.settings_window(pid)
-    if window is None:
-        msg = "Settings is not open (jbctl settings-open)"
-        raise ide.IdeError(msg)
-    return window
-
-
 def open_settings(app: Path, pid: int, page: str) -> str:
     """Settings on `page`, whichever route opened it: the breadcrumb says so."""
     window, restored = ide.open_settings(pid, page)
     number = int(window.removeprefix("w-"))
     crumbs = rea.breadcrumb(rea.observe(str(app), pid, number))
     # The station route opens Settings on the page; the menu route opens it on the page it showed last, and a
-    # station open can still be landing. Not covered headless: no working station open has reached it.
+    # station open can still be landing, which only some headless runs see.
     if crumbs[-1:] != [page]:
         crumbs = rea.goto(str(app), pid, number, page)
     emit(Event(settings_window=window, front_restored=restored, breadcrumb=crumbs))
@@ -142,9 +134,9 @@ def drive(options: Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress |
         case SettingsOpen():
             open_settings(app, pid, options.page)
         case SettingsGoto():
-            goto(app, pid, require_settings(pid), options.page)
+            goto(app, pid, ide.own_settings(pid), options.page)
         case SettingsPress():
-            require_settings(pid)
+            ide.own_settings(pid)
             press(pid, options.label)
         case _:  # RouterDirect, the one model left
             open_settings(app, pid, "Exposed Tools")

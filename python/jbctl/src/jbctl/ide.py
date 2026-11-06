@@ -6,6 +6,7 @@ import subprocess
 import time
 import urllib.parse
 from http import HTTPStatus
+from pathlib import Path
 from typing import Any
 
 from . import station
@@ -57,6 +58,34 @@ def settings_window(ide: int, listed: list[dict[str, Any]] | None = None) -> str
     return next((w["id"] for w in listed if w.get("pid") == ide and w.get("title") == "Settings"), None)
 
 
+def opened_record(ide: int) -> Path:
+    """Where settings-open records the Settings window it opened for this IDE, for the later steps to check."""
+    state = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
+    return state / "jbctl" / f"settings-{ide}"
+
+
+def owned(ide: int, window: str) -> str:
+    """The record for this window: the IDE process's start time, then the window id."""
+    # A pid and a window id are unique only within one login session (a reboot reuses both): the start time binds
+    # them to this run of the IDE.
+    started = subprocess.run(["ps", "-o", "lstart=", "-p", str(ide)], capture_output=True, text=True, check=True,
+                             timeout=TIMEOUT).stdout.strip()  # fmt: skip
+    return f"{started}\n{window}"
+
+
+def own_settings(ide: int) -> str:
+    """The open Settings window, if jbctl opened it; any other may hold the user's unapplied edits."""
+    window = settings_window(ide)
+    if window is None:
+        msg = "Settings is not open (jbctl settings-open)"
+        raise IdeError(msg)
+    record = opened_record(ide)
+    if not record.exists() or record.read_text() != owned(ide, window):
+        msg = "this Settings window was not opened by jbctl settings-open, so jbctl leaves it alone"
+        raise IdeError(msg)
+    return window
+
+
 def focused(listed: list[dict[str, Any]]) -> str | None:
     return next((w["id"] for w in listed if w.get("is_focused")), None)
 
@@ -89,6 +118,8 @@ def open_settings(ide: int, page: str) -> tuple[str, bool]:
     if window is None:
         msg = "Settings did not open"
         raise IdeError(msg)
+    opened_record(ide).parent.mkdir(parents=True, exist_ok=True)
+    opened_record(ide).write_text(owned(ide, window))
     # Showing the dialog can re-activate the IDE after the menu route's batch, so hand the front back again.
     if foreground and hand_back:  # pragma: foreground - the debug route's second hand-back
         agent_desktop("batch", json.dumps(hand_back), "--stop-on-error")

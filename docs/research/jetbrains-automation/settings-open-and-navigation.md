@@ -38,7 +38,9 @@ command without LaunchServices. LaunchServices (`open jetbrains://...`) was what
   inside jbax and never printed. The full title may add the product's full name, a version and a superuser
   suffix. A window whose title or subrole AX cannot read, or a standard window with an empty title, is `unknown`
   and refused. The title is localized, so a non-English Welcome screen is not recognized: a known gap. An
-  existing Settings window is refused, never reused: it may hold the user's unapplied edits. A frame on another Space is NOT_RUN.
+  existing Settings window is refused, never reused: it may hold the user's unapplied edits. settings-open records
+  the window id it opened, with the IDE process's start time (`~/.local/state/jbctl/settings-<pid>`), and settings-press and settings-goto refuse any
+  other Settings window, such as one the user opened. A frame on another Space is NOT_RUN.
   [code + inference]
 - **Debug route.** The menu-bar route below runs only with `JETBRAINS_FOREGROUND=1`, and never as a fallback.
 
