@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "cpp"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -12,6 +12,7 @@ workflow = "python/workflow"
 cbm = "python/cbm"
 home = "python/home"
 visualplan = "python/visualplan"
+jbctl = "python/jbctl"
 
 [settings]
 lockfile = true
@@ -22,7 +23,7 @@ lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//cpp:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own

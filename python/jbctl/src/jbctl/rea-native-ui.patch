@@ -1,0 +1,60 @@
+--- a/bridge/native/ReaNativeUI.swift
++++ b/bridge/native/ReaNativeUI.swift
+@@ -42,6 +42,12 @@
+   guard AXValueGetValue(p as! AXValue, .cgPoint, &point), AXValueGetValue(s as! AXValue, .cgSize, &size) else { return nil }
+   return CGRect(origin: point, size: size)
+ }
++// jbctl patch (dotfiles#502): Java/Swing (JBR) puts accessible names in AXDescription, not AXTitle.
++func label(_ element: AXUIElement) -> Any {
++  if let t = attribute(element, kAXTitleAttribute) as? String, !t.isEmpty { return t }
++  if let d = attribute(element, kAXDescriptionAttribute) as? String, !d.isEmpty { return d }
++  return NSNull()
++}
+ func observe(_ request: Request) async throws -> [String: Any] {
+   guard let app = NSRunningApplication(processIdentifier: request.pid) else {
+     try fail("pid-not-application", "LaunchServices does not expose an application for the selected PID; this does not establish that the process is absent")
+@@ -55,8 +61,19 @@
+   guard canonicalExecutable == request.executable else {
+     try fail("target-mismatch", "Selected PID executable \(canonicalExecutable) differs from active target \(request.executable)")
+   }
+-  guard let launch = app.launchDate?.timeIntervalSince1970 else {
+-    try fail("process-identity-unavailable", "Selected application does not expose a launch time; stable PID reuse checks are unavailable")
++  // jbctl patch (dotfiles#502): processes not started by LaunchServices have no launchDate.
++  // Fall back to the kernel's process start time, which serves the same PID-reuse check.
++  var launch: Double
++  if let observed = app.launchDate?.timeIntervalSince1970 {
++    launch = observed
++  } else {
++    var info = kinfo_proc(); var size = MemoryLayout<kinfo_proc>.stride
++    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, request.pid]
++    guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else {
++      try fail("process-identity-unavailable", "Selected application does not expose a launch time; stable PID reuse checks are unavailable")
++    }
++    let start = info.kp_proc.p_starttime
++    launch = Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000
+   }
+   if let expected = request.launch_time, expected != launch { try fail("process-replaced", "Selected process was replaced") }
+   let executableSize = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? -1
+@@ -84,7 +101,12 @@
+     guard let axWindows = attribute(application, kAXWindowsAttribute) as? [AXUIElement] else {
+       try fail("accessibility-unavailable", "Selected application does not expose accessibility windows")
+     }
+-    let matches = axWindows.filter { windowBounds($0) == bounds }
++    var matches = axWindows.filter { windowBounds($0) == bounds }
++    // jbctl patch (dotfiles#502): same-size windows (e.g. several full-screen IDE frames) are
++    // disambiguated by the CG window name, which must equal the AX title.
++    if matches.count > 1, let cgName = window[kCGWindowName as String] as? String, !cgName.isEmpty {
++      matches = matches.filter { (text($0, kAXTitleAttribute) as? String) == cgName }
++    }
+     guard matches.count == 1 else { try fail("ambiguous-window", "Accessibility window geometry does not identify exactly one selected window; selected CG bounds \(bounds), AX candidates \(axWindows.map { String(describing: windowBounds($0)) })") }
+     selected = matches[0]
+   }
+@@ -122,7 +144,7 @@
+       AXUIElementCopyActionNames(element, &actions)
+       let observedValue = captureAccessibilityValue(attribute(element, kAXValueAttribute))
+       if let gap = observedValue.gap { gaps.append("\(gap) at path \(path)"); truncated = true }
+-      nodes.append(["path": path, "role": text(element, kAXRoleAttribute), "title": text(element, kAXTitleAttribute), "value": observedValue.value, "actions": actions as? [String] ?? [], "children_count": childCountResult.value.map { $0 as Any } ?? NSNull()])
++      nodes.append(["path": path, "role": text(element, kAXRoleAttribute), "title": label(element), "value": observedValue.value, "actions": actions as? [String] ?? [], "children_count": childCountResult.value.map { $0 as Any } ?? NSNull()])
+       guard let totalChildren = childCountResult.value else {
+         truncated = true
+         gaps.append("AX child count unavailable at path \(path): AXError \(childCountResult.error ?? -1)")

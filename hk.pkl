@@ -40,6 +40,22 @@ local linters = new Mapping<String, Step> {
         glob = List("python/cbm/**")
         check = "mise run //cbm:check"
     }
+    // python/jbctl (#502): lint and the non-live tests; the live 100% gate (//jbctl:coverage) brings the IDE forward.
+    ["jbctl"] {
+        glob = List("python/jbctl/**")
+        check = "mise run //jbctl:check"
+    }
+    // swift/ (jbax, #502): SwiftLint as hk's builtin; swift format, build and the non-live tests through the root's
+    // mise task. The live-IDE coverage gate (//swift:coverage) brings the IDE forward, so it is never a hook.
+    ["swiftlint"] = (Builtins.swiftlint) {
+        glob = List("swift/**/*.swift")
+        // macOS only, like jbax and its swiftlint pin (os = ["macos"] in the global mise config).
+        condition = "exec_ok('test \"$(uname -s)\" = Darwin')"
+    }
+    ["swift"] {
+        glob = List("swift/**")
+        check = "mise run //swift:check"
+    }
     // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
     ["frontmatter"] {
         glob = List("**/*.md", "**/*.yml", "**/*.yaml")

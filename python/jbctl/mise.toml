@@ -1,0 +1,39 @@
+# jbctl (issue #502): drive JetBrains IDEs from code. No [tools]: ruff, ty, uv, datamodel-codegen and rea are
+# global (DL-757); jbax comes from //swift:install. From the repository root: //jbctl:<task>.
+
+[env]
+_.python.venv = { path = ".venv" }
+
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.codegen]
+description = "Generate src/jbctl/models.py from schema/jbctl.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+# The live tests are skipped unless JBCTL_LIVE=1, so this never touches an IDE.
+[tasks.test]
+# The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
+skip_if = "{{ os() != 'macos' }}"
+description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_LIVE=1"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+# Brings the running IDE forward briefly (opening Settings needs it); run it only when nobody is working in it.
+[tasks.coverage]
+skip_if = "{{ os() != 'macos' }}"
+description = "Every test, live ones included, at 100% line and branch coverage"
+depends = ["sync"]
+env = { JBCTL_LIVE = "1" }
+run = "uv run --locked pytest --cov-fail-under=100"
+
+[tasks.check]
+description = "lint and the non-live tests"
+depends = ["lint", "test"]

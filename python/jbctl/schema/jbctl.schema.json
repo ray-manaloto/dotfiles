@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "jbctl",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of jbctl (issue #502); mise run //jbctl:codegen writes src/jbctl/models.py from this file.",
+  "properties": {
+    "command": {
+      "$ref": "#/$defs/Command"
+    },
+    "options": {
+      "$ref": "#/$defs/Options"
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "failure": {
+      "$ref": "#/$defs/Failure"
+    }
+  },
+  "$defs": {
+    "Command": {
+      "description": "The jbctl subcommands.",
+      "type": "string",
+      "enum": [
+        "map",
+        "settings-open",
+        "settings-goto",
+        "settings-press",
+        "router-direct",
+        "check-direct",
+        "rea-patch"
+      ]
+    },
+    "Map": {
+      "description": "Save rea's accessibility map of one IDE window (layer-0 windows only).",
+      "type": "object",
+      "properties": {
+        "window": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "CG window id, as agent-desktop lists it without the w- prefix"
+        },
+        "out": {
+          "type": "string",
+          "minLength": 1,
+          "description": "File to write the map to; never overwritten"
+        }
+      },
+      "required": [
+        "window",
+        "out"
+      ],
+      "additionalProperties": false
+    },
+    "SettingsOpen": {
+      "description": "Open Settings: the IDE comes forward briefly (AppKit drops menu presses while inactive), then the front goes back.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "SettingsGoto": {
+      "description": "Go to a Settings page through the search field, in the background; the breadcrumb confirms it.",
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The page name as the breadcrumb shows it"
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "additionalProperties": false
+    },
+    "SettingsPress": {
+      "description": "Press a button in the open Settings dialog, in the background (jbax press).",
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The button's exact label"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "RouterDirect": {
+      "description": "Set MCP Server > Exposed Tools router-only mode to ACP agents only (DIRECT) and verify it over MCP.",
+      "type": "object",
+      "properties": {
+        "mcp_url": {
+          "description": "The IDE's MCP streamable-HTTP endpoint; only initialize and tools/list are sent.",
+          "type": "string",
+          "default": "http://127.0.0.1:64362/stream"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CheckDirect": {
+      "description": "Fail unless the IDE's MCP tools/list shows more than the router tool alone (DIRECT).",
+      "type": "object",
+      "properties": {
+        "mcp_url": {
+          "description": "The IDE's MCP streamable-HTTP endpoint; only initialize and tools/list are sent.",
+          "type": "string",
+          "default": "http://127.0.0.1:64362/stream"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReaPatch": {
+      "description": "Apply jbctl's patch to rea's native UI helper (launch-time fallback, same-size windows, Swing labels).",
+      "type": "object",
+      "properties": {
+        "helper": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ReaNativeUI.swift to patch; default the one in the global rea-agents install"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Options": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Map"
+        },
+        {
+          "$ref": "#/$defs/SettingsOpen"
+        },
+        {
+          "$ref": "#/$defs/SettingsGoto"
+        },
+        {
+          "$ref": "#/$defs/SettingsPress"
+        },
+        {
+          "$ref": "#/$defs/RouterDirect"
+        },
+        {
+          "$ref": "#/$defs/CheckDirect"
+        },
+        {
+          "$ref": "#/$defs/ReaPatch"
+        }
+      ]
+    },
+    "PatchState": {
+      "description": "What rea-patch found.",
+      "type": "string",
+      "enum": [
+        "applied",
+        "already"
+      ]
+    },
+    "Event": {
+      "description": "One JSON line on stdout.",
+      "type": "object",
+      "properties": {
+        "settings_window": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "front_restored": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "breadcrumb": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "pressed": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "selected": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "tools": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "direct": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "map": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "nodes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "Failure": {
+      "description": "The JSON line on stderr when a command fails.",
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
