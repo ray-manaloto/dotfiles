@@ -20,7 +20,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CONFIG = tomllib.loads((REPO / "unix/home/.config/mise/config.toml").read_text())
-POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
+# The skills hooks only: the last hook, //depmaps:sync, is a Tera template that mise renders before
+# the shell sees it, and python/depmaps tests what it runs.
+POST_TOOLS = [
+    command
+    for command in CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
+    if "//depmaps:sync" not in command
+]
 # mise runs each hook command with its default inline shell, unix_default_inline_shell_args
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
