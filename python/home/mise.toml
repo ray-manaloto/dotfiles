@@ -1,0 +1,47 @@
+# The global toolchain tasks (DL-758, #391): the hometools package does their work. Its commands run from
+# the file tasks toolchain:verify and bootstrap:toolchain in the global tasks folder; this file holds only the
+# development tasks. From the repository root they are //home:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+# Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/hometools/models.py from schema/hometools.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+[tasks.integration]
+description = "The real toolchain:verify on this Mac through this checkout's file task: read-only, macOS only"
+depends = ["sync"]
+run = "uv run --locked pytest -m integration --no-cov"
+
+# hk check's step "home": no real-toolchain test, so this Mac's Homebrew or Xcode never fails it.
+[tasks.unit]
+description = "lint and test"
+depends = ["lint", "test"]
+
+# The commit gate: owner 2026-11-05, the real-toolchain test runs on every commit that reaches the toolchain
+# tasks; hk's pre-commit step runs this through //repo:toolchain-gate, which says which commits those are.
+[tasks.check]
+description = "lint, test and integration"
+depends = ["lint", "test", "integration"]

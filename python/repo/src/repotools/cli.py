@@ -25,6 +25,7 @@ from .models import (
     ScratchEnv,
     ShellApply,
     ShellRollback,
+    ToolchainGate,
     ZeroBash,
 )
 
@@ -45,6 +46,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_armed: MainGuardArmed,
     Command.shell_apply: ShellApply,
     Command.shell_rollback: ShellRollback,
+    Command.toolchain_gate: ToolchainGate,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -74,12 +76,8 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
         zero_bash.report(options)
-    elif isinstance(options, ReviewPython):
-        gates.review(options)
-    elif isinstance(options, ReviewApproved):
-        gates.approved()
-    elif isinstance(options, PrivacyScan):
-        gates.privacy_scan(options)
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
+        gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
     elif isinstance(options, ShellApply | ShellRollback):
