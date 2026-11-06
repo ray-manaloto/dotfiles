@@ -1,5 +1,16 @@
 # Directory Update Log
 
+## 2026-11-06
+* **Addition**: [§4.12-§4.13](rust-call-graphs.md). cbm's `run`, `tasks` and `bootstrap` gaps are
+  traced to the 256-name cap, the dropped self-edge and grouped `use` imports. Charon, CGA and rustc's
+  MIR check SCIP's call edges: 93-99% exact, and SCIP+either adds nothing real to any blast.
+* **Correction**: rust-analyzer gives every `#[async_trait]` method the whole block as its range. The
+  prototypes now take the tree-sitter function bounds, which changes the SCIP blast for bootstrap,
+  upgrade, install and tool (marked † in the tables) and codanna's scores (§4.10).
+* **Decisions**: Q20-Q30 (inactive-code edges flagged per host build, cleanup, three tickets, the
+  glossary terms, the next steps), in [design](design.md).
+* **Filed**: dotfiles #510, #511, #512; upstream DeusData/codebase-memory-mcp #2922-#2926.
+
 ## 2026-11-05
 * **Creation**: bundle cut from the working notes after five grilling rounds and the owner's
   confirmation of design items 1-7. Covers cbm 0.12.1, rust-analyzer SCIP, REAgraph and graphify

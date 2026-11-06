@@ -36,7 +36,7 @@ sources:
 
 # Other engines piloted: REAgraph, graphify, scip-clang, codanna; cbm's Rust macro miss
 
-Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
+Section numbers (§1-§5, Q1-Q30) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
 ## 4.6 Compared: REAgraph, rea, agent-desktop
 
@@ -97,14 +97,19 @@ to use the nearest preceding function (`hunks` mode, 114 seeds versus SCIP's 111
 |---|---|---|---|---|
 | run | 24 | 34 | 45 | 9 |
 | tasks | 15 | 23 | 6 | 7 |
-| bootstrap | 12 | 26 | 14 | 4 |
-| upgrade | 14 | 11 | 19 | 13 |
+| bootstrap | 12 | 27† | 14 | 4 |
+| upgrade | 14 | 12† | 19 | 13 |
 | lock | 13 | 13 | 19 | 11 |
 | exec | 12 | 2 | 5 | 4 |
 | use | 10 | 8 | 11 | 7 |
-| install | 5 | 8 | 1 | 0 |
+| install | 5 | 9† | 1 | 0 |
 | dotfiles | 6 | 4 | 13 | 3 |
-| tool | 0 | 1 | 0 | 0 |
+| tool | 0 | 0† | 0 | 0 |
+
+† Corrected 2026-11-05 ([§4.13](rust-call-graphs.md)): rust-analyzer gave every `#[async_trait]` method the whole block as
+its range, so the changed `Backend::install_version` was credited to `Backend#description`. The
+fixed SCIP blast adds it to bootstrap, upgrade and install, and drops the false `tool` hit. The other
+columns were not re-run.
 
 **Why it under-reaches:** graphify's Rust call graph is mostly within a file. Of 34,680 Rust
 `calls` edges, 28,285 (82%) join two nodes in the same file; only 6,395 cross files, and 3,534
@@ -292,9 +297,13 @@ Goal: does C have a SCIP-grade engine, so cbm could get a blast radius too (Q17 
 
 | | count |
 |---|---|
-| SCIP src/ functions / reference edges | 12,651 / 26,750 |
-| agree | 16,576 |
-| **codanna precision / recall** | **0.920 / 0.620** |
+| SCIP src/ functions / reference edges | 12,651 / 27,270 |
+| agree | 17,674 |
+| **codanna precision / recall** | **0.981 / 0.648** |
+
+Re-run 2026-11-06 with the SCIP range fix ([§4.13](rust-call-graphs.md)). Before it: 26,750 edges, 16,576 agree, 0.920 / 0.620.
+Most of the 8% "codanna-only" edges were calls inside `#[async_trait]` blocks that SCIP had credited
+to the wrong method. The codanna blast column did not change.
 
 Probes: `Task::default` callers codanna 34 vs SCIP 160 (all 34 agree); `bind_requests` 1/1;
 `install_all_versions_with_progress` 1 of 2.
@@ -305,17 +314,22 @@ Blast at depth 4, same 110 touched functions:
 |---|---|---|---|
 | run | 24 | 34 | 15 |
 | tasks | 15 | 23 | 10 |
-| bootstrap | 12 | 26 | 6 |
-| upgrade | 14 | 11 | 11 |
+| bootstrap | 12 | 27† | 6 |
+| upgrade | 14 | 12† | 11 |
 | lock | 13 | 13 | 10 |
 | exec | 12 | 2 | 6 |
 | use | 10 | 8 | 8 |
-| install | 5 | 8 | **0** |
+| install | 5 | 9† | **0** |
 | dotfiles | 6 | 4 | 4 |
-| tool | 0 | 1 | 0 |
+| tool | 0 | 0† | 0 |
 
-- **Verdict:** codanna is more precise than cbm on Rust but misses 38% of SCIP's edges, so it doesn't
-  replace SCIP for blast radius. The 8% of codanna edges not in SCIP were not spot-checked.
+† Corrected 2026-11-05 ([§4.13](rust-call-graphs.md)): rust-analyzer gave every `#[async_trait]` method the whole block as
+its range, so the changed `Backend::install_version` was credited to `Backend#description`. The
+fixed SCIP blast adds it to bootstrap, upgrade and install, and drops the false `tool` hit. The other
+columns were not re-run.
+
+- **Verdict:** codanna is more precise than cbm on Rust but misses 35% of SCIP's edges, so it doesn't
+  replace SCIP for blast radius. The 2% of codanna edges not in SCIP were not spot-checked.
 
 **Why `install` is 0** (read from codanna v0.17.1 and tree-sitter-rust 0.24.2, its pinned grammar,
 then confirmed with a real run). Each of SCIP's 14 caller chains (depth 4) from the 8 touched
@@ -389,5 +403,13 @@ also injects them for operator calls such as `a + b`, :2921.) For a macro_invoca
   `macro_rules!`, a method call passed to a `#[macro_export]` macro in another file, and a method
   call and a free call written in a same-file macro's own transcriber. So even with the macro
   visible and its body expanded, cbm makes no edge.
+- **Patched build (2026-11-05):** v0.12.1 rebuilt with both lookups (:3546, :4816) changed to "first
+  named `token_tree` child", same probe, direct `cbm_pipeline_run` driver. Same 2 of 7 edges. Stderr
+  prints show the four same-file expansions now bind `$block` and each pushes one resolved call
+  with caller `run`, but the call-edge pass (`src/pipeline/pass_parallel.c:3170`) only attaches
+  resolved calls to extractor `CBMCall` sites, and a zero-site call gets no injected carrier
+  (`rust_lsp.c:4111-4113`; on purpose, `pass_parallel.c:4026-4032`). `rust_walk_macro_tokens` pushed 0
+  every time: it looks for call nodes a token tree never has (:2831-2846). `measure_x!` (other
+  file) never expanded. The field fix is needed but not enough; a mapped site per call is the fix.
 - The same holds at src/config/mod.rs:1200 (`measure!` around `self.load_all_tasks_with_context`).
   Every mise call wrapped in `measure!` or any other user macro is missing from cbm's blast.

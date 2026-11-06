@@ -45,7 +45,7 @@ sources:
 
 # Other indexers surveyed
 
-Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
+Section numbers (§1-§5, Q1-Q30) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
 | Tool | What it stores | Real working config |
 |---|---|---|
@@ -74,5 +74,7 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
 | narsil-mcp | tree-sitter, call graph, taint | v1.7.2, 2026-10-07 | README only, not run. |
 | codeseek | call graph + hybrid search | v0.1.31, 2026-07 | README only, not run. |
 | probe | code search, no graph | v0.6.0-rc344 | Not a map. |
+| Charon (AeneasVerif) | rustc driver, writes ULLBC JSON | 0.1.311 (2bceb7c), on nightly-2026-09-17 | Piloted ([§4.13](rust-call-graphs.md)). Compiler-resolved calls for sync code; async bodies come out as `Error`. |
+| CGA (OpenDevicePartnership/cga) | rustc driver, monomorphized call graph | 2fc6310, 2026-10-20, on nightly-2026-10-18 | Piloted ([§4.13](rust-call-graphs.md)). Needs a one-character build.rs fix on macOS. Reads async fns but not `#[async_trait]` (`dyn Future`) bodies. |
 
 The tree-sitter tools compete with cbm, not with SCIP.

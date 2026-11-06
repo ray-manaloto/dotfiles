@@ -18,7 +18,7 @@ sources:
 
 # JetBrains CLion indexes and SARIF
 
-Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
+Section numbers (§1-§5, Q1-Q30) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
 - `WellKnownCommand` in `lib/intellij.platform.core.jar` names `dump-shared-index`, but no bundled
   plugin registers it as an `appStarter`. The registered starters are: buildEventsScheme,

@@ -23,7 +23,7 @@ sources:
 
 # codebase-memory-mcp as a per-version map store
 
-Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
+Section numbers (§1-§5, Q1-Q30) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
 ## 1.1 Where the graph lives and what format it is
 - One SQLite DB per project: `<cache>/<project>.db`, where `project_db_path` builds

@@ -3,7 +3,7 @@ okf_version: "0.2"
 type: "report"
 title: "Dependency code maps: results"
 description: "What was measured across cbm, SCIP, scip-clang, codanna, graphify and JetBrains, and what it means for the design."
-timestamp: "2026-11-05T23:00:00Z"
+timestamp: "2026-11-06T12:00:00Z"
 status: "draft"
 stale_after: "2026-12-05T00:00:00Z"
 tags: [dep-maps, codebase-memory-mcp, scip, summary]
@@ -32,7 +32,7 @@ sources:
 
 # Dependency code maps: results
 
-Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
+Section numbers (§1-§5, Q1-Q30) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
 - **Yes, this works with cbm today.** Indexing one mise tag takes ~20 s and gives 70k nodes and
   334k edges. The result is one SQLite file per version, which agents query offline through the
@@ -50,7 +50,8 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
   only through a running IDE.
 - **SCIP** (`rust-analyzer scip`) was run on mise and compared with cbm (§4.4). cbm's call edges
   are wrong in both directions: it adds false callers for common names (`default()`) and drops
-  every call inside a `macro_rules!` macro (§4.11), such as mise's `measure!`. So SCIP is the one to trust for blast radius, while cbm stays
+  every call inside a `macro_rules!` macro (§4.11), such as mise's `measure!`. The `run`, `tasks` and `bootstrap` gaps come from a 256-name cap on
+  the name lookup, a dropped self-edge and grouped `use` imports ([§4.12](rust-call-graphs.md)). So SCIP is the one to trust for blast radius, while cbm stays
   the browsing tool for agents and covers the other languages. The SCIP run took 258 s and wrote
   112 MB.
 - **REAgraph + graphify** was run as a third blast-radius engine (§4.7). Its diff is prefix-free
@@ -63,7 +64,8 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
   (§4.5), and the cbm artifact is 30.6 MB.
 - **scip-clang on cbm's own C** (§4.9): 2 s, 46 MB. cbm's C call edges score recall 0.919 and
   precision 0.787 against it (~0.936 without cbm's libc wrappers), far closer than on Rust.
-- **codanna on mise** (§4.10): 12.6 s, precision 0.920 but recall 0.620 against SCIP; it doesn't
+- **codanna on mise** (§4.10): 12.6 s, precision 0.981 but recall 0.648 against SCIP (after the
+  range fix below); it doesn't
   replace SCIP for blast radius. Its `install` blast is 0 because it drops all three call sites
   where SCIP's chains enter src/cli/install.rs: a receiver typed only by annotation, a call inside `measure!`, and an
   `&Arc<Config>` parameter it types as `Arc`. Its resolver drops untyped receivers rather than guess.
@@ -71,4 +73,13 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
   site, and inside a macro it adds sites only for built-in macros such as `println!`. So no call in
   a `macro_rules!` body is linked, which is why the `install_all_versions_with_progress` call at
   src/cli/install.rs:720 is missing. Confirmed on the mise graph and a probe crate.
-- **Design confirmed (Q19):** the owner confirmed proposal items 1-7 on 2026-11-05.
+- **SCIP checked against the compiler** ([§4.13](rust-call-graphs.md)). Charon and CGA, both rustc
+  drivers, agree with SCIP's call edges at 0.988/0.985 and 0.928/0.925 precision/recall, and rustc's
+  MIR confirms 1,684 of the 1,703 edges out of `#[async_trait]` methods. Neither tool adds anything real
+  to any command's blast. The fault that moved the blast counts was in our reading of SCIP:
+  rust-analyzer gives `#[async_trait]` methods the whole block as their range, which the prototypes
+  now fix with tree-sitter bounds. SCIP's one real flaw found: three nested test fns share one symbol,
+  and their 3 edges are in test code that no check builds.
+- **cfg:** SCIP keeps path edges from `#[cfg]`-off code. Blast keeps them and flags them as not in this
+  host's build (Q20, Q24).
+- **Design confirmed (Q19)** on 2026-11-05; the build is tickets #510, #511 and #512 (Q23).
