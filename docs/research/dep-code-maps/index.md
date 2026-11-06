@@ -15,7 +15,7 @@ confirmed by the owner on 2026-11-05; nothing is built yet.
 * [JetBrains](jetbrains.md) - CLion's C++ engines and caches, Qodana and SARIF (§2).
 * [Other indexers](other-tools.md) - SCIP and the survey of other indexers (§3).
 * [Pilot: mise with cbm and SCIP](pilots.md) - store layout, navigation, blast radius per subcommand, size limits (§4.1-§4.5).
-* [Other engines](other-engines.md) - REAgraph, graphify, scip-clang on cbm's C and codanna against SCIP (§4.6-§4.10).
+* [Other engines](other-engines.md) - REAgraph, graphify, scip-clang on cbm's C, codanna against SCIP, and cbm's Rust macro miss (§4.6-§4.11).
 
 Working notes, prototypes and generated maps stay outside the repo: `~/.local/state/dotfiles/dep-code-maps/`
 and `~/.local/share/dep-maps/`. The upstream codebase-memory-mcp issue about `compare_graphs` is drafted

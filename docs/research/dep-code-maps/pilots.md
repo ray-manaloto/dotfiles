@@ -89,7 +89,7 @@ SCIP run: `rust-analyzer scip .` in the v2026.11.2 worktree took **258 s** and w
 | symbol identity | `<project>.<path>.<name>`, resolved by name | type-qualified, e.g. `lib/task/impl#[Task][Default]default().` |
 | callers of `Lock::bind_requests` | `bind_and_write_target` (correct) | lock.rs:1301 and :1308, both in `bind_and_write_target` (correct, line-exact) |
 | callers of `Task::default()` | 155 edges in 24 files, **10 files wrong** (e.g. `cli/lock.rs`) | 234 refs in 20 files; cbm missed 6 of them (e.g. `task/task_executor.rs`) |
-| method call on a local | **missed**: `ts.install_all_versions_with_progress(` at `src/cli/install.rs:720` has no edge | found |
+| method call on a local | **missed**: `ts.install_all_versions_with_progress(` at `src/cli/install.rs:720` has no edge. It sits inside `measure!`, and cbm makes no edge for any call inside a `macro_rules!` macro ([other-engines §4.11](other-engines.md)) | found |
 | SQLite export detail | n/a | `chunks` only records line ranges of about 100 lines; the occurrence blob is zstd-compressed protobuf. Exact lines come from `scip print --json` (5 s) |
 
 Blast radius, same hunks and depth 4, both engines:

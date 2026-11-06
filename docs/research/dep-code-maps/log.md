@@ -10,5 +10,9 @@
 * **Addition**: §4.10 explains codanna's 0 `install` blast from its v0.17.1 source and a probe
   crate: annotation-only `let` types, macro bodies, `&Arc<T>` parameters and `..Default::default()`
   leave the receiver untyped or mistyped, and the resolver drops those calls.
+* **Addition**: §4.11 explains cbm's miss at src/cli/install.rs:720 from its v0.12.1 source, the
+  mise graph and a probe crate. Edges start only from syntactic call sites, and inside a macro
+  cbm injects synthetic sites only for built-in expression macros, so no call inside a `macro_rules!` macro
+  gets an edge. §4.10's "the macro miss is codanna's own" is corrected.
 * **Deferred**: `depmaps lint-diff` (SARIF findings diff), the upstream cbm issue, blast-depth
   calibration.

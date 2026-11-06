@@ -1,12 +1,12 @@
 ---
 okf_version: "0.2"
 type: "report"
-title: "Other engines piloted: REAgraph, graphify, scip-clang, codanna"
-description: "REAgraph and graphify as a blast engine, why graphify misses Rust calls, scip-clang on cbm C sources, and codanna scored against SCIP."
+title: "Other engines piloted: REAgraph, graphify, scip-clang, codanna; cbm's Rust macro miss"
+description: "REAgraph and graphify as a blast engine, why graphify misses Rust calls, scip-clang on cbm C sources, codanna scored against SCIP, and why cbm drops calls inside Rust macros."
 timestamp: "2026-11-05T23:00:00Z"
 status: "draft"
 stale_after: "2026-12-05T00:00:00Z"
-tags: [dep-maps, graphify, reagraph, scip-clang, codanna]
+tags: [dep-maps, graphify, reagraph, scip-clang, codanna, cbm]
 sources:
   - id: reagraph
     resource: "https://github.com/Graphify-Labs/REAgraph/tree/83b3c41"
@@ -31,10 +31,10 @@ sources:
     title: "tree-sitter-rust grammar at the version codanna 0.17.1 pins"
   - id: cbm
     resource: "https://github.com/DeusData/codebase-memory-mcp/tree/v0.12.1"
-    title: "Graph store, export and compare_graphs source at the pinned tag"
+    title: "Graph store, export, compare_graphs and Rust LSP source at the pinned tag"
 ---
 
-# Other engines piloted: REAgraph, graphify, scip-clang, codanna
+# Other engines piloted: REAgraph, graphify, scip-clang, codanna; cbm's Rust macro miss
 
 Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut from; the [index](index.md) maps them to pages. Prototype scripts named `prototype/*.py` are throwaway and live outside the repo in `~/.local/state/dotfiles/dep-code-maps/prototype/`.
 
@@ -111,8 +111,8 @@ to use the nearest preceding function (`hunks` mode, 114 seeds versus SCIP's 111
 of those are INFERRED.
 - `Task::default` has 2 callers, both tests in task/mod.rs. SCIP has 234 references, cbm 155.
 - The `ts.install_all_versions_with_progress(` call at src/cli/install.rs:720 has no edge. The
-  only caller is in-file (`install_all_versions`). That is the same miss cbm has, and why
-  `install` scores 0 or 1.
+  only caller is in-file (`install_all_versions`). cbm misses it too, for a different reason
+  (§4.11), and that is why `install` scores 0 or 1.
 - Precise when it does link: `bind_requests` ← `bind_and_write_target` matches SCIP exactly.
 
 **Verdict:** for Rust blast radius it ranks below cbm and well below SCIP. The REAgraph diff
@@ -348,6 +348,45 @@ src/config/mod.rs:
   parameter and an explicit `Task::default()`. Five got none: the annotated `let`, a `ts.m()` and a
   `self.m()` inside a `macro_rules!` macro, the `&Arc<Config>` parameter, and `..Default::default()`
   against a hand-written `impl Default for Task`.
-- The macro miss is codanna's own. graphify 0.9.102 (graphify/extractors/rust.py:215-240, 917-943)
-  and cbm 0.12.1 (internal/cbm/lsp/rust_lsp.c:2827) both have code that walks macro token trees.
-  §4.8 gives graphify's reason for missing :720. cbm's reason was not traced.
+- The macro miss is not codanna's alone. graphify 0.9.102 has code that walks macro token trees
+  (graphify/extractors/rust.py:215-240, 917-943); §4.8 gives its reason for missing :720. cbm
+  0.12.1 has a walker too (internal/cbm/lsp/rust_lsp.c:2827), but it is never reached, and no call
+  inside a `macro_rules!` macro gets a cbm edge (§4.11).
+
+## 4.11 Why cbm misses the call at src/cli/install.rs:720 (cbm v0.12.1 source)
+
+The call is `ts.install_all_versions_with_progress(…)` inside `measure!("install_all_versions", { … })`.
+`measure!` is `#[macro_export] macro_rules! measure { ($fmt:expr, $block:block) => {{ … $block … }} }`
+in src/timings.rs:93. Read from DeusData/codebase-memory-mcp at tag `pkg/go/v0.12.1`, then confirmed
+with real runs.
+
+**Edges start from syntactic call sites.** Both call passes loop over `result->calls`, the sites the
+generic tree-sitter extractor found (src/pipeline/pass_parallel.c:3170, src/pipeline/pass_calls.c:1374).
+The Rust LSP's answers (`resolved_calls`) are only looked up for those sites. The grammar keeps a
+macro's arguments as a `token_tree` with no field name and no `call_expression` in it (checked with cbm's
+vendored grammar, internal/cbm/vendored/grammars/rust). So the extractor finds no site, and an LSP
+answer reaches the graph only if the LSP injects a synthetic site itself (`rust_inject_syn_call`,
+internal/cbm/lsp/rust_lsp.c:4045-4060).
+
+**Inside a macro, the LSP injects sites only for built-in expression macros.** (Outside macros it
+also injects them for operator calls such as `a + b`, :2921.) For a macro_invocation
+(rust_lsp.c:4755-4818):
+
+| macro kind | what cbm does | edge? |
+|---|---|---|
+| a `macro_rules!` visible in the same file before the call | `rust_expand_user_macro` (:3526-3652) re-parses the transcriber as a function body. It reads the invocation through an `arguments` field (:3546), which `macro_invocation` doesn't have, so the arguments come back empty and `$block` is never substituted: the first rule is used unbound (:3571-3572). The expanded source gets site 0:0 (:3635) and no injected call. The comment at :2918-2920 says it outright: "Generated macro_rules! source has no faithful mapped site and stays semantic only." | no |
+| a `macro_rules!` defined in another file (mise's `measure!`) | Rules are collected from the current file only, its root and inline mod bodies (`rust_collect_macro_rules`, :3015-3050, called once at :5304), and a rule counts only after its definition byte in that file. So `measure!` is unknown in install.rs. | no |
+| `println!`, `format!`, `assert!` and the other built-in expression macros | The arguments are re-parsed with a mapped site and `inject_syn_calls` set (:3755-3772), so each resolved call gets a synthetic site. | yes |
+| any other macro | The fallback `rust_walk_macro_tokens` hangs off the same missing `arguments` field (:4816-4818), so it never runs. | no |
+
+**Confirmed:**
+- **mise:** in cbm's `mise-v2026.11.2` project, `install_missing_runtimes` has CALLS edges at :717
+  and next at :730, none for :718-729, the whole `measure!` body.
+- **Probe:** a 7-case crate indexed with cbm 0.12.1 (mode fast, then deleted). Two cases got an
+  edge: a plain `ts.via_plain()` and `println!("{}", free_print())`; the `println!` edge has no line
+  number. Five got none: a method call and a free call passed as a `$block` to a same-file
+  `macro_rules!`, a method call passed to a `#[macro_export]` macro in another file, and a method
+  call and a free call written in a same-file macro's own transcriber. So even with the macro
+  visible and its body expanded, cbm makes no edge.
+- The same holds at src/config/mod.rs:1200 (`measure!` around `self.load_all_tasks_with_context`).
+  Every mise call wrapped in `measure!` or any other user macro is missing from cbm's blast.
