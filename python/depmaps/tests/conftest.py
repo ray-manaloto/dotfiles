@@ -25,7 +25,7 @@ CBM = Path.home() / ".local/share/mise/installs/github-deus-data-codebase-memory
 TIMEOUT = 120
 # Seconds: far longer than a whole run of this suite.
 STALE = 3600
-VERSIONS = ("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0")
+VERSIONS = ("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.9.0", "1.10.0", "1.11.0")
 
 CORE_1_0 = """\
 def keep(count):
