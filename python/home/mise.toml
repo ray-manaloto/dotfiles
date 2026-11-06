@@ -1,6 +1,7 @@
-# The global toolchain tasks (DL-758, #391): the hometools package does their work. Its commands run from
-# the file tasks toolchain:verify and bootstrap:toolchain in the global tasks folder; this file holds only the
-# development tasks. From the repository root they are //home:<task>.
+# The global toolchain and update tasks (DL-758, #391, #392): the hometools package does their work. Its
+# commands run from the file tasks toolchain:verify, bootstrap:toolchain, update:brew and update:check in the
+# global tasks folder; this file holds only the development tasks. From the repository root they are
+# //home:<task>.
 
 [env]
 # This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).

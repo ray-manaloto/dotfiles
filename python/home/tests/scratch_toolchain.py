@@ -64,6 +64,13 @@ def installed_vars(checkout: Path, real: Path) -> dict[str, str]:
     return held | installed | majors
 
 
+def text(value: object) -> str:
+    """value as TOML: JSON's string, boolean and list forms are TOML's once every character but DEL is written as
+    itself. JSON's \\uD83D\\uDE00 surrogate pairs are not TOML escapes, and TOML allows no raw DEL (R9); JSON
+    escapes the other control characters as TOML does."""
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
 def toml_table(name: str, table: dict[str, object]) -> str:
     """A TOML table of strings, booleans and string lists; JSON writes each as valid TOML."""
     lines = [f"[{name}]"]
@@ -71,7 +78,7 @@ def toml_table(name: str, table: dict[str, object]) -> str:
         if not (isinstance(value, (str, bool)) or (isinstance(value, list) and all(isinstance(v, str) for v in value))):
             msg = f"{name}.{key} is not a string, a boolean or a list of strings"
             raise TypeError(msg)
-        lines.append(f"{json.dumps(key)} = {json.dumps(value)}")
+        lines.append(f"{text(key)} = {text(value)}")
     return "\n".join(lines) + "\n"
 
 
@@ -81,8 +88,8 @@ def global_config(checkout: Path, settings: dict[str, str]) -> str:
     data = tomllib.loads((checkout / MISE_HOME / "config.toml").read_text())
     tables = [toml_table("vars", dict(settings))]
     for kind in ("directories", "files"):
-        tables += [toml_table(f"bootstrap.{kind}.{json.dumps(p)}", t) for p, t in data["bootstrap"][kind].items()]
-    tables += [toml_table(f"tasks.{json.dumps(t)}", data["tasks"][t]) for t in TASKS if t in data.get("tasks", {})]
+        tables += [toml_table(f"bootstrap.{kind}.{text(p)}", t) for p, t in data["bootstrap"][kind].items()]
+    tables += [toml_table(f"tasks.{text(t)}", data["tasks"][t]) for t in TASKS if t in data.get("tasks", {})]
     return "\n".join(tables)
 
 

@@ -16,7 +16,7 @@ from hometools.cli import main
 from hometools.config import ToolchainError
 from hometools.models import Bootstrap
 
-from .scratch_toolchain import FORMULAE, Scratch
+from .scratch_toolchain import FORMULAE, Scratch, toml_table
 
 FIX = "run: mise run bootstrap:toolchain"
 
@@ -347,3 +347,10 @@ def test_an_empty_first_line_prints_nothing(capfd: pytest.CaptureFixture[str]) -
     # No Homebrew program prints nothing for --version; true is a real program that does.
     proc.head(Path("/usr/bin/true"))
     assert capfd.readouterr().out == ""
+
+
+def test_toml_table_round_trips_text_outside_the_bmp_and_control_characters() -> None:
+    # JSON's default escapes for text outside the BMP are surrogate pairs, invalid TOML, and TOML has no raw DEL.
+    name = 'tasks."x😀"'
+    values: dict[str, object] = {"run😀": "é 😀\x7f\x00\n", "list": ["😀\x7f"], "flag": True}
+    assert tomllib.loads(toml_table(name, values)) == {"tasks": {"x😀": values}}
