@@ -71,6 +71,27 @@ Shell the zero-bash rule itself allows, so it is not a finding. AGENTS.md states
 the only exception is the zsh startup files under `unix/home`.
 _Avoid_: Waiver, skip, ignore
 
+### Dependency maps
+
+**Dependency map**:
+The code graph (cbm, plus SCIP for Rust) of one dependency at one pinned version, kept outside the
+repo.
+_Avoid_: Index, snapshot
+
+**Blast radius**:
+The functions of a dependency that changed between two pinned versions and that our usage surface can
+reach through callers.
+_Avoid_: Impact, diff
+
+**Host build**:
+The code one machine actually compiles, meaning its target OS, family, arch and env.
+_Avoid_: Platform build
+
+**Inactive-code edge**:
+An edge whose site is inside `#[cfg]` code that is off for the host build; kept in the blast radius
+and flagged.
+_Avoid_: Dead edge
+
 ### Labels
 
 **`needs-triage`**:
