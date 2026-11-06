@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "cpp"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "cpp"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -11,6 +11,7 @@ repo = "python/repo"
 workflow = "python/workflow"
 cbm = "python/cbm"
 home = "python/home"
+visualplan = "python/visualplan"
 
 [settings]
 lockfile = true
@@ -21,7 +22,7 @@ lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//cpp:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//cpp:test"]
 run = "echo all tests passed"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own
@@ -107,6 +108,8 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # A skill written here: Codex reads ~/.agents/skills and Claude ~/.claude/skills, so both link to it.
 "~/.agents/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
 "~/.claude/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
+"~/.agents/skills/visual-plan" = { source = "unix/home/.agents/skills/visual-plan", mode = "symlink" }
+"~/.claude/skills/visual-plan" = { source = "unix/home/.agents/skills/visual-plan", mode = "symlink" }
 # TokenEconomizer's global policy, copied (TE rewrites the file, which would break a symlink). Change it
 # with `te --host claude config set --global ...`, then capture it from the main checkout with
 # `mise dot add ~/.tokeneconomizer/config.json` before any `mise dot apply`: an apply overwrites an
