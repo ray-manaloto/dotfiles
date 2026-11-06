@@ -1,6 +1,7 @@
 """The map store: <store>/<dep>/.repo.git, and per version a worktree, its cbm map and manifest.json."""
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -43,14 +44,23 @@ def mapped(cfg: Config, name: str, version: str) -> bool:
     return found is not None and cbm.database(found.project).exists()
 
 
+def order(version: str) -> list[str | int]:
+    """A version's sort key: its runs of digits as numbers, so 2026.11.10 follows 2026.11.9.
+
+    re.split with a group puts the text runs at even places and the digit runs at odd ones, so two keys
+    compare text with text and number with number.
+    """
+    return [int(part) if index % 2 else part for index, part in enumerate(re.split(r"(\d+)", version))]
+
+
 def maps(cfg: Config, name: str) -> list[Manifest]:
-    """Every map of the dependency, oldest first: by indexed_at, then by when manifest.json was written."""
+    """Every map of the dependency, oldest version first, whatever order they were built in."""
     found = [
-        (each.indexed_at, child.stat().st_mtime_ns, each)
-        for child in sorted((cfg.store / name).glob("*/manifest.json"))
+        each
+        for child in (cfg.store / name).glob("*/manifest.json")
         if (each := manifest(cfg, name, child.parent.name)) is not None  # None: removed since the glob
     ]
-    return [each for *_, each in sorted(found, key=lambda item: item[:2])]
+    return sorted(found, key=lambda each: order(each.version))
 
 
 def remove(cfg: Config, name: str, version: str) -> None:
@@ -87,8 +97,12 @@ def build(cfg: Config, name: str, dep: Dep, version: str) -> Manifest:
 
 
 def prune(cfg: Config, name: str, pinned: str) -> list[str]:
-    """Keep the pinned version and the newest other map; remove the rest, oldest first."""
-    others = [each.version for each in maps(cfg, name) if each.version != pinned]
-    for version in others[:-1]:
+    """Keep the pinned version and the highest version below it; remove the rest, oldest first. A map
+    newer than the pin, left by a pin moved back, goes too."""
+    versions = [each.version for each in maps(cfg, name)]
+    below = [version for version in versions if order(version) < order(pinned)]
+    keep = {pinned, *below[-1:]}
+    gone = [version for version in versions if version not in keep]
+    for version in gone:
         remove(cfg, name, version)
-    return others[:-1]
+    return gone

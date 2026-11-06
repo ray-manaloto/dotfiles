@@ -221,6 +221,34 @@ def test_sync_and_prune(env: Env) -> None:
     assert str(env.folder("1.1.0") / "src") in worktrees
 
 
+def test_prune_keeps_the_version_below_the_pin(env: Env) -> None:
+    # Built out of order, 1.10.0 before 1.9.0, and as text 1.10.0 sorts before 1.9.0: either order would
+    # keep 1.9.0, which comes before 1.10.0.
+    for version in ("1.9.0", "1.10.0", "1.11.0"):
+        release(env.repo, version, {"notes.md": f"{version}\n"})
+    for version in ("1.10.0", "1.9.0"):
+        assert env.run("map", env.name, "--version", version).returncode == 0
+    env.pin("1.11.0")
+    result = env.run("sync")
+    assert result.returncode == 0, result.stderr
+    assert events(result.stdout)[1:] == [
+        {"event": "pruned", "dep": env.name, "version": "1.9.0"},
+        {"event": "done", "command": "sync", "message": "depmaps: sync mapped 1, pruned 1"},
+    ]
+    assert database(f"{env.name}-v1.10.0").is_file()
+    # With 1.9.0 mapped again, the pin moves back to 1.10.0: 1.11.0, newer than the pin, goes, and 1.9.0,
+    # the one below it, stays.
+    assert env.run("map", env.name, "--version", "1.9.0").returncode == 0
+    env.pin("1.10.0")
+    result = env.run("sync")
+    assert result.returncode == 0, result.stderr
+    assert events(result.stdout) == [
+        {"event": "pruned", "dep": env.name, "version": "1.11.0"},
+        {"event": "done", "command": "sync", "message": "depmaps: sync mapped 0, pruned 1"},
+    ]
+    assert database(f"{env.name}-v1.9.0").is_file()
+
+
 def test_sync_rebuilds_a_map_cbm_lost(env: Env) -> None:
     assert env.run("sync").returncode == 0
     assert cbm_tool("delete_project", {"project": f"{env.name}-v1.0.0"}).returncode == 0
