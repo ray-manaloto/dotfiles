@@ -64,8 +64,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   does the same by hand, and `//repo:main-guard-remove` switches it off until the next install. If the
   copy can't start (its Python pruned), every move of main fails with a hint to re-run the install. It is
   a local check that anyone running as this user can remove, so it catches mistakes, not a forger.
-- Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
-  this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
+- Run anything against a scratch home through `mise run scratch:env <empty folder> <command>`, from
+  this checkout. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.
 - `mise run shell:apply` links the six zsh files; run it before a bare `mise dot apply` and after each
   `shell:rollback`. A bare apply stops on `~/.zprofile` and `~/.zshrc`, and with `--force` replaces them

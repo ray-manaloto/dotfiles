@@ -1,6 +1,6 @@
 """Agent skills setup: the global post-tools hook, the linked skills and the hc-codex blocks."""
 
-# All run through tasks/scratch/env.sh, so every home path is inside a temporary folder. The hook
+# All run through `mise run scratch:env`, so every home path is inside a temporary folder. The hook
 # runs with the real `skills` CLI, and the scratch home's git config points GitHub at local
 # repositories: herdr-core at its tag (installed only when missing) and agent-desktop at its tag
 # (installed on every run). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
@@ -48,7 +48,7 @@ class HerdrAppTest(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, self.root)
         self.home = self.root / "home"
-        # skills keeps its lock under $XDG_STATE_HOME, which env.sh sets.
+        # skills keeps its lock under $XDG_STATE_HOME, which scratch:env sets.
         self.lock = self.root / "state/skills/.skill-lock.json"
         self.skills: dict[str, dict[str, str]] = {}
         # Bound but never listening, so every connection to it is refused.
@@ -89,7 +89,7 @@ class HerdrAppTest(unittest.TestCase):
 
     def scratch(self, *argv: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "tasks/scratch/env.sh", str(self.root), *argv],
+            ["mise", "run", "scratch:env", str(self.root), *argv],
             cwd=REPO,
             stdin=subprocess.DEVNULL,
             capture_output=True,
