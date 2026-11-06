@@ -5,6 +5,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,11 @@ REPO = Path(__file__).resolve().parents[2]
 UNIX_HOME = REPO / "unix/home"
 IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*")
 MISE = Path(shutil.which("mise") or "mise").resolve()
+UV = Path(shutil.which("uv") or "uv").resolve()
+# The tasks run repotools through uv run; the scratch HOME has no uv cache or Python of its own, so the
+# copy's venv is built from this machine's cache, downloading what it lacks, with the interpreter
+# running these tests.
+UV_CACHE = subprocess.run([UV, "cache", "dir"], capture_output=True, check=True, text=True).stdout.strip()
 
 STARTUP = (".zshenv", ".zprofile", ".zshrc")
 DROP_INS = (".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh")
@@ -53,7 +59,10 @@ class ShellApplyTest(unittest.TestCase):
         self.env = {
             "HOME": str(self.home),
             "USER": os.environ["USER"],  # the root mise.toml renders env.USER
-            "PATH": f"{MISE.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{MISE.parent}:{UV.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "UV_CACHE_DIR": UV_CACHE,
+            "UV_PYTHON": str(Path(sys.executable).resolve()),
+            "UV_PYTHON_DOWNLOADS": "never",
             "XDG_CONFIG_HOME": str(root / "config"),
             "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(self.state),
