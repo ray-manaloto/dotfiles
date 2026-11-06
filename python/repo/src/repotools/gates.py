@@ -14,6 +14,8 @@ from .pane_approval import git, hashed
 
 PROMPT = Path("tasks/review/python.md")
 APPROVING = b"VERDICT: PASS"
+# The review lead and the 6 slice reviewers it runs at once (tasks/review/python.md).
+THREADS = 7
 REFUSAL = "review:python has not passed on the staged python/ files; stage them, then mise run review:python"
 HINT = "privacy:scan: replace each host path with ~ or a {{ env.HOME }} template"
 # Short values (a CI runner's HOME, say) would match ordinary text; only real paths are kept.
@@ -38,7 +40,20 @@ def review(options: ReviewPython) -> None:
     staged = staged_python()
     prompt = PROMPT.read_bytes() + f"Path: {options.path}\nCommit: {options.commit or 'none'}\n".encode()
     # One word, as codex's clap parser reads a separate value that starts with - as an option.
-    command = ["codex", "exec", "-C", ".", "-c", 'sandbox_mode="read-only"', f"--output-last-message={out}", "-"]
+    # multi_agent_v2 counts the lead in its thread total (default 4), and this override merges with a
+    # plain `multi_agent_v2 = true` in config.toml (codex-rs/config/src/merge.rs:63-98 at rust-v0.167.0).
+    command = [
+        "codex",
+        "exec",
+        "-C",
+        ".",
+        "-c",
+        'sandbox_mode="read-only"',
+        "-c",
+        f"features.multi_agent_v2.max_concurrent_threads_per_session={THREADS}",
+        f"--output-last-message={out}",
+        "-",
+    ]
     done = subprocess.run(command, input=prompt, check=False)
     if done.returncode:
         raise SystemExit(done.returncode)

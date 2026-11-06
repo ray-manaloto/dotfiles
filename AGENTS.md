@@ -34,6 +34,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   in its own terminal pane, never inside a read-only Codex session: that sandbox denies mise's temp
   file, the git-dir report and the network, and the session gets no extra access. A read-only session
   reviews by reading the report and the changes under `python/`: staged, unstaged and untracked.
+- Large Codex reviews fan out: a read-only lead splits the change into slices of about 1,000 lines,
+  one subagent per slice works every (file, rule) row, and the lead verifies and merges, as
+  `tasks/review/python.md` does.
 - Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
   reviewer Codex in the checkout being committed and name its session once with
   `mise run //repo:pane-pin <session id>`. Stage everything, write the message to a file, run
