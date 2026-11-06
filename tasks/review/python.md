@@ -5,6 +5,9 @@ Scope: the `Path:` and `Commit:` lines at the end of this prompt. With `Commit: 
 uncommitted changes (staged, unstaged and untracked) under that path: `git status --short -- <path>`,
 `git diff HEAD -- <path>`, and each untracked file read in full. With a commit, review what it
 changed under that path: `git show <commit> -- <path>`.
+Each `Merged:` line after them names a file a merge of origin/main brings in exactly as main has
+it, quoted as `git diff` quotes it: main reviewed it, so leave it out of the review and out of
+the count.
 
 Review against `CODING_STANDARDS.md` at the repository root (rules R1-R9), applying every rule to
 every changed file. Skip what ruff, ty, coverage and `codegen --check` already enforce, and skip
@@ -21,8 +24,8 @@ checked here too: if the reason it gives does not hold, that is a finding. Each 
 ## 1. Size the change
 
 Count the changed lines in scope (`git diff --numstat HEAD -- <path>` plus untracked files' lengths,
-or `git show --numstat <commit> -- <path>`). Leave generated models, JSON Schemas and lock files out
-of the count, and out of line-by-line review: check code against them instead.
+less the `Merged:` files, or `git show --numstat <commit> -- <path>`). Leave generated models,
+JSON Schemas and lock files out of the count, and out of line-by-line review: check code against them instead.
 
 - Under 1,000 changed lines: review it yourself. Build the checklist of (file, R1-R9) and work
   every row. A row is done only when every changed line in that file was checked against that rule.
