@@ -25,7 +25,8 @@
         "main-guard-armed",
         "shell-apply",
         "shell-rollback",
-        "scratch-env"
+        "scratch-env",
+        "toolchain-gate"
       ]
     },
     "ZeroBash": {
@@ -81,6 +82,12 @@
     },
     "MainGuardArmed": {
       "description": "Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ToolchainGate": {
+      "description": "Print run when the staged change can change what toolchain:verify sees on this Mac.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -178,7 +185,8 @@
         { "$ref": "#/$defs/MainGuardRemove" },
         { "$ref": "#/$defs/MainGuardArmed" },
         { "$ref": "#/$defs/ShellApply" },
-        { "$ref": "#/$defs/ShellRollback" }
+        { "$ref": "#/$defs/ShellRollback" },
+        { "$ref": "#/$defs/ToolchainGate" }
       ]
     },
     "Fingerprint": {
@@ -306,6 +314,7 @@
     "shell_apply": { "$ref": "#/$defs/ShellApply" },
     "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
     "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
+    "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

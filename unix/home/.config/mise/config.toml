@@ -392,96 +392,6 @@ brew upgrade --yes
 mise run toolchain:verify
 '''
 
-[tasks."bootstrap:toolchain"]
-description = "Render conf.d/toolchain.toml from [vars], install from it, then verify (DL-770)"
-# mise reads its config before [bootstrap.files] writes the fragment, so the second run installs from it.
-run = [
-  # DL-786: bootstrap skips an exact version it cannot install, so refuse before changing anything.
-  '''
-{% if os() == "macos" %}
-missing=""
-for want in gcc:{{ vars.gcc }} llvm:{{ vars.llvm }} lld:{{ vars.llvm }} lldb:{{ vars.llvm }}; do
-  name="${want%%:*}" version="${want#*:}"
-  case " $(brew list --versions "$name" 2>/dev/null) " in
-    *" $version "*) ;;
-    *) echo "bootstrap:toolchain: brew package $name $version is not installed" >&2; missing=1 ;;
-  esac
-done
-[ -z "$missing" ]
-{% endif %}
-''',
-  "mise bootstrap --only files,packages --yes",
-  "mise bootstrap --only files,packages --yes",
-  "mise run toolchain:verify",
-]
-
-[tasks."toolchain:verify"]
-description = "Check the held Homebrew toolchain: versions, IWYU/LLVM match, dylib links, pins (DL-595)"
-run = '''
-set -euo pipefail
-want_llvm={{ vars.llvm_major }}
-want_gcc={{ vars.gcc_major }}
-llvm={{ system_brew_prefix }}/opt/llvm/bin
-clang_v="$("$llvm/clang" -dumpversion)"
-case "$clang_v" in "$want_llvm".*) ;; *) echo "clang $clang_v is not $want_llvm.x" >&2; exit 1;; esac
-gcc_v="$({{ system_brew_prefix }}/bin/gcc-$want_gcc -dumpfullversion)"
-case "$gcc_v" in "$want_gcc".*) ;; *) echo "gcc-$want_gcc reports $gcc_v" >&2; exit 1;; esac
-iwyu={{ system_brew_prefix }}/opt/include-what-you-use/bin/include-what-you-use
-iwyu_v="$("$iwyu" --version)"
-case "$iwyu_v" in *"based on Homebrew clang version $clang_v") ;; *) echo "iwyu/LLVM mismatch: $iwyu_v vs clang $clang_v" >&2; exit 1;; esac
-for bin in "$iwyu" {{ system_brew_prefix }}/opt/lld/bin/ld64.lld {{ system_brew_prefix }}/opt/lldb/bin/lldb; do
-  libs="$(/usr/bin/otool -L "$bin" | awk 'NR>1 && $1 ~ /^\/opt\/homebrew\// {print $1}')"
-  for lib in $libs; do
-    [ -e "$lib" ] || { echo "$bin: missing $lib" >&2; exit 1; }
-  done
-done
-{{ system_brew_prefix }}/opt/lld/bin/ld.lld --version
-{{ system_brew_prefix }}/bin/gdb --version | head -n 1
-{{ system_brew_prefix }}/bin/gmake --version | head -n 1
-{{ system_brew_prefix }}/opt/pkgconf/bin/pkgconf --version
-# P2996 (DL-755): sfx is the PATH folder of -p2996 links, cur the prefix bin dir clang resolves to and
-# reads its default configs from: unversioned triple names, versionless SDK equal to xcrun's.
-sfx="$HOME/.local/share/p2996/bin"
-cur="$(dirname "$(/bin/realpath "$sfx/clang-p2996")")"
-sdk="$(xcrun --show-sdk-path)"
-[ -d "$sdk" ] || { echo "xcrun SDK $sdk does not exist" >&2; exit 1; }
-for cfg in arm64-apple-darwin.cfg arm64-apple-darwin-clang++.cfg; do
-  [ -f "$cur/$cfg" ] && [ "$sfx/$cfg" -ef "$cur/$cfg" ] || { echo "missing P2996 default config $cfg in $cur or $sfx" >&2; exit 1; }
-done
-for stale in "$cur"/arm64-apple-darwin[0-9]*.cfg "$sfx"/arm64-apple-darwin[0-9]*.cfg; do
-  if [ -e "$stale" ] || [ -L "$stale" ]; then echo "versioned P2996 config $stale shadows the unversioned one" >&2; exit 1; fi
-done
-cfg_sdk="$(sed -n 's/^-isysroot[ =]//p' "$cur/arm64-apple-darwin.cfg")"
-[ -d "$cfg_sdk" ] || { echo "P2996 config SDK '$cfg_sdk' does not exist" >&2; exit 1; }
-[ "$cfg_sdk" = "$sdk" ] || { echo "P2996 config SDK $cfg_sdk is not xcrun's $sdk" >&2; exit 1; }
-for pair in clang-p2996:arm64-apple-darwin.cfg clang++-p2996:arm64-apple-darwin-clang++.cfg; do
-  exe="$sfx/${pair%%:*}" want="${pair#*:}"
-  ver="$(env -u SDKROOT -u CLANG_NO_DEFAULT_CONFIG "$exe" --version)"
-  case "$ver" in *"Configuration file: "*"/$want"*) ;; *) echo "$exe does not load $want" >&2; exit 1;; esac
-  got="$(env -u SDKROOT -u CLANG_NO_DEFAULT_CONFIG "$exe" -### -x c++ -c /dev/null 2>&1 | sed -n 's/.*"-isysroot" "\([^"]*\)".*/\1/p' | head -n 1)"
-  [ "$got" = "$sdk" ] || { echo "$exe uses sysroot '$got', not xcrun's $sdk" >&2; exit 1; }
-done
-"$sfx/clang++-p2996" --version | head -n 1
-pinned="$(brew list --pinned)"
-for f in gcc llvm lld lldb include-what-you-use gdb make pkgconf; do
-  printf '%s\n' "$pinned" | grep -qx "$f" || { echo "$f is not pinned" >&2; exit 1; }
-done
-# [vars] llvm/gcc must equal the installed versions; a stale conf.d/toolchain.toml shows below as a
-# version mismatch (fix: mise run bootstrap:toolchain).
-[ "$clang_v" = "{{ vars.llvm }}" ] || { echo "clang $clang_v is not [vars] llvm {{ vars.llvm }}" >&2; exit 1; }
-[ "$gcc_v" = "{{ vars.gcc }}" ] || { echo "gcc $gcc_v is not [vars] gcc {{ vars.gcc }}" >&2; exit 1; }
-status="$(mise bootstrap packages status)"
-# Every versioned package must be declared at its [vars] version: a missing or stale conf.d/toolchain.toml
-# is not a status mismatch when the install still matches the old render.
-for want in "gcc@{{ vars.gcc }}" "llvm@{{ vars.llvm }}" "lld@{{ vars.llvm }}" "lldb@{{ vars.llvm }}" \
-    "include-what-you-use@{{ vars.iwyu }}" "gdb@{{ vars.gdb }}" "make@{{ vars.make }}" "pkgconf@{{ vars.pkgconf }}"; do
-  case "$status" in *"$want"*) ;; *) echo "conf.d/toolchain.toml does not declare $want; run: mise run bootstrap:toolchain" >&2; exit 1;; esac
-done
-case "$status" in *"version mismatch"*) printf '%s\n' "$status" | grep "version mismatch" >&2; echo "run: mise run bootstrap:toolchain" >&2; exit 1;; esac
-mise bootstrap packages status --missing
-echo "toolchain:verify OK: clang $clang_v, gcc $gcc_v, $iwyu_v"
-'''
-
 [tasks."update:mise"]
 description = "update mise tools"
 # Always from $HOME: run from a stale worktree, `mise install -y` would install its pins (incl. agy/codex).
@@ -606,6 +516,9 @@ gemini_yolo = "gemini --yolo"
 [vars]
 # DL-764, DL-770: the one home for compiler and brew versions; conf.d/toolchain.toml renders
 # [bootstrap.packages] from them and toolchain:verify checks the installs match.
+# To bump gcc or llvm: install the new version first (unpin it, brew upgrade it, pin it again), then edit
+# these and run `mise run bootstrap:toolchain`. A commit that changes [vars] runs //home:integration
+# (repotools toolchain-gate), which fails until the installs match: a typo or an uninstalled version stops it.
 gcc = "16.2.0"
 gcc_major = "16"
 llvm = "23.1.4"

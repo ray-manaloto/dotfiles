@@ -27,6 +27,7 @@ class Command(StrEnum):
     shell_apply = "shell-apply"
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
+    toolchain_gate = "toolchain-gate"
 
 
 class ZeroBash(BaseModel):
@@ -125,6 +126,17 @@ class MainGuardRemove(BaseModel):
 class MainGuardArmed(BaseModel):
     """
     Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ToolchainGate(BaseModel):
+    """
+    Print run when the staged change can change what toolchain:verify sees on this Mac.
     """
 
     model_config = ConfigDict(
@@ -283,6 +295,7 @@ type Options = (
     | MainGuardArmed
     | ShellApply
     | ShellRollback
+    | ToolchainGate
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -527,6 +540,7 @@ class Repotools(BaseModel):
     shell_apply: ShellApply | None = None
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
+    toolchain_gate: ToolchainGate | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

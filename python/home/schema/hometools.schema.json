@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "hometools",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of the hometools package; mise run //home:codegen writes src/hometools/models.py from this file.",
+  "$defs": {
+    "Command": {
+      "description": "One hometools command, run by the global mise task of the same purpose.",
+      "type": "string",
+      "enum": ["toolchain-verify", "bootstrap-toolchain"]
+    },
+    "Bootstrap": {
+      "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gcc", "llvm"],
+      "properties": {
+        "gcc": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_GCC, [vars] gcc."},
+        "llvm": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_LLVM, [vars] llvm: llvm, lld and lldb."}
+      }
+    },
+    "Verify": {
+      "description": "What toolchain-verify reads: the brew prefix and every [vars] version it checks.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brew_prefix", "llvm", "llvm_major", "gcc", "gcc_major", "iwyu", "gdb", "make", "pkgconf"],
+      "properties": {
+        "brew_prefix": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_BREW_PREFIX, mise's {{ system_brew_prefix }}."},
+        "llvm": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_LLVM, [vars] llvm."},
+        "llvm_major": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_LLVM_MAJOR, [vars] llvm_major."},
+        "gcc": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_GCC, [vars] gcc."},
+        "gcc_major": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_GCC_MAJOR, [vars] gcc_major."},
+        "iwyu": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_IWYU, [vars] iwyu."},
+        "gdb": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_GDB, [vars] gdb."},
+        "make": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_MAKE, [vars] make."},
+        "pkgconf": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_PKGCONF, [vars] pkgconf."}
+      }
+    },
+    "Failure": {
+      "description": "Why a command stopped, printed as one JSON line on stderr.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {
+        "error": {"type": "string", "description": "The lines the shell task printed, joined by newlines."}
+      }
+    }
+  }
+}
