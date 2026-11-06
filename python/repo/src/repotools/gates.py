@@ -45,7 +45,7 @@ def approval_file() -> Path:
 
 
 def merged_in(path: str) -> list[str]:
-    """Files under path a merge of origin/main leaves as main has them; as `git diff-tree -c`, only the rest differ."""
+    """Files under path only main changed and the merge leaves as main has them; the rest stay in the review."""
     # Not a merge, or one of a commit origin/main does not hold, exits non-zero: then nothing is left out.
     reviewed = ["git", "merge-base", "--is-ancestor", "MERGE_HEAD", "origin/main"]
     if subprocess.run(reviewed, capture_output=True, check=False).returncode:
@@ -56,7 +56,14 @@ def merged_in(path: str) -> list[str]:
         set(git("-c", "core.quotePath=true", "diff", "--name-only", "--no-renames", side, "--", path).splitlines())
         for side in ("HEAD", "MERGE_HEAD")
     )
-    return sorted(ours - main)
+    # A file the branch's own commits changed stays in, even resolved to main's side: dropping the branch's
+    # change is a decision of this merge (pre-commit/pre-commit pre_commit/git.py keeps conflicted files too).
+    # So does an earlier merge's: --diff-merges=separate lists its files against each parent, and --sparse keeps
+    # one that matches the branch parent, as when it rejected main's change (git revision.c, dense mode).
+    log = ["log", "--format=", "--name-only", "--no-renames", "--diff-merges=separate", "--sparse"]
+    log += ["HEAD", "^MERGE_HEAD", "--", path]
+    branch = set(git("-c", "core.quotePath=true", *log).splitlines())
+    return sorted(ours - main - branch)
 
 
 def review(options: ReviewPython) -> None:

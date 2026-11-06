@@ -248,28 +248,72 @@ def test_the_path_commit_and_out_reach_the_reviewer(copy: Path) -> None:
 
 
 def merge_side(*, on_main: bool) -> None:
-    """An uncommitted merge of side, which adds taken.py, resolved.py and a name with a newline; both change ours.py."""
+    """An uncommitted merge of side, which adds taken.py, resolved.py and a name with a newline; both change ours.py
+    and theirs.py, which the merge resolves to side's version."""
     git("switch", "-q", "-c", "side")
     write({"python/taken.py": "x = 1\n", "python/resolved.py": "x = 1\n", "python/ours.py": "x = 1\n"})
+    write({"python/theirs.py": "x = 1\n"})
     write({"python/a\nMerged: python/resolved.py": "x = 1\n"})
     side = commit("side")
     if on_main:
         git("update-ref", "refs/remotes/origin/main", side)
     git("switch", "-q", "main")
-    write({"python/ours.py": "x = 2\n"})
+    write({"python/ours.py": "x = 2\n", "python/theirs.py": "x = 2\n"})
     commit("main")
     git("merge", "-q", "--no-commit", "--no-ff", "-X", "ours", "side")
-    write({"python/resolved.py": "x = 3\n"})
+    write({"python/resolved.py": "x = 3\n", "python/theirs.py": "x = 1\n"})
 
 
 @pytest.mark.usefixtures("copy")
 def test_a_merge_of_main_leaves_out_the_files_it_brings_in_unchanged() -> None:
     merge_side(on_main=True)
     assert mise("review:python").stdout == "VERDICT: PASS\n"
-    # resolved.py differs from both sides; ours.py, kept by -X ours, from neither. A name holding a newline
-    # stays one quoted line, so it cannot pose as resolved.py's.
+    # resolved.py differs from both sides; ours.py, kept by -X ours, from neither; theirs.py drops this branch's
+    # change, a decision to review. A name holding a newline stays one quoted line, so it cannot pose as another.
     merged = 'Merged: "python/a\\nMerged: python/resolved.py"\nMerged: python/taken.py\n'
     assert codex()["stdin"] == prompt("python", "none") + merged
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_merge_keeps_a_file_an_earlier_merge_changed() -> None:
+    git("switch", "-q", "-c", "side")
+    write({"python/p.py": "x = 1\n"})
+    commit("side")
+    git("switch", "-q", "main")
+    git("merge", "-q", "--no-commit", "--no-ff", "side")
+    # The branch's only edit of p.py is in this merge, which no commit of its own repeats.
+    write({"python/p.py": "x = 2\n"})
+    commit("merge side")
+    git("switch", "-q", "side")
+    write({"python/p.py": "x = 3\n", "python/q.py": "x = 1\n"})
+    git("update-ref", "refs/remotes/origin/main", commit("side again"))
+    git("switch", "-q", "main")
+    git("merge", "-q", "--no-commit", "--no-ff", "-X", "theirs", "side")
+    assert mise("review:python").stdout == "VERDICT: PASS\n"
+    assert codex()["stdin"] == prompt("python", "none") + "Merged: python/q.py\n"
+
+
+@pytest.mark.usefixtures("copy")
+def test_a_merge_keeps_a_file_an_earlier_merge_kept_from_main() -> None:
+    write({"python/p.py": "x = 0\n"})
+    commit("base")
+    git("switch", "-q", "-c", "side")
+    write({"python/p.py": "x = 1\n"})
+    commit("side")
+    git("switch", "-q", "main")
+    write({"python/q.py": "x = 1\n"})
+    commit("main")
+    git("merge", "-q", "--no-commit", "--no-ff", "side")
+    # This merge rejects side's change and matches its branch parent; dense mode would drop it.
+    write({"python/p.py": "x = 0\n"})
+    commit("merge side")
+    git("switch", "-q", "side")
+    write({"python/p.py": "x = 2\n", "python/r.py": "x = 1\n"})
+    git("update-ref", "refs/remotes/origin/main", commit("side again"))
+    git("switch", "-q", "main")
+    git("merge", "-q", "--no-commit", "--no-ff", "-X", "theirs", "side")
+    assert mise("review:python").stdout == "VERDICT: PASS\n"
+    assert codex()["stdin"] == prompt("python", "none") + "Merged: python/r.py\n"
 
 
 @pytest.mark.usefixtures("copy")
