@@ -9,8 +9,11 @@
 # Ownership decision: https://github.com/ray-manaloto/dotfiles-legacy/issues/448
 # Plan: ray-manaloto/dotfiles/docs/specs/mise-native-dotfiles-plan.md
 # Add the include below by array merge; never replace the actual global config.
-# Built-in {{ mise_config_dir }} (2026.10.19) and system_brew_prefix need this release or newer.
-min_version = "2026.10.19"
+# Built-in {{ mise_config_dir }} (2026.10.19) and system_brew_prefix need 2026.10.19 or newer;
+# task.history needs 2026.11.3. A hard minimum, not a soft one: an older mise that meets a setting it
+# doesn't know warns and drops this file's whole [settings] table (src/config/settings.rs:1635-1646 at
+# v2026.10.19), paranoid and the disable lists included, where this stops it with an upgrade hint.
+min_version = "2026.11.3"
 
 [settings]
 github.credential_command = "gh auth token"
@@ -44,6 +47,10 @@ disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "
 auto_install_disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "codex", "aqua:openai/codex", "npm:@openai/codex", "claude-code", "github:anthropics/claude-code", "npm:@anthropic-ai/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode"]
 pin = true
 install_layout = "identity"
+# Keep each task's last 20 runs (time, result, exit code) for `mise tasks history`, under
+# $MISE_STATE_DIR/task-history/. On by default since 2026.11.3; set here so a default change can't
+# turn it off. task.logs (each task's last output) stays off: it can keep unredacted private text.
+task.history = true
 
 [settings.self_update]
 auto = true

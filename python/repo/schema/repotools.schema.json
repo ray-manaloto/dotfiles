@@ -24,7 +24,8 @@
         "main-guard-remove",
         "main-guard-armed",
         "shell-apply",
-        "shell-rollback"
+        "shell-rollback",
+        "scratch-env"
       ]
     },
     "ZeroBash": {
@@ -45,6 +46,16 @@
       "description": "Restore the zsh files from the pre-apply backup.",
       "type": "object",
       "properties": {},
+      "additionalProperties": false
+    },
+    "ScratchEnv": {
+      "description": "Run one command from this checkout with every home path inside a scratch folder.",
+      "type": "object",
+      "properties": {
+        "folder": { "type": "string", "minLength": 1, "description": "The scratch folder; its home, config, data, state, cache and tmp are made if missing" },
+        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "The program and its arguments" }
+      },
+      "required": ["folder", "command"],
       "additionalProperties": false
     },
     "MainGuard": {
@@ -153,7 +164,7 @@
       "additionalProperties": false
     },
     "Options": {
-      "description": "What a repotools command parses from its arguments.",
+      "description": "What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.",
       "anyOf": [
         { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
@@ -294,6 +305,7 @@
     "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
     "shell_apply": { "$ref": "#/$defs/ShellApply" },
     "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
+    "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

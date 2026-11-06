@@ -53,7 +53,7 @@ and the task exits non-zero. Quote the summary and the name and first lines of e
 
 The task is the shell probe: the startup tests copy the tracked files into a temporary HOME and
 start zsh the four ways a shell starts (login and not, interactive and not), and the interactive
-tests type into it. Don't hand-run zsh in `tasks/scratch/env.sh`: it gives an empty HOME without
+tests type into it. Don't hand-run zsh in `mise run scratch:env`: it gives an empty HOME without
 the tracked files, so its output says nothing about them. Never touch the live `~/.zshrc` or the
 other live startup files.
 

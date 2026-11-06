@@ -51,6 +51,15 @@ description = "Restore the zsh files from the pre-apply backup"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
 run = "uv run --project python/repo --locked repotools shell-rollback"
 
+# Here, not in python/repo: that config's _.python.venv takes a lock under ~/.cache/mise on every run.
+# No usage spec, so mise appends the arguments to the line, each quoted; raw keeps both streams unprefixed, and
+# raw_args hands a --help to the command, not to mise (v2026.11.2 src/cli/run.rs:911-915).
+[tasks."scratch:env"]
+description = "Run one command from this checkout with every home path inside a scratch folder"
+raw = true
+raw_args = true
+run = "uv run --project python/repo --locked repotools scratch-env"
+
 [tasks.pre-commit]
 run = "hk run pre-commit"
 

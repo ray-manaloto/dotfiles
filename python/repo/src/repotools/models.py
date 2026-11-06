@@ -26,6 +26,7 @@ class Command(StrEnum):
     main_guard_armed = "main-guard-armed"
     shell_apply = "shell-apply"
     shell_rollback = "shell-rollback"
+    scratch_env = "scratch-env"
 
 
 class ZeroBash(BaseModel):
@@ -63,6 +64,25 @@ class ShellRollback(BaseModel):
         extra="forbid",
         frozen=True,
     )
+
+
+class ScratchEnv(BaseModel):
+    """
+    Run one command from this checkout with every home path inside a scratch folder.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folder: Annotated[str, Field(min_length=1)]
+    """
+    The scratch folder; its home, config, data, state, cache and tmp are made if missing
+    """
+    command: Annotated[list[str], Field(min_length=1)]
+    """
+    The program and its arguments
+    """
 
 
 class MainGuard(BaseModel):
@@ -265,7 +285,7 @@ type Options = (
     | ShellRollback
 )
 """
-What a repotools command parses from its arguments.
+What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
 """
 
 
@@ -506,6 +526,7 @@ class Repotools(BaseModel):
     main_guard_armed: MainGuardArmed | None = None
     shell_apply: ShellApply | None = None
     shell_rollback: ShellRollback | None = None
+    scratch_env: ScratchEnv | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None
