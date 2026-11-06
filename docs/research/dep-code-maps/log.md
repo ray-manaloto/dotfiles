@@ -14,5 +14,8 @@
   mise graph and a probe crate. Edges start only from syntactic call sites, and inside a macro
   cbm injects synthetic sites only for built-in expression macros, so no call inside a `macro_rules!` macro
   gets an edge. §4.10's "the macro miss is codanna's own" is corrected.
+* **Correction**: results and pilots no longer say cbm drops method calls on local variables. The
+  traced miss is the macro one (§4.11); the `run`, `tasks` and `bootstrap` gaps are open. The probe
+  crates and helper scripts are saved under `prototype/`.
 * **Deferred**: `depmaps lint-diff` (SARIF findings diff), the upstream cbm issue, blast-depth
   calibration.

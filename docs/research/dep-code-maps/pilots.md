@@ -89,26 +89,29 @@ SCIP run: `rust-analyzer scip .` in the v2026.11.2 worktree took **258 s** and w
 | symbol identity | `<project>.<path>.<name>`, resolved by name | type-qualified, e.g. `lib/task/impl#[Task][Default]default().` |
 | callers of `Lock::bind_requests` | `bind_and_write_target` (correct) | lock.rs:1301 and :1308, both in `bind_and_write_target` (correct, line-exact) |
 | callers of `Task::default()` | 155 edges in 24 files, **10 files wrong** (e.g. `cli/lock.rs`) | 234 refs in 20 files; cbm missed 6 of them (e.g. `task/task_executor.rs`) |
-| method call on a local | **missed**: `ts.install_all_versions_with_progress(` at `src/cli/install.rs:720` has no edge. It sits inside `measure!`, and cbm makes no edge for any call inside a `macro_rules!` macro ([other-engines §4.11](other-engines.md)) | found |
+| call inside `measure!` | **missed**: `ts.install_all_versions_with_progress(` at `src/cli/install.rs:720` has no edge. It sits inside `measure!`, and cbm makes no edge for any call inside a `macro_rules!` macro ([other-engines §4.11](other-engines.md)) | found |
 | SQLite export detail | n/a | `chunks` only records line ranges of about 100 lines; the occurrence blob is zstd-compressed protobuf. Exact lines come from `scip print --json` (5 s) |
 
 Blast radius, same hunks and depth 4, both engines:
 
 | subcommand | cbm | SCIP | why they differ |
 |---|---|---|---|
-| run | 24 | 34 | SCIP follows method calls cbm misses |
+| run | 24 | 34 | SCIP follows calls cbm misses (not traced) |
 | tasks | 15 | 23 | same |
 | bootstrap | 12 | 26 | SCIP reaches `packslip::*` and `TaskFetcher::*` through `Run::run` and the install path |
 | upgrade | 14 | 11 | cbm `default()` noise |
 | lock | 13 | 13 | — |
 | exec | 12 | **2** | cbm noise: name-resolved `default()` |
 | use | 10 | 8 | noise |
-| install | 5 | 8 | method calls |
+| install | 5 | 8 | calls inside `measure!` (other-engines §4.11) |
 | dotfiles | 6 | 4 | noise |
 | tool | 0 | 1 | — |
 
 **What this means:** cbm's call edges are wrong in **both** directions: it adds false edges for
-common names and drops method calls on typed receivers. For "what upgrade change can reach my
+common names and drops calls it can't see. The one miss traced (`install`, :720) is a call inside
+a `macro_rules!` macro, which cbm never links (other-engines §4.11). A plain method call on a local
+links in the §4.11 probe, so "local variables" is not the cause. The `run`, `tasks` and `bootstrap`
+gaps are not traced; their cause is unknown. For "what upgrade change can reach my
 command" SCIP is the source to trust; cbm stays the agents' browsing tool (search, outline,
 snippets) and handles languages SCIP has no indexer for. Not explained yet: SCIP counts
 references, not only calls (a function passed as a value counts as well). I spot-checked one

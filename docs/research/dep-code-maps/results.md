@@ -50,7 +50,7 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
   only through a running IDE.
 - **SCIP** (`rust-analyzer scip`) was run on mise and compared with cbm (§4.4). cbm's call edges
   are wrong in both directions: it adds false callers for common names (`default()`) and drops
-  method calls on local variables. So SCIP is the one to trust for blast radius, while cbm stays
+  every call inside a `macro_rules!` macro (§4.11), such as mise's `measure!`. So SCIP is the one to trust for blast radius, while cbm stays
   the browsing tool for agents and covers the other languages. The SCIP run took 258 s and wrote
   112 MB.
 - **REAgraph + graphify** was run as a third blast-radius engine (§4.7). Its diff is prefix-free
@@ -67,4 +67,8 @@ Section numbers (§1-§5, Q1-Q19) follow the working notes this bundle was cut f
   replace SCIP for blast radius. Its `install` blast is 0 because it drops all three call sites
   where SCIP's chains enter src/cli/install.rs: a receiver typed only by annotation, a call inside `measure!`, and an
   `&Arc<Config>` parameter it types as `Arc`. Its resolver drops untyped receivers rather than guess.
+- **cbm on Rust macros** (§4.11): cbm makes an edge only where its syntactic extractor finds a call
+  site, and inside a macro it adds sites only for built-in macros such as `println!`. So no call in
+  a `macro_rules!` body is linked, which is why the `install_all_versions_with_progress` call at
+  src/cli/install.rs:720 is missing. Confirmed on the mise graph and a probe crate.
 - **Design confirmed (Q19):** the owner confirmed proposal items 1-7 on 2026-11-05.

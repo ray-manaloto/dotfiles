@@ -343,7 +343,7 @@ src/config/mod.rs:
   avoid wrong edges.
 - `let mut` is not a cause: the grammar puts `mut` in its own `mutable_specifier` node, and the
   `pattern` is still a plain identifier (grammar.js:602-605).
-- **Confirmed** on an 8-case crate indexed with codanna 0.17.1 (semantic search off). Three cases got
+- **Confirmed** on an 8-case crate (`prototype/probes/codanna-probe`) indexed with codanna 0.17.1 (semantic search off). Three cases got
   a Calls edge: the value-typed `let ts = Toolset::from(1); ts.m()`, the `config: &Config`
   parameter and an explicit `Task::default()`. Five got none: the annotated `let`, a `ts.m()` and a
   `self.m()` inside a `macro_rules!` macro, the `&Arc<Config>` parameter, and `..Default::default()`
@@ -382,7 +382,8 @@ also injects them for operator calls such as `a + b`, :2921.) For a macro_invoca
 **Confirmed:**
 - **mise:** in cbm's `mise-v2026.11.2` project, `install_missing_runtimes` has CALLS edges at :717
   and next at :730, none for :718-729, the whole `measure!` body.
-- **Probe:** a 7-case crate indexed with cbm 0.12.1 (mode fast, then deleted). Two cases got an
+- **Probe:** a 7-case crate (`prototype/probes/cbm-macro-probe`) indexed with cbm 0.12.1 (mode
+  fast, then the project was deleted). `prototype/fieldcheck.py` parses it with cbm's vendored grammar. Two cases got an
   edge: a plain `ts.via_plain()` and `println!("{}", free_print())`; the `println!` edge has no line
   number. Five got none: a method call and a free call passed as a `$block` to a same-file
   `macro_rules!`, a method call passed to a `#[macro_export]` macro in another file, and a method

@@ -133,9 +133,11 @@ change none of these items.
 - cbm drops every call inside a `macro_rules!` macro (§4.11). Whether to raise it upstream with
   the cbm issue is open.
 - `blast` depth 4 was chosen ad hoc; it is not calibrated against a known breaking change.
+- Why cbm's `run`, `tasks` and `bootstrap` blasts fall short of SCIP's: not traced, cause unknown.
 - The SCIP blast counts all references, not only calls; the cbm/SCIP deltas were spot-checked once
   (`auto_sync_skills`, `install_all_versions_with_progress`), not line by line.
 - Prototypes are in `~/.local/state/dotfiles/dep-code-maps/prototype/`
   (depdiff.py, hunks.py, blast.py, scipblast.py, rgblast.py, gfyclass.py, cscore.py,
-  codannascore.py, diff.txt, hunks.txt). They are throwaway and were
+  codannascore.py, installpath.py, taskchains.txt, mjcc.py, fieldcheck.py, diff.txt, hunks.txt), with
+  the codanna and cbm probe crates of §4.10 and §4.11 in `probes/`. They are throwaway and were
   written with heredocs; the real version must be the Python package in §5.
