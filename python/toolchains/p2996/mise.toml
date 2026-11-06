@@ -101,6 +101,13 @@ description = "Real tests (no mocking library) at 100% line and branch coverage;
 depends = ["sync"]
 run = "uv run --locked pytest"
 
+[tasks."test:focus"]
+# For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
+# coverage without failing on it. The command-line --cov-fail-under overrides the one in addopts.
+description = "Focused tests: coverage reported, not gated; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest --cov-fail-under=0"
+
 [tasks.check]
 description = "lint and test"
 depends = ["lint", "test"]
