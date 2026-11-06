@@ -1,0 +1,13 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="structured, read-only: what is outdated? (exit 1 if anything is)"
+"""update:check: hometools update-check prints what brew and mise find outdated; exits 0, 1 on drift, 2 unchecked."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash, #392): this launcher only finds the hometools
+# package in the checkout it is linked from and runs one command there. Nothing is installed or upgraded.
+
+import os
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/update/check.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--locked", "hometools", "update-check"])

@@ -23,6 +23,8 @@ class Command(StrEnum):
 
     toolchain_verify = "toolchain-verify"
     bootstrap_toolchain = "bootstrap-toolchain"
+    update_brew = "update-brew"
+    update_check = "update-check"
 
 
 class Bootstrap(BaseModel):

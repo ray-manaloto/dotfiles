@@ -1,7 +1,7 @@
 [project]
 name = "hometools"
 version = "0.1.0"
-description = "The global mise tasks' work: check the held Homebrew toolchain and bootstrap it (toolchain:verify, bootstrap:toolchain)"
+description = "The global mise tasks' work: check and bootstrap the held Homebrew toolchain, update brew and check for drift (toolchain:verify, bootstrap:toolchain, update:brew, update:check)"
 requires-python = ">=3.15"
 # Uncapped: the latest of every dependency (DL-758).
 dependencies = ["pydantic"]

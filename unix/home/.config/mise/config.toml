@@ -368,29 +368,8 @@ ty = { version = "0.0.97", minimum_release_age = "0s" }
 # DAG: mise tasks deps --compact; plan: mise run -n update:all
 # A wedged install that holds mise's tool-version lock blocks every later `mise run`
 # (knowledge-base #418); scripts/mise_update_guard.py detects it (see [shell_alias]).
-[tasks."update:brew"]
-description = "update brew tools (refuses while the compiler toolchain is unpinned)"
-# --json is available on `brew outdated` if this ever needs to feed another step.
-#
-# `--yes` on the upgrade: brew CAN prompt (casks that need confirmation), and this
-# task runs inside `update:all` where stdin is not a terminal — a prompt there
-# hangs or fails rather than being answered. Checked against the installed brew:
-# `upgrade` accepts `--yes`, `--force` and `--dry-run`; `update` has no prompt to
-# suppress (only `--force`/`--quiet`), so it is left alone.
-# DL-595: refuse unless the toolchain set is pinned, then upgrade the rest and verify the toolchain.
-run = '''
-set -euo pipefail
-pinned="$(brew list --pinned)"
-for f in gcc llvm lld lldb include-what-you-use gdb make pkgconf; do
-  if ! printf '%s\n' "$pinned" | grep -qx "$f"; then
-    echo "update:brew: $f is not pinned; run 'brew pin $f' or do a planned toolchain upgrade (DL-595)" >&2
-    exit 1
-  fi
-done
-brew update
-brew upgrade --yes
-mise run toolchain:verify
-'''
+# update:brew and update:check are file tasks in tasks/update/: hometools update-brew and update-check
+# do their work (#392).
 
 [tasks."update:mise"]
 description = "update mise tools"
@@ -442,25 +421,6 @@ description = "update claude, marketplace and plugins"
 # was missing. `run` with the built-in `mise_config_dir` keeps the username out of this file;
 # a templated `file` runs too, but `mise tasks validate` checks it unrendered (DL-706).
 run = "{{ mise_config_dir }}/scripts/update_claude.py"
-
-[tasks."update:check"]
-description = "structured, read-only: what is outdated? (exit 1 if anything is)"
-# Cheap enough to run any time — nothing is installed or upgraded. Every source is
-# printed AND gated, which is the fix made 2026-08-24: `mise upgrade --dry-run-code`
-# exits 1 on mise drift, but `brew outdated` and `mise outdated` only ever PRINT, so
-# the task reported rc=0 — "in sync" — with libksba and a cask both
-# outdated, while the description above promised exit 1. `jq` is pinned above, so the
-# emptiness tests read the STRUCTURE rather than grepping for a substring.
-#
-# Three exit codes, kept distinct because collapsing them is how the defect happened:
-#   0  checked, nothing outdated
-#   1  checked, something is outdated
-#   2  COULD NOT CHECK — a source failed to answer. Never reported as green.
-#
-# Deliberately NOT gated: mise's "newer versions outside the configured version
-# ranges" notice. Those are pinned on purpose, so gating them would make this task
-# exit 1 essentially always. `mise upgrade --bump` is the tool for that question.
-run = "set -uo pipefail\ndrift=0\n\nif ! brew_json=$(brew outdated --json); then\n  echo \"update:check: 'brew outdated' failed — COULD NOT CHECK\" >&2\n  exit 2\nfi\nprintf '%s\n' \"$brew_json\"\nprintf '%s' \"$brew_json\" | jq -e '((.formulae | length) + (.casks | length)) > 0' >/dev/null && drift=1\n\nif ! mise_json=$(mise outdated --json); then\n  echo \"update:check: 'mise outdated' failed — COULD NOT CHECK\" >&2\n  exit 2\nfi\nprintf '%s\n' \"$mise_json\"\nprintf '%s' \"$mise_json\" | jq -e 'length > 0' >/dev/null && drift=1\n\nmise upgrade --dry-run-code || drift=1\n\nexit \"$drift\"\n"
 
 [tasks."update:codex"]
 description = "update the NATIVE codex install (never a mise pin)"
