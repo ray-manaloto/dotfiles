@@ -25,13 +25,22 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 "src/jbctl/models.py" = ["I001"]
 
 [tool.pytest.ini_options]
-# The 100% gate is //jbctl:coverage (JBCTL_LIVE=1): the live tests drive a running IDE, so a hook
-# runs the rest without it.
+# The coverage gate (98.20%, #502 MVP) is //jbctl:coverage <ide> (sets JBCTL_IDE): the live tests drive a running IDE in the
+# background, so a hook runs the rest without it.
 addopts = "--cov=jbctl --cov-branch --cov-report=term-missing"
 testpaths = ["tests"]
 
 [tool.coverage.run]
 patch = ["subprocess"]
+
+# "# pragma: foreground" marks the only code allowed out of the coverage count: the debug route that brings the
+# IDE forward (JETBRAINS_FOREGROUND=1), which the default, headless runs must never take. `mise run //jbctl:markers`
+# (part of //jbctl:check) fails on any other pragma, so nothing else is marked to reach the gate.
+[tool.coverage.report]
+exclude_also = ["# pragma: foreground"]
+partial_also = ["# pragma: foreground"]
+# coverage.py rounds the total and --cov-fail-under to this many decimals: at 0, a 99 floor passes 98.5%.
+precision = 2
 
 [tool.datamodel-codegen]
 input = "schema/jbctl.schema.json"

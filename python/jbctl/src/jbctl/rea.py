@@ -29,15 +29,19 @@ def top_level(snapshot: dict[str, Any], role: str) -> list[dict[str, Any]]:
 
 
 def breadcrumb(snapshot: dict[str, Any]) -> list[str]:
-    """The Settings page header (e.g. AI > MCP Server > Exposed Tools): labelled top-level buttons with no actions."""
+    """The Settings page header (e.g. AI > MCP Server > Exposed Tools): labelled top-level buttons with no actions.
+
+    A banner's link (e.g. Dismiss) matches too and comes first, so the page is always the last entry.
+    """
     return [n["title"] for n in top_level(snapshot, "AXButton") if n["title"] and not n["actions"]]
 
 
 def goto(app: str, ide: int, window: int, page: str) -> list[str]:
     """Type the page name into the Settings search field, then clear it; works with the IDE in the background."""
+    # The dialog's own search field comes first; a page such as Exposed Tools adds another "Search" field.
     search = [n["path"] for n in top_level(observe(app, ide, window), "AXTextField") if n["title"] == "Search"]
-    if len(search) != 1:  # pragma: no cover - #502 MVP: live-only guard; Settings always has one search field
-        msg = "the Settings search field is not unique"
+    if not search:
+        msg = "the Settings search field is missing"
         raise IdeError(msg)
     steps = [
         {"kind": "key-entry", "path": search[0], "text": page},

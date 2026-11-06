@@ -36,6 +36,7 @@ about it.
 | `python/repo/` | `mise run //repo:check` |
 | `typescript/` | `mise run //typescript:test` |
 | `cpp/` | `mise run //cpp:test` |
+| `python/jbctl/`, `swift/` (jbctl, jbax) | drive the CLIs against a running JetBrains IDE, headless only: `python/jbctl/.venv/bin/jbctl resolve --ide clion`, `check-direct --ide clion`, `settings-open --ide clion --page "Exposed Tools"` then `settings-press --ide clion --label Cancel` (`settings-open` refuses while a Settings window is already open: it may hold the owner's unapplied edits, so ask them to close it rather than pressing anything), and `~/.local/bin/jbax windows <pid>` (`mise run //swift:install` first). Log `lsappinfo front` while driving: the front app must not change. Never set `JETBRAINS_FOREGROUND=1` or pass `--foreground` without the owner's go for that exact run |
 | any other task: `tasks/privacy/`, `tasks/review/`, `hk.pkl`, a task in a `mise.toml` | that task itself, through `mise run`, on an input that reaches the change |
 
 A change to the shell tests is verified here: they are the instrument, and a broken instrument

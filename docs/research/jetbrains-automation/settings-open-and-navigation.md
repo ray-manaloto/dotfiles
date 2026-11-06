@@ -2,10 +2,10 @@
 okf_version: "0.2"
 type: "report"
 title: "Opening and navigating CLion Settings"
-description: "Why Settings can't be opened with the IDE inactive, the shortest activation route, and background page navigation through the search field."
+description: "Opening Settings in the background through the IDE's station socket, why the menu route needs activation, and background page navigation through the search field."
 resource: "https://github.com/JetBrains/intellij-community"
 version: "intellij-community ebd238636 / CLion 2026.3"
-timestamp: "2026-11-05T23:00:00Z"
+timestamp: "2026-11-06T02:00:00Z"
 status: "draft"
 stale_after: "2026-12-05T00:00:00Z"
 tags: [clion, intellij, settings, macos, accessibility, rea]
@@ -13,7 +13,36 @@ tags: [clion, intellij, settings, macos, accessibility, rea]
 
 # Opening and navigating Settings
 
-## Opening: needs activation
+## Opening in the background: the station socket (the default)
+
+Each running IDE's station plugin serves HTTP on `$(getconf DARWIN_USER_TEMP_DIR)jb.station.ij.<pid>.sock`.
+`POST /protocolHandler` with `{"uri": "jetbrains://idea/settings?name=<page>"}` runs the IDE's `settings` protocol
+command without LaunchServices. LaunchServices (`open jetbrains://...`) was what activated the IDE before.
+
+- **Measured once, 2026-11-05 (CLion 2026.3, a project open, nothing else of CLion's open):** reply
+  `{"exitCode":0}`. Settings opened unfocused on AI > MCP Server > Exposed Tools, and the frontmost app never
+  changed (sampled every 50 ms for 8 s). This is one state, not a guarantee.
+- **The host is a placeholder.** `JBProtocolCommand.execute` reads only the command, `parts[1]`, so
+  `jetbrains://idea/...` serves every product. [code]
+- **`name=` and not `page_id=`.** `name=` matches the display name (`SearchConfigurableByNameHelper`, case-insensitive;
+  first match breadth-first; localized) and returns once the dialog is scheduled with `invokeLater`. `page_id=`
+  (here `com.intellij.mcpserver.settings.filter`) is locale-independent, but it waits on the EDT for the dialog to
+  show, and a modal Settings turns that into a wait until the dialog closes. [code]
+- **Reply checks.** The IDE reports a refused command as exit code 0 with a `message`. jbctl requires HTTP 200,
+  `exitCode` 0 and no message, then waits for the window. [code]
+- **States that may still bring it forward.** `NonModalWindowWrapper.show` de-iconifies and fronts frames.
+  `jbax windows` reports `unsafe` (a reason, or null) from its `backgroundRisk`, and jbctl and the Swift test
+  refuse unless it is null: only project frames, each with `minimized` and `modal` explicitly false. A flag AX cannot read is null, and null is refused. A dialog or popup of any size is
+  `other`, so it refuses too. The projectless Welcome screen is also a titled standard window. With no project
+  open, Settings opens for the default project. jbax recognizes it by the title prefix `Welcome to `, compared
+  inside jbax and never printed. The full title may add the product's full name, a version and a superuser
+  suffix. A window whose title or subrole AX cannot read, or a standard window with an empty title, is `unknown`
+  and refused. The title is localized, so a non-English Welcome screen is not recognized: a known gap. An
+  existing Settings window is refused, never reused: it may hold the user's unapplied edits. A frame on another Space is NOT_RUN.
+  [code + inference]
+- **Debug route.** The menu-bar route below runs only with `JETBRAINS_FOREGROUND=1`, and never as a fallback.
+
+## The menu route: needs activation (debug only, JETBRAINS_FOREGROUND=1)
 
 | attempt (CLion inactive) | result |
 |---|---|

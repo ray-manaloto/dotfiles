@@ -20,7 +20,9 @@ struct Accessibility {
 
   /// An attribute that holds one element (AXWindow, AXFocusedUIElement).
   static func element(_ element: AXUIElement, _ name: String) -> AXUIElement? {
-    guard let value = attr(element, name), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+    guard let value = attr(element, name), CFGetTypeID(value) == AXUIElementGetTypeID() else {
+      return nil
+    }
     return unsafeDowncast(value, to: AXUIElement.self)
   }
 

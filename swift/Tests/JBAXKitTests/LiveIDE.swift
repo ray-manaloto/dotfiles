@@ -1,5 +1,5 @@
-// Live-IDE fixture: the running JetBrains IDE, driven through agent-desktop where activation is
-// unavoidable (opening Settings, keys), and handed back to the previous front window afterwards.
+// Live-IDE fixture: the JetBrains IDE under test. Settings opens through its station socket; the debug route
+// (JETBRAINS_FOREGROUND=1) opens it from the menu bar through agent-desktop and hands the front back.
 import AppKit
 import ApplicationServices
 import Foundation
@@ -12,13 +12,11 @@ enum LiveIDE {
   static let direct = "ACP agents only"
   static let viaRouter = "All agents"
 
-  /// The GUI JetBrains IDE (helper processes such as `clion stdioMcpServer` have no bundle).
+  /// The IDE under test: `mise run //swift:coverage <ide>` resolves the Toolbox install with `jbctl resolve`
+  /// and passes its pid, so the test never guesses among several running JetBrains IDEs.
   static var pid: pid_t {
     get throws {
-      let app = NSWorkspace.shared.runningApplications.first {
-        ($0.bundleIdentifier ?? "").hasPrefix("com.jetbrains.") && $0.activationPolicy == .regular
-      }
-      return try #require(app, "a running JetBrains IDE").processIdentifier
+      try #require(ProcessInfo.processInfo.environment["JBAX_PID"].flatMap { pid_t($0) }, "JBAX_PID")
     }
   }
 
@@ -55,7 +53,7 @@ enum LiveIDE {
       as? String
   }
 
-  /// Runs agent-desktop steps as one batch, so a focus-window and the keys after it cannot be split.
+  /// Runs agent-desktop steps as one batch, so a focus-window and the click after it cannot be split.
   static func batch(_ steps: [[String: Any]]) throws {
     let json = try #require(String(bytes: try JSONSerialization.data(withJSONObject: steps), encoding: .utf8))
     _ = try agentDesktop("batch", json, "--stop-on-error")
@@ -64,16 +62,56 @@ enum LiveIDE {
   static func frameWindow() throws -> String {
     let pid = try pid
     let frame = try windows().first {
-      $0["pid"] as? Int == Int(pid) && (($0["bounds"] as? [String: Double])?["width"] ?? 0) > 1000
+      let bounds = $0["bounds"] as? [String: Double] ?? [:]
+      return $0["pid"] as? Int == Int(pid) && bounds["width", default: 0] > 1000 && bounds["height", default: 0] > 300
     }
     return try #require(frame?["id"] as? String)
   }
 
-  /// The test's single activation, then the front goes back to whatever had it:
-  /// open Settings (AppKit drops a menu press for an inactive app), go to the router page, put
-  /// "All agents" into the dialog with keys (only keys reach row 1; nothing is applied), and read
-  /// Java's focus owner while the IDE is active.
-  static func openSettingsForTest() throws -> (settings: String, focusOwner: [String: Any]) {
+  /// Opens Settings on `page` through the IDE's station socket (as `jbctl settings-open` does): the IDE stays
+  /// in the background. Like jbctl, it first requires the one state measured to stay there: project windows only,
+  /// none minimized or modal (`jbax windows`).
+  static func openSettingsFromStation(_ page: String) throws -> String {
+    let pid = try pid
+    let risk = try jbax("windows", String(pid)).json["unsafe"]
+    try #require(risk is NSNull, "only project windows open, none minimized or modal")
+    // The IDE's per-user temporary folder (confstr), not this process's TMPDIR, which a harness may change.
+    var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+    confstr(_CS_DARWIN_USER_TEMP_DIR, &buffer, buffer.count)
+    let folder = try #require(String(bytes: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, encoding: .utf8))
+    let name = try #require(page.addingPercentEncoding(withAllowedCharacters: .alphanumerics))
+    let curl = Process()
+    curl.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+    curl.arguments = [
+      "-sf", "--max-time", "10", "--unix-socket", folder + "jb.station.ij.\(pid).sock", "-X", "POST",
+      "-H", "Content-Type: application/json", "-d", "{\"uri\": \"jetbrains://idea/settings?name=\(name)\"}",
+      "http://localhost/protocolHandler",
+    ]
+    let output = Pipe()
+    curl.standardOutput = output
+    try curl.run()
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    curl.waitUntilExit()
+    // The IDE reports a refused command as exit code 0 with a message.
+    let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    let opened = curl.terminationStatus == 0 && reply["exitCode"] as? Int == 0 && reply["message"] == nil
+    try #require(opened, "the station opened Settings")
+    return try waitForSettings()
+  }
+
+  static func waitForSettings() throws -> String {
+    var settings: String?
+    for _ in 0..<40 where settings == nil {
+      Thread.sleep(forTimeInterval: 0.1)
+      settings = try settingsWindow()
+    }
+    return try #require(settings, "Settings opened")
+  }
+
+  /// The debug route (JETBRAINS_FOREGROUND=1), then the front goes back to whatever had it: open Settings from
+  /// the menu bar (AppKit drops a menu press for an inactive app) and read Java's focus owner while the IDE is
+  /// active. The router page is then reached in the background.
+  static func openSettingsFromMenu() throws -> (settings: String, focusOwner: [String: Any]) {
     let previous = try focusedWindow()
     let frame = try frameWindow()
     let found = try agentDesktop("find", "--surface", "menubar", "--window-id", frame, "--name", "Settings…", "--exact")
@@ -81,24 +119,10 @@ enum LiveIDE {
     try batch([
       ["command": "focus-window", "args": ["window_id": frame]], ["command": "click", "args": ["ref_id": item]],
     ])
-    var settings: String?
-    for _ in 0..<40 where settings == nil {
-      Thread.sleep(forTimeInterval: 0.1)
-      settings = try settingsWindow()
-    }
-    let window = try #require(settings, "Settings opened")
-    try goto("Exposed Tools")
-    try batch([
-      ["command": "focus-window", "args": ["window_id": window]],
-      ["command": "press", "args": ["combo": "tab", "window_id": window]],
-      ["command": "press", "args": ["combo": "space", "window_id": window]],
-      ["command": "wait", "args": ["ms": 300]],
-      ["command": "press", "args": ["combo": "down"]],
-      ["command": "wait", "args": ["ms": 200]],
-      ["command": "press", "args": ["combo": "return"]],
-    ])
+    let window = try waitForSettings()
     let owner = try jbax("focus-owner", String(try pid)).json["focus_owner"] as? [String: Any]
     if let previous { _ = try agentDesktop("focus-window", "--window-id", previous) }
+    try goto("Exposed Tools")
     return (window, try #require(owner))
   }
 

@@ -13,23 +13,31 @@ skip_if = "{{ os() != 'macos' }}"
 description = "swift format lint (the toolchain's own), strict"
 run = "swift format lint --strict --recursive Package.swift Sources Tests"
 
-# The live scenario is skipped unless JBAX_LIVE=1, so this never touches an IDE.
+# The live scenario is skipped unless JBAX_PID is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 skip_if = "{{ os() != 'macos' }}"
-description = "Tests; the live-IDE scenario runs only with JBAX_LIVE=1"
+description = "Tests; the live-IDE scenario runs only with JBAX_PID set"
 run = "swift test"
 
-# Brings the running IDE forward once for a few seconds (opening Settings and the key route need it); run it
-# only when nobody is working in the IDE. Gate: at least 97% of lines in each Sources/ file. For the #502 MVP the
-# rest is the failure guards a working IDE never triggers (select's value read-back, AX errors).
-# llvm-cov has no per-line exclusion for Swift, so the allowance is a budget; tighten it with stand-ins.
+# <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1): jbctl resolve finds its pid. The live
+# scenario runs in the background, Settings included (opened through the IDE's station socket). The gate: every
+# file under Sources/JBAXKit in the export, each at the minimum share of lines and regions (Swift exports have no
+# branch data). Only Foreground.swift is skipped: only the debug route reaches its code, and llvm-cov can leave out
+# files but not lines. No line is marked. It covers the library, not Sources/jbax/main.swift, which the test
+# binary does not link. The #502 MVP minimum is 87%, measured: regions count every fallback for an AX read or JSON
+# encode that fails, and the dialog, duplicate-label and not-changed cases no working IDE produces in a run.
+# --foreground runs the debug route, which brings the IDE forward once.
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
-description = "Live-IDE scenario with coverage; fails below 97% of lines per Sources/ file (#502 MVP)"
-env = { JBAX_LIVE = "1" }
+description = "Live-IDE scenario with coverage; every JBAXKit file but Foreground.swift at 87% of lines and regions (#502 MVP)"
+depends = ["//jbctl:sync"]
+usage = """
+arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
+flag "--foreground" help="Use the debug route that brings the IDE forward (menu-bar Settings)"
+"""
 run = [
-  "swift test --enable-code-coverage",
-  "jq -e '[.data[0].files[] | select(.filename | test(\"/swift/Sources/\")) | .summary | (.lines.percent >= 97)] | all' \"$(swift build --show-bin-path)/codecov/jbax.json\"",
+  "pid=$(uv run --locked --project ../python/jbctl jbctl resolve --ide \"$usage_ide\" | jq -er .ide.pid) && JBAX_PID=$pid JETBRAINS_FOREGROUND=${usage_foreground:+1} swift test --enable-code-coverage",
+  "uv run --locked --project ../python/jbctl jbctl coverage-gate --report \"$(swift build --show-bin-path)/codecov/jbax.json\" --sources Sources/JBAXKit --skip '[\"Foreground.swift\"]' --minimum 87",
 ]
 
 # jbctl runs jbax by name (or $JBAX).

@@ -8,15 +8,18 @@ from pathlib import Path
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import ide, mcp, rea
+from . import covgate, ide, mcp, rea, toolbox
 from .models import (
     CheckDirect,
     Command,
+    CoverageGate,
     Event,
     Failure,
+    Ide,
     Map,
     Options,
     ReaPatch,
+    Resolve,
     RouterDirect,
     SettingsGoto,
     SettingsOpen,
@@ -24,6 +27,7 @@ from .models import (
 )
 
 OPTIONS: dict[Command, type[Options]] = {
+    Command.resolve: Resolve,
     Command.map: Map,
     Command.settings_open: SettingsOpen,
     Command.settings_goto: SettingsGoto,
@@ -31,6 +35,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.router_direct: RouterDirect,
     Command.check_direct: CheckDirect,
     Command.rea_patch: ReaPatch,
+    Command.coverage_gate: CoverageGate,
 }
 ROUTER_MODE = "Enable router-only mode for:"
 DIRECT = "ACP agents only"
@@ -65,14 +70,21 @@ def require_settings(pid: int) -> str:
     return window
 
 
-def open_settings(pid: int) -> str:
-    window, restored = ide.open_settings(pid)
-    emit(Event(settings_window=window, front_restored=restored))
+def open_settings(app: Path, pid: int, page: str) -> str:
+    """Settings on `page`, whichever route opened it: the breadcrumb says so."""
+    window, restored = ide.open_settings(pid, page)
+    number = int(window.removeprefix("w-"))
+    crumbs = rea.breadcrumb(rea.observe(str(app), pid, number))
+    # The station route opens Settings on the page; the menu route opens it on the page it showed last, and a
+    # station open can still be landing. Not covered headless: no working station open has reached it.
+    if crumbs[-1:] != [page]:
+        crumbs = rea.goto(str(app), pid, number, page)
+    emit(Event(settings_window=window, front_restored=restored, breadcrumb=crumbs))
     return window
 
 
-def goto(pid: int, window: str, page: str) -> None:
-    emit(Event(breadcrumb=rea.goto(ide.app_path(pid), pid, int(window.removeprefix("w-")), page)))
+def goto(app: Path, pid: int, window: str, page: str) -> None:
+    emit(Event(breadcrumb=rea.goto(str(app), pid, int(window.removeprefix("w-")), page)))
 
 
 def press(pid: int, label: str) -> None:
@@ -83,8 +95,9 @@ def press(pid: int, label: str) -> None:
 def check(url: str) -> None:
     """Exit 1 unless the MCP server lists more than the router tool (DIRECT)."""
     tools = mcp.tool_count(url)
-    emit(Event(tools=tools, direct=tools > 1))
-    if tools <= 1:
+    direct = tools > 1
+    emit(Event(tools=tools, direct=direct))
+    if not direct:
         raise SystemExit(1)
 
 
@@ -94,33 +107,52 @@ def run(options: Options) -> None:
         case ReaPatch():
             helper = Path(options.helper) if options.helper else rea.installed_helper()
             emit(Event(patch=rea.patch(helper)))
-            return
+        case CoverageGate():
+            result = covgate.check(Path(options.report), Path(options.sources), options.skip, options.minimum)
+            emit(Event(coverage=result))
+            if result.short:
+                raise SystemExit(1)
+        case CheckDirect(mcp_url=str() as url):
+            check(url)
+        case CheckDirect(ide=str() as name):
+            check(toolbox.mcp_url(*toolbox.resolve(name)))
+        # The schema cannot carry "--ide or --mcp-url": datamodel-codegen turns an anyOf of required fields into a
+        # union of two models (CheckDirect1 | CheckDirect2), and CliApp parses one model class per command.
         case CheckDirect():
-            check(options.mcp_url)
-            return
-    pid = ide.pid()
+            msg = "check-direct needs --ide or --mcp-url"
+            raise ValueError(msg)
+        case _:
+            drive(options)
+
+
+def drive(options: Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect) -> None:
+    """The commands that act on the IDE that --ide names (a Toolbox shell-script name)."""
+    found, pid = toolbox.resolve(options.ide)
+    app = Path(found.app)
     match options:
+        case Resolve():
+            url = toolbox.mcp_url(found, pid)
+            emit(Event(ide=Ide(app=str(app), product_code=found.product_code, build=found.build, pid=pid, mcp_url=url)))
         case Map():
             out = Path(options.out)
-            snapshot = rea.observe(ide.app_path(pid), pid, options.window)
+            snapshot = rea.observe(str(app), pid, options.window)
             with out.open("x") as file:  # never overwrite an earlier map
                 json.dump(snapshot, file, indent=1)
             emit(Event(map=str(out), nodes=len(snapshot["nodes"])))
         case SettingsOpen():
-            open_settings(pid)
+            open_settings(app, pid, options.page)
         case SettingsGoto():
-            goto(pid, require_settings(pid), options.page)
+            goto(app, pid, require_settings(pid), options.page)
         case SettingsPress():
             require_settings(pid)
             press(pid, options.label)
-        case RouterDirect():
-            window = open_settings(pid)
-            goto(pid, window, "Exposed Tools")
+        case _:  # RouterDirect, the one model left
+            open_settings(app, pid, "Exposed Tools")
             ide.jbax("select", str(pid), "--label", ROUTER_MODE, "--row", DIRECT)
             emit(Event(selected=DIRECT))
             # OK, not Apply: Apply's enabled state is not refreshed while the IDE is inactive.
             press(pid, "OK")
-            check(options.mcp_url)
+            check(options.mcp_url or toolbox.mcp_url(found, pid))
 
 
 def main(argv: Sequence[str] | None = None) -> None:

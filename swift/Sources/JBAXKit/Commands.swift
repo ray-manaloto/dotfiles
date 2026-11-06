@@ -44,7 +44,7 @@ enum Scope: String {
 }
 
 private let usageText =
-  "usage: jbax <combo|select|press|popup|focus-owner> <pid> [--label L] [--row R] [--window settings|frame|popup] [--dry-run]"
+  "usage: jbax <combo|select|press|popup|focus-owner|windows> <pid> [--label L] [--row R] [--window settings|frame|popup] [--dry-run]"
 
 /// Runs one command line (without the program name).
 public func run(_ args: [String]) -> Outcome {
@@ -62,11 +62,12 @@ private func finish(_ exit: Exit, _ info: [String: Any]) -> Outcome {
   info["ok"] = exit == .success
   if exit != .success { info["exit"] = Int(exit.rawValue) }
   // Every value is a string, number, bool, array or NSNull, so serialization cannot fail.
-  let data = (try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys])) ?? Data()
+  let data =
+    (try? JSONSerialization.data(withJSONObject: info, options: [.sortedKeys])) ?? Data()
   return Outcome(code: exit.rawValue, json: String(bytes: data, encoding: .utf8) ?? "{}")
 }
 
-private struct Args {
+struct Args {
   let command: String
   let accessibility: Accessibility
   let options: [String]
@@ -105,6 +106,7 @@ private func dispatch(_ argv: [String]) throws(Failure) -> [String: Any] {
   case "press": return try press(args)
   case "popup": return popup(args)
   case "focus-owner": return focusOwner(args)
+  case "windows": return windows(args)
   default: throw Failure(exit: .usage, message: usageText)
   }
 }
@@ -173,7 +175,9 @@ private func select(_ args: Args) throws(Failure) -> [String: Any] {
   Thread.sleep(forTimeInterval: 0.5)
   let after = Accessibility.string(dropdown.element, "AXValue") ?? ""
   info["after"] = scope.shown(after)
-  guard after == want else { throw Failure(exit: .notChanged, message: "value did not become \(want)", info: info) }
+  guard after == want else {
+    throw Failure(exit: .notChanged, message: "value did not become \(want)", info: info)
+  }
   info["changed"] = true
   return info
 }
@@ -189,7 +193,8 @@ private func press(_ args: Args) throws(Failure) -> [String: Any] {
   }
   guard hits.count == 1 else {
     throw Failure(
-      exit: hits.isEmpty ? .notFound : .refused, message: "want one button \(want)", info: ["found": hits.count])
+      exit: hits.isEmpty ? .notFound : .refused,
+      message: "want one button \(want)", info: ["found": hits.count])
   }
   let result = AXUIElementPerformAction(hits[0], kAXPressAction as CFString)
   guard result == .success else {
@@ -198,25 +203,46 @@ private func press(_ args: Args) throws(Failure) -> [String: Any] {
   return ["pressed": scope.shown(want), "window": scope.rawValue]
 }
 
-/// Rows of the IDE's open popup windows (ListPopups, dropdown lists): readable in the background,
-/// but a row only runs on Enter or a real click.
-private func popup(_ args: Args) -> [String: Any] {
-  let popups = args.accessibility.windows.filter { Scope(window: $0) == .popup }
-  let rows = popups.flatMap { Accessibility.descendants($0, maxDepth: 20).filter { Accessibility.role($0) == "AXRow" } }
-  return ["popups": popups.count, "rows": rows.map { Accessibility.rowText($0) }]
+/// The IDE's AX windows by kind, without their titles (a frame's title names the project): what jbctl checks
+/// before opening Settings in the background. minimized and modal are null when AX cannot read them.
+private func windows(_ args: Args) -> [String: Any] {
+  let listed = args.accessibility.windows.map { window in
+    [
+      "kind": windowKind(
+        title: Accessibility.attr(window, "AXTitle") as? String,
+        subrole: Accessibility.attr(window, "AXSubrole") as? String),
+      "minimized": Accessibility.attr(window, "AXMinimized") as? Bool ?? NSNull(),
+      "modal": Accessibility.attr(window, "AXModal") as? Bool ?? NSNull(),
+    ] as [String: Any]
+  }
+  return ["windows": listed, "unsafe": backgroundRisk(listed) ?? NSNull()]
 }
 
-/// JBR reports Java's focus owner here. While the IDE is inactive it is an empty element: keys go nowhere.
-private func focusOwner(_ args: Args) -> [String: Any] {
-  guard let element = Accessibility.element(args.accessibility.app, "AXFocusedUIElement"),
-    !Accessibility.role(element).isEmpty
-  else {
-    return ["focus_owner": NSNull()]
+/// Why showing Settings may bring the IDE forward from these windows, or nil when it should not: only project
+/// frames, each explicitly neither minimized nor modal, were measured to stay in the background. A minimized frame
+/// is de-iconified and fronted (NonModalWindowWrapper.show), and an unread flag counts as unsafe.
+func backgroundRisk(_ windows: [[String: Any]]) -> String? {
+  let frames = windows.filter { $0["kind"] as? String == "frame" }
+  let unsure = frames.filter { $0["minimized"] as? Bool != false || $0["modal"] as? Bool != false }
+  let others = windows.count - frames.count
+  guard frames.isEmpty || !unsure.isEmpty || others > 0 else { return nil }
+  return "\(frames.count) project windows, \(unsure.count) minimized, modal or unknown, \(others) others"
+}
+
+/// A window's kind from its title and subrole, each read once; nil means AX could not read it. Only "frame" is a
+/// project window, and nothing unread becomes one:
+/// - "welcome": the projectless Welcome screen, also a titled standard window. Its title starts "Welcome to "
+///   (WelcomeScreenComponentFactory: the full product name, then an optional version and superuser suffix); it is
+///   localized, so only an English one is recognized.
+/// - "unknown": a title or subrole AX could not read, or a standard window with an empty title.
+/// - "other": a window none of the kinds is, such as a dialog.
+func windowKind(title: String?, subrole: String?) -> String {
+  guard let title, let subrole else { return "unknown" }
+  switch (title, subrole == "AXStandardWindow") {
+  case ("Settings", _): return Scope.settings.rawValue
+  case ("", true): return "unknown"
+  case ("", false): return Scope.popup.rawValue
+  case (_, true): return title.hasPrefix("Welcome to ") ? "welcome" : Scope.frame.rawValue
+  default: return "other"
   }
-  let scope = Accessibility.element(element, "AXWindow").flatMap { Scope(window: $0) } ?? .frame
-  return [
-    "focus_owner": [
-      "role": Accessibility.role(element), "label": scope.shown(Accessibility.label(element)), "window": scope.rawValue,
-    ]
-  ]
 }

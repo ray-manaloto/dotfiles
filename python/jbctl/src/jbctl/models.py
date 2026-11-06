@@ -10,6 +10,7 @@ class Command(StrEnum):
     The jbctl subcommands.
     """
 
+    resolve = "resolve"
     map = "map"
     settings_open = "settings-open"
     settings_goto = "settings-goto"
@@ -17,96 +18,13 @@ class Command(StrEnum):
     router_direct = "router-direct"
     check_direct = "check-direct"
     rea_patch = "rea-patch"
+    coverage_gate = "coverage-gate"
 
 
-class Map(BaseModel):
-    """
-    Save rea's accessibility map of one IDE window (layer-0 windows only).
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    window: Annotated[int, Field(gt=0)]
-    """
-    CG window id, as agent-desktop lists it without the w- prefix
-    """
-    out: Annotated[str, Field(min_length=1)]
-    """
-    File to write the map to; never overwritten
-    """
-
-
-class SettingsOpen(BaseModel):
-    """
-    Open Settings: the IDE comes forward briefly (AppKit drops menu presses while inactive), then the front goes back.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-
-
-class SettingsGoto(BaseModel):
-    """
-    Go to a Settings page through the search field, in the background; the breadcrumb confirms it.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    page: Annotated[str, Field(min_length=1)]
-    """
-    The page name as the breadcrumb shows it
-    """
-
-
-class SettingsPress(BaseModel):
-    """
-    Press a button in the open Settings dialog, in the background (jbax press).
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    label: Annotated[str, Field(min_length=1)]
-    """
-    The button's exact label
-    """
-
-
-class RouterDirect(BaseModel):
-    """
-    Set MCP Server > Exposed Tools router-only mode to ACP agents only (DIRECT) and verify it over MCP.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    mcp_url: str = "http://127.0.0.1:64362/stream"
-    """
-    The IDE's MCP streamable-HTTP endpoint; only initialize and tools/list are sent.
-    """
-
-
-class CheckDirect(BaseModel):
-    """
-    Fail unless the IDE's MCP tools/list shows more than the router tool alone (DIRECT).
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    mcp_url: str = "http://127.0.0.1:64362/stream"
-    """
-    The IDE's MCP streamable-HTTP endpoint; only initialize and tools/list are sent.
-    """
+type McpUrl = Annotated[str, Field(min_length=1)]
+"""
+An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initialize and tools/list are sent
+"""
 
 
 type Helper = Annotated[str, Field(min_length=1)]
@@ -130,9 +48,6 @@ class ReaPatch(BaseModel):
     """
 
 
-type Options = Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect | CheckDirect | ReaPatch
-
-
 class PatchState(StrEnum):
     """
     What rea-patch found.
@@ -140,27 +55,6 @@ class PatchState(StrEnum):
 
     applied = "applied"
     already = "already"
-
-
-class Event(BaseModel):
-    """
-    One JSON line on stdout.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    settings_window: str | None = None
-    front_restored: bool | None = None
-    breadcrumb: list[str] | None = None
-    pressed: str | None = None
-    selected: str | None = None
-    tools: int | None = None
-    direct: bool | None = None
-    patch: PatchState | None = None
-    map: str | None = None
-    nodes: int | None = None
 
 
 class Failure(BaseModel):
@@ -173,6 +67,269 @@ class Failure(BaseModel):
         frozen=True,
     )
     error: str
+
+
+type IdeName = Annotated[str, Field(pattern="^[a-z][a-z0-9]*$")]
+"""
+The IDE by its Toolbox shell-script name (channel tool.extensions[type=shell].name): clion, pycharm, clion1
+"""
+
+
+class Resolve(BaseModel):
+    """
+    Resolve a Toolbox install to its running IDE: app, product, build, pid and MCP endpoint.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+
+
+class Ide(BaseModel):
+    """
+    One running IDE, as resolve reports it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    app: str
+    """
+    The .app bundle (state.json installLocation)
+    """
+    product_code: str
+    """
+    product-info.json productCode, e.g. CL
+    """
+    build: str
+    """
+    product-info.json buildNumber
+    """
+    pid: int
+    mcp_url: str
+
+
+class SkipEnum(StrEnum):
+    foreground_swift = "Foreground.swift"
+
+
+class CoverageGate(BaseModel):
+    """
+    Gate an llvm-cov JSON export: every source file present and covered to the minimum.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    report: Annotated[str, Field(min_length=1)]
+    """
+    The export, e.g. swift test's codecov/<package>.json
+    """
+    sources: Annotated[str, Field(min_length=1)]
+    """
+    The folder whose *.swift files must all be covered
+    """
+    skip: list[SkipEnum] = []
+    """
+    Files left out: only Foreground.swift (only the debug route reaches it) is allowed
+    """
+    minimum: Annotated[float, Field(ge=0.0, le=100.0)] = 100
+    """
+    Percent of lines and of regions each file needs
+    """
+
+
+class FileCoverage(BaseModel):
+    """
+    One source file's counts from the export.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    file: str
+    lines: Annotated[list[int], Field(max_length=2, min_length=2)]
+    """
+    [covered, total]
+    """
+    regions: Annotated[list[int], Field(max_length=2, min_length=2)]
+    """
+    [covered, total]
+    """
+
+
+class Install(BaseModel):
+    """
+    One Toolbox install, as toolbox.install reads it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    app: str
+    """
+    The .app bundle (state.json installLocation)
+    """
+    product_code: str
+    build: str
+    config: str
+    """
+    The effective idea.config.path: a -Didea.config.path option, else Toolbox's default
+    """
+    properties: dict[str, str]
+    """
+    The JVM's -D properties, in launcher order (later ones win)
+    """
+
+
+class Map(BaseModel):
+    """
+    Save rea's accessibility map of one IDE window (layer-0 windows only).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+    window: Annotated[int, Field(gt=0)]
+    """
+    CG window id, as agent-desktop lists it without the w- prefix
+    """
+    out: Annotated[str, Field(min_length=1)]
+    """
+    File to write the map to; never overwritten
+    """
+
+
+class SettingsOpen(BaseModel):
+    """
+    Open Settings on a page, in the background (JETBRAINS_FOREGROUND=1: from the menu bar).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+    page: Annotated[str, Field(min_length=1)]
+    """
+    The page's display name, as the breadcrumb shows it
+    """
+
+
+class SettingsGoto(BaseModel):
+    """
+    Go to a Settings page through the search field, in the background; the breadcrumb confirms it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+    page: Annotated[str, Field(min_length=1)]
+    """
+    The page name as the breadcrumb shows it
+    """
+
+
+class SettingsPress(BaseModel):
+    """
+    Press a button in the open Settings dialog, in the background (jbax press).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+    label: Annotated[str, Field(min_length=1)]
+    """
+    The button's exact label
+    """
+
+
+class RouterDirect(BaseModel):
+    """
+    Set MCP Server > Exposed Tools router-only mode to ACP agents only (DIRECT) and verify it over MCP.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName
+    mcp_url: McpUrl | None = None
+    """
+    An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initialize and tools/list are sent
+    """
+
+
+class CheckDirect(BaseModel):
+    """
+    Fail unless an MCP tools/list shows more than the router tool alone (DIRECT): the IDE's own server, or --mcp-url.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName | None = None
+    mcp_url: McpUrl | None = None
+    """
+    An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initialize and tools/list are sent
+    """
+
+
+type Options = (
+    Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect | CheckDirect | ReaPatch | CoverageGate
+)
+
+
+class Coverage(BaseModel):
+    """
+    What coverage-gate found.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    files: list[FileCoverage]
+    short: list[str]
+    """
+    Files missing from the export or below 100%
+    """
+
+
+class Event(BaseModel):
+    """
+    One JSON line on stdout.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: Ide | None = None
+    settings_window: str | None = None
+    front_restored: bool | None = None
+    breadcrumb: list[str] | None = None
+    pressed: str | None = None
+    selected: str | None = None
+    tools: int | None = None
+    direct: bool | None = None
+    patch: PatchState | None = None
+    map: str | None = None
+    nodes: int | None = None
+    coverage: Coverage | None = None
 
 
 class Jbctl(BaseModel):

@@ -18,22 +18,42 @@ description = "ruff check, ruff format --check, ty check, and models.py matches 
 depends = ["sync", "codegen --check"]
 run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 
-# The live tests are skipped unless JBCTL_LIVE=1, so this never touches an IDE.
+# The live tests are skipped unless JBCTL_IDE is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
 skip_if = "{{ os() != 'macos' }}"
-description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_LIVE=1"
+description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_IDE set"
 depends = ["sync"]
 run = "uv run --locked pytest"
 
-# Brings the running IDE forward briefly (opening Settings needs it); run it only when nobody is working in it.
+# <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1). The live tests run in the background,
+# Settings included (opened through the IDE's station socket). Only the debug route that brings the IDE forward is
+# marked out of the count ("# pragma: foreground"; //jbctl:markers refuses any other pragma). The #502 MVP
+# floor is 98.20%, measured: the rest is three guards no working IDE or jbax trips, "Settings did not open"
+# (ide.py), a Settings window without a search field (rea.py) and a jbax that crashed without printing JSON
+# (ide.py), plus the move to the page asked for when Settings opens elsewhere (cli.py), which no headless
+# station open has needed. All are left visible as uncovered rather than marked.
+# --foreground also runs the debug route against the real IDE, which brings it forward once.
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
-description = "Every test, live ones included, at 100% line and branch coverage"
+description = "Every test, live ones included; line and branch coverage of at least 98.20% (#502 MVP)"
 depends = ["sync"]
-env = { JBCTL_LIVE = "1" }
-run = "uv run --locked pytest --cov-fail-under=100"
+usage = """
+arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
+flag "--foreground" help="Also run the debug route that brings the IDE forward (menu-bar Settings)"
+"""
+run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=98.20'
+
+# The only coverage pragma allowed is "# pragma: foreground", and only in ide.py, on the debug route that brings
+# the IDE forward: nothing else is marked out of the count to reach the gate. mise runs with errexit, so each
+# line fails on a match (rg exits 0) or an rg error (2), and passes when nothing matches (1).
+[tasks.markers]
+description = "Fail on any coverage pragma but ide.py's foreground ones"
+run = [
+  "rg -n 'pragma:' src --glob '!src/jbctl/ide.py' && exit 1; test $? -eq 1",
+  "rg -n -P 'pragma:(?!\\s*foreground\\b)' src/jbctl/ide.py && exit 1; test $? -eq 1",
+]
 
 [tasks.check]
-description = "lint and the non-live tests"
-depends = ["lint", "test"]
+description = "lint, the coverage-pragma policy and the non-live tests"
+depends = ["lint", "markers", "test"]

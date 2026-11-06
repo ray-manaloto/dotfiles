@@ -22,7 +22,7 @@ tags: [clion, jetbrains, macos, accessibility, agent-desktop, rea, mcp, swing]
   `invocationMode`. DIRECT is the default: when DIRECT is saved, IntelliJ **deletes** the file.
   `CLion2026.2/…` is a stale older config dir.
 - The file is written on save (at OK, or when settings are flushed), not on Apply.
-- **Ground truth:** MCP `initialize` + `tools/list` on `127.0.0.1:64362/stream` (no tool calls).
+- **Ground truth:** MCP `initialize` + `tools/list` on the IDE's own endpoint (`jbctl resolve`; CLion's was `127.0.0.1:64362/stream`), no tool calls.
   VIA_ROUTER returns 1 tool (`execute_tool`); DIRECT returned 88.
 
 ## Routes

@@ -1,21 +1,27 @@
-"""The running IDE through agent-desktop (windows, the one activation) and jbax (background AX)."""
+"""The IDE that toolbox.py found: its station socket, agent-desktop (windows) and jbax (background AX)."""
 
 import json
 import os
 import subprocess
 import time
+import urllib.parse
+from http import HTTPStatus
 from typing import Any
 
-# A GUI JetBrains IDE; helper processes such as `clion stdioMcpServer` show no foreground presentation.
-BUNDLE_PREFIX = "com.jetbrains."
-# A project frame is wider than this; the IDE's toolbar strips and popups are narrower.
+from . import station
+
+# A project frame is larger than this; the IDE's toolbar strips (as wide as a frame, 33 px high) and popups are not.
 FRAME_MIN_WIDTH = 1000
+FRAME_MIN_HEIGHT = 300
+# The one opt-in for the route that brings the IDE forward (opening Settings from the menu bar), off by default:
+# the default runs are fully background, and the foreground route is for debugging when a headless one fails.
+FOREGROUND = "JETBRAINS_FOREGROUND"
 # Seconds before a hung agent-desktop, rea or jbax is a failure instead of a hang.
 TIMEOUT = 60
 
 
 class IdeError(Exception):
-    """A step that found the IDE in a state it cannot act on; the CLI reports it as one failure line."""
+    """A step that cannot find the IDE --ide names, or finds it in a state it cannot act on; one failure line."""
 
 
 def tool(*args: str) -> Any:  # noqa: ANN401 - a JSON document whose shape the caller knows
@@ -26,31 +32,20 @@ def agent_desktop(*args: str) -> Any:  # noqa: ANN401 - agent-desktop's data mem
     return tool("agent-desktop", *args)["data"]
 
 
-def jbax(*args: str) -> None:
+def jbax(*args: str) -> dict[str, Any]:
     """jbax prints one JSON object and exits non-zero when it refuses; its refusal is an IdeError, not a crash."""
     command = [os.environ.get("JBAX", "jbax"), *args]
     done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=TIMEOUT)
-    if not done.stdout:  # pragma: no cover - #502 MVP: a jbax crash prints no JSON; no live run crashes it
-        raise subprocess.CalledProcessError(done.returncode, command, stderr=done.stderr)
+    # A jbax that crashed prints no JSON. Not covered: no test can make the real jbax crash, and the owner ruled
+    # out a stand-in; it stays visible in the coverage report.
+    if not done.stdout:
+        msg = f"jbax printed nothing (exit {done.returncode}): {done.stderr.strip()}"
+        raise IdeError(msg)
     result = json.loads(done.stdout)
     if not result["ok"]:
         msg = f"{result['error']} (jbax exit {done.returncode})"
         raise IdeError(msg)
-
-
-def pid() -> int:
-    for app in agent_desktop("list-apps")["apps"]:
-        if app.get("bundle_id", "").startswith(BUNDLE_PREFIX) and app.get("presentation") == "foreground":
-            return int(app["pid"])
-    # #502 MVP: a live run has an IDE by definition; covering this needs a stand-in agent-desktop.
-    msg = "no JetBrains IDE is running"  # pragma: no cover - see above
-    raise IdeError(msg)  # pragma: no cover - see above
-
-
-def app_path(ide: int) -> str:
-    """The .app bundle, from the process's executable (rea binds its evidence to it)."""
-    executable = subprocess.run(["ps", "-o", "comm=", "-p", str(ide)], capture_output=True, text=True, check=True)
-    return executable.stdout.strip().split(".app/", 1)[0] + ".app"
+    return result
 
 
 def windows() -> list[dict[str, Any]]:
@@ -66,33 +61,84 @@ def focused(listed: list[dict[str, Any]]) -> str | None:
     return next((w["id"] for w in listed if w.get("is_focused")), None)
 
 
-def open_settings(ide: int) -> tuple[str, bool]:
-    """Open Settings with the shortest activation, then hand the front back.
+def open_settings(ide: int, page: str) -> tuple[str, bool]:
+    """Open Settings on `page`, and say whether the front app is the one that had it before.
 
-    AppKit drops a menu item's AXPress while the app is inactive, so the IDE must come forward. The menu
-    item is resolved first, in the background; one batch activates, presses and hands back. Showing the
-    dialog can re-activate the IDE after that, so the front is handed back once more if needed.
+    By default through the IDE's station socket, which leaves the IDE in the background. With
+    JETBRAINS_FOREGROUND=1, through the menu bar instead, which brings the IDE forward: for debugging a headless
+    failure only, never as an automatic fallback.
     """
     listed = windows()
-    if open_window := settings_window(ide, listed):
-        return open_window, True
+    # A dialog jbctl did not open may hold the user's unapplied edits, which a later Cancel or OK would discard or
+    # save: refuse it rather than reuse it.
+    if settings_window(ide, listed):
+        msg = "a Settings window is already open; close it first, since jbctl drives only a dialog it opened"
+        raise IdeError(msg)
     previous = focused(listed)
-    frame = next(w["id"] for w in listed if w.get("pid") == ide and w["bounds"]["width"] > FRAME_MIN_WIDTH)
-    item = agent_desktop("find", "--surface", "menubar", "--window-id", frame, "--name", "Settings…", "--exact")
     hand_back = [{"command": "focus-window", "args": {"window_id": previous}}] if previous else []
+    foreground = os.environ.get(FOREGROUND) == "1"
+    if not foreground:
+        check_background(ide)
+        open_from_station(ide, page)
+    else:  # pragma: foreground - the debug route, which the default runs never take
+        open_from_menu(ide, listed, hand_back)
+    window, deadline = None, time.monotonic() + 4
+    while window is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+        window = settings_window(ide)
+    if window is None:
+        msg = "Settings did not open"
+        raise IdeError(msg)
+    # Showing the dialog can re-activate the IDE after the menu route's batch, so hand the front back again.
+    if foreground and hand_back:  # pragma: foreground - the debug route's second hand-back
+        agent_desktop("batch", json.dumps(hand_back), "--stop-on-error")
+    return window, previous is None or focused(windows()) == previous
+
+
+def frames(ide: int, listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The IDE's project windows, minimized ones included."""
+    return [
+        w
+        for w in listed
+        if w.get("pid") == ide and w["bounds"]["width"] > FRAME_MIN_WIDTH and w["bounds"]["height"] > FRAME_MIN_HEIGHT
+    ]
+
+
+def check_background(ide: int) -> None:
+    """Refuse the states in which showing Settings may bring the IDE forward; `jbax windows` names them."""
+    if risk := jbax("windows", str(ide))["unsafe"]:
+        msg = f"Settings may bring the IDE forward from this state ({risk}); only visible project windows are safe"
+        raise IdeError(msg)
+
+
+def open_from_station(ide: int, page: str) -> None:
+    """POST the settings command to the IDE's station socket: no LaunchServices, so no activation.
+
+    name= returns once the dialog is scheduled (invokeLater); page_id= instead waits for the dialog to show,
+    which a modal Settings turns into a wait until it closes. The host is a placeholder: the IDE reads only the
+    command (JBProtocolCommand.execute), so one URI serves every product.
+    """
+    uri = "jetbrains://idea/settings?" + urllib.parse.urlencode({"name": page}, quote_via=urllib.parse.quote)
+    status, reply = station.post(ide, "/protocolHandler", {"uri": uri}, TIMEOUT)
+    # The IDE reports a refused command as exit code 0 with a message.
+    if status != HTTPStatus.OK or reply.get("exitCode") != 0 or reply.get("message"):
+        msg = f"the IDE did not open Settings on {page}: HTTP {status} {reply}"
+        raise IdeError(msg)
+
+
+def open_from_menu(  # pragma: foreground - the debug route (JETBRAINS_FOREGROUND=1)
+    ide: int, listed: list[dict[str, Any]], hand_back: list[dict[str, Any]]
+) -> None:
+    """Debug route: activate the IDE, press the menu bar's Settings…, and hand the front back.
+
+    AppKit drops a menu item's AXPress while the app is inactive. The item is resolved in the background first;
+    one batch activates, presses and hands back.
+    """
+    frame = frames(ide, listed)[0]["id"]
+    item = agent_desktop("find", "--surface", "menubar", "--window-id", frame, "--name", "Settings…", "--exact")
     steps = [
         {"command": "focus-window", "args": {"window_id": frame}},
         {"command": "click", "args": {"ref_id": item["matches"][0]["ref_id"]}},
         *hand_back,
     ]
     agent_desktop("batch", json.dumps(steps), "--stop-on-error")
-    deadline = time.monotonic() + 4
-    while (window := settings_window(ide)) is None and time.monotonic() < deadline:
-        time.sleep(0.1)
-    if window is None:  # pragma: no cover - #502 MVP: live-only guard; a working IDE opens Settings
-        msg = "Settings did not open"
-        raise IdeError(msg)
-    # Showing the dialog can re-activate the IDE after the batch, so hand the front back again.
-    if hand_back:  # pragma: no branch - #502 MVP: a person at the machine always has some window in front
-        agent_desktop("batch", json.dumps(hand_back), "--stop-on-error")
-    return window, previous is None or focused(windows()) == previous
