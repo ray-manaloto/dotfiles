@@ -145,7 +145,7 @@ rust = { version = "1.99.1", minimum_release_age = "0s" }
 pixi = { version = "0.84.1", minimum_release_age = "0s" }
 uv = { version = "0.13.7", minimum_release_age = "0s" }
 chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
-pkl = { version = "0.32.2", minimum_release_age = "0s" }
+pkl = { version = "0.33.0", minimum_release_age = "0s" }
 hk = { version = "2.11.1", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
 fnox = { version = "1.47.0", workflow = "release.yml", minimum_release_age = "0s" }
