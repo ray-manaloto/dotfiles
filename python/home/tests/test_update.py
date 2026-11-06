@@ -159,9 +159,20 @@ def test_update_check_prints_every_report_and_exits_on_drift(
         ({"code": 1}, {}, "brew outdated"),
         ({"stdout": "Error: no JSON\n"}, {}, "brew outdated"),
         ({"stdout": "[]\n"}, {}, "brew outdated"),
+        ({"stdout": ""}, {}, "brew outdated"),
         (NONE_OUTDATED, {"code": 1}, "mise outdated"),
+        (NONE_OUTDATED, {"stdout": "mise WARN something\n"}, "mise outdated"),
+        ({"stdout": '{"formulae": [{"name": "jq"}], "casks": []}'}, {"stdout": "oops\n"}, "mise outdated"),
     ],
-    ids=["brew-fails", "brew-not-json", "brew-not-an-object", "mise-fails"],
+    ids=[
+        "brew-fails",
+        "brew-not-json",
+        "brew-not-an-object",
+        "brew-empty",
+        "mise-fails",
+        "mise-not-json",
+        "brew-drift-mise-not-json",
+    ],
 )
 def test_update_check_exits_2_when_a_source_cannot_answer(
     tools: Tools, capfd: pytest.CaptureFixture[str], brew: dict[str, object], mise: dict[str, object], source: str
@@ -170,6 +181,27 @@ def test_update_check_exits_2_when_a_source_cannot_answer(
     code, _out, err = hometools(capfd, "update-check")
     assert (code, error(err)) == (2, f"update:check: '{source}' failed — COULD NOT CHECK")
     assert DRY not in tools.calls()
+
+
+def test_update_check_counts_a_mise_upgrade_that_cannot_start_as_drift(
+    tools: Tools, capfd: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """mise answers outdated, then is gone: the shell task's `mise upgrade ... || drift=1` exited 1."""
+    # On PATH only the stand-ins and the python3 they start with, so no other mise is found.
+    python = tmp_path / "python"
+    python.mkdir()
+    (python / "python3").symlink_to(Path(sys.base_prefix) / "bin/python3")
+    monkeypatch.setenv("PATH", f"{tools.folder}:{python}")
+    # mise outdated runs this: it removes the mise stand-in, then answers nothing outdated.
+    last = tmp_path / "last-answer"
+    last.write_text(
+        f"#!{python / 'python3'} -I\nimport os\nos.unlink(os.environ['STAND_IN'] + '/mise')\nprint('{{}}')\n"
+    )
+    last.chmod(0o755)
+    tools.answer({BREW: NONE_OUTDATED, MISE: {"real": str(last)}})
+    code, out, err = hometools(capfd, "update-check")
+    assert (code, out, error(err)) == (1, '{"formulae": [], "casks": []}\n{}\n', "mise: No such file or directory")
+    assert tools.calls() == [BREW, MISE]
 
 
 def test_update_check_without_brew_cannot_check(tools: Tools, capfd: pytest.CaptureFixture[str]) -> None:

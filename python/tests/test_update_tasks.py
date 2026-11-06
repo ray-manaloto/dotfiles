@@ -271,6 +271,36 @@ class CheckTest(UpdateTasksTest):
                 )
                 self.assertEqual(self.calls(), calls)
 
+    def test_unreadable_output_exits_2_where_the_shell_task_exited_0(self) -> None:
+        # The shell task's jq test failed on these and skipped `&& drift=1`: in sync, a
+        # false green its contract forbade. The port exits 2 (owner, 2026-11-06), so this
+        # test, alone in this file, fails on the shell version.
+        brew, mise = [self.BREW], [self.BREW, self.MISE]
+        for name, args, source, calls in [
+            ("brew text", ({"stdout": "Error: busy\n"}, {}, {}), "brew outdated", brew),
+            ("brew list", ({"stdout": "[]\n"}, {}, {}), "brew outdated", brew),
+            ("brew nothing", ({"stdout": ""}, {}, {}), "brew outdated", brew),
+            (
+                "mise text",
+                (outdated(), {"stdout": "WARN x\n"}, {}),
+                "mise outdated",
+                mise,
+            ),
+            (
+                "mise nothing",
+                (outdated(formulae=1), {"stdout": ""}, {}),
+                "mise outdated",
+                mise,
+            ),
+        ]:
+            with self.subTest(name):
+                code, out, err = self.check(*args)
+                self.assertEqual(code, 2, out + err)
+                self.assertIn(
+                    f"update:check: '{source}' failed — COULD NOT CHECK", refusal(err)
+                )
+                self.assertEqual(self.calls(), calls)
+
 
 class AllTest(UpdateTasksTest):
     def test_update_all_runs_brew_before_mise_and_every_leaf_before_its_own_run(

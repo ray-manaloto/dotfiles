@@ -46,7 +46,11 @@ def brew() -> None:
 
 
 def report(source: str, *argv: str) -> dict[str, object]:
-    """argv's JSON report, printed; a source that can't start, fails or answers no JSON object can't be checked."""
+    """argv's JSON report, printed; a source that can't start, fails or answers no JSON object can't be checked.
+
+    Unreadable output exits 2 where the shell task exited 0, its jq test failing and `&& drift=1` skipped: a false
+    green the task's contract forbids (owner, 2026-11-06).
+    """
     try:
         done = subprocess.run(argv, stdout=subprocess.PIPE, text=True, check=False)
     except OSError:
@@ -68,6 +72,11 @@ def check() -> None:
     formulae = report("brew outdated", "brew", "outdated", "--json")
     tools = report("mise outdated", "mise", "outdated", "--json")
     drift = bool(formulae.get("formulae") or formulae.get("casks") or tools)
-    # Its exit code is the answer: non-zero when an upgrade is due. mise just answered, so it starts.
-    upgrades = subprocess.run(("mise", "upgrade", "--dry-run-code"), check=False).returncode
+    # Its exit code is the answer: non-zero when an upgrade is due.
+    try:
+        upgrades = subprocess.run(("mise", "upgrade", "--dry-run-code"), check=False).returncode
+    except OSError as failed:
+        # The shell task's `|| drift=1` counted a mise that can't start as drift; its error is the one event.
+        sys.stderr.write(Failure(error=f"mise: {failed.strerror}").model_dump_json() + "\n")
+        upgrades = 127
     raise SystemExit(DRIFT if drift or upgrades else IN_SYNC)
