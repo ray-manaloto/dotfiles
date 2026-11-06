@@ -24,6 +24,8 @@ class Command(StrEnum):
     main_guard_install = "main-guard-install"
     main_guard_remove = "main-guard-remove"
     main_guard_armed = "main-guard-armed"
+    shell_apply = "shell-apply"
+    shell_rollback = "shell-rollback"
 
 
 class ZeroBash(BaseModel):
@@ -39,6 +41,28 @@ class ZeroBash(BaseModel):
     """
     Exit 1 when anything is left
     """
+
+
+class ShellApply(BaseModel):
+    """
+    Back up the live zsh files, check a shell from the new ones, then link them into $HOME.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ShellRollback(BaseModel):
+    """
+    Restore the zsh files from the pre-apply backup.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
 
 
 class MainGuard(BaseModel):
@@ -237,6 +261,8 @@ type Options = (
     | MainGuardInstall
     | MainGuardRemove
     | MainGuardArmed
+    | ShellApply
+    | ShellRollback
 )
 """
 What a repotools command parses from its arguments.
@@ -478,6 +504,8 @@ class Repotools(BaseModel):
     main_guard_install: MainGuardInstall | None = None
     main_guard_remove: MainGuardRemove | None = None
     main_guard_armed: MainGuardArmed | None = None
+    shell_apply: ShellApply | None = None
+    shell_rollback: ShellRollback | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

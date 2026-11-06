@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, zero_bash
+from . import gates, main_guard, pane_approval, shell, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -22,6 +22,8 @@ from .models import (
     PrText,
     ReviewApproved,
     ReviewPython,
+    ShellApply,
+    ShellRollback,
     ZeroBash,
 )
 
@@ -40,6 +42,8 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
     Command.main_guard_armed: MainGuardArmed,
+    Command.shell_apply: ShellApply,
+    Command.shell_rollback: ShellRollback,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -63,10 +67,7 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
 
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
-        found = zero_bash.findings()
-        sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
-        if options.strict and found:
-            raise SystemExit(1)
+        zero_bash.report(options)
     elif isinstance(options, ReviewPython):
         gates.review(options)
     elif isinstance(options, ReviewApproved):
@@ -75,6 +76,8 @@ def run(command: Command, options: Options) -> None:
         gates.privacy_scan(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
+    elif isinstance(options, ShellApply | ShellRollback):
+        shell.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:

@@ -31,7 +31,7 @@ about it.
 | `unix/home/.zshenv`, `.zprofile`, `.zshrc`, `.zshrc.d/`, `.config/zsh/`, or a new `.zprofile.d/` | `mise run //python:test` |
 | `unix/home/.config/starship.toml` | `mise run //python:test` |
 | anything else under `python/`: `src/`, `tests/`, `pyproject.toml`, `uv.lock`, `mise.toml` | `mise run //python:test` |
-| `shell:apply`, `shell:rollback` or `shell_backup_paths` in `mise.toml`, `tasks/shell/` | `mise run //python:test` |
+| `shell:apply`, `shell:rollback` or `shell_backup_paths` in `mise.toml`, `python/repo/src/repotools/shell.py` | `mise run //python:test` |
 | `python/toolchains/p2996/` | `mise run //p2996:check` |
 | `python/repo/` | `mise run //repo:check` |
 | `typescript/` | `mise run //typescript:test` |

@@ -22,7 +22,9 @@
         "main-guard",
         "main-guard-install",
         "main-guard-remove",
-        "main-guard-armed"
+        "main-guard-armed",
+        "shell-apply",
+        "shell-rollback"
       ]
     },
     "ZeroBash": {
@@ -31,6 +33,18 @@
       "properties": {
         "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" }
       },
+      "additionalProperties": false
+    },
+    "ShellApply": {
+      "description": "Back up the live zsh files, check a shell from the new ones, then link them into $HOME.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ShellRollback": {
+      "description": "Restore the zsh files from the pre-apply backup.",
+      "type": "object",
+      "properties": {},
       "additionalProperties": false
     },
     "MainGuard": {
@@ -151,7 +165,9 @@
         { "$ref": "#/$defs/MainGuard" },
         { "$ref": "#/$defs/MainGuardInstall" },
         { "$ref": "#/$defs/MainGuardRemove" },
-        { "$ref": "#/$defs/MainGuardArmed" }
+        { "$ref": "#/$defs/MainGuardArmed" },
+        { "$ref": "#/$defs/ShellApply" },
+        { "$ref": "#/$defs/ShellRollback" }
       ]
     },
     "Fingerprint": {
@@ -276,6 +292,8 @@
     "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
     "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
     "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
+    "shell_apply": { "$ref": "#/$defs/ShellApply" },
+    "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },

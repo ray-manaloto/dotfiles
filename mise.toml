@@ -44,12 +44,12 @@ run = 'uv run --project python/repo --locked repotools privacy-scan --patterns="
 [tasks."shell:apply"]
 description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "bash tasks/shell/apply.sh"
+run = "uv run --project python/repo --locked repotools shell-apply"
 
 [tasks."shell:rollback"]
 description = "Restore the zsh files from the pre-apply backup"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "bash tasks/shell/rollback.sh"
+run = "uv run --project python/repo --locked repotools shell-rollback"
 
 [tasks.pre-commit]
 run = "hk run pre-commit"
