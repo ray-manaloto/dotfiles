@@ -292,6 +292,8 @@ lua = { version = "5.5.1", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
 ruff = { version = "0.17.3", minimum_release_age = "0s" }
 ty = { version = "0.0.97", minimum_release_age = "0s" }
+# swift/ (jbax): hk's swiftlint builtin; macOS only, like jbax. Formatting is the toolchain's own `swift format`.
+swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 
 # --- webclaw: local browser-enabled build -------------------------------------
 # Added 2026-10-20. The prebuilt release (github:0xMassi/webclaw) is compiled

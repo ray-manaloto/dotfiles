@@ -1,0 +1,52 @@
+# jbax: background accessibility for JetBrains IDEs (swift/, issue #502). No [tools]: the Swift toolchain is
+# Xcode's, swiftlint is global (DL-757). From the repository root: //swift:<task>. jbax is macOS-only (AppKit,
+# ApplicationServices), so every task skips elsewhere and the root test task stays green on Linux.
+
+[tasks.build]
+skip_if = "{{ os() != 'macos' }}"
+description = "Build the JBAXKit library and the jbax executable"
+run = "swift build"
+
+# SwiftLint runs as hk's builtin step (hk check / pre-commit), so it is not repeated here.
+[tasks.lint]
+skip_if = "{{ os() != 'macos' }}"
+description = "swift format lint (the toolchain's own), strict"
+run = "swift format lint --strict --recursive Package.swift Sources Tests"
+
+# The live scenario is skipped unless JBAX_PID is set (only the coverage task sets it), so this never touches an IDE.
+[tasks.test]
+skip_if = "{{ os() != 'macos' }}"
+description = "Tests; the live-IDE scenario runs only with JBAX_PID set"
+run = "swift test"
+
+# <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1): jbctl resolve finds its pid. The live
+# scenario runs in the background, Settings included (opened through the IDE's station socket). The gate: every
+# file under Sources/JBAXKit in the export, each at the minimum share of lines and regions (Swift exports have no
+# branch data). Only Foreground.swift is skipped: only the debug route reaches its code, and llvm-cov can leave out
+# files but not lines. No line is marked. It covers the library, not Sources/jbax/main.swift, which the test
+# binary does not link. The #502 MVP minimum is 87%, measured: regions count every fallback for an AX read or JSON
+# encode that fails, and the dialog, duplicate-label and not-changed cases no working IDE produces in a run.
+# --foreground runs the debug route, which brings the IDE forward once.
+[tasks.coverage]
+skip_if = "{{ os() != 'macos' }}"
+description = "Live-IDE scenario with coverage; every JBAXKit file but Foreground.swift at 87% of lines and regions (#502 MVP)"
+depends = ["//jbctl:sync"]
+usage = """
+arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
+flag "--foreground" help="Use the debug route that brings the IDE forward (menu-bar Settings)"
+"""
+run = [
+  "pid=$(uv run --locked --project ../python/jbctl jbctl resolve --ide \"$usage_ide\" | jq -er .ide.pid) && JBAX_PID=$pid JETBRAINS_FOREGROUND=${usage_foreground:+1} swift test --enable-code-coverage",
+  "uv run --locked --project ../python/jbctl jbctl coverage-gate --report \"$(swift build --show-bin-path)/codecov/jbax.json\" --sources Sources/JBAXKit --skip '[\"Foreground.swift\"]' --minimum 87",
+]
+
+# jbctl runs jbax by name (or $JBAX).
+[tasks.install]
+skip_if = "{{ os() != 'macos' }}"
+description = "Build jbax for release and put it in ~/.local/bin"
+run = ["swift build -c release", "install -m 0755 .build/release/jbax ~/.local/bin/jbax"]
+
+[tasks.check]
+skip_if = "{{ os() != 'macos' }}"
+description = "lint and the non-live tests (which build first)"
+depends = ["lint", "test"]
