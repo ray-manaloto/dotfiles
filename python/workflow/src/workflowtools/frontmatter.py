@@ -9,7 +9,7 @@ from .git import staged, tracked
 from .models import Check, Finding, OkfFrontmatter, SkillFrontmatter
 
 # The okf bundles: every Markdown file in them but the map and the log is a concept with a type.
-OKF = ("docs/workflow/", "docs/research/")
+OKF = ("unix/home/.config/agents/workflow/", "docs/research/")
 MAPS = {"index.md", "log.md"}
 
 

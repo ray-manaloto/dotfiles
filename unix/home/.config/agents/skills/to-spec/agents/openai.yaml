@@ -1,0 +1,5 @@
+interface:
+  display_name: "To spec"
+  short_description: "Turn a settled conversation into one approved spec issue."
+policy:
+  allow_implicit_invocation: true

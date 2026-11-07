@@ -30,7 +30,12 @@ DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
 DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
 # A skill written in this repo, linked for both agents by [dotfiles] in mise.toml.
 PERMISSIONS = "macos-agent-permissions"
-BLOCKS = ("~/.claude/CLAUDE.md/hc-codex", "~/.codex/AGENTS.md/hc-codex")
+ENTRIES = (
+    "~/.config/agents/AGENTS.md",
+    "~/.codex/AGENTS.md",
+    "~/.gemini/GEMINI.md",
+    "~/.claude/CLAUDE.md/agents",
+)
 
 # What `skills add herdrdev/herdr` installed in September, as the skills lock records it.
 OLD = ("herdr", "herdr-pre-release-audit", "herdr-throwaway-repro", "triage")
@@ -202,15 +207,18 @@ class HerdrAppTest(unittest.TestCase):
         self.assertIn(f"name: {PERMISSIONS}\n", (source / "SKILL.md").read_text())
 
     def test_claude_and_codex_open_watched_agents_as_tabs(self) -> None:
-        done = self.scratch("mise", "dot", "apply", *BLOCKS)
+        done = self.scratch("mise", "dot", "apply", *ENTRIES)
         self.assertEqual(done.returncode, 0, done.stderr)
         claude = (self.home / ".claude/CLAUDE.md").read_text()
         codex = (self.home / ".codex/AGENTS.md").read_text()
-        self.assertEqual(claude, codex)
-        self.assertIn("herdr-app do tab.new --space ", claude)
-        self.assertIn('--argv \'["codex-hc"', claude)
-        self.assertIn("If `herdr-app ls` fails, stop and ask the user", claude)
-        self.assertNotIn("hc run --bg", claude)
+        self.assertEqual(claude.splitlines().count("@~/.config/agents/AGENTS.md"), 1)
+        imported = (self.home / ".config/agents/AGENTS.md").read_text()
+        self.assertEqual(imported, codex)
+        for text in (codex, imported):
+            self.assertIn("herdr-app do tab.new --space ", text)
+            self.assertIn('--argv \'["codex-hc"', text)
+            self.assertIn("If `herdr-app ls` fails, stop and ask the user", text)
+            self.assertNotIn("hc run --bg", text)
 
 
 if __name__ == "__main__":

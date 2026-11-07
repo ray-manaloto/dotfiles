@@ -447,6 +447,14 @@ def opencode_agent(text: str) -> bool:
     )  # fmt: skip
 
 
+def js_quote(text: str) -> str:
+    r"""A single-quoted JavaScript literal of text, escaped as CBM's escape_js escapes the plugin's launcher
+    path: backslash, quote, newline and carriage return only (client_adapter.c:86-108)."""
+    for raw, escaped in (("\\", "\\\\"), ("'", "\\'"), ("\n", "\\n"), ("\r", "\\r")):
+        text = text.replace(raw, escaped)
+    return f"'{text}'"
+
+
 def verify_opencode(cfg: Config, target: str) -> list[bool]:
     folder = cfg.home / ".config/opencode"
     # CBM 0.12.1 writes the legacy `mcp` shape, which OpenCode 2 still reads (cli.c:4091-4094).
@@ -462,6 +470,6 @@ def verify_opencode(cfg: Config, target: str) -> list[bool]:
     results.append(agents_md(folder / "AGENTS.md", "OpenCode"))
     # The plugin runs `<launcher> hook-augment` around grep, glob and read; it names its binary once.
     plugin = folder / "plugins/cbm-augment.ts"
-    names = f"const BIN = '{target}';" in read_text(plugin).splitlines()
+    names = f"const BIN = {js_quote(target)};" in read_text(plugin).splitlines()
     results.append(check("OpenCode plugin cbm-augment runs the launcher", ok=names))
     return results

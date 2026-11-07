@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from cbm.setup import js_quote
+
 from .conftest import CBM, TIMEOUT, calls, cbm, check_after, events, failed, launcher, link, mode, restored
 
 SCOUT = "Codex agent codebase-memory-scout: launcher, scout profile, read-only CBM tools only"
@@ -50,6 +52,8 @@ def test_install_then_verify_pass(home: Path) -> None:
     # A second install removes this package's own launcher first and puts it back.
     assert cbm("install", cwd=home / "checkout").returncode == 0
     assert restored(home)
+    # Exactly one `mcp` key: the config is JSONC, so count it in the text.
+    assert (home / OPENCODE / "opencode.json").read_text().count('"mcp"') == 1
 
 
 def test_verify_before_install_fails_and_reports_the_missing_launcher(home: Path) -> None:
@@ -480,6 +484,14 @@ def test_opencode_plugin_that_runs_another_binary_fails(home: Path, change: Call
     check_after(
         home, lambda: plugin.write_text(change(plugin.read_text())), "OpenCode plugin cbm-augment runs the launcher"
     )
+
+
+@pytest.mark.parametrize("path", ["/opt/it's/cbm", "C:\\cbm\\bin", '/opt/"q"/cbm', "/opt/a\nb\r/cbm"])
+def test_the_plugin_literal_keeps_a_hostile_launcher_path(path: str) -> None:
+    script = f"const BIN = {js_quote(path)}; process.stdout.write(BIN);"
+    # Bytes: text mode would read the carriage return back as a newline.
+    done = subprocess.run(["node", "-e", script], capture_output=True, timeout=TIMEOUT, check=True)
+    assert done.stdout.decode() == path
 
 
 def test_version_command_failing_fails_both_version_checks(home: Path) -> None:

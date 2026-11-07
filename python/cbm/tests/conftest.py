@@ -24,6 +24,7 @@
 # cbm-augment.ts is the OpenCode plugin CBM 0.12.1's own installer wrote in a scratch HOME, with its
 # launcher path replaced by @BIN@; the stand-in writes it back with the temporary launcher.
 
+import inspect
 import json
 import os
 import shutil
@@ -35,6 +36,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
+from cbm.setup import js_quote
 
 from .mise_stand_in import MISE
 
@@ -207,18 +210,20 @@ for client in clients:
 if "opencode" in clients:
   write(".config/opencode/AGENTS.md", AGENTS_POINTER)
   # The MCP entry goes into opencode.jsonc when it exists, else opencode.json. Like CBM, it is spliced into the
-  # text, so comments and trailing commas stay (the stand-in assumes no `mcp` key yet).
+  # text, so comments and trailing commas stay. A reinstall replaces the entry an earlier run wrote, as CBM
+  # updates its own entry, instead of splicing a second `mcp` key (the stand-in assumes no other `mcp` key).
   jsonc = home / ".config/opencode/opencode.jsonc"
   config = jsonc if jsonc.is_file() else home / ".config/opencode/opencode.json"
   entry = json.dumps({"mcp": {"codebase-memory-mcp": {"command": [cmd], "type": "local"}}})[1:-1]
   text = config.read_text() if config.is_file() else "{}"
+  text = re.sub(r'"mcp": \{"codebase-memory-mcp": \{[^{}]*\}\},', "", text)
   write(str(config.relative_to(home)), text.replace("{", "{" + entry + ",", 1))
-  write(".config/opencode/plugins/cbm-augment.ts", Path(@PLUGIN@).read_text().replace("@BIN@", cmd))
+  write(".config/opencode/plugins/cbm-augment.ts", Path(@PLUGIN@).read_text().replace("'@BIN@'", js_quote(cmd)))
 # Another agent step's config error fails the whole install too (cli.c:10581, :11173-11186).
 failures += mode == "other-fails"
 sys.exit(1 if failures else 0)
 """.replace("@PLUGIN@", repr(str(Path(__file__).with_name("cbm-augment.ts")))).replace(
-    "@SHARED@", Path(__file__).with_name("codex_text.py").read_text()
+    "@SHARED@", Path(__file__).with_name("codex_text.py").read_text() + inspect.getsource(js_quote)
 )
 
 

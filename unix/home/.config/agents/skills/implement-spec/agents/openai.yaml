@@ -1,0 +1,5 @@
+interface:
+  display_name: "Implement Spec"
+  short_description: "Build every open ticket of a spec, frontier first, one pinned worker per ticket."
+policy:
+  allow_implicit_invocation: true

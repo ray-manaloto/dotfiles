@@ -1,0 +1,5 @@
+interface:
+  display_name: "Implement"
+  short_description: "Build one ticket in this worktree, pinned to its plan by PLAN_ID; stage and hand back."
+policy:
+  allow_implicit_invocation: true

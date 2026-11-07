@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, scratch_env, shell, zero_bash
+from . import gates, main_guard, pane_approval, scratch_env, shell, tools_install, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -26,6 +26,7 @@ from .models import (
     ShellApply,
     ShellRollback,
     ToolchainGate,
+    ToolsInstall,
     ZeroBash,
 )
 
@@ -47,6 +48,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.shell_apply: ShellApply,
     Command.shell_rollback: ShellRollback,
     Command.toolchain_gate: ToolchainGate,
+    Command.tools_install: ToolsInstall,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
@@ -86,6 +88,8 @@ def run(command: Command, options: Options) -> None:
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
         pane_approval.create(options)
+    elif isinstance(options, ToolsInstall):
+        tools_install.run()
     elif command in APPROVED:
         pane_approval.check(options)
     else:

@@ -62,6 +62,13 @@ description = "Install this checkout's repotools as a uv tool, the copy the main
 dir = "{{ config_root }}/../.."
 run = "uv tool install --reinstall ./python/repo"
 
+[tasks.tools-install]
+# main-guard-copy remains a working-tree install route (Q-G1); a changed RECORD makes this task reinstall.
+description = "Install workflowtools and repotools as uv tools from this checkout's committed trees; a second run changes nothing"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/repo --locked repotools tools-install"
+
 [tasks.main-guard-install]
 description = "Install the guard's copy and register it as this repository's reference-transaction hook"
 depends = ["main-guard-copy"]

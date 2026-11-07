@@ -35,6 +35,29 @@ def hashed(data: bytes) -> str:
     return done.stdout.decode().strip()
 
 
+def head() -> str:
+    """HEAD's commit and a newline, or "unborn" and a newline before a repository's first commit.
+
+    rev-parse --verify -q prints nothing and exits 1 when HEAD names no commit yet; any other failure (128 outside a
+    repository) is git's own error, raised.
+    """
+    done = subprocess.run(["git", "rev-parse", "--verify", "-q", "HEAD"], capture_output=True, check=False, text=True)
+    if done.returncode == 1:
+        return "unborn\n"
+    done.check_returncode()
+    return done.stdout
+
+
+def base() -> str:
+    """The branch a pull request goes into: origin's default branch, as this clone recorded it."""
+    ref = "refs/remotes/origin/HEAD"
+    done = subprocess.run(["git", "symbolic-ref", "--short", ref], capture_output=True, check=False, text=True)
+    if done.returncode != 0:
+        msg = f"{ref} is not set, so origin's default branch is unknown; run git remote set-head origin --auto"
+        raise ValueError(msg)
+    return done.stdout.strip().removeprefix("origin/")
+
+
 def stripped(path: str) -> str:
     # git commit cleans the message the same way before it is stored, so a trailing blank line changes nothing.
     # Git 2.56.0 builtin/stripspace.c:61-70, read offline: reads to EOF before output; fingerprints stay read-only.
@@ -47,18 +70,21 @@ def stripped(path: str) -> str:
 def fingerprint(text: CommitText | PrText, body: bytes | None = None) -> str:
     """What the reviewer approves. From the root, its own command gives these bytes:
 
-    { git rev-parse HEAD; git ls-files -s; echo; git stripspace < MESSAGE; } | git hash-object --stdin
-    { echo "pull request"; git rev-parse HEAD; echo "$TITLE"; echo; cat BODY; } | git hash-object --stdin
+    { git rev-parse --verify -q HEAD || echo unborn; git ls-files -s; echo; git stripspace < MESSAGE; } |
+      git hash-object --stdin
+    { echo "pull request"; git rev-parse --verify -q HEAD || echo unborn; echo "$TITLE"; echo; cat BODY; } |
+      git hash-object --stdin
+
+    Run them in the checkout: outside one, git fails and this command reports it instead of hashing "unborn".
 
     body, when given, is the body file as already read, so what is checked is what is sent.
     """
-    head = git("rev-parse", "HEAD")
     if isinstance(text, PrText):
         sent = Path(text.body_file).read_bytes() if body is None else body
-        return hashed(f"pull request\n{head}{text.title}\n\n".encode() + sent)
+        return hashed(f"pull request\n{head()}{text.title}\n\n".encode() + sent)
     # :/ and --full-name keep the whole index when run from a subfolder, where ls-files lists only that folder.
     listing = git("ls-files", "-s", "--full-name", ":/")
-    return hashed(f"{head}{listing}\n{stripped(text.message)}".encode())
+    return hashed(f"{head()}{listing}\n{stripped(text.message)}".encode())
 
 
 def pin_file() -> Path:
@@ -233,7 +259,7 @@ def create(text: PrText) -> None:
     """Open the pull request with the body read once: the bytes checked are the bytes gh sends."""
     body = Path(text.body_file).read_bytes()
     check(text, body)
-    command = ["gh", "pr", "create", "--base", "main", "--title", text.title, "--body-file", "-"]
+    command = ["gh", "pr", "create", "--base", base(), "--title", text.title, "--body-file", "-"]
     done = process.run(command, body, capture_stdout=False)
     # The helper always captures stderr; only stdout may be None.
     sys.stderr.write(cast("bytes", done.stderr).decode(errors="replace"))

@@ -9,6 +9,8 @@ import pytest
 
 from workflowtools.cli import main
 
+from .conftest import report
+
 
 def failure(capsys: pytest.CaptureFixture[str], argv: list[str] | None) -> str:
     with pytest.raises(SystemExit) as stop:
@@ -45,9 +47,20 @@ def test_outside_a_repository_git_fails(
     assert failure(capsys, ["frontmatter"]).startswith("git failed: fatal: not a git repository")
 
 
-@pytest.mark.usefixtures("repo")
-def test_a_missing_status_table_is_a_failure(capsys: pytest.CaptureFixture[str]) -> None:
-    assert "docs/agents/issue-tracker.md" in failure(capsys, ["tickets"])
+def test_a_git_error_reading_the_origin_fails_instead_of_skipping(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (repo / "task_plan.md").write_text("# Roadmap\n")
+    with (repo / ".git" / "config").open("a") as config:
+        config.write('[remote "origin"\n')
+    assert failure(capsys, ["tickets"]).startswith("git failed: fatal: bad config line")
+
+
+def test_a_missing_roadmap_is_a_finding_through_the_cli(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert report(capsys, "tickets") == [
+        {"path": "task_plan.md", "check": "tickets", "detail": f"no roadmap at {repo / 'task_plan.md'}"},
+        {"exit": "1"},
+    ]
 
 
 @pytest.mark.usefixtures("repo")
@@ -55,3 +68,16 @@ def test_the_console_script_runs() -> None:
     script = Path(sys.executable).parent / "workflowtools"
     done = subprocess.run([script, "settings-local"], capture_output=True, check=False, text=True)
     assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [["--listing", "open", "--rebuild"], ["--listing", "frontier", "--plan"], ["--rebuild", "--plan"]],
+)
+def test_two_ticket_modes_at_once_fail(capsys: pytest.CaptureFixture[str], options: list[str]) -> None:
+    assert "workflowtools tickets: use one of --listing, --rebuild, --plan" in failure(capsys, ["tickets", *options])
+
+
+@pytest.mark.parametrize("spec", ["0", "-1"])
+def test_a_spec_below_one_is_refused(capsys: pytest.CaptureFixture[str], spec: str) -> None:
+    assert "greater than or equal to 1" in failure(capsys, ["tickets", "--spec", spec])

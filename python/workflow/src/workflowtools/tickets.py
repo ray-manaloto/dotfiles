@@ -1,129 +1,160 @@
-"""Tickets under .scratch/<feature>/issues/ against the status table in docs/agents/issue-tracker.md."""
+"""Check, list and recover issue tickets or resolve a worker's named plan."""
 
-import re
+import os
 from pathlib import Path
 
-from .git import top
-from .models import Check, Finding, Listed, Listing, Ticket, Tickets
+from pydantic import BaseModel
 
-TABLE = "docs/agents/issue-tracker.md"
-# A status row: | `name` | meaning | yes or no, whether the status satisfies a Blocking edge |
-ROW = re.compile(r"^\|\s*`([a-z-]+)`\s*\|[^|]*\|\s*(yes|no)\s*\|\s*$", re.MULTILINE)
-STATUS = re.compile(r"^(?:\*\*Status:\*\*|Status:)[ \t]*(.*)$", re.MULTILINE)
-BLOCKED = re.compile(r"^(?:\*\*Blocked by:\*\*|Blocked by:)[ \t]*(.*)$", re.MULTILINE)
-PR_LINK = re.compile(r"https://github\.com/\S+/pull/\d+")
-
-
-def status(ticket: Ticket) -> str:
-    return ticket.statuses[0].split(" ", 1)[0] if ticket.statuses else ""
-
-
-def blockers(ticket: Ticket) -> list[str]:
-    """Two-digit numbers on the Blocked by line, outside parenthesised notes."""
-    text = ticket.blocked_by[0] if ticket.blocked_by else "None"
-    return re.findall(r"\b\d{2}\b", re.sub(r"\([^)]*\)", "", text))
+from . import git, github, roadmap
+from .models import (
+    Check,
+    Finding,
+    GitHubIssue,
+    IssueState,
+    IssueTicket,
+    Listing,
+    PlanResolved,
+    Skipped,
+    Tickets,
+    Unavailable,
+)
 
 
-def load(root: Path, feature: str | None) -> tuple[dict[tuple[str, str], Ticket], list[Finding]]:
-    tickets: dict[tuple[str, str], Ticket] = {}
-    found = []
-    for path in sorted((root / ".scratch").glob(f"{feature or '*'}/issues/*.md")):
-        relative = str(path.relative_to(root))
-        if not re.match(r"\d{2}-", path.name):
-            found.append(finding(relative, "name must start with a two-digit ticket number"))
-            continue
+def code(lines: list[BaseModel], *, require_github: bool) -> int:
+    if any(isinstance(line, Finding) for line in lines):
+        return 1
+    if any(isinstance(line, Unavailable) or (require_github and isinstance(line, Skipped)) for line in lines):
+        return 2
+    return 0
+
+
+def select(tickets: list[IssueTicket], states: dict[int, IssueState] | None, listing: Listing) -> list[IssueTicket]:
+    closed = (
+        {number for number, state in states.items() if state == IssueState.closed}
+        if states is not None
+        else {ticket.number for ticket in tickets if ticket.checked}
+    )
+    return [
+        ticket.model_copy(update={"state": states[ticket.number] if states is not None else None})
+        for ticket in tickets
+        if ticket.number != ticket.spec
+        and not ticket.checked
+        and (listing == Listing.open or all(number in closed for number in ticket.blocked_by))
+    ]
+
+
+def rebuild_specs(path: Path, spec: int | None) -> list[int]:
+    if spec is not None:
+        return [spec]
+    try:
         text = path.read_text()
-        ticket = Ticket(
-            path=relative,
-            feature=path.parent.parent.name,
-            number=path.name[:2],
-            statuses=STATUS.findall(text),
-            blocked_by=BLOCKED.findall(text),
+    # Recovery cannot infer its scope from a missing, unreadable or undecodable roadmap.
+    except OSError, UnicodeError:
+        return []
+    return list(dict.fromkeys(number for number, _ in roadmap.sections(text)))
+
+
+def render_issue(issue: GitHubIssue, plan: str | None, blockers: list[int] | None = None) -> str:
+    line = f"- [{'x' if issue.state == IssueState.closed else ' '}] #{issue.number} {issue.title} ({issue.html_url})"
+    if plan is not None:
+        line += f" — PLAN_ID {plan}"
+    if blockers is not None:
+        line += f" — blocked by {github.numbers_text(blockers)}"
+    return line
+
+
+def rebuild(path: Path, shown: str, spec: int | None) -> tuple[list[BaseModel], str]:
+    specs = rebuild_specs(path, spec)
+    if not specs:
+        return [roadmap.problem(shown, "--rebuild without a readable spec section needs --spec N")], ""
+    repo = github.origin()
+    if repo is None:
+        return [roadmap.problem(shown, "--rebuild needs a GitHub origin")], ""
+    associations, found = roadmap.plans()
+    if found:
+        return list(found), ""
+    fetched = github.spec_issues(specs, repo)
+    if isinstance(fetched, Unavailable):
+        return [fetched], ""
+    parents, children = fetched
+    blockers = github.dependencies((child.number for entries in children.values() for child in entries), repo)
+    if isinstance(blockers, Unavailable):
+        return [blockers], ""
+    output = []
+    for number in specs:
+        parent = parents[number]
+        output.extend(
+            [
+                f"## spec #{number} {parent.title} ({parent.html_url})",
+                "",
+                render_issue(parent, associations.get(number)),
+            ]
         )
-        key = (ticket.feature, ticket.number)
-        if key in tickets:
-            found.append(finding(relative, f"number {ticket.number} is used twice in {ticket.feature}"))
-        tickets[key] = ticket
-    return tickets, found
-
-
-def finding(path: str, detail: str) -> Finding:
-    return Finding(path=path, check=Check.tickets, detail=detail)
-
-
-def problems(
-    ticket: Ticket, tickets: dict[tuple[str, str], Ticket], satisfying: set[str], known: set[str]
-) -> list[str]:
-    if len(ticket.statuses) != 1:
-        return [f"needs exactly one Status line, found {len(ticket.statuses)}"]
-    state, detail = status(ticket), ticket.statuses[0]
-    found = []
-    if state not in known:
-        found.append(f"status {state!r} is not in {TABLE}")
-    if state == "done" and not (PR_LINK.search(detail) or detail.startswith("done pre-workflow")):
-        found.append("done needs its PR link")
-    if len(ticket.blocked_by) > 1:
-        found.append("more than one Blocked by line")
-    if not blockers(ticket) and ticket.blocked_by and not ticket.blocked_by[0].startswith("None"):
-        found.append("Blocked by needs ticket numbers or None")
-    for number in blockers(ticket):
-        other = tickets.get((ticket.feature, number))
-        if other is None or number == ticket.number:
-            found.append(f"blocker {number} is not another ticket in {ticket.feature}")
-        elif state in satisfying | {"claimed"} and status(other) not in satisfying:
-            found.append(f"is {state} but blocker {number} is {status(other)}")
-        elif status(other) == "wontfix" and state != "wontfix":
-            found.append(f"blocker {number} is wontfix, so this ticket can never start")
-    return found
-
-
-def cycles(tickets: dict[tuple[str, str], Ticket]) -> list[Finding]:
-    found = []
-    settled: set[tuple[str, str]] = set()
-
-    def visit(key: tuple[str, str], trail: list[tuple[str, str]]) -> None:
-        if key in trail:
-            ring = " -> ".join(number for _, number in [*trail[trail.index(key) :], key])
-            found.append(finding(f".scratch/{key[0]}", f"Blocking edges form a cycle: {ring}"))
-            return
-        if key in settled or key not in tickets:
-            return
-        for number in blockers(tickets[key]):
-            visit((key[0], number), [*trail, key])
-        settled.add(key)
-
-    for key in sorted(tickets):
-        visit(key, [])
-    return found
-
-
-def listed(tickets: dict[tuple[str, str], Ticket], satisfying: set[str], options: Tickets) -> list[Listed]:
-    def ready(ticket: Ticket) -> bool:
-        return status(ticket) == "ready-for-agent" and all(
-            (ticket.feature, number) in tickets and status(tickets[(ticket.feature, number)]) in satisfying
-            for number in blockers(ticket)
+        output.extend(
+            render_issue(child, associations.get(child.number), [blocker.number for blocker in blockers[child.number]])
+            for child in children[number]
         )
-
-    def unfinished(ticket: Ticket) -> bool:
-        return status(ticket) not in satisfying | {"wontfix"}
-
-    wanted = ready if options.listing is Listing.frontier else unfinished
-    return [Listed(path=ticket.path) for _, ticket in sorted(tickets.items()) if wanted(ticket)]
+        output.append("")
+    return [], "\n".join(output) + "\n"
 
 
-def run(options: Tickets) -> tuple[list[Finding], list[Listed]]:
-    root = top()
-    rows = ROW.findall((root / TABLE).read_text())
-    if not rows:
-        return [finding(TABLE, "has no status table")], []
-    if options.feature and not (root / ".scratch" / options.feature).is_dir():
-        return [finding(f".scratch/{options.feature}", "no such feature")], []
-    known = {name for name, _ in rows}
-    satisfying = {name for name, unblocks in rows if unblocks == "yes"}
-    # --feature narrows the check too: another feature's broken ticket does not block this one's listing.
-    tickets, found = load(root, options.feature)
-    found += [finding(t.path, p) for t in tickets.values() for p in problems(t, tickets, satisfying, known)]
-    found += cycles(tickets)
-    if found or options.listing is None:
-        return found, []
-    return found, listed(tickets, satisfying, options)
+def plan_section(text: str, plan_id: str) -> int | None:
+    for spec, lines in roadmap.sections(text):
+        for _, line in lines:
+            match = roadmap.PLAN_ID.search(line)
+            if match is not None and match[1] == plan_id:
+                return spec
+    return None
+
+
+def resolved_plan(tickets: list[IssueTicket], plan_id: str, shown: str) -> list[BaseModel]:
+    target = next((ticket for ticket in tickets if ticket.plan_id == plan_id), None)
+    if target is None:
+        return [roadmap.problem(shown, f"PLAN_ID {plan_id} is on no roadmap line")]
+    folder = roadmap.planning() / plan_id
+    if not (folder / "task_plan.md").is_file():
+        return [roadmap.problem(shown, f"no plan at {folder}")]
+    return [PlanResolved(kind="plan", plan_id=plan_id, path=str(folder), issue=target.number, url=target.url)]
+
+
+def resolve(path: Path, shown: str) -> list[BaseModel]:
+    plan_id = os.environ.get("PLAN_ID")
+    if not plan_id:
+        return [roadmap.problem("task_plan.md", "PLAN_ID is not set")]
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return [roadmap.problem(shown, f"no roadmap at {path.absolute()}")]
+    spec = plan_section(text, plan_id)
+    if spec is None:
+        return [roadmap.problem(shown, f"PLAN_ID {plan_id} is on no roadmap line")]
+    tickets, _, found = roadmap.parse(text, shown, spec=spec)
+    found = roadmap.local_findings(tickets, found, shown)
+    if found:
+        return list(found)
+    return resolved_plan(tickets, plan_id, shown)
+
+
+def run(options: Tickets) -> tuple[list[BaseModel], str]:
+    path = Path(options.roadmap) if options.roadmap is not None else git.main_checkout() / "task_plan.md"
+    shown = options.roadmap if options.roadmap is not None else "task_plan.md"
+    if options.rebuild:
+        return rebuild(path, shown, options.spec)
+    if options.plan:
+        return resolve(path, shown), ""
+    tickets, specs, found = roadmap.read(path, spec=options.spec, display=shown)
+    if not specs:
+        return list(found), ""
+    lines: list[BaseModel] = list(roadmap.local_findings(tickets, found, shown))
+    repo = github.origin()
+    states = None
+    if repo is None:
+        lines.append(
+            Skipped(check=Check.tickets, reason="origin is not a GitHub repository: the GitHub scope was not checked")
+        )
+    else:
+        states, result = github.scope(tickets, specs, repo, path=shown)
+        lines.extend([result] if isinstance(result, Unavailable) else result)
+    if options.listing is not None and not code(lines, require_github=options.require_github):
+        lines.extend(select(tickets, states, options.listing))
+    return lines, ""

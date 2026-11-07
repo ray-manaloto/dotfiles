@@ -114,10 +114,33 @@ def test_a_fresh_approval_passes(repo: Path, capsys: pytest.CaptureFixture[str])
 def test_the_fingerprint_is_what_the_read_only_reviewer_can_compute(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    message = 'git stripspace < "$TEST_MESSAGE_FILE"'
-    script = f"{{ git rev-parse HEAD; git ls-files -s; echo; {message}; }} | git hash-object --stdin"
-    own = subprocess.run(script, shell=True, capture_output=True, check=True, text=True, cwd=repo)  # noqa: S602 -- the documented reviewer command is a pipeline
-    assert fingerprint(capsys) == own.stdout.strip()
+    assert fingerprint(capsys) == reviewer_fingerprint(repo)
+
+
+REVIEWER = (
+    '{ git rev-parse --verify -q HEAD || echo unborn; git ls-files -s; echo; git stripspace < "$TEST_MESSAGE_FILE"; }'
+    " | git hash-object --stdin"
+)
+
+
+def reviewer_fingerprint(root: Path) -> str:
+    """The fingerprint as the docstring's reviewer command computes it, run by a real shell."""
+    own = subprocess.run(REVIEWER, shell=True, capture_output=True, check=True, text=True, cwd=root)  # noqa: S602 -- the documented reviewer command is a pipeline
+    return own.stdout.strip()
+
+
+def test_before_the_first_commit_the_fingerprint_is_still_the_reviewers(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fresh = repo.parent / "fresh"
+    subprocess.run(["git", "init", "-q", fresh], check=True)
+    monkeypatch.chdir(fresh)
+    (fresh / "a.py").write_text("one\n")
+    subprocess.run(["git", "add", "."], check=True)
+    assert fingerprint(capsys) == reviewer_fingerprint(fresh)
+    main(["pane-pin", "--session", SESSION])
+    write_log(fresh, turn(fresh, "t1", f"Reviewed.\nPANE-APPROVE {fingerprint(capsys)}"))
+    main(["pane-approved", *text()])
 
 
 def test_the_fingerprint_covers_the_whole_index_from_a_subfolder(
@@ -336,6 +359,14 @@ def test_git_outside_a_repository_is_a_named_failure(
 ) -> None:
     monkeypatch.chdir(repo.parent)
     assert "git failed" in refusal(capsys)
+
+
+def test_a_pull_request_fingerprint_outside_a_repository_is_a_named_failure(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    options = pr()
+    monkeypatch.chdir(repo.parent)
+    assert pr_refusal_of(capsys, "pr-fingerprint", options).startswith("git failed: fatal: not a git repository")
 
 
 def test_an_unknown_command_names_the_choices(capsys: pytest.CaptureFixture[str]) -> None:
@@ -570,15 +601,25 @@ GH_STAND_IN = """import json, sys
 record, exists = sys.argv[1], sys.argv[2] == "1"
 args = sys.argv[3:]
 # gh pr create's flags as repotools passes them; anything else is gh's usage error.
-if args[:5] != ["pr", "create", "--base", "main", "--title"] or args[6:] != ["--body-file", "-"]:
+if args[:3] != ["pr", "create", "--base"] or args[4] != "--title" or args[6:] != ["--body-file", "-"]:
     sys.stderr.write("unknown flag\\nUsage:  gh pr create [flags]\\n")
     sys.exit(1)
-open(record, "w").write(json.dumps({"title": args[5], "body": sys.stdin.buffer.read().decode()}))
+body = sys.stdin.buffer.read().decode()
+open(record, "w").write(json.dumps({"base": args[3], "title": args[5], "body": body}))
 if exists:
     sys.stderr.write(EXISTS)
     sys.exit(1)
 sys.stdout.write(URL + "\\n")
 """
+
+
+def origin(root: Path, branch: str = "trunk") -> None:
+    """A real bare origin whose default branch is branch, pushed to and recorded as origin/HEAD by set-head."""
+    remote = root.parent / "origin.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", branch, remote], check=True)
+    subprocess.run(["git", "remote", "add", "origin", remote], check=True)
+    subprocess.run(["git", "push", "-q", "origin", f"HEAD:{branch}"], check=True)
+    subprocess.run(["git", "remote", "set-head", "origin", "--auto"], check=True, capture_output=True)
 
 
 def fake_gh(root: Path, monkeypatch: pytest.MonkeyPatch, *, exists: bool = False) -> Path:
@@ -604,12 +645,14 @@ def fake_gh(root: Path, monkeypatch: pytest.MonkeyPatch, *, exists: bool = False
 def test_pr_create_sends_the_approved_text_to_gh(
     repo: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """capfd, not capsys: gh's own stdout passes straight through to the caller's."""
+    """capfd, not capsys: gh's own stdout passes straight through to the caller's. The base is origin's default."""
     record = fake_gh(repo, monkeypatch)
+    origin(repo)
     write_log(repo, pr_approve(repo, capfd))
     capfd.readouterr()
     main(["pr-create", *pr()])
-    assert json.loads(record.read_text()) == {"title": "feat: one", "body": "## Summary\n\nOne change.\n"}
+    sent = {"base": "trunk", "title": "feat: one", "body": "## Summary\n\nOne change.\n"}
+    assert json.loads(record.read_text()) == sent
     assert capfd.readouterr().out == GH_URL + "\n"
 
 
@@ -626,8 +669,18 @@ def test_gh_refusing_the_pull_request_is_a_named_failure(
     repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_gh(repo, monkeypatch, exists=True)
+    origin(repo)
     write_log(repo, pr_approve(repo, capsys))
     assert pr_refusal_of(capsys, "pr-create", pr()) == f"gh failed: {GH_EXISTS}"
+
+
+def test_pr_create_without_a_known_default_branch_never_runs_gh(
+    repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    record = fake_gh(repo, monkeypatch)
+    write_log(repo, pr_approve(repo, capsys))
+    assert "git remote set-head origin --auto" in pr_refusal_of(capsys, "pr-create", pr())
+    assert not record.exists()
 
 
 HK_PKL = Path(__file__).resolve().parents[3] / "hk.pkl"
@@ -678,11 +731,12 @@ def test_a_crlf_body_is_hashed_and_sent_as_its_bytes(
     crlf.write_bytes(b"## Summary\r\n\r\nOne change.\r\n")
     main(["pr-fingerprint", *pr(body_file=str(crlf))])
     shown = json.loads(capsys.readouterr().out)["fingerprint"]
-    text = 'echo "pull request"; git rev-parse HEAD; echo "feat: one"; echo; cat ../crlf.md'
+    text = 'echo "pull request"; git rev-parse --verify -q HEAD || echo unborn; echo "feat: one"; echo; cat ../crlf.md'
     script = f"{{ {text}; }} | git hash-object --stdin"
     own = subprocess.run(script, shell=True, capture_output=True, check=True, cwd=repo)  # noqa: S602 -- the documented reviewer command is a pipeline
     assert shown == own.stdout.decode().strip()
     record = fake_gh(repo, monkeypatch)
+    origin(repo)
     write_log(repo, turn(repo, "t1", f"Reviewed.\nPANE-APPROVE {shown}"))
     main(["pane-pin", "--session", SESSION])
     main(["pr-create", *pr(body_file=str(crlf))])

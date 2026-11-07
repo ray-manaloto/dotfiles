@@ -28,6 +28,59 @@ class Command(StrEnum):
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
     toolchain_gate = "toolchain-gate"
+    tools_install = "tools-install"
+
+
+class ToolsInstall(BaseModel):
+    """
+    Install workflowtools and repotools as uv tools from the committed trees
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ToolAction(StrEnum):
+    installed = "installed"
+    unchanged = "unchanged"
+
+
+class Healthy(BaseModel):
+    """
+    A tool whose RECORD and console script passed the start probe.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    record_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+
+
+class ToolReceipt(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    name: str
+    tree: Annotated[str, Field(pattern="^[0-9a-f]{40,64}$")]
+    record_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+
+
+class ToolInstalled(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    tool: str
+    tree: str
+    action: ToolAction
+    bin: str
+    """
+    Absolute path of the console script
+    """
 
 
 class ZeroBash(BaseModel):
@@ -296,6 +349,7 @@ type Options = (
     | ShellApply
     | ShellRollback
     | ToolchainGate
+    | ToolsInstall
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -541,6 +595,11 @@ class Repotools(BaseModel):
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
     toolchain_gate: ToolchainGate | None = None
+    tools_install: ToolsInstall | None = None
+    tool_action: ToolAction | None = None
+    healthy: Healthy | None = None
+    tool_receipt: ToolReceipt | None = None
+    tool_installed: ToolInstalled | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

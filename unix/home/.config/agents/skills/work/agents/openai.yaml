@@ -1,0 +1,5 @@
+interface:
+  display_name: "Work"
+  short_description: "Set a repository up for the agent workflow on first use, then name the next ready ticket."
+policy:
+  allow_implicit_invocation: true

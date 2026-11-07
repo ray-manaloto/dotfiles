@@ -1,0 +1,13 @@
+// The work skill's approval step: copy this into hk.pkl's hooks block. Every commit, docs included, needs the
+// pinned reviewer pane's last answer to approve this HEAD, index and message. It is a commit-msg step because
+// pre-commit runs before the message exists. hk inserts the path as raw text, so single quotes, with each ' as
+// '\'', keep it one word.
+hooks {
+    ["commit-msg"] {
+        steps {
+            ["pane-approval"] {
+                check = #"repotools pane-approved --message '{{ commit_msg_file | replace(from="'", to="'\''") }}'"#
+            }
+        }
+    }
+}

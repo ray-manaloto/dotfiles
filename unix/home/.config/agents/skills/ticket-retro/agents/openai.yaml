@@ -1,0 +1,5 @@
+interface:
+  display_name: "Ticket retro"
+  short_description: "Retrospective on a finished ticket or spec, recorded in its plan."
+policy:
+  allow_implicit_invocation: true

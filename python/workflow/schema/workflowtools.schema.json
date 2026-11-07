@@ -35,9 +35,6 @@
     "skipped": {
       "$ref": "#/$defs/Skipped"
     },
-    "listed": {
-      "$ref": "#/$defs/Listed"
-    },
     "failure": {
       "$ref": "#/$defs/Failure"
     },
@@ -56,8 +53,20 @@
     "installed_plugins": {
       "$ref": "#/$defs/InstalledPlugins"
     },
-    "ticket": {
-      "$ref": "#/$defs/Ticket"
+    "issue_state": {
+      "$ref": "#/$defs/IssueState"
+    },
+    "github_issue": {
+      "$ref": "#/$defs/GitHubIssue"
+    },
+    "issue_ticket": {
+      "$ref": "#/$defs/IssueTicket"
+    },
+    "plan_resolved": {
+      "$ref": "#/$defs/PlanResolved"
+    },
+    "unavailable": {
+      "$ref": "#/$defs/Unavailable"
     }
   },
   "$defs": {
@@ -78,7 +87,7 @@
       "additionalProperties": false
     },
     "SkillTable": {
-      "description": "Check docs/workflow/skills.md against the mattpocock-skills plugin installed for this checkout.",
+      "description": "Check the workflow docs' skills.md against the user-scope mattpocock-skills plugin install.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -92,9 +101,33 @@
       ]
     },
     "Tickets": {
-      "description": "Check every ticket under .scratch against the status table in docs/agents/issue-tracker.md.",
+      "description": "Check the roadmap's ticket lines against GitHub; list, rebuild or resolve a plan.",
       "type": "object",
       "properties": {
+        "roadmap": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Roadmap file; default <main checkout>/task_plan.md"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "listing": {
           "anyOf": [
             {
@@ -107,18 +140,18 @@
           "default": null,
           "description": "After a clean check, print the tickets ready to start (frontier) or not yet finished (open)"
         },
-        "feature": {
-          "anyOf": [
-            {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Only this feature folder under .scratch"
+        "rebuild": {
+          "type": "boolean",
+          "default": false
+        },
+        "require_github": {
+          "type": "boolean",
+          "default": false,
+          "description": "Exit 2 unless the scope was checked against GitHub"
+        },
+        "plan": {
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false
@@ -197,20 +230,6 @@
       ],
       "additionalProperties": false
     },
-    "Listed": {
-      "description": "One ticket a listing selected, printed as a JSON line on stdout.",
-      "type": "object",
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "The ticket file, relative to the repository root"
-        }
-      },
-      "required": [
-        "path"
-      ],
-      "additionalProperties": false
-    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -282,6 +301,18 @@
       "description": "One install of a plugin in ~/.claude/plugins/installed_plugins.json.",
       "type": "object",
       "properties": {
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "user, project or local"
+        },
         "projectPath": {
           "anyOf": [
             {
@@ -336,43 +367,158 @@
       ],
       "additionalProperties": true
     },
-    "Ticket": {
-      "description": "One ticket file under .scratch/<feature>/issues/, as read.",
+    "IssueState": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed"
+      ]
+    },
+    "GitHubIssue": {
+      "description": "The issue fields read from GitHub; other API fields pass.",
       "type": "object",
       "properties": {
-        "path": {
-          "type": "string",
-          "description": "The file, relative to the repository root"
+        "number": {
+          "type": "integer"
         },
-        "feature": {
+        "title": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/IssueState"
+        },
+        "html_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "title",
+        "state",
+        "html_url"
+      ],
+      "additionalProperties": true
+    },
+    "IssueTicket": {
+      "description": "One ticket line in a roadmap spec section.",
+      "type": "object",
+      "properties": {
+        "kind": {
           "type": "string",
-          "description": "Its feature folder"
+          "const": "ticket"
         },
         "number": {
-          "type": "string",
-          "description": "Its two-digit number"
+          "type": "integer"
         },
-        "statuses": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Every Status line's value"
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "spec": {
+          "type": "integer"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "plan_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "blocked_by": {
           "type": "array",
           "items": {
-            "type": "string"
-          },
-          "description": "Every Blocked by line's value"
+            "type": "integer"
+          }
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IssueState"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "path",
-        "feature",
+        "kind",
         "number",
-        "statuses",
-        "blocked_by"
+        "title",
+        "url",
+        "spec",
+        "line",
+        "checked",
+        "plan_id",
+        "blocked_by",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "PlanResolved": {
+      "description": "An existing named plan resolved without writing or calling GitHub.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "plan"
+        },
+        "plan_id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "issue": {
+          "type": "integer"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "plan_id",
+        "path",
+        "issue",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "Unavailable": {
+      "description": "GitHub could not provide a verified answer.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "github-unavailable"
+        },
+        "check": {
+          "$ref": "#/$defs/Check"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "check",
+        "repo",
+        "detail"
       ],
       "additionalProperties": false
     }
