@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import zlib
@@ -242,14 +243,37 @@ def test_a_subfolder_reports_the_whole_repository(
     assert [finding["path"] for finding in report(capsys)] == ["a.sh"]
 
 
+def real_git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, check=True, text=True).stdout
+
+
 def test_this_repository_reports_no_zsh_startup_file(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     for name in [name for name in os.environ if name.startswith("GIT_")]:
         monkeypatch.delenv(name)
     monkeypatch.chdir(REPO)
-    paths = [finding["path"] for finding in report(capsys)]
-    assert not [path for path in paths if path.startswith(("unix/home/.z", "unix/home/.config/zsh/"))]
+    # The scan reads a copy of this checkout's index with one probe added, so the proof that it read
+    # the real repository depends on no leftover there. The probe's blob goes to a temporary object
+    # folder that borrows the real one as an alternate: the checkout's index and objects stay untouched.
+    copy, objects, probe = tmp_path / "index", tmp_path / "objects", tmp_path / "probe.sh"
+    shutil.copyfile(real_git("rev-parse", "--path-format=absolute", "--git-path", "index").strip(), copy)
+    real_objects = real_git("rev-parse", "--path-format=absolute", "--git-path", "objects").strip()
+    objects.mkdir()
+    monkeypatch.setenv("GIT_INDEX_FILE", str(copy))
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(objects))
+    monkeypatch.setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", real_objects)
+    startup = ("unix/home/.z", "unix/home/.config/zsh/")
+    assert [path for path in real_git("ls-files", "--full-name", ":/").splitlines() if path.startswith(startup)]
+    probe.write_text("#!/bin/sh\n")  # the shebang finding needs the scan's cat-file to read this blob
+    blob = real_git("hash-object", "-w", str(probe)).strip()
+    real_git("update-index", "--add", "--cacheinfo", f"100644,{blob},probe/run.sh")
+    found = report(capsys)
+    assert [finding for finding in found if finding["path"] == "probe/run.sh"] == [
+        {"path": "probe/run.sh", "rule": "shell-file", "detail": ".sh"},
+        {"path": "probe/run.sh", "rule": "shell-shebang", "detail": "#!/bin/sh"},
+    ]
+    assert not [finding for finding in found if finding["path"].startswith(startup)]
 
 
 def test_large_index_and_blob_output_finish_without_a_pipe_deadlock(repo: Path) -> None:
