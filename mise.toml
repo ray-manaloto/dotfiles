@@ -132,6 +132,9 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # ticket-retro (#453): the user-scope skill, one folder for both agents; the LICENSE sits beside it in the source.
 "~/.claude/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
 "~/.agents/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+# work (#455): sets a repository up on first use; user scope only, like ticket-retro.
+"~/.claude/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
+"~/.agents/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]

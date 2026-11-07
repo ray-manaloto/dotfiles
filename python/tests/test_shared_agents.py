@@ -23,6 +23,8 @@ ENTRIES = (
     "~/.config/agents/skills",
     "~/.claude/skills/ticket-retro",
     "~/.agents/skills/ticket-retro",
+    "~/.claude/skills/work",
+    "~/.agents/skills/work",
 )
 # Frozen from the live source ranges in #449's brief before writing the shared file.
 TABS_SHA256 = "01ac699d9ef173bcb243c4ca126fb3b4ea41e4f317907a18a354503a0b1cc5b9"
@@ -164,11 +166,12 @@ class SharedAgentsInstallTest(unittest.TestCase):
 
     def test_the_skills_folder_resolves(self) -> None:
         self.assertTrue((self.home / ".config/agents/skills/LICENSE").is_file())
-        for relative in (".claude/skills/ticket-retro", ".agents/skills/ticket-retro"):
-            with self.subTest(relative=relative):
-                path = self.home / relative
-                self.assertTrue(path.is_symlink())
-                self.assertEqual(path.resolve(), SKILLS / "ticket-retro")
+        for skill in ("ticket-retro", "work"):
+            for scope in (".claude", ".agents"):
+                with self.subTest(skill=skill, scope=scope):
+                    path = self.home / scope / "skills" / skill
+                    self.assertTrue(path.is_symlink())
+                    self.assertEqual(path.resolve(), SKILLS / skill)
 
     def test_each_skill_has_a_loadable_frontmatter(self) -> None:
         for skill in sorted(SKILLS.glob("*/SKILL.md")):
