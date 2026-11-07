@@ -112,10 +112,10 @@ class Env:
         self.root, self.repo = root, repo
         self.name = f"dmtest-{uuid.uuid4().hex[:12]}"
         self.registry, self.lock, self.store = root / "deps.json", root / "mise.lock", root / "store"
-        self.names = [self.name]
 
     def deps(self, deps: dict[str, dict[str, Any]]) -> None:
-        self.names += [name for name in deps if name not in self.names]
+        """Write the registry. Only the dependency under this test's own name may get mapped: teardown
+        deletes the cbm projects of that name alone, never a shared name such as broken-v1.0.0."""
         self.registry.write_text(json.dumps({"deps": deps}))
 
     def dep(self, **extra: object) -> dict[str, object]:
@@ -200,5 +200,5 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Env]:
     yield found
     # Runs when the test fails too. Every reply is collected before any is checked, so a status other
     # than deleted or not_found leaves none of the rest behind.
-    replies = [delete(f"{name}-v{version}") for name in found.names for version in VERSIONS]
+    replies = [delete(f"{found.name}-v{version}") for version in VERSIONS]
     assert all(reply in {"deleted", "not_found"} for reply in replies), replies
