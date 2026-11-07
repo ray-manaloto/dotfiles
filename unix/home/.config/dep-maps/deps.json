@@ -1,0 +1,15 @@
+{
+  "deps": {
+    "mise": {
+      "repo": "https://github.com/jdx/mise",
+      "tag": "v{version}",
+      "version": { "command": ["mise", "--version"] },
+      "files": ["settings.toml", "schema/*.json"]
+    },
+    "codebase-memory-mcp": {
+      "repo": "https://github.com/DeusData/codebase-memory-mcp",
+      "tag": "v{version}",
+      "version": { "lock": "github:DeusData/codebase-memory-mcp" }
+    }
+  }
+}

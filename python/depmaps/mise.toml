@@ -1,0 +1,67 @@
+# Dependency maps (DL-758, #510): the depmaps Python package does the work; one task per command.
+# No [tools]: git and codebase-memory-mcp come from the global config. From the repository root the
+# tasks are //depmaps:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+[tasks.list]
+description = "Each registry dependency, its pinned version, and whether that version has a map"
+run = "uv run --locked depmaps list"
+
+[tasks.map]
+description = "Map one dependency at its pinned version, or at --version"
+usage = '''
+arg "<dep>" help="A dependency name from the registry"
+flag "--version <version>" help="Map this version instead of the pinned one"
+'''
+run = "uv run --locked depmaps map ${usage_dep} ${usage_version:+--version $usage_version}"
+
+[tasks.sync]
+description = "Map every registry dependency whose pinned version has no map, then prune old maps"
+run = "uv run --locked depmaps sync"
+
+[tasks.diff]
+description = "The functions and listed files that changed between two mapped versions of a dependency"
+usage = '''
+arg "<dep>" help="A dependency name from the registry"
+arg "<old>" help="The older mapped version"
+arg "<new>" help="The newer mapped version"
+'''
+run = "uv run --locked depmaps diff ${usage_dep} ${usage_old} ${usage_new}"
+
+# Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
+[tasks.venv]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/depmaps/models.py from schema/depmaps.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["venv", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
+depends = ["venv"]
+run = "uv run --locked pytest"
+
+[tasks."test:focus"]
+# For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
+# coverage without failing on it. The command-line --cov-fail-under overrides the one in addopts.
+description = "Focused tests: coverage reported, not gated; extra args go to pytest"
+depends = ["venv"]
+run = "uv run --locked pytest --cov-fail-under=0"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

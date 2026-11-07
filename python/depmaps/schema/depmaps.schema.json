@@ -1,0 +1,550 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "depmaps",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of the depmaps package; mise run //depmaps:codegen writes src/depmaps/models.py from this file.",
+  "$defs": {
+    "Command": {
+      "description": "The depmaps subcommands, one per mise task.",
+      "type": "string",
+      "enum": [
+        "list",
+        "map",
+        "sync",
+        "diff"
+      ]
+    },
+    "ErrorCode": {
+      "description": "Stable failure names; the message explains the particular failure.",
+      "type": "string",
+      "enum": [
+        "invalid_usage",
+        "invalid_registry",
+        "unknown_dep",
+        "version_unavailable",
+        "git_failed",
+        "cbm_failed",
+        "no_map",
+        "invalid_manifest"
+      ]
+    },
+    "Config": {
+      "description": "Where depmaps reads and writes: each path from its DEP_MAPS_* environment variable, else its default.",
+      "type": "object",
+      "properties": {
+        "registry": {
+          "type": "string",
+          "format": "path",
+          "description": "The registry file, default ~/.config/dep-maps/deps.json"
+        },
+        "store": {
+          "type": "string",
+          "format": "path",
+          "description": "The map store, default ~/.local/share/dep-maps"
+        },
+        "lock": {
+          "type": "string",
+          "format": "path",
+          "description": "The global mise lockfile, default ~/.config/mise/mise.lock"
+        },
+        "cbm": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The cbm command, default mise's link to the globally pinned cbm"
+        }
+      },
+      "required": [
+        "registry",
+        "store",
+        "lock",
+        "cbm"
+      ],
+      "additionalProperties": false
+    },
+    "LockSource": {
+      "description": "The version of a mise tool, read from its entry in the global lockfile.",
+      "type": "object",
+      "properties": {
+        "lock": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool's name in mise.lock, such as github:DeusData/codebase-memory-mcp"
+        }
+      },
+      "required": [
+        "lock"
+      ],
+      "additionalProperties": false
+    },
+    "CommandSource": {
+      "description": "The version a tool's own version command prints: the first field of its output.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "The command and its arguments, such as [\"mise\", \"--version\"]"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "additionalProperties": false
+    },
+    "Dep": {
+      "description": "One dependency to map: where its source is, how a version names a tag, and where its pinned version comes from.",
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A git URL or path to clone"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "\\{version\\}",
+          "description": "The tag recipe, such as v{version}"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LockSource"
+            },
+            {
+              "$ref": "#/$defs/CommandSource"
+            }
+          ],
+          "description": "Where the pinned version comes from"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": [],
+          "description": "Non-code paths or globs that diff also compares, such as settings.toml"
+        }
+      },
+      "required": [
+        "repo",
+        "tag",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "Registry": {
+      "description": "The dependencies to map, by name. It never holds a version.",
+      "type": "object",
+      "properties": {
+        "deps": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Dep"
+          },
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "description": "Each dependency by name"
+        }
+      },
+      "required": [
+        "deps"
+      ],
+      "additionalProperties": false
+    },
+    "Manifest": {
+      "description": "What one map holds, written as manifest.json beside the map's source.",
+      "type": "object",
+      "properties": {
+        "dep": {
+          "type": "string",
+          "description": "The dependency name"
+        },
+        "version": {
+          "type": "string",
+          "description": "The mapped version"
+        },
+        "tag": {
+          "type": "string",
+          "description": "The tag the source is checked out at"
+        },
+        "commit": {
+          "type": "string",
+          "description": "The commit the tag points at"
+        },
+        "project": {
+          "type": "string",
+          "description": "The live cbm project name, <dep>-v<version>"
+        },
+        "cbm_version": {
+          "type": "string",
+          "description": "The version cbm prints"
+        },
+        "schema_version": {
+          "type": "integer",
+          "description": "The cbm artifact schema version"
+        },
+        "indexed_at": {
+          "type": "string",
+          "description": "When cbm indexed it, from artifact.json"
+        },
+        "nodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Graph node count"
+        },
+        "edges": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Graph edge count"
+        }
+      },
+      "required": [
+        "dep",
+        "version",
+        "tag",
+        "commit",
+        "project",
+        "cbm_version",
+        "schema_version",
+        "indexed_at",
+        "nodes",
+        "edges"
+      ],
+      "additionalProperties": false
+    },
+    "DepStatus": {
+      "description": "One registry dependency as list reports it, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "dep",
+          "default": "dep",
+          "description": "The event name"
+        },
+        "dep": {
+          "type": "string",
+          "description": "The dependency name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Its pinned version"
+        },
+        "mapped": {
+          "type": "boolean",
+          "description": "Whether the pinned version has a map"
+        }
+      },
+      "required": [
+        "dep",
+        "version",
+        "mapped"
+      ],
+      "additionalProperties": false
+    },
+    "Mapped": {
+      "description": "A map that was built, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "mapped",
+          "default": "mapped",
+          "description": "The event name"
+        },
+        "manifest": {
+          "$ref": "#/$defs/Manifest",
+          "description": "The new map's manifest"
+        }
+      },
+      "required": [
+        "manifest"
+      ],
+      "additionalProperties": false
+    },
+    "Pruned": {
+      "description": "A map that was removed, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "pruned",
+          "default": "pruned",
+          "description": "The event name"
+        },
+        "dep": {
+          "type": "string",
+          "description": "The dependency name"
+        },
+        "version": {
+          "type": "string",
+          "description": "The removed version"
+        }
+      },
+      "required": [
+        "dep",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "ChangeKind": {
+      "description": "How a function differs between two versions.",
+      "type": "string",
+      "enum": [
+        "added",
+        "removed",
+        "signature",
+        "body"
+      ]
+    },
+    "Change": {
+      "description": "A function or method that differs between two versions, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "change",
+          "default": "change",
+          "description": "The event name"
+        },
+        "kind": {
+          "$ref": "#/$defs/ChangeKind",
+          "description": "How it changed"
+        },
+        "label": {
+          "type": "string",
+          "description": "The cbm node label, Function or Method"
+        },
+        "file": {
+          "type": "string",
+          "description": "Its file, relative to the source root"
+        },
+        "name": {
+          "type": "string",
+          "description": "Its qualified name without the project prefix"
+        },
+        "before": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The old signature, for a signature change"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The new signature, for a signature change"
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "file",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "FileChange": {
+      "description": "A registry-listed non-code file that differs between two versions, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "file",
+          "default": "file",
+          "description": "The event name"
+        },
+        "status": {
+          "type": "string",
+          "description": "git diff's status letter: A, M, D, or R with a score"
+        },
+        "path": {
+          "type": "string",
+          "description": "The file in the new version (the old one for D)"
+        }
+      },
+      "required": [
+        "status",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "description": "A failure the command caught, on stderr; the command then exits 1, or 2 for usage.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "error",
+          "default": "error",
+          "description": "The event name"
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode",
+          "description": "The named failure"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What went wrong and what to do"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Done": {
+      "description": "The end of a command, on stdout.",
+      "type": "object",
+      "properties": {
+        "event": {
+          "const": "done",
+          "default": "done",
+          "description": "The event name"
+        },
+        "command": {
+          "$ref": "#/$defs/Command",
+          "description": "The command that ran"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the command did"
+        }
+      },
+      "required": [
+        "command",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Request": {
+      "description": "One parsed command line.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "$ref": "#/$defs/Command",
+          "description": "The subcommand"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Its positional arguments: the dep, then old and new for diff"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "map's --version, else null",
+          "default": null
+        }
+      },
+      "required": [
+        "command",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "NodeKey": {
+      "description": "A function or method, the same in every version: its file, its name without the project prefix, its label.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "cbm's file_path"
+        },
+        "name": {
+          "type": "string",
+          "description": "The qualified name without the <project>. prefix"
+        },
+        "label": {
+          "type": "string",
+          "description": "Function or Method"
+        }
+      },
+      "required": [
+        "file",
+        "name",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "NodeShape": {
+      "description": "What diff compares of one function or method: its signature, return type, body fingerprint and lines.",
+      "type": "object",
+      "properties": {
+        "signature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "cbm's signature property"
+        },
+        "return_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "cbm's return_type property"
+        },
+        "fp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "cbm's body fingerprint; small functions have none"
+        },
+        "start": {
+          "type": "integer",
+          "description": "First line"
+        },
+        "end": {
+          "type": "integer",
+          "description": "Last line"
+        }
+      },
+      "required": [
+        "signature",
+        "return_type",
+        "fp",
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
