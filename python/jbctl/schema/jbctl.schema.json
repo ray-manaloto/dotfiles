@@ -31,7 +31,11 @@
         "router-direct",
         "check-direct",
         "rea-patch",
-        "coverage-gate"
+        "coverage-gate",
+        "status",
+        "start",
+        "stop",
+        "restart"
       ]
     },
     "Map": {
@@ -221,6 +225,18 @@
         },
         {
           "$ref": "#/$defs/CoverageGate"
+        },
+        {
+          "$ref": "#/$defs/Status"
+        },
+        {
+          "$ref": "#/$defs/Start"
+        },
+        {
+          "$ref": "#/$defs/Stop"
+        },
+        {
+          "$ref": "#/$defs/Restart"
         }
       ]
     },
@@ -328,6 +344,27 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Coverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ides": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/IdeStatus"
+          },
+          "default": null
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Lifecycle"
             },
             {
               "type": "null"
@@ -501,6 +538,18 @@
       "description": "One Toolbox install, as toolbox.install reads it.",
       "type": "object",
       "properties": {
+        "script": {
+          "type": "string",
+          "description": "The Toolbox shell-script name (--ide)"
+        },
+        "tool_id": {
+          "type": "string",
+          "description": "state.json toolId, e.g. CLion, PyCharm-P"
+        },
+        "launch": {
+          "type": "string",
+          "description": "state.json launchCommand: the app's executable, as Toolbox's background mode runs it"
+        },
         "app": {
           "type": "string",
           "description": "The .app bundle (state.json installLocation)"
@@ -524,11 +573,389 @@
         }
       },
       "required": [
+        "script",
+        "tool_id",
+        "launch",
         "app",
         "product_code",
         "build",
         "config",
         "properties"
+      ],
+      "additionalProperties": false
+    },
+    "Status": {
+      "description": "Every running Toolbox IDE, or the ones picked: pid, state and MCP; no IDE is touched.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IdeName"
+          },
+          "default": [],
+          "description": "Toolbox script names; repeat --ide for several"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product"
+        },
+        "all": {
+          "type": "boolean",
+          "default": false,
+          "description": "Every Toolbox IDE (status), or every one the command applies to"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Start": {
+      "description": "Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IdeName"
+          },
+          "default": [],
+          "description": "Toolbox script names; repeat --ide for several"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product"
+        },
+        "all": {
+          "type": "boolean",
+          "default": false,
+          "description": "Every Toolbox IDE (status), or every one the command applies to"
+        },
+        "yes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Act on the --all plan; without it, --all only prints the plan"
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "default": 120,
+          "description": "Seconds to wait for each IDE"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A project folder for the IDE to open"
+        },
+        "foreground": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow bringing the IDE forward, as start and restart do (or JETBRAINS_FOREGROUND=1); only with the owner's go"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Stop": {
+      "description": "Ask running IDEs to quit, as Toolbox's Quit does, and wait until each has ended; nothing is killed.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IdeName"
+          },
+          "default": [],
+          "description": "Toolbox script names; repeat --ide for several"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product"
+        },
+        "all": {
+          "type": "boolean",
+          "default": false,
+          "description": "Every Toolbox IDE (status), or every one the command applies to"
+        },
+        "yes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Act on the --all plan; without it, --all only prints the plan"
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "default": 120,
+          "description": "Seconds to wait for each IDE"
+        },
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "After --timeout, send a forced quit (only when no dialog is open)"
+        },
+        "check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run every guard and report would-stop or would-restart (or the refusal), sending the IDE nothing"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Restart": {
+      "description": "Have running IDEs restart themselves and wait until each new one is ready (a foreground action).",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IdeName"
+          },
+          "default": [],
+          "description": "Toolbox script names; repeat --ide for several"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product"
+        },
+        "all": {
+          "type": "boolean",
+          "default": false,
+          "description": "Every Toolbox IDE (status), or every one the command applies to"
+        },
+        "yes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Act on the --all plan; without it, --all only prints the plan"
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "default": 120,
+          "description": "Seconds to wait for each IDE"
+        },
+        "foreground": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow bringing the IDE forward, as start and restart do (or JETBRAINS_FOREGROUND=1); only with the owner's go"
+        },
+        "check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run every guard and report would-stop or would-restart (or the refusal), sending the IDE nothing"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IdeState": {
+      "description": "Where a Toolbox IDE is in its life.",
+      "type": "string",
+      "enum": [
+        "stopped",
+        "starting",
+        "running",
+        "ready"
+      ]
+    },
+    "McpState": {
+      "description": "What the IDE's MCP port did when asked; not-answering does not mean the server is switched off.",
+      "type": "string",
+      "enum": [
+        "answering",
+        "not-answering",
+        "unknown"
+      ]
+    },
+    "IdeStatus": {
+      "description": "One Toolbox IDE, as status reports it.",
+      "type": "object",
+      "properties": {
+        "script": {
+          "type": "string"
+        },
+        "tool_id": {
+          "type": "string"
+        },
+        "pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "state": {
+          "$ref": "#/$defs/IdeState"
+        },
+        "mcp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mcp_port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Why the MCP state is unknown, or why the IDE is not managed"
+        }
+      },
+      "required": [
+        "script",
+        "tool_id",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "Action": {
+      "description": "What a lifecycle command did, or would do, to one IDE.",
+      "type": "string",
+      "enum": [
+        "started",
+        "stopped",
+        "restarted",
+        "refused",
+        "skipped",
+        "would-start",
+        "would-stop",
+        "would-restart"
+      ]
+    },
+    "Lifecycle": {
+      "description": "One IDE's outcome from start, stop or restart.",
+      "type": "object",
+      "properties": {
+        "script": {
+          "type": "string"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "previous_pid": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "script",
+        "action"
+      ],
+      "additionalProperties": false
+    },
+    "Lifetime": {
+      "description": "One run of an IDE process: a pid is unique only while it runs, so its start time pins this run.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer"
+        },
+        "created": {
+          "type": "number",
+          "description": "The process's start time (psutil create_time)"
+        },
+        "socket": {
+          "type": "string",
+          "description": "The station socket it owns"
+        }
+      },
+      "required": [
+        "pid",
+        "created",
+        "socket"
+      ],
+      "additionalProperties": false
+    },
+    "Answer": {
+      "description": "What the IDE's built-in web server said to /api/about: ready, asked too often (HTTP 429), or why not.",
+      "type": "object",
+      "properties": {
+        "ready": {
+          "type": "boolean"
+        },
+        "busy": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ready",
+        "busy",
+        "detail"
       ],
       "additionalProperties": false
     }

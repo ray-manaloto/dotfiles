@@ -30,3 +30,39 @@ Opening Settings in the background through the IDE's station socket, which leave
 How `--ide` names one install: the shell-script name Toolbox gives it (`clion`, `clion1`, `pycharm`). It
 names an install, not a product: several installs of one product get numbered names.
 _Avoid_: product name, app name.
+
+**Toolbox IDE**:
+A Toolbox install of an IntelliJ-platform IDE: one whose app carries `product-info.json` and the station
+plugin (CLion, PyCharm, IntelliJ IDEA, GoLand, RustRover, ...). Other Toolbox tools (Fleet, dotTrace, Junie
+CLI, ...) are not Toolbox IDEs.
+_Avoid_: tool, product.
+
+**Running IDE**:
+A Toolbox IDE whose process is up: a process with a live station socket whose executable is inside that
+install's `.app`. An IDE that Toolbox did not install is not a running IDE in this sense.
+_Avoid_: instance, open IDE.
+
+**Ready**:
+A running IDE whose built-in web server answers `/api/about`, with or without an open project. Its MCP
+server is not part of it: an IDE can have MCP switched off.
+_Avoid_: started, up, loaded.
+
+**Tool ID**:
+How Toolbox names a product (`CLion`, `PyCharm-P`, `IDEA-U`, `Goland`), shared by every install of it. It
+picks a product where a Toolbox script name picks one install.
+_Avoid_: product code (`CL`, `PY`), display name (`IntelliJ IDEA`).
+
+**Quit request**:
+Asking a running IDE to quit the way Toolbox's Quit does: the IDE saves, closes its projects and may first
+ask its user a question, which can keep it running. Nothing is killed.
+_Avoid_: kill, terminate.
+
+**Forced quit**:
+A quit request that dismisses the IDE's open dialogs and skips the checks that could keep it running, but
+still lets the IDE shut itself down. Not Toolbox's Force Quit, which kills the process.
+_Avoid_: force kill, Force Quit.
+
+**Config directory**:
+Where an install keeps its settings (`idea.config.path`). Several installs of one product can share one,
+as the three CLion installs here do, and then a setting one of them saves applies to all of them.
+_Avoid_: profile, settings folder.

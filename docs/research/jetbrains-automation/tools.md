@@ -18,7 +18,7 @@ tags: [tools, swift, python, jbctl, jbax, rea, agent-desktop]
 | tool | does | background? |
 |---|---|---|
 | `swift/` **jbax** | Swift CLI for background AX on JBR/Swing: `windows` (kind frame/settings/popup/other, minimized, modal; no titles), `focus-owner`, `combo`, `select` (guarded AXSelected commit, row 0 only), `press`, `popup list/select`. JSON out; exit codes 0 ok, 1 not found, 2 guard refused, 3 verify failed, 4 not reachable in background, 5 AX error | yes |
-| `python/jbctl` | recipe runner and CLI: `--ide` resolution through Toolbox, Settings open (station socket)/goto/press, router-direct, the DIRECT check (MCP tools/list), rea maps and the rea helper patch | yes (the menu-bar opener needs `JETBRAINS_FOREGROUND=1`) |
+| `python/jbctl` | recipe runner and CLI: `--ide` resolution through Toolbox, Settings open (station socket)/goto/press, router-direct, the DIRECT check (MCP tools/list), rea maps and the rea helper patch, and `status`/`start`/`stop`/`restart` of Toolbox IDEs (ADR 0002) | yes (the menu-bar opener needs `JETBRAINS_FOREGROUND=1`; `start` and `restart` bring the IDE forward) |
 
 ## Which IDE: `--ide`, resolved through Toolbox
 

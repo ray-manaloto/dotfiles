@@ -2,12 +2,16 @@
 
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import psutil
 import pytest
 
 from jbctl.cli import main
@@ -45,16 +49,35 @@ def no_tool_list() -> Iterator[str]:
     yield from mcp_server(None, sse=False)
 
 
-def install(root: Path, channel: str, app: Path, script: str | None, product: str | None = "FK") -> None:
+def install(  # noqa: PLR0913 - one parameter per field a test varies
+    root: Path, channel: str, app: Path, script: str | None, product: str | None = "FK", *, tool_id: str = "Fake"
+) -> None:
     """One install, in the shape Toolbox 3.9.1 writes (only the fields jbctl reads): state.json and its channel."""
     state = root / "state.json"
     tools = json.loads(state.read_text())["tools"] if state.exists() else []
-    tool = {"channelId": channel, "installLocation": str(app), "productCode": product, "buildNumber": "263.1.2"}
+    tool = {
+        "channelId": channel,
+        "toolId": tool_id,
+        "installLocation": str(app),
+        "launchCommand": str(app / "Contents/MacOS/fake"),
+        "productCode": product,
+        "buildNumber": "263.1.2",
+    }
     state.write_text(json.dumps({"tools": [*tools, tool]}))
     config = {"idea.config.path": str(app.parent / f"{channel}-config")}
     extensions = [{"type": "intellij", "defaultConfigDirectories": config}]
     extensions += [{"type": "shell", "name": script}] if script else []
     (root / "channels" / f"{channel}.json").write_text(json.dumps({"tool": {"extensions": extensions}}))
+
+
+def launcher(app: Path, standin: Path = STANDIN) -> Path:
+    """The app's executable, as Toolbox's launchCommand names it: it starts the stand-in IDE under its own name, so
+    the process's argv[0] is inside the app as a real IDE's is. The paths are shell-quoted, whatever they hold."""
+    path = app / "Contents/MacOS/fake"
+    command = f"{shlex.quote(sys.executable)} -I {shlex.quote(str(standin))}"
+    path.write_text(f'#!/bin/sh\nSTANDIN_LAUNCH="$0" exec -a "$0" {command} "$@"\n')
+    path.chmod(0o755)
+    return path
 
 
 def product_info(app: Path, *jvm: str) -> None:
@@ -85,29 +108,37 @@ Start = Callable[..., Ide]
 
 
 @pytest.fixture
-def toolbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def toolbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     """A stand-in Toolbox: the install `fake` (fake.app), a second one of the product (fake1), an install with
     no shell script, and a non-IDE tool. Each app's own .vmoptions sets no MCP port."""
     root = tmp_path / "toolbox"
     (root / "channels").mkdir(parents=True)
     for name, script in (("fake", "fake"), ("fake-2", "fake1"), ("bare", None)):
         app = tmp_path / f"{name}.app"
-        for folder in ("Resources", "MacOS", "bin"):
+        for folder in ("Resources", "MacOS", "bin", "plugins/station-plugin"):
             (app / "Contents" / folder).mkdir(parents=True)
         (app / "Contents/bin/fake.vmoptions").write_text("-Xmx2048m\n-Dsun.io.useCanonCaches\n-Dfake.app=1\n")
         product_info(app, "-Didea.platform.prefix=Fake")
+        launcher(app)
         install(root, name, app, script)
     install(root, "profiler", tmp_path / "Profiler.app", "prof", product=None)
     # A channel file Toolbox left behind for a tool it no longer lists: state.json decides.
     (root / "channels" / "gone.json").write_text('{"tool": {"extensions": [{"type": "shell", "name": "gone"}]}}')
     monkeypatch.setenv("JBCTL_TOOLBOX", str(root))
-    station = tmp_path / "station"
-    station.mkdir()
+    # A Unix socket's path is at most 104 bytes on macOS, more than a pytest folder leaves room for.
+    station = Path(tempfile.mkdtemp(prefix="jbs", dir="/tmp"))
     # A socket left behind by an IDE that has ended (this pid runs python, not an app), and an unrelated file.
     (station / f"jb.station.ij.{os.getpid()}.sock").touch()
     (station / "jb.station.other").touch()
     monkeypatch.setenv("JBCTL_STATION_DIR", str(station))
-    return tmp_path
+    # jbctl's lifecycle locks and Settings records, kept out of the user's own state folder.
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    yield tmp_path
+    shutil.rmtree(station)
+    # Stand-in IDEs that jbctl started or restarted run in their own session until /exit; end any left over.
+    for process in psutil.process_iter(["cmdline"]):
+        if (process.info["cmdline"] or [""])[0].startswith(str(tmp_path)):
+            process.terminate()
 
 
 @pytest.fixture
@@ -115,20 +146,18 @@ def start(toolbox: Path) -> Iterator[Start]:
     """Starts a stand-in IDE from fake.app's Contents/MacOS, with its station socket and the listeners asked for."""
     started: list[subprocess.Popen[str]] = []
 
-    def launch(*listeners: str) -> Ide:
-        # Resolved, as a real install's path is: the process's path is compared with the app's.
-        executable = (toolbox / "fake.app/Contents/MacOS").resolve() / "fake"
-        executable.unlink(missing_ok=True)
-        executable.symlink_to(sys.executable)
+    def launch(*flags: str) -> Ide:
+        """flags: the stand-in's (--mcp, --http, --stubborn, ...); it ends when the test ends, or on /exit."""
         process = subprocess.Popen(
-            [executable, "-I", STANDIN, *listeners], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+            [toolbox / "fake.app/Contents/MacOS/fake", "--stdin", *flags],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
         )
         started.append(process)
         assert process.stdout
-        ports = json.loads(process.stdout.readline())
-        (toolbox / "station" / f"jb.station.ij.{process.pid}.sock").touch()
-        return Ide(process, ports)
+        return Ide(process, json.loads(process.stdout.readline()))
 
     yield launch
     for process in started:
-        process.communicate("")  # closing stdin ends it
+        process.communicate("")  # closing stdin ends it, if /exit has not
