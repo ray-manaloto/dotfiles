@@ -276,9 +276,9 @@ def restart(target: Install, everything: list[Install], timeout: float, *, check
         life = one(target)
         if reason := dialogs(life.pid) or occupant(target, everything, life):
             raise IdeError(reason)
-        # One /api/about request: a restart of an IDE that is still starting (perhaps from the last restart) waits.
+        # One /api/about request: a restart of an IDE that is not ready yet (perhaps from the last restart) waits.
         if not about(target, life).ready:
-            msg = f"pid {life.pid} is still starting; wait (jbctl status) or stop it"
+            msg = f"pid {life.pid} is not ready yet; wait (jbctl status) or stop it"
             raise IdeError(msg)
         if check:
             return Lifecycle(script=target.script, action=Action.would_restart, pid=life.pid)
