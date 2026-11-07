@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from repotools.cli import main
+from tests import clean_git_env
 
 DEPLOYED = (".zshenv", ".zprofile", ".zshrc", ".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh", ".config/zsh/path.zsh")
 PATHS = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d .config/zsh"
@@ -29,12 +30,8 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (tmp_path / "home/.zshrc").write_text("# live .zshrc\n")
     (tmp_path / "home/.zshrc.d/70-mine.zsh").write_text("# live drop-in\n")
     (tmp_path / "home/.zshrc.d/60-agent-tools.zsh").symlink_to("/nowhere/60-agent-tools.zsh")
-    # A pre-commit hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
+    clean_git_env(monkeypatch)
     for name, value in {
-        "GIT_CONFIG_GLOBAL": os.devnull,
-        "GIT_CONFIG_NOSYSTEM": "1",
         "HOME": tmp_path / "home",
         "XDG_CONFIG_HOME": tmp_path / "config",
         "XDG_DATA_HOME": tmp_path / "data",

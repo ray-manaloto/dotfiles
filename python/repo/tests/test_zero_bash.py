@@ -1,7 +1,6 @@
 """repotools zero-bash through its command line, in real git repositories."""
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -11,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from repotools.cli import main
-from tests import run_python
+from tests import clean_git_env, run_python
 
 REPO = Path(__file__).resolve().parents[3]
 LONG_RUN = "[tasks.a]\nrun = '''\necho one\necho two\n'''\n"
@@ -19,9 +18,7 @@ LONG_RUN = "[tasks.a]\nrun = '''\necho one\necho two\n'''\n"
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    # A pre-commit hook exports these, and they would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
+    clean_git_env(monkeypatch, config=False)
     subprocess.run(["git", "init", "-q", tmp_path], check=True)
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -250,8 +247,7 @@ def real_git(*args: str) -> str:
 def test_this_repository_reports_no_zsh_startup_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
+    clean_git_env(monkeypatch, config=False)
     monkeypatch.chdir(REPO)
     # The scan reads a copy of this checkout's index with one probe added, so the proof that it read
     # the real repository depends on no leftover there. The probe's blob goes to a temporary object

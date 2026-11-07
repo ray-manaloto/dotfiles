@@ -11,6 +11,8 @@ import pytest
 
 from repotools import main_guard
 from repotools.cli import main
+from repotools.main_guard import REPAIR
+from tests import clean_git_env
 
 SCRIPT = str(Path(sys.executable).parent / "repotools")  # what uv installed from [project.scripts]
 CHECKOUT = Path(__file__).parents[3]  # The repository root, where //repo: tasks resolve.
@@ -40,11 +42,7 @@ def tip(ref: str = "refs/heads/main") -> str:
 @pytest.fixture
 def origin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """The upstream: a repository whose main has one commit."""
-    # A hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clean_git_env(monkeypatch)
     root = tmp_path / "origin"
     ok("init", "-q", "-b", "main", str(root))
     ok("commit", "-q", "--allow-empty", "-m", "one", cwd=root)
@@ -171,7 +169,7 @@ def test_the_shell_gate_starts_nothing_for_other_refs_and_fails_closed_for_main(
     ok("commit", "-q", "--allow-empty", "-m", "fast path")
     before = tip()
     error = refused("branch", "-f", "main", "feature")
-    assert "did not start; repair it with mise run //repo:main-guard-install" in error
+    assert f"did not start; repair it with {REPAIR}" in error
     assert tip() == before
 
 
@@ -191,7 +189,7 @@ def test_a_copy_whose_python_was_pruned_names_the_repair(clone: Path) -> None:
     python.symlink_to(clone.parent / "pruned" / "python3")
     ok("commit", "-q", "--allow-empty", "-m", "a feature commit never starts it")
     error = refused("branch", "-f", "main", "feature")
-    assert f"main guard: {copy} did not start; repair it with mise run //repo:main-guard-install" in error
+    assert f"main guard: {copy} did not start; repair it with {REPAIR}" in error
 
 
 @pytest.mark.usefixtures("clone")
