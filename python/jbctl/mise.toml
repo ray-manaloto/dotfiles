@@ -49,7 +49,9 @@ flag "--foreground" help="Also run the debug route that brings the IDE forward (
 run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=97.68'
 
 # start, restart and stop of a real spare IDE: it comes forward and is quit, so the owner runs this, never a hook
-# or the coverage gate. The IDE opens a throwaway worktree of ~/dev/github/jdx/mise (JBCTL_LIFECYCLE_REPO).
+# or the coverage gate. The IDE opens a throwaway worktree of ~/dev/github/jdx/mise (JBCTL_LIFECYCLE_REPO) under
+# ~/.local/state/jbctl/lifecycle-projects (JBCTL_LIFECYCLE_PROJECTS), which the owner adds once to that IDE's
+# Trusted Locations, or the IDE stops at its trust prompt.
 [tasks.lifecycle]
 skip_if = "{{ os() != 'macos' }}"
 description = "Start, restart and stop a spare IDE for real (opt-in: it brings the IDE forward and quits it)"

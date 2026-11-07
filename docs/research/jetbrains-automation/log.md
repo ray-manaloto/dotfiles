@@ -165,3 +165,19 @@
   that exits while it is read. A scan of every process's command line therefore failed whenever another process
   exited. jbctl reads processes through one helper that treats NoSuchProcess and that SystemError as "not
   running".
+* **Measured** (`mise run //jbctl:lifecycle rustrover`, with the owner's go, 2026-11-07 03:06): a real start,
+  restart and stop of RustRover on a throwaway worktree of the local mise checkout. `lsappinfo front` was logged.
+  * **start** (direct `launchCommand` launch with the project folder): ready in seconds. RustRover took the front
+    3 s after the launch, so start is a foreground action, as the spikes measured.
+  * **RustRover asked whether to trust the new folder** ("Trust and Open Project?", a dialog). **The project-open
+    check passed wrongly:** it matched the project's name in the dialog's title. It now counts only a
+    frame-sized project window.
+  * **restart and stop refused** with "1 dialog or unreadable windows are open" and sent nothing. That is the
+    guard working on a real dialog. The test then raised `KeyError: previous_pid` instead of reporting the
+    refusal (fixed: it checks the action first). The worktree was kept, because the IDE still ran.
+  * After the owner trusted the folder, the steps were finished through the CLI. `restart --foreground` gave a new
+    pid, and the project frame reopened with the worktree's name (compared privately). `stop --check` gave
+    would-stop, and `stop` quit RustRover with nothing killed. Then the worktree was removed. RustRover held the
+    front for 13 s across the restart, then the owner's app had it again.
+  * **For the next runs**, the test creates its worktree under `~/.local/state/jbctl/lifecycle-projects/`, which
+    the owner adds once to RustRover's Trusted Locations. jbctl never changes the IDE's settings.
