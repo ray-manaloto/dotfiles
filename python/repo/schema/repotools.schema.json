@@ -26,7 +26,8 @@
         "shell-apply",
         "shell-rollback",
         "scratch-env",
-        "toolchain-gate"
+        "toolchain-gate",
+        "te-review"
       ]
     },
     "ZeroBash": {
@@ -186,7 +187,11 @@
         { "$ref": "#/$defs/MainGuardArmed" },
         { "$ref": "#/$defs/ShellApply" },
         { "$ref": "#/$defs/ShellRollback" },
-        { "$ref": "#/$defs/ToolchainGate" }
+        { "$ref": "#/$defs/ToolchainGate" },
+        { "$ref": "#/$defs/TeReviewCollect" },
+        { "$ref": "#/$defs/TeReviewReport" },
+        { "$ref": "#/$defs/TeReviewReceiptsDraft" },
+        { "$ref": "#/$defs/TeReviewCarry" }
       ]
     },
     "Fingerprint": {
@@ -287,6 +292,1351 @@
       },
       "required": ["turn_id"]
     },
+    "TeReviewCommand": {
+      "description": "The te-review subcommands, the word after te-review.",
+      "type": "string",
+      "enum": ["collect", "report", "receipts", "carry"]
+    },
+    "TeReviewCollect": {
+      "description": "Freeze the TokenEconomizer Claude ledger rows of a window into a new, create-only evidence collection.",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First calendar day of the window, inclusive" },
+        "until": { "type": "string", "format": "date", "description": "Last calendar day of the window, inclusive" },
+        "tz": { "type": "string", "description": "IANA time zone the calendar days are read in, such as America/Chicago" },
+        "out": { "type": "string", "description": "The collection directory, which must not exist" },
+        "te_root": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+        },
+        "receipts": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "A receipt manifest (ReceiptManifest); its files are checked, copied and hashed into the collection"
+        },
+        "cadence_receipt": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "A CadenceReceipt proving the proposer cadence; without one every session's cadence is unknown"
+        },
+        "synthetic_manifest": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "A receipt manifest of synthetic receipts only, naming the synthetic sessions"
+        }
+      },
+      "required": ["since", "until", "tz", "out"],
+      "additionalProperties": false
+    },
+    "TeReviewReceiptsCommand": {
+      "description": "The te-review receipts subcommands, the word after receipts.",
+      "type": "string",
+      "enum": ["draft"]
+    },
+    "TeReviewReceiptsDraft": {
+      "description": "Draft, create-only, the receipt manifest collect --receipts reads; transcripts and TE state stay unchanged.",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First calendar day of the window, inclusive" },
+        "until": { "type": "string", "format": "date", "description": "Last calendar day of the window, inclusive" },
+        "tz": { "type": "string", "description": "IANA time zone the calendar days are read in, such as America/Chicago" },
+        "out": { "type": "string", "description": "The manifest to write, an absolute path that must not exist" },
+        "te_root": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "TokenEconomizer state root (default $TOKENECONOMIZER_HOME, else ~/.tokeneconomizer)"
+        },
+        "transcripts": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Claude Code's transcript folder (default ~/.claude/projects), searched at any depth for <session id>.jsonl"
+        },
+        "synthetic_manifest": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "The synthetic manifest collect will be given; its sessions get no real_work receipt"
+        }
+      },
+      "required": ["since", "until", "tz", "out"],
+      "additionalProperties": false
+    },
+    "TranscriptAttachment": {
+      "description": "A Claude Code transcript attachment; only a hook's output is read.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "hook_additional_context, hook_system_message, or another kind" },
+        "content": { "description": "A list of strings for additional context, a string for a system message" },
+        "toolUseID": { "type": ["string", "null"], "default": null, "description": "The tool call the hook ran on; SessionStart at session start" },
+        "hookEvent": { "type": ["string", "null"], "default": null, "description": "The hook event, such as PostToolUse" },
+        "stdout": { "type": ["string", "null"], "default": null, "description": "A hook_success: what the hook printed" }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "HookOutput": {
+      "description": "A hook's printed JSON output; only the notice and the context the host shows are read.",
+      "type": "object",
+      "properties": {
+        "systemMessage": { "type": ["string", "null"], "default": null, "description": "The notice the host shows the user" },
+        "hookSpecificOutput": {
+          "anyOf": [{ "$ref": "#/$defs/HookSpecificOutput" }, { "type": "null" }],
+          "default": null,
+          "description": "The event's own output"
+        }
+      },
+      "additionalProperties": true
+    },
+    "HookSpecificOutput": {
+      "description": "A hook's event-specific output; only the additional context is read.",
+      "type": "object",
+      "properties": {
+        "additionalContext": { "type": ["string", "null"], "default": null, "description": "The context the host adds for the agent" }
+      },
+      "additionalProperties": true
+    },
+    "TranscriptRecord": {
+      "description": "One line of a Claude Code transcript, <session id>.jsonl; only attachments are read.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "The record type" },
+        "timestamp": { "type": ["string", "null"], "format": "date-time", "default": null, "description": "When it was recorded" },
+        "attachment": {
+          "anyOf": [{ "$ref": "#/$defs/TranscriptAttachment" }, { "type": "null" }],
+          "default": null,
+          "description": "An attachment record's attachment"
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": true
+    },
+    "DraftGap": {
+      "description": "Why a session in the window got no real_work receipt.",
+      "type": "string",
+      "enum": ["synthetic", "no_transcript", "many_transcripts", "ambiguous_session"]
+    },
+    "DraftUncovered": {
+      "description": "A session in the window left without a real_work receipt.",
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string", "description": "The session" },
+        "gap": { "$ref": "#/$defs/DraftGap" }
+      },
+      "required": ["session_id", "gap"],
+      "additionalProperties": false
+    },
+    "DraftCounts": {
+      "description": "The drafted receipts, by kind.",
+      "type": "object",
+      "properties": {
+        "real_work": { "type": "integer" },
+        "host_delivery": { "type": "integer" },
+        "fact_injection": { "type": "integer" }
+      },
+      "required": ["real_work", "host_delivery", "fact_injection"],
+      "additionalProperties": false
+    },
+    "DraftSummary": {
+      "description": "What te-review receipts draft wrote, printed as one JSON line.",
+      "type": "object",
+      "properties": {
+        "counts": { "$ref": "#/$defs/DraftCounts" },
+        "without_receipt": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DraftUncovered" },
+          "description": "The window's sessions with no real_work receipt, and why"
+        },
+        "undelivered_nudges": {
+          "type": "integer",
+          "description": "Non-shadow nudges of the window's sessions with no host_delivery receipt"
+        },
+        "undelivered_aborts": {
+          "type": "integer",
+          "description": "Non-shadow aborts of the window's sessions with no host_delivery receipt"
+        }
+      },
+      "required": ["counts", "without_receipt", "undelivered_nudges", "undelivered_aborts"],
+      "additionalProperties": false
+    },
+    "ErrorCode": {
+      "description": "Why a te-review command stopped; collect writes nothing when it does.",
+      "type": "string",
+      "enum": [
+        "OUT_EXISTS",
+        "BAD_WINDOW",
+        "BAD_TIMEZONE",
+        "NO_LEDGER",
+        "UNREADABLE",
+        "MALFORMED_LINE",
+        "TRUNCATED_LINE",
+        "UNKNOWN_SCHEMA",
+        "SOURCE_CHANGED",
+        "MALFORMED_FILE",
+        "RECEIPT_MISMATCH",
+        "BAD_RECEIPT",
+        "RELATIVE_PATH",
+        "BAD_MODE",
+        "NOT_COMPLETE",
+        "BAD_BUNDLE",
+        "HASH_MISMATCH",
+        "BAD_ARGUMENTS",
+        "NO_WORKSHEET",
+        "BAD_WORKSHEET",
+        "STALE_WORKSHEET",
+        "UNKNOWN_REF"
+      ]
+    },
+    "CodedFailure": {
+      "description": "Why a te-review command stopped, printed as a JSON line on stderr.",
+      "type": "object",
+      "properties": {
+        "code": { "$ref": "#/$defs/ErrorCode" },
+        "error": { "type": "string", "description": "The message" }
+      },
+      "required": ["code", "error"],
+      "additionalProperties": false
+    },
+    "SessionRow": {
+      "description": "A TokenEconomizer 0.1.0 ledger session row, as plugin/fold.py fold_locked writes it; other keys are unknown.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "session", "description": "The record kind" },
+        "session_id": { "type": "string", "description": "The Claude session id" },
+        "host": { "const": "claude", "description": "The agent host; this adapter reads Claude only" },
+        "repo": { "type": "string", "description": "The repository label" },
+        "folded_at": { "type": "number", "description": "When the session was folded, Unix seconds" },
+        "started": { "type": ["number", "null"], "description": "Session start, Unix seconds" },
+        "ended": { "type": ["number", "null"], "description": "Session end, Unix seconds; the window selects on it" },
+        "shadow": { "type": "boolean", "description": "Folded in shadow mode" },
+        "imported": { "type": "boolean", "description": "Folded from the agent's history, from before the plugin" },
+        "prompts": { "type": ["integer", "null"], "description": "Prompts in the transcript" },
+        "error": { "type": "string", "description": "Why the transcript could not be read" },
+        "injection": { "type": ["object", "null"], "description": "The micro-skills fold result" },
+        "untool": { "type": ["object", "null"], "description": "The tool-pruning fold result" },
+        "model": { "type": ["string", "null"], "description": "The billed model id" },
+        "requests": { "type": ["integer", "null"], "description": "Model requests" },
+        "input_tokens": { "type": ["integer", "null"], "description": "Fresh input tokens" },
+        "cache_read_input_tokens": { "type": ["integer", "null"], "description": "Cached input tokens read" },
+        "cache_creation_input_tokens": { "type": ["integer", "null"], "description": "Cached input tokens written" },
+        "output_tokens": { "type": ["integer", "null"], "description": "Output tokens" },
+        "effective_tokens": { "type": ["number", "null"], "description": "Cache-aware effective tokens" },
+        "priced_by": { "type": ["string", "null"], "description": "model, fallback or no_usage" },
+        "turns": { "type": "integer", "description": "Turns the plugin recorded" },
+        "nudges": { "type": "integer", "description": "Redirects delivered" },
+        "aborts": { "type": "integer", "description": "Still-stuck notices" },
+        "injected_chars": { "type": "integer", "description": "Characters injected at session start" },
+        "untool_applied": { "type": "array", "description": "Deny rules the session ran under" },
+        "overhead": { "type": "object", "description": "Mechanism overhead tokens, by ledger.py OVERHEAD_KEYS" }
+      },
+      "required": [
+        "kind",
+        "session_id",
+        "host",
+        "repo",
+        "folded_at",
+        "started",
+        "ended",
+        "shadow",
+        "prompts",
+        "turns",
+        "nudges",
+        "aborts",
+        "injected_chars",
+        "untool_applied",
+        "overhead"
+      ],
+      "additionalProperties": false
+    },
+    "OverheadRow": {
+      "description": "A TokenEconomizer 0.1.0 ledger overhead row, as plugin/judge.py run_job writes it; other keys are an unknown schema.",
+      "type": "object",
+      "properties": {
+        "kind": { "const": "overhead", "description": "The record kind" },
+        "session_id": { "type": "string", "description": "The Claude session charged" },
+        "host": { "const": "claude", "description": "The agent host; this adapter reads Claude only" },
+        "job": { "type": ["string", "null"], "description": "The judge job; a charge without one is ambiguous" },
+        "at": { "type": "number", "description": "When it was charged, Unix seconds" },
+        "overhead": { "type": "object", "description": "Mechanism overhead tokens, by ledger.py OVERHEAD_KEYS" }
+      },
+      "required": ["kind", "session_id", "host", "at", "overhead"],
+      "additionalProperties": false
+    },
+    "RowKind": {
+      "description": "A ledger record kind.",
+      "type": "string",
+      "enum": ["session", "overhead"]
+    },
+    "RowClass": {
+      "description": "What the collection made of a distinct ledger row.",
+      "type": "string",
+      "enum": [
+        "in_window",
+        "outside_window",
+        "missing_end",
+        "matched",
+        "not_selected",
+        "unmatched",
+        "conflict",
+        "ambiguous"
+      ]
+    },
+    "SourceLine": {
+      "description": "Where a row was read.",
+      "type": "object",
+      "properties": {
+        "source": { "type": "string", "description": "The ledger file, relative to the state root" },
+        "line": { "type": "integer", "description": "The 1-based line number" }
+      },
+      "required": ["source", "line"],
+      "additionalProperties": false
+    },
+    "LedgerRead": {
+      "description": "One ledger row as read: its store, its place, the validated record and the row itself.",
+      "type": "object",
+      "properties": {
+        "store": { "type": "string", "description": "The repository store, repos/<label> under the state root" },
+        "place": { "$ref": "#/$defs/SourceLine" },
+        "record": { "anyOf": [{ "$ref": "#/$defs/SessionRow" }, { "$ref": "#/$defs/OverheadRow" }] },
+        "row": { "type": "object", "description": "The row as read" }
+      },
+      "required": ["store", "place", "record", "row"],
+      "additionalProperties": false
+    },
+    "EvidenceRow": {
+      "description": "One distinct ledger row and its class; identical repeats are one row with their count.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference, stable within the collection" },
+        "kind": { "$ref": "#/$defs/RowKind" },
+        "row_class": { "$ref": "#/$defs/RowClass" },
+        "store": { "type": "string", "description": "The repository store, repos/<label> under the state root" },
+        "host": { "type": "string", "description": "The agent host" },
+        "session_id": { "type": "string", "description": "The session" },
+        "job": { "type": ["string", "null"], "description": "The charge's judge job; null for a session or a charge without one" },
+        "count": { "type": "integer", "description": "How many identical copies were read" },
+        "lines": { "type": "array", "items": { "$ref": "#/$defs/SourceLine" }, "description": "Every copy's place" },
+        "row": { "type": "object", "description": "The row as read" }
+      },
+      "required": ["ref", "kind", "row_class", "store", "host", "session_id", "job", "count", "lines", "row"],
+      "additionalProperties": false
+    },
+    "Evidence": {
+      "description": "evidence.json: every distinct row read, in source order, the receipts and the judgment candidates.",
+      "type": "object",
+      "properties": {
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRow" }, "description": "The rows" },
+        "receipts": { "type": "array", "items": { "$ref": "#/$defs/EvidenceReceipt" }, "description": "The frozen receipts" },
+        "cadence_receipt": {
+          "anyOf": [{ "$ref": "#/$defs/CadenceReceipt" }, { "type": "null" }],
+          "description": "The cadence receipt, when one was given"
+        },
+        "sessions": { "type": "array", "items": { "$ref": "#/$defs/SessionEvidence" }, "description": "Each session row's cohort and cadence" },
+        "redirects": { "type": "array", "items": { "$ref": "#/$defs/RedirectCandidate" }, "description": "Every redirect event" },
+        "facts": { "type": "array", "items": { "$ref": "#/$defs/FactCandidate" }, "description": "Every learned fact, as it is now" },
+        "imports": { "type": "array", "items": { "$ref": "#/$defs/ImportCandidate" }, "description": "Each store's current import operation" },
+        "import_folds": { "type": "array", "items": { "$ref": "#/$defs/ImportFoldCandidate" }, "description": "Paid live folds near an import's end" },
+        "import_coverage": { "$ref": "#/$defs/ImportCoverage" },
+        "import_note": { "$ref": "#/$defs/ImportNote" }
+      },
+      "required": ["rows", "receipts", "cadence_receipt", "sessions", "redirects", "facts", "imports", "import_folds", "import_coverage", "import_note"],
+      "additionalProperties": false
+    },
+    "Window": {
+      "description": "Inclusive calendar days in a time zone, read as the half-open instants [start, end).",
+      "type": "object",
+      "properties": {
+        "since": { "type": "string", "format": "date", "description": "First day" },
+        "until": { "type": "string", "format": "date", "description": "Last day" },
+        "tz": { "type": "string", "description": "IANA time zone" },
+        "start": { "type": "string", "format": "date-time", "description": "since at 00:00 in tz, included" },
+        "end": { "type": "string", "format": "date-time", "description": "The day after until at 00:00 in tz, excluded" }
+      },
+      "required": ["since", "until", "tz", "start", "end"],
+      "additionalProperties": false
+    },
+    "Label": {
+      "description": "INTERIM when collected before the window's end, else FINAL.",
+      "type": "string",
+      "enum": ["INTERIM", "FINAL"]
+    },
+    "SourceFile": {
+      "description": "One consumed ledger file, as hashed before and after the read.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Relative to the state root" },
+        "bytes": { "type": "integer", "description": "Size" },
+        "sha256": { "type": "string", "description": "Hash of the bytes read" },
+        "lines": { "type": "integer", "description": "Line count" }
+      },
+      "required": ["path", "bytes", "sha256", "lines"],
+      "additionalProperties": false
+    },
+    "Mirror": {
+      "description": "A TokenEconomizer source file whose row shapes the adapter mirrors.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Relative to the plugin root" },
+        "sha256": { "type": "string", "description": "Hash of the file at the mirrored version" }
+      },
+      "required": ["path", "sha256"],
+      "additionalProperties": false
+    },
+    "Versions": {
+      "description": "What read the ledgers.",
+      "type": "object",
+      "properties": {
+        "adapter": { "type": "string", "description": "The ledger adapter, named by the TokenEconomizer version it mirrors" },
+        "schema": { "type": "integer", "description": "The evidence and collection schema version" },
+        "mirrors": { "type": "array", "items": { "$ref": "#/$defs/Mirror" }, "description": "The mirrored source files" }
+      },
+      "required": ["adapter", "schema", "mirrors"],
+      "additionalProperties": false
+    },
+    "Collection": {
+      "description": "collection.json: when and from what evidence.json was built.",
+      "type": "object",
+      "properties": {
+        "collection_id": { "type": "string", "description": "sha256 over the window, versions, every source's bytes and evidence.json; not worksheet.json" },
+        "collected_at": { "type": "string", "format": "date-time", "description": "When, in the window's time zone" },
+        "label": { "$ref": "#/$defs/Label" },
+        "window": { "$ref": "#/$defs/Window" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/SourceFile" }, "description": "The consumed files: ledgers, TokenEconomizer state, manifests and receipts" },
+        "versions": { "$ref": "#/$defs/Versions" }
+      },
+      "required": ["collection_id", "collected_at", "label", "window", "sources", "versions"],
+      "additionalProperties": false
+    },
+    "ReceiptKind": {
+      "description": "What a receipt shows; a closed list.",
+      "type": "string",
+      "enum": ["host_delivery", "fact_injection", "fact_use", "history_fold", "fact_snapshot", "not_run", "ab", "cadence", "synthetic", "real_work"]
+    },
+    "RedirectLink": {
+      "description": "A redirect event, by the session it was logged in and its time.",
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string", "description": "The session" },
+        "at": { "type": "number", "description": "The event's at, Unix seconds, exactly as events.jsonl has it" }
+      },
+      "required": ["session_id", "at"],
+      "additionalProperties": false
+    },
+    "Receipt": {
+      "description": "One owner-supplied receipt file and what it is evidence for, by native ids.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "The file, absolute or relative to the manifest's folder" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "The file's hash; any other content is refused" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the receipt was recorded" },
+        "kind": { "$ref": "#/$defs/ReceiptKind" },
+        "sessions": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Session ids" },
+        "facts": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Fact ids" },
+        "redirects": { "type": "array", "items": { "$ref": "#/$defs/RedirectLink" }, "default": [], "description": "Redirect events" },
+        "imports": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Stores, repos/<label>, whose import operation it shows" }
+      },
+      "required": ["path", "sha256", "timestamp", "kind"],
+      "additionalProperties": false
+    },
+    "ReceiptManifest": {
+      "description": "The receipts given to collect, by --receipts or --synthetic-manifest.",
+      "type": "object",
+      "properties": {
+        "receipts": { "type": "array", "items": { "$ref": "#/$defs/Receipt" }, "description": "The receipts" }
+      },
+      "required": ["receipts"],
+      "additionalProperties": false
+    },
+    "ManifestRole": {
+      "description": "Which option named a receipt.",
+      "type": "string",
+      "enum": ["receipts", "synthetic"]
+    },
+    "ProposeEvery": {
+      "description": "microskills_propose_every: sessions between proposer runs.",
+      "type": "integer",
+      "enum": [1, 3]
+    },
+    "CadenceProof": {
+      "description": "How a cadence receipt proves the fold process's effective policy (TokenEconomizer plugin/config.py load_config).",
+      "type": "string",
+      "enum": ["process_started_after_change", "captured_config"]
+    },
+    "CapturedConfig": {
+      "description": "A fold process's effective configuration, as captured; only the cadence is read.",
+      "type": "object",
+      "properties": {
+        "microskills_propose_every": { "type": "integer", "description": "The effective cadence" }
+      },
+      "required": ["microskills_propose_every"],
+      "additionalProperties": true
+    },
+    "CadenceReceipt": {
+      "description": "--cadence-receipt: the global cadence change and the proof of the policy a fold process ran under.",
+      "type": "object",
+      "properties": {
+        "sessions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "The sessions the proof covers, by session id; each must name exactly one collected session"
+        },
+        "changed_at": { "type": "string", "format": "date-time", "description": "When te config set --global changed the cadence" },
+        "before": { "anyOf": [{ "$ref": "#/$defs/ProposeEvery" }, { "type": "null" }], "description": "The cadence asserted before the change, if any: it names a reason, never a session's cadence (D11)" },
+        "after": { "$ref": "#/$defs/ProposeEvery" },
+        "proof": { "$ref": "#/$defs/CadenceProof" },
+        "process_started": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the fold process the proof is about started; only its folds, at or after this time, are proven"
+        },
+        "repo_override": { "type": "boolean", "description": "A repository config.json set the cadence" },
+        "env_override": { "type": "boolean", "description": "An environment variable set the cadence" },
+        "captured_config": {
+          "anyOf": [{ "$ref": "#/$defs/CapturedConfig" }, { "type": "null" }],
+          "default": null,
+          "description": "For captured_config: the process's effective configuration"
+        }
+      },
+      "required": ["sessions", "changed_at", "before", "after", "proof", "process_started", "repo_override", "env_override"],
+      "additionalProperties": false
+    },
+    "EventLine": {
+      "description": "A TokenEconomizer 0.1.0 events.jsonl line, as plugin/controller.py _log writes it; its kind decides the rest.",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "description": "The event kind" },
+        "at": { "type": "number", "description": "When, Unix seconds" },
+        "session_id": { "type": "string", "description": "The session" },
+        "shadow": { "type": "boolean", "description": "Logged in shadow mode, where nothing reaches the agent" }
+      },
+      "required": ["kind", "at", "session_id", "shadow"],
+      "additionalProperties": true
+    },
+    "RedirectKind": {
+      "description": "The redirect events: a nudge, and the still-stuck notice after one.",
+      "type": "string",
+      "enum": ["nudge", "abort"]
+    },
+    "RedirectEvent": {
+      "description": "A nudge or abort events.jsonl line, as plugin/controller.py post_tool logs it.",
+      "type": "object",
+      "properties": {
+        "kind": { "$ref": "#/$defs/RedirectKind" },
+        "at": { "type": "number", "description": "When, Unix seconds" },
+        "session_id": { "type": "string", "description": "The session" },
+        "shadow": { "type": "boolean", "description": "Logged in shadow mode" },
+        "reason": { "type": "string", "description": "The loop guard's reason" },
+        "tool_calls": { "type": "integer", "description": "Tool calls in the turn so far" },
+        "envelope": { "type": ["number", "null"], "description": "The repository's envelope" },
+        "delivered": { "type": "string", "description": "How an abort was delivered" }
+      },
+      "required": ["kind", "at", "session_id", "shadow", "reason", "tool_calls", "envelope"],
+      "additionalProperties": false
+    },
+    "HistoryRunState": {
+      "description": "history.json state (plugin/history.py).",
+      "type": "string",
+      "enum": ["running", "partial", "done", "skipped", "stopped"]
+    },
+    "HistoryState": {
+      "description": "A TokenEconomizer 0.1.0 history.json, the store's one import operation (plugin/history.py).",
+      "type": "object",
+      "properties": {
+        "state": { "$ref": "#/$defs/HistoryRunState" },
+        "reason": { "type": ["string", "null"], "description": "Why it was skipped or stopped" },
+        "plan": { "type": "array", "description": "The ordered sessions to import" },
+        "next": { "type": "integer", "description": "The plan's next index" },
+        "imported": { "type": "integer", "description": "Sessions imported" },
+        "planned": { "type": "integer", "description": "Sessions planned" },
+        "skipped": { "type": "object", "description": "Sessions left out, by reason" },
+        "over_limit": { "type": "integer", "description": "Logs too large to read" },
+        "attempt": { "type": "object", "description": "The session a dead run was on" },
+        "started": { "type": "number", "description": "When the plan was made, Unix seconds" },
+        "heartbeat": { "type": "number", "description": "The last sign of life, Unix seconds" },
+        "finished": { "type": "number", "description": "When the plan was done, Unix seconds" },
+        "noticed": { "type": "boolean", "description": "Whether the notice was shown" },
+        "pid": { "type": "integer", "description": "The last run's process" },
+        "runs": { "type": "integer", "description": "Runs so far" }
+      },
+      "required": ["state"],
+      "additionalProperties": false
+    },
+    "FactLifeState": {
+      "description": "A learned fact's lifecycle state (microskills/lifecycle.py).",
+      "type": "string",
+      "enum": ["CANDIDATE", "ACTIVE", "RETIRED"]
+    },
+    "FactLife": {
+      "description": "A learned fact's lifecycle; only its state is read.",
+      "type": "object",
+      "properties": { "state": { "$ref": "#/$defs/FactLifeState" } },
+      "required": ["state"],
+      "additionalProperties": true
+    },
+    "MechanismFact": {
+      "description": "One fact of a mechanism state file (microskills distiller.py or envfacts.py to_dict).",
+      "type": "object",
+      "properties": { "life": { "$ref": "#/$defs/FactLife" } },
+      "required": ["life"],
+      "additionalProperties": true
+    },
+    "MechanismState": {
+      "description": "A mechanisms/<manual|envfacts>_state/<repo>.json file; only its facts are read.",
+      "type": "object",
+      "properties": {
+        "repo": { "type": "string", "description": "The repository" },
+        "facts": { "type": "object", "additionalProperties": { "$ref": "#/$defs/MechanismFact" }, "description": "The facts, by id" }
+      },
+      "required": ["repo", "facts"],
+      "additionalProperties": true
+    },
+    "InjectionState": {
+      "description": "injection.json; only the ids of the facts rendered for injection are read.",
+      "type": "object",
+      "properties": {
+        "rendered_ids": { "type": "array", "items": { "type": "string" }, "default": [], "description": "The rendered facts" }
+      },
+      "additionalProperties": true
+    },
+    "EvidenceReceipt": {
+      "description": "A receipt as frozen into the collection, with the evidence refs it links.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference" },
+        "kind": { "$ref": "#/$defs/ReceiptKind" },
+        "manifest": { "$ref": "#/$defs/ManifestRole" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When it was recorded" },
+        "path": { "type": "string", "description": "The copy, relative to sources/ in the collection" },
+        "origin": { "type": "string", "description": "The file it was copied from" },
+        "sha256": { "type": "string", "description": "The file's hash" },
+        "links": { "type": "array", "items": { "type": "string" }, "description": "The rows and candidates it links, by ref" }
+      },
+      "required": ["ref", "kind", "manifest", "timestamp", "path", "origin", "sha256", "links"],
+      "additionalProperties": false
+    },
+    "SessionCohort": {
+      "description": "A session's class, from receipts only.",
+      "type": "string",
+      "enum": ["real_work", "synthetic", "unknown"]
+    },
+    "CadenceLabel": {
+      "description": "The proposer cadence a session was folded under, or unknown.",
+      "type": "string",
+      "enum": ["cadence_1", "cadence_3", "unknown"]
+    },
+    "CadenceReason": {
+      "description": "Why a session's cadence is what it is.",
+      "type": "string",
+      "enum": ["no_receipt", "not_covered", "missing_end", "import_process_before_change", "straddles_change", "before_change_unproven", "before_change", "before_proven_process", "after_change"]
+    },
+    "SessionEvidence": {
+      "description": "A session row's cohort and cadence.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The session's evidence row" },
+        "store": { "type": "string", "description": "The repository store" },
+        "session_id": { "type": "string", "description": "The session" },
+        "cohort": { "$ref": "#/$defs/SessionCohort" },
+        "cohort_receipts": { "type": "array", "items": { "type": "string" }, "description": "The real_work or synthetic receipts" },
+        "cadence": { "$ref": "#/$defs/CadenceLabel" },
+        "cadence_reason": { "$ref": "#/$defs/CadenceReason" }
+      },
+      "required": ["ref", "store", "session_id", "cohort", "cohort_receipts", "cadence", "cadence_reason"],
+      "additionalProperties": false
+    },
+    "RedirectState": {
+      "description": "A redirect's delivery: only delivery_confirmed (a host_delivery receipt) is delivered; shadow never is.",
+      "type": "string",
+      "enum": ["shadow_suppressed", "delivery_confirmed", "delivery_unknown"]
+    },
+    "RedirectCandidate": {
+      "description": "A redirect event to judge.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference" },
+        "digest": { "type": "string", "description": "sha256 of the candidate's content" },
+        "store": { "type": "string", "description": "The repository store" },
+        "line": { "$ref": "#/$defs/SourceLine" },
+        "kind": { "$ref": "#/$defs/RedirectKind" },
+        "session_id": { "type": "string", "description": "The session" },
+        "at": { "type": "number", "description": "When, Unix seconds" },
+        "in_window": { "type": "boolean", "description": "at is in the window" },
+        "state": { "$ref": "#/$defs/RedirectState" },
+        "receipts": { "type": "array", "items": { "type": "string" }, "description": "Its host_delivery receipts" },
+        "event": { "type": "object", "description": "The line as read" }
+      },
+      "required": ["ref", "digest", "store", "line", "kind", "session_id", "at", "in_window", "state", "receipts", "event"],
+      "additionalProperties": false
+    },
+    "FactMechanism": {
+      "description": "Which mechanism learned a fact: manual is the paid proposer (distiller), envfacts the free one.",
+      "type": "string",
+      "enum": ["manual", "envfacts"]
+    },
+    "FactProvenance": {
+      "description": "Whether a fact_snapshot receipt places the fact in time; without one, when it was produced is unknown.",
+      "type": "string",
+      "enum": ["receipted", "missing"]
+    },
+    "FactCandidate": {
+      "description": "A learned fact as it is now (a snapshot), to judge.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference" },
+        "digest": { "type": "string", "description": "sha256 of the candidate's content" },
+        "store": { "type": "string", "description": "The repository store" },
+        "source": { "type": "string", "description": "The state file, relative to the state root" },
+        "mechanism": { "$ref": "#/$defs/FactMechanism" },
+        "paid": { "type": "boolean", "description": "Proposed by the paid proposer" },
+        "fact_id": { "type": "string", "description": "The fact's id" },
+        "life_state": { "$ref": "#/$defs/FactLifeState" },
+        "retained": { "type": "boolean", "description": "Not retired" },
+        "rendered": { "type": "boolean", "description": "In injection.json's rendered facts" },
+        "provenance": { "$ref": "#/$defs/FactProvenance" },
+        "receipts": { "type": "array", "items": { "type": "string" }, "description": "Its fact_injection, fact_use and fact_snapshot receipts" },
+        "fact": { "type": "object", "description": "The fact as read" }
+      },
+      "required": ["ref", "digest", "store", "source", "mechanism", "paid", "fact_id", "life_state", "retained", "rendered", "provenance", "receipts", "fact"],
+      "additionalProperties": false
+    },
+    "ImportCompletion": {
+      "description": "How far an import operation got.",
+      "type": "string",
+      "enum": ["completed", "partial", "unknown"]
+    },
+    "ImportCandidate": {
+      "description": "A store's current import operation (history.json).",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference" },
+        "digest": { "type": "string", "description": "sha256 of the candidate's content" },
+        "store": { "type": "string", "description": "The repository store" },
+        "completion": { "$ref": "#/$defs/ImportCompletion" },
+        "in_window": { "type": "boolean", "description": "finished is in the window" },
+        "sessions": { "type": ["integer", "null"], "description": "Sessions imported" },
+        "receipts": { "type": "array", "items": { "type": "string" }, "description": "Its history_fold receipts" },
+        "history": { "$ref": "#/$defs/HistoryState" }
+      },
+      "required": ["ref", "digest", "store", "completion", "in_window", "sessions", "receipts", "history"],
+      "additionalProperties": false
+    },
+    "FoldProvenance": {
+      "description": "What ties a live fold to an import: a history_fold receipt, or only its time.",
+      "type": "string",
+      "enum": ["receipted", "time_near"]
+    },
+    "ImportFoldCandidate": {
+      "description": "A paid live fold that the import may have run after it finished (plugin/history.py _run_locked).",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "Opaque reference" },
+        "digest": { "type": "string", "description": "sha256 of the candidate's content" },
+        "import_ref": { "type": "string", "description": "The import" },
+        "session_ref": { "type": "string", "description": "The session's evidence row" },
+        "session_id": { "type": "string", "description": "The session" },
+        "folded_at": { "type": "number", "description": "When it was folded, Unix seconds" },
+        "provenance": { "$ref": "#/$defs/FoldProvenance" },
+        "receipts": { "type": "array", "items": { "type": "string" }, "description": "The history_fold receipts naming both" }
+      },
+      "required": ["ref", "digest", "import_ref", "session_ref", "session_id", "folded_at", "provenance", "receipts"],
+      "additionalProperties": false
+    },
+    "ImportCoverage": {
+      "description": "Whether history_fold receipts cover past import operations, or only the current state was seen.",
+      "type": "string",
+      "enum": ["observed_current_only", "history_receipts"]
+    },
+    "RedirectVerdict": { "description": "The owner's judgment of a redirect.", "type": "string", "enum": ["right", "wrong", "unjudged"] },
+    "OwnerAssessment": { "description": "The owner's assessment of a paid fact.", "type": "string", "enum": ["useful", "not_useful", "unknown"] },
+    "FactReason": {
+      "description": "Why the owner assessed a paid fact so.",
+      "type": "string",
+      "enum": ["saved_lookup", "prevented_error", "not_used", "redundant", "misleading", "cannot_tell"]
+    },
+    "FactVerdict": { "description": "Whether a learned fact is wrong.", "type": "string", "enum": ["wrong", "ok", "unknown"] },
+    "ImportVerdict": {
+      "description": "What ties an import candidate to its effect: proven needs a receipt; time alone is only a candidate.",
+      "type": "string",
+      "enum": ["proven", "candidate", "unknown"]
+    },
+    "NotRunOutcome": { "description": "What became of a NOT_RUN item.", "type": "string", "enum": ["run", "re_deferred"] },
+    "DeferReason": {
+      "description": "Why a NOT_RUN item was deferred again.",
+      "type": "string",
+      "enum": ["blocked", "needs_owner", "needs_longer_window", "out_of_scope"]
+    },
+    "AbOutcome": { "description": "The MCP A/B result.", "type": "string", "enum": ["ab_receipt", "protected_unchanged"] },
+    "Decision": { "description": "The owner's #408 decision.", "type": "string", "enum": ["keep", "change", "insufficient"] },
+    "ConfigSetting": {
+      "description": "One te config set --global setting.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string", "description": "The setting" },
+        "value": { "type": "string", "description": "Its value, as typed" }
+      },
+      "required": ["key", "value"],
+      "additionalProperties": false
+    },
+    "WorksheetRedirect": {
+      "description": "Section 1: a nudge in the window.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "state": { "$ref": "#/$defs/RedirectState" },
+        "verdict": { "anyOf": [{ "$ref": "#/$defs/RedirectVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "like_128": { "type": ["boolean", "null"], "description": "Like #128; null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "The host_delivery receipt a delivery_confirmed state rests on" }
+      },
+      "required": ["ref", "digest", "state", "verdict", "like_128", "receipt_ref"],
+      "additionalProperties": false
+    },
+    "WorksheetAbort": {
+      "description": "D4: an abort in the window; never a delivered redirect, judged on its own.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "state": { "$ref": "#/$defs/RedirectState" },
+        "verdict": { "anyOf": [{ "$ref": "#/$defs/RedirectVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "The host_delivery receipt a delivery_confirmed state rests on" }
+      },
+      "required": ["ref", "digest", "state", "verdict", "receipt_ref"],
+      "additionalProperties": false
+    },
+    "WorksheetPaidFact": {
+      "description": "Section 2: a retained paid fact.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "owner_assessment": { "anyOf": [{ "$ref": "#/$defs/OwnerAssessment" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "reason": { "anyOf": [{ "$ref": "#/$defs/FactReason" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "origin_ref": { "type": ["string", "null"], "description": "The evidence ref of its paid origin" },
+        "use_ref": { "type": ["string", "null"], "description": "Its fact_injection or fact_use receipt" }
+      },
+      "required": ["ref", "digest", "owner_assessment", "reason", "origin_ref", "use_ref"],
+      "additionalProperties": false
+    },
+    "WorksheetFact": {
+      "description": "Section 3: any learned fact.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "verdict": { "anyOf": [{ "$ref": "#/$defs/FactVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" }
+      },
+      "required": ["ref", "digest", "verdict"],
+      "additionalProperties": false
+    },
+    "WorksheetImport": {
+      "description": "Section 4: an import finished in the window or partial with no finished time, or a paid live fold.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The candidate" },
+        "digest": { "type": "string", "description": "The candidate's digest" },
+        "entry": { "$ref": "#/$defs/ImportEntry" },
+        "verdict": { "anyOf": [{ "$ref": "#/$defs/ImportVerdict" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "The receipt a proven verdict rests on" }
+      },
+      "required": ["ref", "digest", "entry", "verdict", "receipt_ref"],
+      "additionalProperties": false
+    },
+    "ImportEntry": {
+      "description": "Why a section 4 entry is there: partial has no finished time, so the window cannot place it.",
+      "type": "string",
+      "enum": ["finished_in_window", "partial", "fold"]
+    },
+    "WorksheetNotRun": {
+      "description": "Section 5: a NOT_RUN item carried over, by its not_run receipt.",
+      "type": "object",
+      "properties": {
+        "ref": { "type": "string", "description": "The not_run receipt" },
+        "digest": { "type": "string", "description": "The receipt's sha256" },
+        "outcome": { "anyOf": [{ "$ref": "#/$defs/NotRunOutcome" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "evidence_ref": { "type": ["string", "null"], "description": "For run: the evidence" },
+        "reason": { "anyOf": [{ "$ref": "#/$defs/DeferReason" }, { "type": "null" }], "description": "For re_deferred" },
+        "owner": { "type": ["string", "null"], "description": "For re_deferred: who follows up" },
+        "follow_up": { "type": ["string", "null"], "format": "date", "description": "For re_deferred: when" }
+      },
+      "required": ["ref", "digest", "outcome", "evidence_ref", "reason", "owner", "follow_up"],
+      "additionalProperties": false
+    },
+    "WorksheetAb": {
+      "description": "Section 6: the MCP A/B.",
+      "type": "object",
+      "properties": {
+        "outcome": { "anyOf": [{ "$ref": "#/$defs/AbOutcome" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "receipt_ref": { "type": ["string", "null"], "description": "For ab_receipt: the ab receipt" }
+      },
+      "required": ["outcome", "receipt_ref"],
+      "additionalProperties": false
+    },
+    "WorksheetDecision": {
+      "description": "Section 7: the owner's decision.",
+      "type": "object",
+      "properties": {
+        "decision": { "anyOf": [{ "$ref": "#/$defs/Decision" }, { "type": "null" }], "description": "null: NOT_REVIEWED" },
+        "settings": {
+          "anyOf": [{ "type": "array", "items": { "$ref": "#/$defs/ConfigSetting" } }, { "type": "null" }],
+          "description": "For change: the exact settings"
+        }
+      },
+      "required": ["decision", "settings"],
+      "additionalProperties": false
+    },
+    "Worksheet": {
+      "description": "worksheet.json: the template the owner fills; outside the collection id, which it carries.",
+      "type": "object",
+      "properties": {
+        "collection_id": { "type": "string", "description": "The collection it judges" },
+        "redirects": { "type": "array", "items": { "$ref": "#/$defs/WorksheetRedirect" }, "description": "Section 1" },
+        "aborts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetAbort" }, "description": "Aborts, apart from section 1 (D4)" },
+        "paid_facts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetPaidFact" }, "description": "Section 2" },
+        "learned_facts": { "type": "array", "items": { "$ref": "#/$defs/WorksheetFact" }, "description": "Section 3" },
+        "imports": { "type": "array", "items": { "$ref": "#/$defs/WorksheetImport" }, "description": "Section 4" },
+        "not_run": { "type": "array", "items": { "$ref": "#/$defs/WorksheetNotRun" }, "description": "Section 5" },
+        "mcp_ab": { "$ref": "#/$defs/WorksheetAb" },
+        "decision": { "$ref": "#/$defs/WorksheetDecision" }
+      },
+      "required": ["collection_id", "redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"],
+      "additionalProperties": false
+    },
+    "TeReviewReport": {
+      "description": "Print the overhead accounting of a frozen te-review collection.",
+      "type": "object",
+      "properties": {
+        "evidence": {"type": "string", "description": "The collection directory, an absolute path"},
+        "public": {"type": "boolean", "default": false, "description": "Print only the public report (the default)"},
+        "private": {"type": "boolean", "default": false, "description": "Print the private report, with every row and key name"},
+        "worksheet": {"type": ["string", "null"], "default": null, "description": "The filled worksheet, an absolute path; default: the collection's own"}
+      },
+      "required": ["evidence"],
+      "additionalProperties": false
+    },
+    "TeReviewCarry": {
+      "description": "Write a new, create-only worksheet for collection B holding the judgments of A whose candidates B holds unchanged.",
+      "type": "object",
+      "properties": {
+        "from": {"type": "string", "description": "Collection A, whose judgments are carried, an absolute path"},
+        "to": {"type": "string", "description": "Collection B, the newer one, an absolute path"},
+        "out": {"type": "string", "description": "The worksheet to write, an absolute path that must not exist"},
+        "worksheet": {"type": ["string", "null"], "default": null, "description": "A's filled worksheet, an absolute path; default: A's own"}
+      },
+      "required": ["from", "to", "out"],
+      "additionalProperties": false
+    },
+    "CarrySection": {
+      "description": "A worksheet section a judgment is in, the decision included.",
+      "type": "string",
+      "enum": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "decision"]
+    },
+    "CarryReason": {
+      "description": "Why a judgment of A was not carried: candidate changed, digest ambiguous, a ref not in B, or no digest.",
+      "type": "string",
+      "enum": ["changed", "ambiguous", "ref_not_in_b", "no_candidate"]
+    },
+    "Carried": {
+      "description": "A judgment of A carried into the new worksheet, by its ref in A and in B.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": "string", "description": "The candidate in A"},
+        "to_ref": {"type": "string", "description": "The same candidate in B"}
+      },
+      "required": ["section", "from_ref", "to_ref"],
+      "additionalProperties": false
+    },
+    "NotCarried": {
+      "description": "A judgment of A left out of the new worksheet, and why.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": ["string", "null"], "description": "The candidate in A; null for mcp_ab and decision"},
+        "reason": {"$ref": "#/$defs/CarryReason"}
+      },
+      "required": ["section", "from_ref", "reason"],
+      "additionalProperties": false
+    },
+    "CarryConflict": {
+      "description": "A judgment of A that B's own worksheet already judges otherwise; B's judgment stays, the owner settles it.",
+      "type": "object",
+      "properties": {
+        "section": {"$ref": "#/$defs/CarrySection"},
+        "from_ref": {"type": "string", "description": "The candidate in A"},
+        "to_ref": {"type": "string", "description": "The same candidate in B"}
+      },
+      "required": ["section", "from_ref", "to_ref"],
+      "additionalProperties": false
+    },
+    "CarrySummary": {
+      "description": "What te-review carry wrote, printed as JSON: what it carried, left out and found in conflict.",
+      "type": "object",
+      "properties": {
+        "collection_id": {"type": "string", "description": "B's collection id, which the new worksheet carries"},
+        "carried": {"type": "array", "items": {"$ref": "#/$defs/Carried"}},
+        "not_carried": {"type": "array", "items": {"$ref": "#/$defs/NotCarried"}},
+        "conflicts": {"type": "array", "items": {"$ref": "#/$defs/CarryConflict"}}
+      },
+      "required": ["collection_id", "carried", "not_carried", "conflicts"],
+      "additionalProperties": false
+    },
+    "PublicFailure": {
+      "description": "Why te-review report stopped, in public mode: the code only.",
+      "type": "object",
+      "properties": {
+        "code": {"$ref": "#/$defs/ErrorCode"}
+      },
+      "required": ["code"],
+      "additionalProperties": false
+    },
+    "OverheadKey": {
+      "description": "The overhead token fields TokenEconomizer 0.1.0's ledger.py OVERHEAD_KEYS names; each counts toward the total.",
+      "type": "string",
+      "enum": ["optimizer_tokens", "untool_classify_tokens", "untool_judge_tokens", "codex_untool_adapt_tokens", "spiral_judge_tokens", "spiral_nudge_writer_tokens"]
+    },
+    "SessionClass": {
+      "description": "What a session was, from receipts; without one it is unknown.",
+      "type": "string",
+      "enum": ["real_work", "synthetic", "unknown"]
+    },
+    "Exclusion": {
+      "description": "Why a row is outside the headline cohort; a row is counted under the first of its reasons in this order.",
+      "type": "string",
+      "enum": ["NOT_SELECTED", "MISSING_END", "CONFLICT", "AMBIGUOUS", "UNMATCHED", "IMPORTED", "MISSING_USAGE", "ERROR", "FALLBACK_PRICING", "UNKNOWN_PRICING_STATUS", "BAD_AMOUNT", "SYNTHETIC", "UNCLASSIFIED", "SESSION_EXCLUDED", "CHARGE_EXCLUDED"]
+    },
+    "ShareStatus": {
+      "description": "KNOWN, or UNKNOWN for a zero or non-finite denominator.",
+      "type": "string",
+      "enum": ["KNOWN", "UNKNOWN"]
+    },
+    "Verdict": {
+      "description": "Whether the share is above the threshold.",
+      "type": "string",
+      "enum": ["YES", "NO", "UNKNOWN"]
+    },
+    "Cadence": {
+      "description": "The fold cadence; UNKNOWN unless a cadence receipt proves the fold process's effective policy.",
+      "type": "string",
+      "enum": ["1", "3", "UNKNOWN"]
+    },
+    "Scope": {
+      "description": "What the numbers are: charges the ledger recorded, not a billing audit.",
+      "const": "recorded charges"
+    },
+    "OverheadComponents": {
+      "description": "Overhead tokens by recognized key; a sum is null when it is not finite.",
+      "type": "object",
+      "properties": {
+        "optimizer_tokens": {"type": ["number", "null"], "description": "Sum of optimizer_tokens"},
+        "untool_classify_tokens": {"type": ["number", "null"], "description": "Sum of untool_classify_tokens"},
+        "untool_judge_tokens": {"type": ["number", "null"], "description": "Sum of untool_judge_tokens"},
+        "codex_untool_adapt_tokens": {"type": ["number", "null"], "description": "Sum of codex_untool_adapt_tokens"},
+        "spiral_judge_tokens": {"type": ["number", "null"], "description": "Sum of spiral_judge_tokens"},
+        "spiral_nudge_writer_tokens": {"type": ["number", "null"], "description": "Sum of spiral_nudge_writer_tokens"}
+      },
+      "required": ["optimizer_tokens", "untool_classify_tokens", "untool_judge_tokens", "codex_untool_adapt_tokens", "spiral_judge_tokens", "spiral_nudge_writer_tokens"],
+      "additionalProperties": false
+    },
+    "Share": {
+      "description": "overhead / (effective + overhead) over a set of rows, as TE's plugin/accounting.py summarize has it.",
+      "type": "object",
+      "properties": {
+        "sessions": {"type": "integer", "description": "Session rows counted"},
+        "charges": {"type": "integer", "description": "Overhead charge rows counted"},
+        "effective_tokens": {"type": ["number", "null"], "description": "Sum of the sessions' effective tokens; null when not finite"},
+        "overhead_tokens": {"type": ["number", "null"], "description": "Sum of the recognized overhead keys, and in all_keys of every key; null when not finite"},
+        "components": {"$ref": "#/$defs/OverheadComponents"},
+        "unknown_overhead_keys": {"type": "integer", "description": "How many distinct unrecognized overhead keys were counted"},
+        "share": {"type": ["number", "null"], "description": "The share; null when UNKNOWN"},
+        "status": {"$ref": "#/$defs/ShareStatus"},
+        "above_5_percent": {"$ref": "#/$defs/Verdict"}
+      },
+      "required": ["sessions", "charges", "effective_tokens", "overhead_tokens", "components", "unknown_overhead_keys", "share", "status", "above_5_percent"],
+      "additionalProperties": false
+    },
+    "ExcludedCount": {
+      "description": "The rows whose first exclusion reason is this one, and their recorded spend.",
+      "type": "object",
+      "properties": {
+        "reason": {"$ref": "#/$defs/Exclusion"},
+        "rows": {"type": "integer", "description": "Rows"},
+        "effective_tokens": {"type": ["number", "null"], "description": "Sum of their finite recorded effective tokens; null when the sum is not finite"},
+        "overhead_tokens": {"type": ["number", "null"], "description": "Their finite recorded tokens of the recognized keys, in all_keys of every key; null when not finite"},
+        "invalid_amounts": {"type": "integer", "description": "Amounts left out of the sums, not a finite number; of the recognized keys, and in all_keys of every key"}
+      },
+      "required": ["reason", "rows", "effective_tokens", "overhead_tokens", "invalid_amounts"],
+      "additionalProperties": false
+    },
+    "Coverage": {
+      "description": "D3: how much of the selection the headline covers, in sessions.",
+      "type": "object",
+      "properties": {
+        "headline_sessions": {"type": "integer", "description": "Sessions in the headline cohort"},
+        "selected_sessions": {"type": "integer", "description": "Selected non-imported sessions, whatever their class"},
+        "no_recorded_usage": {"type": "integer", "description": "Selected sessions whose transcript failed (ERROR), so no usage was recorded"}
+      },
+      "required": ["headline_sessions", "selected_sessions", "no_recorded_usage"],
+      "additionalProperties": false
+    },
+    "PublicExcludedCount": {
+      "description": "D1, D9: counts only, never tokens: the rows whose first reason is this one, and the sessions it takes out.",
+      "type": "object",
+      "properties": {
+        "reason": {"$ref": "#/$defs/Exclusion"},
+        "rows": {"type": "integer", "description": "Rows whose first reason is this one"},
+        "sessions": {"type": "integer", "description": "Excluded sessions whose first reason is this one (D5)"}
+      },
+      "required": ["reason", "rows", "sessions"],
+      "additionalProperties": false
+    },
+    "ClassCount": {
+      "description": "Selected sessions of one class.",
+      "type": "object",
+      "properties": {
+        "session_class": {"$ref": "#/$defs/SessionClass"},
+        "sessions": {"type": "integer", "description": "Sessions"}
+      },
+      "required": ["session_class", "sessions"],
+      "additionalProperties": false
+    },
+    "EraCandidate": {
+      "description": "A policy-era candidate: selected sessions folded on one calendar day; a timestamp group, not a proven cadence.",
+      "type": "object",
+      "properties": {
+        "folded_on": {"type": ["string", "null"], "format": "date", "description": "The fold's calendar day in the window's time zone; null for a fold time no calendar holds"},
+        "sessions": {"type": "integer", "description": "Sessions"}
+      },
+      "required": ["folded_on", "sessions"],
+      "additionalProperties": false
+    },
+    "PublicReport": {
+      "description": "te-review report --public: aggregates, fixed codes and dates only.",
+      "type": "object",
+      "properties": {
+        "scope": {"$ref": "#/$defs/Scope"},
+        "label": {"$ref": "#/$defs/Label"},
+        "since": {"type": "string", "format": "date", "description": "First day of the window"},
+        "until": {"type": "string", "format": "date", "description": "Last day of the window"},
+        "headline": {"$ref": "#/$defs/Share"},
+        "coverage": {"$ref": "#/$defs/Coverage"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/PublicExcludedCount"}, "description": "Every exclusion reason, in precedence order"},
+        "session_classes": {"type": "array", "items": {"$ref": "#/$defs/ClassCount"}, "description": "Selected sessions by class"},
+        "cadence": {"$ref": "#/$defs/Cadence"},
+        "policy_era_candidates": {"type": "array", "items": {"$ref": "#/$defs/EraCandidate"}, "description": "Timestamp groups only"},
+        "unknown_keys": {"type": "string", "pattern": "^unknown keys: [0-9]+ \\(excluded from public totals\\)$", "description": "How many distinct unrecognized overhead keys the collection holds; the totals leave their amounts out"},
+        "withheld": {"const": "excluded rows show counts only; their spend is only in --private", "description": "D6, D9: excluded spend public leaves out, an exception to B3"},
+        "review": {"$ref": "#/$defs/Review"}
+      },
+      "required": ["scope", "label", "since", "until", "headline", "coverage", "excluded", "session_classes", "cadence", "policy_era_candidates", "unknown_keys", "withheld", "review"],
+      "additionalProperties": false
+    },
+    "AbReceipt": {
+      "description": "D8: an ab receipt's file, a fresh-session MCP A/B with and without the candidate denies.",
+      "type": "object",
+      "properties": {
+        "candidate_tools": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "The MCP tools the denies name"},
+        "without_denies": {"$ref": "#/$defs/AbSession"},
+        "with_denies": {"$ref": "#/$defs/AbSession"}
+      },
+      "required": ["candidate_tools", "without_denies", "with_denies"],
+      "additionalProperties": false
+    },
+    "AbSession": {
+      "description": "One fresh session of the A/B and its first request's input tokens.",
+      "type": "object",
+      "properties": {
+        "session_id": {"type": "string", "description": "The session; the receipt's manifest entry must name it"},
+        "first_request_input_tokens": {"type": "integer", "minimum": 0, "description": "Input tokens of its first request: a JSON integer of zero or more, read strictly; else not an A/B (D8a)"}
+      },
+      "required": ["session_id", "first_request_input_tokens"],
+      "additionalProperties": false
+    },
+    "Review": {
+      "description": "The owner's worksheet against the evidence: counts, fixed codes and dates only.",
+      "type": "object",
+      "properties": {
+        "redirects": {"$ref": "#/$defs/RedirectCounts"},
+        "aborts": {"$ref": "#/$defs/AbortCounts"},
+        "paid_facts": {"$ref": "#/$defs/PaidFactCounts"},
+        "learned_facts": {"$ref": "#/$defs/LearnedFactCounts"},
+        "imports": {"$ref": "#/$defs/ImportCounts"},
+        "not_run": {"$ref": "#/$defs/NotRunCounts"},
+        "mcp_ab": {"$ref": "#/$defs/McpResult"},
+        "evidence_complete": {"type": "boolean", "description": "Every section judged; evidence gaps are listed beside it and do not change it"},
+        "missing": {"type": "array", "items": {"$ref": "#/$defs/Section"}, "description": "The sections with a NOT_REVIEWED judgment"},
+        "evidence_gaps": {"type": "array", "items": {"$ref": "#/$defs/EvidenceGap"}, "description": "What the evidence cannot show, however the worksheet is filled: a caveat, not a missing judgment"},
+        "decision_recorded": {"type": "boolean", "description": "Section 7 is filled"},
+        "decision": {"$ref": "#/$defs/DecisionLine"},
+        "envfacts": {"anyOf": [{"const": "no paid fact proved useful: select microskills=envfacts"}, {"type": "null"}], "description": "The spec's condition, stated when no paid fact is useful"},
+        "conflict": {"type": "boolean", "description": "The decision conflicts with the envfacts condition"},
+        "follow_up": {"anyOf": [{"const": "2026-11-17"}, {"type": "null"}], "description": "The next check, named while a section is not reviewed"}
+      },
+      "required": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab", "evidence_complete", "missing", "evidence_gaps", "decision_recorded", "decision", "envfacts", "conflict", "follow_up"],
+      "additionalProperties": false
+    },
+    "RedirectCounts": {
+      "description": "Section 1: nudges by delivery; verdicts and like_128 over the delivered ones.",
+      "type": "object",
+      "properties": {
+        "delivered": {"type": "integer", "description": "delivery_confirmed with its host_delivery receipt"},
+        "delivery_unknown": {"type": "integer", "description": "Not shown delivered"},
+        "shadow_suppressed": {"type": "integer", "description": "Never delivered"},
+        "right": {"type": "integer", "description": "Delivered and right"},
+        "wrong": {"type": "integer", "description": "Delivered and wrong"},
+        "unjudged": {"type": "integer", "description": "Delivered, judged unjudgeable"},
+        "not_reviewed": {"type": "integer", "description": "Delivered, verdict NOT_REVIEWED"},
+        "like_128": {"type": "integer", "description": "Delivered and like upstream #128"},
+        "not_like_128": {"type": "integer", "description": "Delivered and not like #128"},
+        "like_128_not_reviewed": {"type": "integer", "description": "Delivered, like_128 NOT_REVIEWED"}
+      },
+      "required": ["delivered", "delivery_unknown", "shadow_suppressed", "right", "wrong", "unjudged", "not_reviewed", "like_128", "not_like_128", "like_128_not_reviewed"],
+      "additionalProperties": false
+    },
+    "AbortCounts": {
+      "description": "D4: aborts, apart from the redirects; verdicts over the delivered ones.",
+      "type": "object",
+      "properties": {
+        "aborts": {"type": "integer", "description": "Aborts in the window"},
+        "delivery_confirmed": {"type": "integer", "description": "With their host_delivery receipt"},
+        "delivery_unknown": {"type": "integer", "description": "Not shown delivered"},
+        "shadow_suppressed": {"type": "integer", "description": "Never delivered"},
+        "right": {"type": "integer", "description": "Delivered and right"},
+        "wrong": {"type": "integer", "description": "Delivered and wrong"},
+        "unjudged": {"type": "integer", "description": "Delivered, judged unjudgeable"},
+        "not_reviewed": {"type": "integer", "description": "Delivered, verdict NOT_REVIEWED"}
+      },
+      "required": ["aborts", "delivery_confirmed", "delivery_unknown", "shadow_suppressed", "right", "wrong", "unjudged", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "PaidFactCounts": {
+      "description": "Section 2: retained paid facts by the owner's assessment.",
+      "type": "object",
+      "properties": {
+        "useful": {"type": "integer", "description": "With a paid origin and a use receipt"},
+        "not_useful": {"type": "integer", "description": "Not useful"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"},
+        "origin": {"const": "owner-asserted", "description": "D8: the tool cannot prove which charge produced a fact"}
+      },
+      "required": ["useful", "not_useful", "unknown", "not_reviewed", "origin"],
+      "additionalProperties": false
+    },
+    "LearnedFactCounts": {
+      "description": "Section 3: learned facts by verdict.",
+      "type": "object",
+      "properties": {
+        "wrong": {"type": "integer", "description": "Wrong"},
+        "ok": {"type": "integer", "description": "Ok"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+      },
+      "required": ["wrong", "ok", "unknown", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "ImportCounts": {
+      "description": "Section 4: imports and import folds by verdict.",
+      "type": "object",
+      "properties": {
+        "proven": {"type": "integer", "description": "With a history_fold receipt"},
+        "candidate": {"type": "integer", "description": "Time-near only"},
+        "unknown": {"type": "integer", "description": "Unknown"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"},
+        "operations": {"$ref": "#/$defs/ImportOperations"},
+        "note": {"$ref": "#/$defs/ImportNote"}
+      },
+      "required": ["proven", "candidate", "unknown", "not_reviewed", "operations", "note"],
+      "additionalProperties": false
+    },
+    "ImportOperations": {
+      "description": "D13: section 4's import operations by how far each got.",
+      "type": "object",
+      "properties": {
+        "completed": {"type": "integer", "description": "completed"},
+        "partial": {"type": "integer", "description": "partial"},
+        "unknown": {"type": "integer", "description": "unknown"}
+      },
+      "required": ["completed", "partial", "unknown"],
+      "additionalProperties": false
+    },
+    "ImportNote": {
+      "description": "What the import evidence covers, in words.",
+      "type": "string",
+      "enum": ["observed current import state; historical operation coverage unknown", "history_fold receipts cover the operations they name; others unknown"]
+    },
+    "NotRunCounts": {
+      "description": "Section 5: NOT_RUN items by outcome.",
+      "type": "object",
+      "properties": {
+        "run": {"type": "integer", "description": "Run, with evidence"},
+        "re_deferred": {"type": "integer", "description": "Deferred again, with reason, owner and follow-up"},
+        "not_reviewed": {"type": "integer", "description": "NOT_REVIEWED"}
+      },
+      "required": ["run", "re_deferred", "not_reviewed"],
+      "additionalProperties": false
+    },
+    "McpResult": {
+      "description": "Section 6: qualified only by an ab receipt that shows a lower first-request count (D8).",
+      "type": "string",
+      "enum": ["qualified", "protected_unchanged", "failed_ab_protected_unchanged", "NOT_REVIEWED"]
+    },
+    "EvidenceGap": {
+      "description": "Evidence no judgment can supply: a host_delivery or history_fold receipt the collection lacks.",
+      "type": "string",
+      "enum": ["redirect_delivery_unknown", "abort_delivery_unknown", "import_history_unknown"]
+    },
+    "Section": {
+      "description": "A worksheet section, by its key.",
+      "type": "string",
+      "enum": ["redirects", "aborts", "paid_facts", "learned_facts", "imports", "not_run", "mcp_ab"]
+    },
+    "DecisionLine": {
+      "description": "Section 7's decision code verbatim, or PENDING while it is null.",
+      "type": "string",
+      "enum": ["keep", "change", "insufficient", "PENDING"]
+    },
+    "AllKeys": {
+      "description": "The report's figures with every overhead key counted, unrecognized ones included; private only.",
+      "type": "object",
+      "properties": {
+        "headline": {"$ref": "#/$defs/Share"},
+        "selected": {"$ref": "#/$defs/Share"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order"}
+      },
+      "required": ["headline", "selected", "excluded"],
+      "additionalProperties": false
+    },
+    "RowReport": {
+      "description": "One evidence row in the private report, with all its exclusion reasons.",
+      "type": "object",
+      "properties": {
+        "ref": {"type": "string", "description": "The evidence row's ref"},
+        "kind": {"$ref": "#/$defs/RowKind"},
+        "store": {"type": "string", "description": "The repository store"},
+        "session_id": {"type": "string", "description": "The session"},
+        "job": {"type": ["string", "null"], "description": "The charge's judge job"},
+        "reasons": {"type": "array", "items": {"$ref": "#/$defs/Exclusion"}, "description": "Every reason, in precedence order; empty in the headline cohort"}
+      },
+      "required": ["ref", "kind", "store", "session_id", "job", "reasons"],
+      "additionalProperties": false
+    },
+    "PrivateReport": {
+      "description": "te-review report --private: the public report as it is, plus the figures with every key, every row and unknown key.",
+      "type": "object",
+      "properties": {
+        "collection_id": {"type": "string", "description": "The collection read"},
+        "tz": {"type": "string", "description": "The window's time zone"},
+        "report": {"$ref": "#/$defs/PublicReport"},
+        "selected": {"$ref": "#/$defs/Share", "description": "Every selected non-imported session and its matched charges; not the headline; private only (D1)"},
+        "excluded": {"type": "array", "items": {"$ref": "#/$defs/ExcludedCount"}, "description": "Every exclusion reason, in precedence order, with the effective and overhead split"},
+        "all_keys": {"$ref": "#/$defs/AllKeys"},
+        "unknown_overhead_keys": {"type": "object", "additionalProperties": {"type": ["number", "null"]}, "description": "Each unrecognized overhead key and its sum over the selected rows; null when not finite"},
+        "rows": {"type": "array", "items": {"$ref": "#/$defs/RowReport"}, "description": "Every evidence row"},
+        "settings": {"anyOf": [{"type": "array", "items": {"$ref": "#/$defs/ConfigSetting"}}, {"type": "null"}], "description": "The decision's settings, as the owner typed them"}
+      },
+      "required": ["collection_id", "tz", "report", "selected", "excluded", "all_keys", "unknown_overhead_keys", "rows", "settings"],
+      "additionalProperties": false
+    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -322,6 +1672,31 @@
     "session_meta": { "$ref": "#/$defs/SessionMeta" },
     "turn_context": { "$ref": "#/$defs/TurnContext" },
     "message": { "$ref": "#/$defs/Message" },
-    "task_event": { "$ref": "#/$defs/TaskEvent" }
+    "task_event": { "$ref": "#/$defs/TaskEvent" },
+    "te_review_command": { "$ref": "#/$defs/TeReviewCommand" },
+    "te_review_collect": { "$ref": "#/$defs/TeReviewCollect" },
+    "te_review_receipts_command": { "$ref": "#/$defs/TeReviewReceiptsCommand" },
+    "te_review_receipts_draft": { "$ref": "#/$defs/TeReviewReceiptsDraft" },
+    "transcript_record": { "$ref": "#/$defs/TranscriptRecord" },
+    "draft_summary": { "$ref": "#/$defs/DraftSummary" },
+    "coded_failure": { "$ref": "#/$defs/CodedFailure" },
+    "session_row": { "$ref": "#/$defs/SessionRow" },
+    "overhead_row": { "$ref": "#/$defs/OverheadRow" },
+    "evidence": { "$ref": "#/$defs/Evidence" },
+    "collection": { "$ref": "#/$defs/Collection" },
+    "ledger_read": { "$ref": "#/$defs/LedgerRead" },
+    "receipt_manifest": { "$ref": "#/$defs/ReceiptManifest" },
+    "cadence_receipt": { "$ref": "#/$defs/CadenceReceipt" },
+    "event_line": { "$ref": "#/$defs/EventLine" },
+    "redirect_event": { "$ref": "#/$defs/RedirectEvent" },
+    "mechanism_state": { "$ref": "#/$defs/MechanismState" },
+    "injection_state": { "$ref": "#/$defs/InjectionState" },
+    "worksheet": { "$ref": "#/$defs/Worksheet" },
+    "te_review_report": { "$ref": "#/$defs/TeReviewReport" },
+    "te_review_carry": { "$ref": "#/$defs/TeReviewCarry" },
+    "carry_summary": { "$ref": "#/$defs/CarrySummary" },
+    "public_failure": { "$ref": "#/$defs/PublicFailure" },
+    "public_report": { "$ref": "#/$defs/PublicReport" },
+    "private_report": { "$ref": "#/$defs/PrivateReport" }
   }
 }
