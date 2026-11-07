@@ -67,10 +67,11 @@ For structural codebase exploration, use the installed `codebase-memory` skill.
 ## Large reviews fan out
 
 A review or sweep bigger than about 1,000 changed lines fans out: split it into slices by file group
-and give each slice to one of your own subagents, all in parallel. Each subagent works the full
-(file, rule) checklist past the first finding and returns finding lines plus one checklist line per
-file. You then check each finding at its path:line, drop with a one-line reason the ones that don't
-hold, merge duplicates, and report every confirmed finding in one pass.
+and give each slice to one of your own subagents, at most 6 at once, starting the rest in later
+batches. Each subagent works the full (file, rule) checklist past the first finding and returns
+finding lines plus one checklist line per file. You then check each finding at its path:line, drop
+with a one-line reason the ones that don't hold, merge duplicates, and report every confirmed
+finding in one pass.
 
 ## context7 snapshot
 
