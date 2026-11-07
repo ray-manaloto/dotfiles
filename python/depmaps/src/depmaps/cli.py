@@ -19,7 +19,7 @@ def parse(args: Sequence[str]) -> Request:
             return Request(command=Command.map, args=[dep])
         case ["map", dep, "--version", version] if registry.VERSION.fullmatch(version):
             return Request(command=Command.map, args=[dep], version=version)
-        case ["diff", dep, old, new]:
+        case ["diff", dep, old, new] if registry.VERSION.fullmatch(old) and registry.VERSION.fullmatch(new):
             return Request(command=Command.diff, args=[dep, old, new])
         case _:
             raise ValueError(USAGE)

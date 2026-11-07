@@ -1,6 +1,5 @@
 """The map store: <store>/<dep>/.repo.git, and per version a worktree, its cbm map and manifest.json."""
 
-import json
 import re
 import shutil
 from pathlib import Path
@@ -10,7 +9,7 @@ from pydantic import ValidationError
 from . import cbm
 from .events import DepmapsError
 from .git import commit, git
-from .models import Config, Dep, ErrorCode, Manifest
+from .models import Artifact, Config, Dep, ErrorCode, Manifest
 
 # The file build writes into a version folder before anything else and deletes once manifest.json is in.
 BUILDING = ".depmaps-building"
@@ -92,6 +91,16 @@ def remove(cfg: Config, name: str, version: str) -> None:
     shutil.rmtree(target)
 
 
+def artifact(source: Path) -> Artifact:
+    """The artifact.json cbm writes on index. One it didn't write, or in another shape, is cbm_failed: a
+    cbm release that changed the file, never a traceback that stops sync for the remaining deps."""
+    path = source / ".codebase-memory/artifact.json"
+    try:
+        return Artifact.model_validate_json(path.read_bytes())
+    except (OSError, ValidationError) as error:  # a missing or unreadable file; not JSON or not this shape
+        raise DepmapsError(ErrorCode.cbm_failed, f"depmaps: cbm artifact {path}: {error}") from None
+
+
 def build(cfg: Config, name: str, dep: Dep, version: str) -> Manifest:
     tag = dep.tag.replace("{version}", version)
     sha = commit(dep.repo, bare(cfg, name), tag)
@@ -107,11 +116,11 @@ def build(cfg: Config, name: str, dep: Dep, version: str) -> Manifest:
     project = f"{name}-v{version}"
     cbm_version = cbm.version(cfg)
     cbm.index(cfg, source, project)
-    artifact = json.loads((source / ".codebase-memory/artifact.json").read_text())
+    indexed = artifact(source)
     made = Manifest(
         dep=name, version=version, tag=tag, commit=sha, project=project, cbm_version=cbm_version,
-        schema_version=artifact["schema_version"], indexed_at=artifact["indexed_at"],
-        nodes=artifact["nodes"], edges=artifact["edges"],
+        schema_version=indexed.schema_version, indexed_at=indexed.indexed_at, nodes=indexed.nodes,
+        edges=indexed.edges,
     )  # fmt: skip
     (target / "manifest.json").write_text(made.model_dump_json(indent=2) + "\n")
     (target / BUILDING).unlink()

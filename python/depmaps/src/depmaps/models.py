@@ -149,6 +149,32 @@ class Registry(BaseModel):
     """
 
 
+class Artifact(BaseModel):
+    """
+    What depmaps reads of cbm's .codebase-memory/artifact.json; depmaps ignores cbm's other fields.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    schema_version: int
+    """
+    The cbm artifact schema version
+    """
+    indexed_at: str
+    """
+    When cbm indexed it
+    """
+    nodes: Annotated[int, Field(ge=0)]
+    """
+    Graph node count
+    """
+    edges: Annotated[int, Field(ge=0)]
+    """
+    Graph edge count
+    """
+
+
 class Manifest(BaseModel):
     """
     What one map holds, written as manifest.json beside the map's source.

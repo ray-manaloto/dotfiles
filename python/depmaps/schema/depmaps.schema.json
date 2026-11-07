@@ -159,6 +159,36 @@
       ],
       "additionalProperties": false
     },
+    "Artifact": {
+      "description": "What depmaps reads of cbm's .codebase-memory/artifact.json; depmaps ignores cbm's other fields.",
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "description": "The cbm artifact schema version"
+        },
+        "indexed_at": {
+          "type": "string",
+          "description": "When cbm indexed it"
+        },
+        "nodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Graph node count"
+        },
+        "edges": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Graph edge count"
+        }
+      },
+      "required": [
+        "schema_version",
+        "indexed_at",
+        "nodes",
+        "edges"
+      ]
+    },
     "Manifest": {
       "description": "What one map holds, written as manifest.json beside the map's source.",
       "type": "object",

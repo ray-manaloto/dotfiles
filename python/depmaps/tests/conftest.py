@@ -113,12 +113,13 @@ class Env:
     def __init__(self, root: Path, repo: Path) -> None:
         self.root, self.repo = root, repo
         # The second the test started goes into the name, so a later sweep reads its age from the name.
-        self.name = f"dmtest-{int(time.time()):08x}-{uuid.uuid4().hex[:8]}"
+        self.name, self.spare = (f"dmtest-{int(time.time()):08x}-{uuid.uuid4().hex[:8]}" for _ in range(2))
         self.registry, self.lock, self.store = root / "deps.json", root / "mise.lock", root / "store"
 
     def deps(self, deps: dict[str, dict[str, Any]]) -> None:
-        """Write the registry. Only the dependency under this test's own name may get mapped: teardown
-        deletes the cbm projects of that name alone, never a shared name such as broken-v1.0.0."""
+        """Write the registry. Only the dependencies under this test's own two names, name and spare, may
+        get mapped: teardown deletes the cbm projects of those names alone, never a shared name such as
+        broken-v1.0.0."""
         self.registry.write_text(json.dumps({"deps": deps}))
 
     def dep(self, **extra: object) -> dict[str, object]:
@@ -213,5 +214,5 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Env]:
     yield found
     # Runs when the test fails too. Every reply is collected before any is checked, so a status other
     # than deleted or not_found leaves none of the rest behind.
-    replies = [delete(f"{found.name}-v{version}") for version in VERSIONS]
+    replies = [delete(f"{name}-v{version}") for name in (found.name, found.spare) for version in VERSIONS]
     assert all(reply in {"deleted", "not_found"} for reply in replies), replies

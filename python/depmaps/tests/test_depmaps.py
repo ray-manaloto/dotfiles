@@ -1,11 +1,13 @@
 """depmaps end to end: the installed command against a real git repository and the real cbm."""
 
 import json
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from .conftest import CBM, Env, cbm_tool, database, events, git, release
+from .conftest import CBM, CORE_1_0, Env, cbm_tool, database, events, git, release
 
 
 def done(result: str) -> dict[str, str]:
@@ -19,7 +21,7 @@ def errors(text: str) -> list[tuple[str, str]]:
 @pytest.mark.parametrize(
     "args",
     [[], ["nope"], ["list", "extra"], ["map"], ["map", "x", "--version"], ["map", "x", "--version", "../up"],
-     ["diff", "x", "1.0.0"]],
+     ["diff", "x", "1.0.0"], ["diff", "x", "../up", "1.0.0"], ["diff", "x", "1.0.0", "../up"]],
 )  # fmt: skip
 def test_usage(env: Env, args: list[str]) -> None:
     result = env.run(*args)
@@ -196,6 +198,28 @@ def test_map_git_failures(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
     assert message.startswith("depmaps: git clone --bare --quiet")
     monkeypatch.setenv("PATH", str(env.root / "empty"))
     [(code, message)] = errors(env.run("map", env.name).stderr)
+    assert code == "git_failed"
+    assert "No such file or directory" in message
+
+
+def test_map_reports_why_a_tag_fetch_failed(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert env.run("map", env.name).returncode == 0
+    release(env.repo, "1.3.0", {"notes.md": "four\n"})
+    gone = env.root / "moved-away"
+    env.repo.rename(gone)
+    # As offline: origin can't be read, which is not the same as origin having no such tag.
+    offline = env.run("map", env.name, "--version", "1.3.0")
+    assert offline.returncode == 1
+    [(code, message)] = errors(offline.stderr)
+    assert code == "git_failed"
+    assert message.startswith("depmaps: git ls-remote --exit-code origin refs/tags/v1.3.0: ")
+    assert str(env.repo) in message
+    gone.rename(env.repo)
+    # git that can't start once the bare clone exists is still a git_failed event, not a traceback.
+    monkeypatch.setenv("PATH", str(env.root / "empty"))
+    no_git = env.run("map", env.name, "--version", "1.3.0")
+    assert no_git.returncode == 1
+    [(code, message)] = errors(no_git.stderr)
     assert code == "git_failed"
     assert "No such file or directory" in message
 
@@ -443,3 +467,40 @@ def test_sync_reads_the_global_lockfile_from_any_folder(env: Env) -> None:
     (other / "mise.lock").write_text('[[tools."fixture:tool"]]\nversion = "1.1.0"\n')
     result = env.run("list", cwd=other)
     assert events(result.stdout)[0]["version"] == "1.0.0"
+
+
+def lost_artifact(env: Env) -> Path:
+    """A repository whose v1.0.0 commits .codebase-memory/artifact.json.tmp as a link to /dev/null. cbm
+    0.12.1 writes the artifact through that name and renames it into place (src/pipeline/artifact.c:177),
+    so the index answers indexed while artifact.json is left a link to an empty file."""
+    repo = env.root / "lost-artifact"
+    (repo / ".codebase-memory").mkdir(parents=True)
+    git(repo, "init", "--quiet", "--initial-branch=main")
+    (repo / "core.py").write_text(CORE_1_0)
+    (repo / ".codebase-memory/artifact.json.tmp").symlink_to(os.devnull)
+    git(repo, "add", "--force", ".")
+    git(repo, "commit", "--quiet", "-m", "Release 1.0.0")
+    git(repo, "tag", "v1.0.0")
+    return repo
+
+
+def test_map_reports_an_artifact_cbm_did_not_write(env: Env) -> None:
+    env.deps({env.name: env.dep(repo=str(lost_artifact(env)))})
+    result = env.run("map", env.name)
+    assert result.returncode == 1
+    [(code, message)] = errors(result.stderr)
+    assert code == "cbm_failed"
+    path = env.folder("1.0.0") / "src/.codebase-memory/artifact.json"
+    assert message.startswith(f"depmaps: cbm artifact {path}: ")
+    assert done(result.stdout)["message"] == "depmaps: map failed: cbm_failed"
+    assert not (env.folder("1.0.0") / "manifest.json").exists()
+
+
+def test_sync_goes_on_after_an_artifact_cbm_did_not_write(env: Env) -> None:
+    env.deps({env.spare: env.dep(repo=str(lost_artifact(env))), env.name: env.dep()})
+    result = env.run("sync")
+    assert result.returncode == 1
+    assert [code for code, _ in errors(result.stderr)] == ["cbm_failed"]
+    [mapped, end] = events(result.stdout)
+    assert mapped["manifest"]["dep"] == env.name
+    assert end["message"] == "depmaps: sync mapped 1, pruned 0; 1 failed"
