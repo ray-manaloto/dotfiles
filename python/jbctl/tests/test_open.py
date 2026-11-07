@@ -18,7 +18,7 @@ def test_an_ide_without_a_project_window_is_refused(
     backgroundRisks test covers the other unsafe states."""
     # The station route's preflight is what this checks; a --foreground run sets the debug route for the live tests.
     monkeypatch.delenv(ide.FOREGROUND, raising=False)
-    start("mcp")
+    start("--mcp")
     code, events, error = run(capsys, "settings-open", "--ide", "fake", "--page", "Keymap")
     found = "0 project windows, 0 minimized, modal or unknown, 0 others"
     refusal = f"Settings may bring the IDE forward from this state ({found}); only visible project windows are safe"

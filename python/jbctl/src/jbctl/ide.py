@@ -10,6 +10,8 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
+import psutil
+
 from . import station
 
 # A project frame is larger than this; the IDE's toolbar strips (as wide as a frame, 33 px high) and popups are not.
@@ -86,9 +88,7 @@ def owned(ide: int, window: str) -> str:
     """The record for this window: the IDE process's start time, then the window id."""
     # A pid and a window id are unique only within one login session (a reboot reuses both): the start time binds
     # them to this run of the IDE.
-    started = subprocess.run(["ps", "-o", "lstart=", "-p", str(ide)], capture_output=True, text=True, check=True,
-                             timeout=helper_timeout()).stdout.strip()  # fmt: skip
-    return f"{started}\n{window}"
+    return f"{psutil.Process(ide).create_time()}\n{window}"
 
 
 def own_settings(ide: int) -> str:
