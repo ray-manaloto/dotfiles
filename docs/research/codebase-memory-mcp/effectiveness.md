@@ -17,6 +17,9 @@ sources:
     resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/docs/BENCHMARK.md"
   - id: issue-1129
     resource: "https://github.com/DeusData/codebase-memory-mcp/issues/1129"
+  - id: issue-2930
+    resource: "https://github.com/DeusData/codebase-memory-mcp/issues/2930"
+    title: "Our report of the Rust module-path call bug, with the probe crate"
 ---
 
 # codebase-memory-mcp effectiveness and token cost
@@ -84,6 +87,8 @@ We checked the depmaps graph `mise-v2026.11.3` against `rg`. It has 6 CALLS edge
   lowercase module paths are still affected. The maintainer's open PR #2886, a strict resolver that covers
   Rust module trees, use trees and re-exports, would replace these name guesses; it was unmerged and in
   conflict with main that day. Recheck both before relying on this paragraph.
+- **Reported upstream on 2026-11-07** as https://github.com/DeusData/codebase-memory-mcp/issues/2930, with
+  the probe crate, the four causes above and suggested fixes. Follow the issue for upstream updates.
 
 How to use the graph for Rust until this is fixed:
 
