@@ -395,6 +395,19 @@ def test_a_nudge_collect_cannot_name_once_or_without_a_transcript_counts_as_unde
     assert (summary["counts"]["host_delivery"], summary["undelivered_nudges"]) == (0, 3)
 
 
+def test_a_nudge_of_a_session_collect_cannot_name_once_counts_as_undelivered(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    te, projects = tmp_path / "te", tmp_path / "projects"
+    ledger(te, "a-1", [session("s1", START + 3600)])
+    ledger(te, "b-2", [session("s1", START + 3600)])
+    state(te, "a-1", "events.jsonl", [redirect("nudge", "s1", START + 30), redirect("abort", "s1", START + 40)])
+    transcript(projects / "p", "s1")
+    draft(te, projects, tmp_path / "receipts.json")
+    summary = json.loads(capsys.readouterr().out)
+    assert (summary["undelivered_nudges"], summary["undelivered_aborts"]) == (1, 1)
+
+
 def test_one_delivery_record_two_nudges_could_claim_confirms_neither(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

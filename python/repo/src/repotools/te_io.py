@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
@@ -94,3 +95,10 @@ def conform[M: BaseModel](model: type[M], where: str, raw: object) -> M:
         fingerprint = hashlib.sha256(json.dumps(keys).encode()).hexdigest()[:12]
         msg = f"{where} has unknown schema fingerprint {fingerprint} for {ADAPTER}"
         raise TeReviewError(ErrorCode.UNKNOWN_SCHEMA, msg) from None
+
+
+def positive(value: object) -> float | None:
+    """A finite number above zero, else None."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 < value < math.inf:
+        return None
+    return float(value)

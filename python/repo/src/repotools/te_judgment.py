@@ -70,7 +70,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import TeReviewError, conform, json_file, json_lines, listing, present, read_bytes
+from .te_io import TeReviewError, conform, json_file, json_lines, listing, positive, present, read_bytes
 
 # How long after an import finishes its process still folds live sessions: plugin/history.py _run_locked
 # sets finished, then folds the sessions that waited for the fold lock in the same process.
@@ -370,9 +370,9 @@ def folds(
             mine = receipted(linked, row.ref, ReceiptKind.history_fold)
             both = [ref for ref in receipted(linked, done.ref, ReceiptKind.history_fold) if ref in mine]
             # A paid live fold only; time proximity stands in where no receipt ties it to the import.
-            optimizer = (row.row.get("overhead") or {}).get("optimizer_tokens") or 0
+            paid = positive((row.row.get("overhead") or {}).get("optimizer_tokens")) is not None
             near = finished is not None and finished <= row.row.get("folded_at", -1) <= finished + NEAR_S
-            if (both or near) and optimizer > 0 and not row.row.get("imported"):
+            if (both or near) and paid and not row.row.get("imported"):
                 provenance = FoldProvenance.receipted if both else FoldProvenance.time_near
                 found.append(
                     sealed(

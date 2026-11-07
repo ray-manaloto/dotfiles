@@ -403,6 +403,17 @@ def test_a_receipt_does_not_make_an_imported_or_free_fold_an_import_fold(tmp_pat
     assert read(out, "evidence.json")["import_folds"] == []
 
 
+def test_a_fold_whose_optimizer_charge_is_not_a_number_is_not_an_import_fold(tmp_path: Path) -> None:
+    te = tmp_path / "te"
+    done = START + 7200
+    overhead = {"optimizer_tokens": "50", "spiral_judge_tokens": 0.0, "spiral_nudge_writer_tokens": 0.0}
+    ledger(te, "b-2", [session("text", START + 100, folded_at=done + 30, overhead=overhead)])
+    state(te, "b-2", "history.json", history("done", START + 7000, done, 1))
+    out = tmp_path / "out"
+    run(te, out)
+    assert read(out, "evidence.json")["import_folds"] == []
+
+
 def test_a_history_fold_receipt_ties_a_fold_to_its_import(tmp_path: Path) -> None:
     te = tmp_path / "te"
     done = START + 7200

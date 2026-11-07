@@ -270,6 +270,12 @@ REFUSALS = {
         "BAD_WORKSHEET",
         "is delivery_confirmed in the evidence",
     ),
+    "a delivered redirect called unknown": (
+        (DELIVERY,),
+        lambda _: {"redirects": judged(state="delivery_unknown", receipt_ref=None)},
+        "BAD_WORKSHEET",
+        "is delivery_confirmed in the evidence",
+    ),
     "an abort confirmed by the nudge's receipt": (
         (DELIVERY,),
         lambda ref: {"aborts": judged(state="delivery_confirmed", receipt_ref=ref["host_delivery"])},

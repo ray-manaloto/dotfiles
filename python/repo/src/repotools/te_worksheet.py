@@ -1,6 +1,5 @@
 """repotools te-review report: the owner's worksheet, checked against the evidence and counted."""
 
-import math
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -50,7 +49,7 @@ from .models import (
     WorksheetPaidFact,
     WorksheetRedirect,
 )
-from .te_io import TeReviewError, absolute
+from .te_io import TeReviewError, absolute, positive
 from .te_judgment import worksheet
 
 # spec.md user story 5: with no useful paid fact the review selects this setting.
@@ -124,7 +123,9 @@ class Refs:
 def delivered(section: str, entry: WorksheetRedirect | WorksheetAbort, found: RedirectCandidate, refs: Refs) -> bool:
     """delivery_confirmed with one of its own host_delivery receipts; a shadow event stays undeliverable."""
     shadow = RedirectState.shadow_suppressed
-    if (entry.state is shadow) != (found.state is shadow):
+    # A worksheet can neither call a shadow event sent nor unsend one the evidence holds a receipt for.
+    unsent = found.state is RedirectState.delivery_confirmed and entry.state is not found.state
+    if (entry.state is shadow) != (found.state is shadow) or unsent:
         msg = f"{section}: {entry.ref} is {found.state} in the evidence"
         raise bad(msg)
     receipt = refs.known(section, entry.receipt_ref)
@@ -183,13 +184,6 @@ def first_snapshot(found: FactCandidate, refs: Refs, collection: Collection) -> 
         refs.receipts[ref].timestamp for ref in found.receipts if refs.receipts[ref].kind is ReceiptKind.fact_snapshot
     ]
     return min(times, default=collection.collected_at)
-
-
-def positive(value: object) -> float | None:
-    """A finite number above zero, else None."""
-    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 < value < math.inf:
-        return None
-    return float(value)
 
 
 # D8b: when a charge was made; a fold writes a session's own optimizer charge into its session row.

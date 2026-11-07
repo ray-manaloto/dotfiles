@@ -265,6 +265,8 @@ def draft(options: TeReviewReceiptsDraft) -> None:
     found = transcripts(projects, set(chosen))
     synthetic = synthetic_sessions(options)
     without = [DraftUncovered(session_id=sid, gap=DraftGap.ambiguous_session) for sid in shared]
+    for sid in shared:
+        drafting.undelivered.update(event.kind for event in drafting.sent(sid))
     for session_id, row in chosen.items():
         paths = found.get(session_id, [])
         if session_id in synthetic:
