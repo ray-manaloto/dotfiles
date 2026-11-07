@@ -184,7 +184,12 @@ def open_from_menu(  # pragma: foreground - the debug route (JETBRAINS_FOREGROUN
     AppKit drops a menu item's AXPress while the app is inactive. The item is resolved in the background first;
     one batch activates, presses and hands back.
     """
-    frame = frames(ide, listed)[0]["id"]
+    found = frames(ide, listed)
+    # The menu bar is reached through a project window; without one there is nothing to press.
+    if not found:
+        msg = "the IDE has no project window to open Settings from"
+        raise IdeError(msg)
+    frame = found[0]["id"]
     item = agent_desktop("find", "--surface", "menubar", "--window-id", frame, "--name", "Settings…", "--exact")
     steps = [
         {"command": "focus-window", "args": {"window_id": frame}},
