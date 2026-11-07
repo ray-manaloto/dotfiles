@@ -181,3 +181,12 @@
     front for 13 s across the restart, then the owner's app had it again.
   * **For the next runs**, the test creates its worktree under `~/.local/state/jbctl/lifecycle-projects/`, which
     the owner adds once to RustRover's Trusted Locations. jbctl never changes the IDE's settings.
+* **Measured** (`mise run //jbctl:lifecycle rustrover`, with the owner's go, 2026-11-07 09:58, at 9f3af12): **passed
+  end to end in 27 s**, after the owner trusted `~/.local/state/jbctl/lifecycle-projects`. The first try at
+  Settings > Trusted Locations did not save, while the folder did not yet exist. Ticking "trust all projects in"
+  that folder in RustRover's own trust dialog did save it.
+  * start (the direct `launchCommand` launch, with the project folder), Ready, a project window showing the
+    worktree's unique name, restart (new pid, the project window again), and stop. Nothing was killed, and the
+    worktree was removed after RustRover had quit.
+  * `lsappinfo front`: RustRover took the front for 3 s after the start, and for an instant at the restart. Both
+    times the owner's app got it back.
