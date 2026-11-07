@@ -7,15 +7,18 @@
 # ~/.config/mise links them from the main checkout, so this suite runs unchanged against the shell tasks and the
 # hometools port (#392).
 
+import fcntl
 import importlib.util
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 import unittest
 from pathlib import Path
@@ -187,19 +190,25 @@ class UpdateTasksTest(unittest.TestCase):
         (extra / "RECORD").write_text("\n".join(record) + "\n")
         return extra
 
-    def run_task(self, task: str) -> tuple[int, str, str]:
-        """`mise run <task>` from an unrelated folder: exit code, stdout and stderr."""
-        done = subprocess.run(
+    def start_task(self, task: str) -> subprocess.Popen[str]:
+        """`mise run <task>` from an unrelated folder, running, with its stdout and stderr piped."""
+        running = subprocess.Popen(
             [self.session.mise, "run", task],
             env=self.env,
             cwd=self.tc.home / "elsewhere",
             stdin=subprocess.DEVNULL,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=300,
-            check=False,
         )
-        return done.returncode, done.stdout, done.stderr
+        self.addCleanup(running.kill)
+        return running
+
+    def run_task(self, task: str) -> tuple[int, str, str]:
+        """`mise run <task>` from an unrelated folder: exit code, stdout and stderr."""
+        running = self.start_task(task)
+        out, err = running.communicate(timeout=300)
+        return running.returncode, out, err
 
 
 class BrewTest(UpdateTasksTest):
@@ -383,6 +392,36 @@ class CheckTest(UpdateTasksTest):
     def test_a_uv_that_cannot_start_exits_2_not_drift(self) -> None:
         self.without_uv()
         self.assert_hometools_could_not_start("uv: No such file or directory")
+
+    def test_a_uv_sync_killed_by_a_signal_exits_2_and_names_128_plus_the_signal(self) -> None:
+        # The first run builds hometools' venv. uv sync then waits on the venv's .lock, an exclusive flock
+        # (uv 0.13.7 crates/uv-project-commands/src/sync.rs:288-293, crates/uv-python-interpreter/src/
+        # interpreter.rs:643-650; Rust 1.99.1 library/std/src/sys/fs/unix.rs:1321-1336): this test holds it,
+        # so the real uv sync is still running when it gets SIGTERM.
+        self.assertEqual(self.check(outdated(), {"stdout": "{}\n"}, {})[0], 0)
+        package = self.candidate / "python/home"
+        lock = (package / ".venv/.lock").open("a")
+        self.addCleanup(lock.close)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        (self.stand_in / "calls.jsonl").unlink()
+        task = self.start_task("update:check")
+        sync = ["uv", "sync", "--project", str(package), "--locked", "--inexact"]
+        pattern = re.escape(" ".join(sync))
+        deadline = time.monotonic() + 60
+        while True:
+            found = subprocess.run(["pgrep", "-fx", pattern], capture_output=True, text=True, check=False)
+            if found.returncode == 0:
+                break
+            self.assertIsNone(task.poll(), "update:check ended before its uv sync waited on the lock")
+            self.assertLess(time.monotonic(), deadline, "no uv sync waited on the lock")
+            time.sleep(0.1)
+        os.kill(int(found.stdout.split()[0]), signal.SIGTERM)
+        out, err = task.communicate(timeout=300)
+        self.assertEqual(task.returncode, 2, out + err)
+        why = f"uv sync exited {128 + signal.SIGTERM}"
+        line = f"update:check: hometools could not start ({why}) — COULD NOT CHECK"
+        self.assertEqual(errors(err), [line])
+        self.assertEqual((out, self.calls()), ("", []))
 
     def test_hometools_sync_keeps_a_package_its_lock_does_not_list(self) -> None:
         # The first run builds hometools' venv; the second syncs it with the extra package in it.

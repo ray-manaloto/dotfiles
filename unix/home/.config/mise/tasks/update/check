@@ -25,6 +25,8 @@ try:
 except OSError as failed:
     synced, why = 127, f"uv: {failed.strerror}"
 else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
     why = f"uv sync exited {synced}"
 if synced:
     error = f"update:check: hometools could not start ({why}) — COULD NOT CHECK"
