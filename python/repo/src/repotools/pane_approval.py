@@ -180,9 +180,9 @@ class Turns:
     def task_complete(self, payload: dict[str, Any]) -> None:
         event = TaskEvent.model_validate(payload)
         context, answer = self.context, self.answer
-        if event.turn_id == self.running and answer is None and event.last_agent_message is None:
-            # No answer (refused at the usage limit, #544): like an abort, nothing is approved, because
-            # task_started cleared it, and the next turn may run.
+        if event.turn_id == self.running and answer in (None, "") and event.last_agent_message is None:
+            # No answer (refused at the usage limit, #544) or an empty one (#562): like an abort, nothing
+            # is approved, because task_started cleared it, and the next turn may run.
             self.running = None
             return
         if event.turn_id != self.running or context is None or answer is None or event.last_agent_message != answer:

@@ -426,6 +426,87 @@ def test_a_turn_with_no_answer_withdraws_an_approval(repo: Path, capsys: pytest.
     assert "no completed last turn" in refusal(capsys)
 
 
+def emptied(root: Path, turn_id: str) -> list[dict[str, Any]]:
+    """A turn whose final answer is empty (#562), trimmed from a real Codex 0.167.0 rollout: a dotfiles
+    reviewer's reply to a broadcast on 2026-11-07. Record order and fields are as recorded; texts, ids,
+    timings and the encrypted reasoning are cut, and the model's settings beyond the sandbox are dropped."""
+    settings = {
+        "turn_id": turn_id,
+        "root_turn_id": turn_id,
+        "cwd": str(root),
+        "approval_policy": "never",
+        "approvals_reviewer": "auto_review",
+        "sandbox_policy": {"type": "read-only"},
+        "permission_profile": READ_ONLY,
+    }
+    asked = {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "FYI, no action."}]}
+    reasoning = {"type": "reasoning", "id": "rs", "summary": [], "encrypted_content": ""}
+    item = {"type": "AgentMessage", "id": "msg", "content": [{"type": "Text", "text": ""}], "phase": "final_answer"}
+    answer = {
+        "type": "message",
+        "status": "completed",
+        "id": "msg",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "", "annotations": [], "logprobs": []}],
+        "phase": "final_answer",
+    }
+    complete = {"type": "task_complete", "root_turn_id": turn_id, "turn_id": turn_id, "last_agent_message": None}
+
+    def completed(done: dict[str, Any]) -> dict[str, Any]:
+        return {"type": "event_msg", "payload": {"type": "item_completed", "turn_id": turn_id, "item": done}}
+
+    return [
+        {"type": "event_msg", "payload": {"type": "task_started", "turn_id": turn_id, "root_turn_id": turn_id}},
+        {"type": "turn_context", "payload": settings},
+        {"type": "response_item", "payload": asked},
+        completed({"type": "UserMessage"}),
+        completed({"type": "Reasoning"}),
+        {"type": "response_item", "payload": reasoning},
+        completed(item),
+        {"type": "response_item", "payload": answer},
+        {"type": "token_usage_record", "payload": {"turn_id": turn_id, "usage": {"output_tokens": 105}}},
+        {"type": "event_msg", "payload": {"type": "token_count"}},
+        {"type": "event_msg", "payload": complete},
+    ]
+
+
+def test_a_turn_with_an_empty_answer_leaves_the_session_usable(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    write_log(repo, [*emptied(repo, "t0"), *records])
+    main(["pane-approved", *text()])
+
+
+def test_a_turn_with_an_empty_answer_withdraws_an_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, [*approve(repo, capsys), *emptied(repo, "t2")])
+    assert "no completed last turn" in refusal(capsys)
+
+
+def test_a_new_approval_after_an_empty_answer_counts(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # #562's three turns in one rollout: an approval, an empty answer that withdraws it, a new approval.
+    first = approve(repo, capsys)
+    write_log(repo, [*first, *emptied(repo, "t2")])
+    assert "no completed last turn" in refusal(capsys)
+    again = turn(repo, "t3", first[2]["payload"]["content"][0]["text"])
+    write_log(repo, [*first, *emptied(repo, "t2"), *again])
+    main(["pane-approved", *text()])
+
+
+def test_an_empty_answer_the_end_reports_otherwise_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = emptied(repo, "t0")
+    records[-1]["payload"]["last_agent_message"] = "Reviewed."
+    write_log(repo, [*records, *approve(repo, capsys)])
+    assert refusal(capsys) == "turn t0 completed without matching settings and answer"
+
+
+def test_an_interrupted_turn_after_an_empty_answer_leaves_the_session_usable(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    records = approve(repo, capsys)
+    started = {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "t1a"}}
+    write_log(repo, [*emptied(repo, "t0"), started, aborted("t1a"), *records])
+    main(["pane-approved", *text()])
+
+
 def test_an_answer_the_end_does_not_report_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # A final answer, then an end that reports none: not a turn with no answer, so still a mismatch.
     write_log(repo, reported(approve(repo, capsys), None))
