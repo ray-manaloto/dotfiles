@@ -101,7 +101,10 @@ def station(flags: set[str]) -> type[BaseHTTPRequestHandler]:
                 return
             if body["restart"]:
                 launcher = os.environ["STANDIN_LAUNCH"]
-                os.posix_spawn(launcher, [launcher, *sys.argv[1:]], os.environ, setsid=True)
+                # --restart-not-ready: the relaunched IDE never answers /api/about.
+                again = [arg for arg in sys.argv[1:] if arg != "--restart-not-ready"]
+                again += ["--no-about"] if "--restart-not-ready" in flags else []
+                os.posix_spawn(launcher, [launcher, *again], os.environ, setsid=True)
             threading.Timer(0.1, os._exit, [0]).start()
 
     return Handler
@@ -109,7 +112,7 @@ def station(flags: set[str]) -> type[BaseHTTPRequestHandler]:
 
 def about(flags: set[str]) -> type[BaseHTTPRequestHandler]:
     """The built-in web server's /api/about, with the build from the app's product-info.json; --busy: HTTP 429,
-    --old: another build, --garbage: not JSON."""
+    --old: another build, --garbage: not JSON, --die-asked: the IDE ends 1.9 s into the first request, unanswered."""
     info = Path(os.environ["STANDIN_LAUNCH"]).parents[1] / "Resources/product-info.json"
     build = "0.0" if "--old" in flags else json.loads(info.read_text())["buildNumber"]
     reply = "<html>" if "--garbage" in flags else json.dumps({"productName": "Fake", "buildNumber": build})
@@ -119,6 +122,9 @@ def about(flags: set[str]) -> type[BaseHTTPRequestHandler]:
             if self.path != "/api/about":
                 self.send_error(404)
                 return
+            if "--die-asked" in flags:  # within jbctl's 2 s request timeout, and after a shorter --timeout
+                threading.Event().wait(1.9)
+                os._exit(0)
             self.send_response(429 if "--busy" in flags else 200)
             self.end_headers()
             self.wfile.write(reply.encode())

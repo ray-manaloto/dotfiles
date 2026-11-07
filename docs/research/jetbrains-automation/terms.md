@@ -47,6 +47,12 @@ A running IDE whose built-in web server answers `/api/about`, with or without an
 server is not part of it: an IDE can have MCP switched off.
 _Avoid_: started, up, loaded.
 
+**Not ready**:
+A running IDE whose built-in web server has not yet answered `/api/about` with its build. jbctl may have
+started or restarted it, or it may still be starting on its own. Not an error: it can become ready later, or be
+stopped.
+_Avoid_: stuck, hung, failed.
+
 **Tool ID**:
 How Toolbox names a product (`CLion`, `PyCharm-P`, `IDEA-U`, `Goland`), shared by every install of it. It
 picks a product where a Toolbox script name picks one install.

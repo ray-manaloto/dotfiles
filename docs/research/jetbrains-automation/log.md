@@ -190,3 +190,14 @@
     worktree was removed after RustRover had quit.
   * `lsappinfo front`: RustRover took the front for 3 s after the start, and for an instant at the restart. Both
     times the owner's app got it back.
+* **Changed** (owner's decisions after a grilling, 2026-11-07): a run of the IDE that jbctl launched or restarted, still
+  running but not ready in time, is no longer reported as `refused`. `refused` could have led an agent to start or
+  restart it again.
+  * `start` reports `started-not-ready`, and `restart` reports `restarted-not-ready` with `previous_pid`. Both
+    exit 75 (EX_TEMPFAIL, as the AgentsView controller does for a pending startup). In a batch, any refusal makes
+    the exit code 1.
+  * The reason says the IDE is still running, and to check `jbctl status` or stop it.
+  * `restart` refuses while the IDE is not ready ("still starting; wait or stop it"). It checks with one
+    `/api/about` request, and `restart --check` reports the same refusal. `stop` stays allowed.
+  * `status`'s state `running` is now `not-ready`, matching the new term "Not ready" in terms.md.
+  * A launch where nothing comes up, or where the IDE ends before it is ready, stays `refused`, since nothing runs.

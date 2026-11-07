@@ -791,12 +791,12 @@
       "additionalProperties": false
     },
     "IdeState": {
-      "description": "Where a Toolbox IDE is in its life.",
+      "description": "Where a Toolbox IDE is in its life: not-ready runs but /api/about has not answered with its build.",
       "type": "string",
       "enum": [
         "stopped",
         "starting",
-        "running",
+        "not-ready",
         "ready"
       ]
     },
@@ -864,12 +864,14 @@
       "additionalProperties": false
     },
     "Action": {
-      "description": "What a lifecycle command did, or would do, to one IDE.",
+      "description": "What a lifecycle command did, or would do, to one IDE (*-not-ready: launched, running, not ready).",
       "type": "string",
       "enum": [
         "started",
+        "started-not-ready",
         "stopped",
         "restarted",
+        "restarted-not-ready",
         "refused",
         "skipped",
         "would-start",

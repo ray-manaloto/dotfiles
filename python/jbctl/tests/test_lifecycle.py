@@ -109,7 +109,7 @@ def test_status_reports_why_an_ide_is_not_ready(
     (toolbox / "fake-config/options/mcpServer.xml").write_text("<application")
     code, [event], _ = run(capsys, "status")
     [row] = event["ides"]
-    assert (code, row["pid"], row["state"], row["mcp"]) == (0, ide.process.pid, "running", "unknown")
+    assert (code, row["pid"], row["state"], row["mcp"]) == (0, ide.process.pid, "not-ready", "unknown")
     unreadable, about = row["note"].split("; ")
     assert (unreadable.startswith("unclosed token"), about.startswith("/api/about: 6334"), said in about) == (
         True,
@@ -202,12 +202,12 @@ def test_start_by_product_refuses_several_installs(capsys: pytest.CaptureFixture
     [
         ([], "no IDE came up from {app} in time"),
         (["--no-about", "--die"], "ended before it was ready"),
-        (["--no-about"], "was not ready in time: /api/about did not answer with build 263.1.2"),
     ],
 )
-def test_start_reports_an_ide_that_does_not_become_ready(
+def test_start_reports_an_ide_that_does_not_come_up(
     capsys: pytest.CaptureFixture[str], toolbox: Path, extra: list[str], reason: str
 ) -> None:
+    """Nothing runs afterwards, so the outcome is a refusal."""
     app = toolbox / "fake.app"
     if extra:
         flags(app, *extra)
@@ -216,6 +216,32 @@ def test_start_reports_an_ide_that_does_not_become_ready(
     code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "3")
     assert (code, event["lifecycle"]["action"]) == (1, "refused")
     assert reason.format(app=app) in event["lifecycle"]["reason"]
+
+
+@needs_jbax
+def test_start_reports_an_ide_that_runs_but_is_not_ready(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
+    """jbctl launched it and it still runs: started-not-ready, exit 75, with a reason that says so, and status shows
+    it not-ready, so nothing starts it a second time; stop still quits it."""
+    flags(toolbox / "fake.app", "--no-about")
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "3")
+    started = event["lifecycle"]
+    assert (code, started["action"]) == (75, "started-not-ready")
+    assert started["reason"].startswith(f"pid {started['pid']} is still running but was not ready in time")
+    code, [listed], _ = run(capsys, "status", "--ide", "fake")
+    assert (code, listed["ides"][0]["state"], listed["ides"][0]["pid"]) == (0, "not-ready", started["pid"])
+    again = f"fake already runs as pid {started['pid']}"
+    refused = {"script": "fake", "action": "refused", "reason": again}
+    assert run(capsys, "start", "--foreground", "--ide", "fake") == (1, [{"lifecycle": refused}], "")
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
+
+
+def test_start_reports_an_ide_that_ends_at_the_deadline(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
+    """It ended during jbctl's last /api/about request, which outlasted --timeout: nothing runs, so refused, not
+    started-not-ready."""
+    flags(toolbox / "fake.app", "--die-asked")
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "1.5")
+    assert (code, event["lifecycle"]["action"]) == (1, "refused")
+    assert event["lifecycle"]["reason"].endswith("ended before it was ready")
 
 
 @pytest.mark.usefixtures("toolbox")
@@ -457,3 +483,25 @@ def test_a_station_that_hangs_up_is_one_ides_refusal(
     code, events, _ = run(capsys, "stop", "--all", "--yes", "--timeout", "20")
     actions = {e["lifecycle"]["script"]: e["lifecycle"]["action"] for e in events}
     assert (code, actions) == (1, {"fake": "refused", "solo": "stopped"})
+
+
+@needs_jbax
+def test_restart_reports_a_new_ide_that_runs_but_is_not_ready(capsys: pytest.CaptureFixture[str], start: Start) -> None:
+    """The IDE restarts itself and the new one runs but is not ready in time: restarted-not-ready, exit 75."""
+    ide = start("--restart-not-ready")
+    code, [event], _ = run(capsys, "restart", "--foreground", "--ide", "fake", "--timeout", "3")
+    restarted = event["lifecycle"]
+    assert (code, restarted["action"], restarted["previous_pid"]) == (75, "restarted-not-ready", ide.process.pid)
+    assert restarted["reason"].startswith(f"pid {restarted['pid']} is still running but was not ready in time")
+
+
+@needs_jbax
+def test_restart_waits_for_an_ide_that_is_still_starting(capsys: pytest.CaptureFixture[str], start: Start) -> None:
+    """A second restart while the IDE is not ready (perhaps still coming up from the first) refuses, --check too,
+    and sends nothing; stop is still allowed."""
+    ide = start("--no-about")
+    reason = f"pid {ide.process.pid} is still starting; wait (jbctl status) or stop it"
+    refused = {"lifecycle": {"script": "fake", "action": "refused", "reason": reason}}
+    assert run(capsys, "restart", "--foreground", "--ide", "fake") == (1, [refused], "")
+    assert run(capsys, "restart", "--ide", "fake", "--check") == (1, [refused], "")
+    assert (ide.process.poll(), run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0]) == (None, 0)

@@ -132,14 +132,20 @@ def run(options: Options) -> None:
             drive(options)
 
 
+# EX_TEMPFAIL, as the AgentsView controller uses for STARTUP_PENDING: an IDE is up but not ready yet.
+NOT_READY = 75
+
+
 def cycle(options: Start | Stop | Restart) -> None:
-    """One line per IDE; exit 1 when any of them was refused."""
-    refused = False
+    """One line per IDE; exit 1 when any was refused, else 75 when any runs but was not ready in time."""
+    actions = set()
     for result in lifecycle.act(options):
         emit(Event(lifecycle=result))
-        refused |= result.action == Action.refused
-    if refused:
+        actions.add(result.action)
+    if Action.refused in actions:
         raise SystemExit(1)
+    if actions & {Action.started_not_ready, Action.restarted_not_ready}:
+        raise SystemExit(NOT_READY)
 
 
 def drive(options: Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect) -> None:
