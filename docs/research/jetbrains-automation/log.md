@@ -201,3 +201,5 @@
     `/api/about` request, and `restart --check` reports the same refusal. `stop` stays allowed.
   * `status`'s state `running` is now `not-ready`, matching the new term "Not ready" in terms.md.
   * A launch where nothing comes up, or where the IDE ends before it is ready, stays `refused`, since nothing runs.
+  * Follow-up (owner's decision, 2026-11-07): `restart`'s refusal now reads "pid N is not ready yet; wait (jbctl
+    status) or stop it", in the words of the term "Not ready".

@@ -496,11 +496,11 @@ def test_restart_reports_a_new_ide_that_runs_but_is_not_ready(capsys: pytest.Cap
 
 
 @needs_jbax
-def test_restart_waits_for_an_ide_that_is_still_starting(capsys: pytest.CaptureFixture[str], start: Start) -> None:
+def test_restart_waits_for_an_ide_that_is_not_ready(capsys: pytest.CaptureFixture[str], start: Start) -> None:
     """A second restart while the IDE is not ready (perhaps still coming up from the first) refuses, --check too,
     and sends nothing; stop is still allowed."""
     ide = start("--no-about")
-    reason = f"pid {ide.process.pid} is still starting; wait (jbctl status) or stop it"
+    reason = f"pid {ide.process.pid} is not ready yet; wait (jbctl status) or stop it"
     refused = {"lifecycle": {"script": "fake", "action": "refused", "reason": reason}}
     assert run(capsys, "restart", "--foreground", "--ide", "fake") == (1, [refused], "")
     assert run(capsys, "restart", "--ide", "fake", "--check") == (1, [refused], "")
