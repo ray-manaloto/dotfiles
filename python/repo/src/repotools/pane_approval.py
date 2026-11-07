@@ -16,15 +16,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from . import process
+from .git import git
 from .models import CommitText, Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
 CITATION_OPEN = "<oai-mem-citation>"
 CITATION_CLOSE = "</oai-mem-citation>"
-
-
-def git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, check=True, text=True).stdout
 
 
 def hashed(data: bytes) -> str:

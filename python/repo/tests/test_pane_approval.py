@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from repotools.cli import main
+from tests import clean_git_env
 
 SESSION = "01a19f1e-28d7-7b12-bce2-4731b8693992"
 OTHER = "01a19f20-baa0-7ff0-8adb-6bb7a2919e7f"
@@ -26,11 +27,7 @@ MESSAGE = "feat: one\n\nWhy it changes.\n"
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    # A pre-commit hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clean_git_env(monkeypatch)
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
     # Beside the repository, untracked: the commit message the reviewer reads, which tests may rewrite.
     (tmp_path / "message").write_text(MESSAGE)

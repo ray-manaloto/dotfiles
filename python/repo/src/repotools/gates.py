@@ -10,8 +10,9 @@ import sys
 import tomllib
 from pathlib import Path
 
+from .git import git
 from .models import PrivacyScan, ReviewApproved, ReviewPython, ToolchainGate
-from .pane_approval import git, hashed
+from .pane_approval import hashed
 
 PROMPT = Path("tasks/review/python.md")
 APPROVING = b"VERDICT: PASS"

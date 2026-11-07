@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from repotools.cli import main
+from tests import clean_git_env
 
 REPO = Path(__file__).resolve().parents[3]
 USER = "gatetester"
@@ -38,11 +39,7 @@ sys.exit(int(os.environ.get("STANDIN_EXIT", "0")))
 @pytest.fixture
 def copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A git repository holding this checkout's working tree, committed and already on its remote."""
-    # A pre-commit hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clean_git_env(monkeypatch)
     listed = subprocess.run(
         ["git", "-C", REPO, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,

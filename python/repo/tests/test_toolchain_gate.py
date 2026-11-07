@@ -1,7 +1,6 @@
 """repotools toolchain-gate on a real repository: run for a change the toolchain tasks see, the reason otherwise."""
 
 import json
-import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from repotools.cli import main
+from tests import clean_git_env
 
 CONFIG = "unix/home/.config/mise/config.toml"
 HELD = """# The global config.
@@ -38,11 +38,7 @@ def put(path: str, text: str) -> None:
 @pytest.fixture(autouse=True)
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A repository whose HEAD holds the global config, the file tasks and hometools."""
-    # A hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clean_git_env(monkeypatch)
     git("init", "-q", "-b", "main", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     put(CONFIG, HELD)
