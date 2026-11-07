@@ -570,3 +570,31 @@ def test_a_marker_that_is_not_utf8_is_not_jbctls(capsys: pytest.CaptureFixture[s
         ["unmanaged", "unmanaged", "copied", "copied"],
     )
     assert events[0]["skill"]["reason"] == "its .jbctl-skill.json is not one jbctl wrote"
+
+
+@pytest.mark.parametrize("metadata", ['{"version": 1}', '["1.0.0"]'], ids=["number", "list"])
+def test_a_version_that_is_not_a_string_is_no_version(
+    capsys: pytest.CaptureFixture[str], home: Path, metadata: str
+) -> None:
+    jar(home.parent / "fake.app", "contrib", bundled("fake-debugger", {**DEBUGGER, "metadata.json": metadata}))
+    code, events, error = run(capsys, "skills", "--ide", "fake", "--skill", "fake-debugger")
+    assert (code, error, [("version" in event["skill"], event["skill"]["state"]) for event in events]) == (
+        0,
+        "",
+        [(False, "copied"), (False, "copied")],
+    )
+    marker = json.loads((home / ".agents/skills/fake-debugger/.jbctl-skill.json").read_text())
+    assert marker["version"] is None
+
+
+def test_a_metadata_json_that_is_not_json_fails_the_run(capsys: pytest.CaptureFixture[str], home: Path) -> None:
+    contrib = jar(
+        home.parent / "fake.app", "contrib", bundled("fake-debugger", {**DEBUGGER, "metadata.json": "not json"})
+    )
+    code, events, error = run(capsys, "skills", "--ide", "fake", "--skill", "fake-debugger")
+    assert (code, events, error.startswith(f"{contrib}!bundledSkills/fake-debugger/metadata.json is not JSON: ")) == (
+        1,
+        [],
+        True,
+    )
+    assert list(home.iterdir()) == []

@@ -106,10 +106,18 @@ def contents(skill: BundledSkill) -> Iterator[tuple[str, bytes]]:
 def bundled(jar: Path, folder: str) -> BundledSkill:
     skill = BundledSkill(jar=str(jar), folder=folder, files={})
     files = dict(contents(skill))
-    metadata = json.loads(files.get("metadata.json", b"{}"))
+    # A metadata.json that is not JSON fails the run, naming it; a version that is not a string (it is only reported
+    # and recorded) gives the skill no version rather than failing every run of it.
+    try:
+        metadata = json.loads(files.get("metadata.json", b"{}"))
+    except ValueError as error:
+        msg = f"{jar}!{folder}/metadata.json is not JSON: {error}"
+        raise IdeError(msg) from None
     version = metadata.get("version") if isinstance(metadata, dict) else None
     hashes = {path: digest(data) for path, data in files.items()}
-    return skill.model_copy(update={"files": hashes, "version": version})
+    return BundledSkill(
+        jar=str(jar), folder=folder, files=hashes, version=version if isinstance(version, str) else None
+    )
 
 
 def sources(install: Install, names: list[str]) -> dict[str, BundledSkill]:
