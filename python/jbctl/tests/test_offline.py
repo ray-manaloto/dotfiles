@@ -31,6 +31,12 @@ def test_check_direct_fails_while_router_only(capsys: pytest.CaptureFixture[str]
     assert run(capsys, "check-direct", "--mcp-url", via_router) == (1, [{"tools": 1, "direct": False}], "")
 
 
+def test_a_tools_list_without_a_tool_list_is_a_failure(capsys: pytest.CaptureFixture[str], no_tool_list: str) -> None:
+    """The URL in the failure is the caller's text: JSON-significant characters stay inert in one Failure line."""
+    url = no_tool_list + '?q="},{\\'
+    assert run(capsys, "check-direct", "--mcp-url", url) == (1, [], f"{url}: tools/list returned no tool list")
+
+
 def test_an_unreachable_mcp_server_is_a_failure(capsys: pytest.CaptureFixture[str]) -> None:
     code, events, error = run(capsys, "check-direct", "--mcp-url", "http://127.0.0.1:9/stream")
     assert (code, events, bool(error)) == (1, [], True)

@@ -153,6 +153,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     except subprocess.CalledProcessError as error:
         sys.stderr.write(Failure(error=f"{error.cmd[0]} failed: {error.stderr}").model_dump_json() + "\n")
         raise SystemExit(1) from None
+    except subprocess.TimeoutExpired as error:
+        # Not the command: its arguments, and JBAX's path, carry text from outside.
+        failure = Failure(error=f"a helper did not answer within {error.timeout:g} s")
+        sys.stderr.write(failure.model_dump_json() + "\n")
+        raise SystemExit(1) from None
     # IdeError: the IDE is not in a state the step can act on. ValueError: pydantic's and json's errors.
     # OSError: an unreadable helper, an existing map file, or an unreachable MCP endpoint (URLError).
     except (ide.IdeError, ValueError, OSError) as error:

@@ -14,7 +14,11 @@ from .models import Coverage, FileCoverage
 
 
 def check(report: Path, sources: Path, skip: Sequence[str], minimum: float) -> Coverage:
-    data = json.loads(report.read_text())["data"][0]["files"]
+    try:
+        data = json.loads(report.read_text())["data"][0]["files"]
+    except (KeyError, IndexError, TypeError) as error:
+        msg = f"{report}: not an llvm-cov JSON export (no data[0].files)"
+        raise ValueError(msg) from error
     exported = {Path(file["filename"]).resolve(): file["summary"] for file in data}
     files: list[FileCoverage] = []
     short: list[str] = []

@@ -23,7 +23,7 @@ tags: [rea, accessibility, macos, clion, reverse-engineering]
   `claude mcp add --scope user rea -- <prefix>/bin/rea mcp`.
 - `rea doctor`: the static engines (Hopper, Ghidra, IDA, JADX, Kuna) are not installed.
 
-## Local patches (`jbctl/rea-native-ui-clion.patch`, reapply with `jbctl/rea-patch.sh`)
+## Local patches (`python/jbctl/src/jbctl/rea-native-ui.patch`, applied to a fresh rea install with `jbctl rea-patch`)
 
 The patches are to `bridge/native/ReaNativeUI.swift`:
 1. **Launch time**: `NSRunningApplication.launchDate` is nil for this CLion process, so fall back to

@@ -143,3 +143,23 @@ def test_a_relative_idea_config_path_is_refused(capsys: pytest.CaptureFixture[st
     product_info(toolbox / "fake.app", "-Didea.config.path=config")
     error = run(capsys, "resolve", "--ide", "fake")[2]
     assert error.endswith("idea.config.path 'config' is relative; only an absolute or ~/ path can be resolved")
+
+
+@pytest.mark.usefixtures("toolbox")
+def test_a_helper_that_does_not_answer_is_one_failure_line(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hung helper (the real ps, given no time) is one Failure line; the command it ran is left out."""
+    monkeypatch.setenv("JBCTL_TIMEOUT", "0")
+    assert run(capsys, "resolve", "--ide", "fake") == (1, [], "a helper did not answer within 0 s")
+
+
+# Not a number (with a quote and a newline: JBCTL_TIMEOUT is outside text, inert in the Failure line), out of range,
+# or a float the wait would overflow on.
+@pytest.mark.parametrize("raw", ['6"0\n', "-1", "nan", "inf", "1e309", "1e300"])
+@pytest.mark.usefixtures("toolbox")
+def test_a_timeout_jbctl_cannot_wait_is_one_failure_line(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("JBCTL_TIMEOUT", raw)
+    assert run(capsys, "resolve", "--ide", "fake") == (1, [], f"JBCTL_TIMEOUT is {raw!r}; want seconds from 0 to 86400")

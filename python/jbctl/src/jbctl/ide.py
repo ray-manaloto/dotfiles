@@ -1,6 +1,7 @@
 """The IDE that toolbox.py found: its station socket, agent-desktop (windows) and jbax (background AX)."""
 
 import json
+import math
 import os
 import subprocess
 import time
@@ -17,8 +18,25 @@ FRAME_MIN_HEIGHT = 300
 # The one opt-in for the route that brings the IDE forward (opening Settings from the menu bar), off by default:
 # the default runs are fully background, and the foreground route is for debugging when a headless one fails.
 FOREGROUND = "JETBRAINS_FOREGROUND"
-# Seconds before a hung agent-desktop, rea or jbax is a failure instead of a hang.
+# Seconds before a hung agent-desktop, rea, jbax, ps or lsof is a failure instead of a hang.
 TIMEOUT = 60
+DAY = 86400
+
+
+def helper_timeout() -> float:
+    """TIMEOUT, or JBCTL_TIMEOUT when set (a slow machine; the tests set 0 to make a real helper time out)."""
+    raw = os.environ.get("JBCTL_TIMEOUT")
+    if not raw:
+        return TIMEOUT
+    try:
+        value = float(raw)
+    except ValueError:
+        value = math.nan
+    # nan, inf and huge values overflow the wait (OverflowError, not a Failure line); a negative one means nothing.
+    if not 0 <= value <= DAY:
+        msg = f"JBCTL_TIMEOUT is {raw!r}; want seconds from 0 to {DAY}"
+        raise ValueError(msg)
+    return value
 
 
 class IdeError(Exception):
@@ -26,7 +44,7 @@ class IdeError(Exception):
 
 
 def tool(*args: str) -> Any:  # noqa: ANN401 - a JSON document whose shape the caller knows
-    return json.loads(subprocess.run(args, capture_output=True, text=True, check=True, timeout=TIMEOUT).stdout)
+    return json.loads(subprocess.run(args, capture_output=True, text=True, check=True, timeout=helper_timeout()).stdout)
 
 
 def agent_desktop(*args: str) -> Any:  # noqa: ANN401 - agent-desktop's data member
@@ -36,7 +54,7 @@ def agent_desktop(*args: str) -> Any:  # noqa: ANN401 - agent-desktop's data mem
 def jbax(*args: str) -> dict[str, Any]:
     """jbax prints one JSON object and exits non-zero when it refuses; its refusal is an IdeError, not a crash."""
     command = [os.environ.get("JBAX", "jbax"), *args]
-    done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=TIMEOUT)
+    done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=helper_timeout())
     # A jbax that crashed prints no JSON. Not covered: no test can make the real jbax crash, and the owner ruled
     # out a stand-in; it stays visible in the coverage report.
     if not done.stdout:
@@ -69,7 +87,7 @@ def owned(ide: int, window: str) -> str:
     # A pid and a window id are unique only within one login session (a reboot reuses both): the start time binds
     # them to this run of the IDE.
     started = subprocess.run(["ps", "-o", "lstart=", "-p", str(ide)], capture_output=True, text=True, check=True,
-                             timeout=TIMEOUT).stdout.strip()  # fmt: skip
+                             timeout=helper_timeout()).stdout.strip()  # fmt: skip
     return f"{started}\n{window}"
 
 
@@ -123,7 +141,8 @@ def open_settings(ide: int, page: str) -> tuple[str, bool]:
     # Showing the dialog can re-activate the IDE after the menu route's batch, so hand the front back again.
     if foreground and hand_back:  # pragma: foreground - the debug route's second hand-back
         agent_desktop("batch", json.dumps(hand_back), "--stop-on-error")
-    return window, previous is None or focused(windows()) == previous
+    # With no focused window before, the front is unchanged only if none is focused now either.
+    return window, focused(windows()) == previous
 
 
 def frames(ide: int, listed: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -150,7 +169,7 @@ def open_from_station(ide: int, page: str) -> None:
     command (JBProtocolCommand.execute), so one URI serves every product.
     """
     uri = "jetbrains://idea/settings?" + urllib.parse.urlencode({"name": page}, quote_via=urllib.parse.quote)
-    status, reply = station.post(ide, "/protocolHandler", {"uri": uri}, TIMEOUT)
+    status, reply = station.post(ide, "/protocolHandler", {"uri": uri}, helper_timeout())
     # The IDE reports a refused command as exit code 0 with a message.
     if status != HTTPStatus.OK or reply.get("exitCode") != 0 or reply.get("message"):
         msg = f"the IDE did not open Settings on {page}: HTTP {status} {reply}"

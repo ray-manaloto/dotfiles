@@ -25,8 +25,9 @@ class NotMcp(BaseHTTPRequestHandler):
         """Keep the test output clean."""
 
 
-def handler(tools: list[str], *, sse: bool) -> type[BaseHTTPRequestHandler]:
-    """Answers initialize and tools/list the way the IDE's streamable-HTTP MCP server does."""
+def handler(tools: list[str] | None, *, sse: bool) -> type[BaseHTTPRequestHandler]:
+    """Answers initialize and tools/list the way the IDE's streamable-HTTP MCP server does; with tools None,
+    tools/list gets a JSON-RPC error instead."""
 
     class Handler(NotMcp):
         def do_POST(self) -> None:
@@ -35,9 +36,14 @@ def handler(tools: list[str], *, sse: bool) -> type[BaseHTTPRequestHandler]:
                 self.send_response(202)
                 self.end_headers()
                 return
-            result = INITIALIZE if body["method"] == "initialize" else {"tools": [{"name": n} for n in tools]}
+            if body["method"] == "initialize":
+                outcome = {"result": INITIALIZE}
+            elif tools is None:
+                outcome = {"error": {"code": -32601, "message": "Method not found"}}
+            else:
+                outcome = {"result": {"tools": [{"name": n} for n in tools]}}
             # Pretty-printed, as a server may send it: the client must parse whole JSON messages, not lines.
-            reply = json.dumps({"jsonrpc": "2.0", "id": body["id"], "result": result}, indent=2)
+            reply = json.dumps({"jsonrpc": "2.0", "id": body["id"], **outcome}, indent=2)
             self.send_response(200)
             self.send_header("Mcp-Session-Id", "session-1")
             self.send_header("Content-Type", "text/event-stream" if sse else "application/json")
@@ -56,7 +62,7 @@ def serve(handler_class: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
     return server
 
 
-def mcp_server(tools: list[str], *, sse: bool) -> Iterator[str]:
+def mcp_server(tools: list[str] | None, *, sse: bool) -> Iterator[str]:
     server = serve(handler(tools, sse=sse))
     yield f"http://127.0.0.1:{server.server_port}/stream"
     server.shutdown()

@@ -63,6 +63,17 @@ def test_a_file_short_of_full_coverage_fails(
     assert (code, coverage["short"]) == (1, [f"{sources.resolve()}/{short}"])
 
 
+@pytest.mark.parametrize("decoded", [{}, {"data": []}, {"data": [{}]}, []])
+def test_a_report_that_is_not_an_export_is_a_failure(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, decoded: object
+) -> None:
+    # A hostile but valid file name: a quote and a newline stay inert in the one Failure line.
+    report = tmp_path / 'jb"ax\n.json'
+    report.write_text(json.dumps(decoded))
+    code, events, error = run(capsys, "coverage-gate", "--report", str(report), "--sources", str(tmp_path))
+    assert (code, events, error) == (1, [], f"{report}: not an llvm-cov JSON export (no data[0].files)")
+
+
 def test_a_folder_with_no_exported_source_fails(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     report, _ = export(tmp_path, {})
     empty = tmp_path / "Empty"

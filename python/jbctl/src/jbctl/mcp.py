@@ -45,4 +45,8 @@ def tool_count(url: str) -> int:
     """VIA_ROUTER lists only the router tool (execute_tool); DIRECT lists every tool."""
     session, _ = initialize(url)
     post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, session)
-    return len(post(url, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, session)[1]["tools"])
+    listed = post(url, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, session)[1]
+    if "tools" not in listed:  # an error reply, or a result without the list
+        msg = f"{url}: tools/list returned no tool list"
+        raise ValueError(msg)
+    return len(listed["tools"])

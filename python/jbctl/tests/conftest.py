@@ -39,6 +39,12 @@ def direct() -> Iterator[str]:
     yield from mcp_server(DIRECT, sse=False)
 
 
+@pytest.fixture
+def no_tool_list() -> Iterator[str]:
+    """A server that answers initialize but replies to tools/list with a JSON-RPC error."""
+    yield from mcp_server(None, sse=False)
+
+
 def install(root: Path, channel: str, app: Path, script: str | None, product: str | None = "FK") -> None:
     """One install, in the shape Toolbox 3.9.1 writes (only the fields jbctl reads): state.json and its channel."""
     state = root / "state.json"

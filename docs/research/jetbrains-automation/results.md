@@ -48,8 +48,10 @@ tags: [clion, jetbrains, macos, accessibility, agent-desktop, rea, mcp, swing]
 
 ## What needs CLion in front
 
-- Opening Settings: AppKit drops the menu AXPress while the app is inactive. The shortest route is
-  `open-settings.sh`, ~1.2 s.
+- Opening Settings **through the menu bar** (the debug route): AppKit drops the menu AXPress while the
+  app is inactive, so the IDE must be activated first. The shortest version is `open-settings.sh`,
+  ~1.2 s. The station route, found later, opens Settings in the background instead, when `jbax windows`
+  reports no `unsafe` reason: see [Settings: open and navigate](settings-open-and-navigation.md).
 - Any keyboard input: Tab, Return, arrows, shortcuts.
 - Running a row in a popup or list (ListPopup runs rows only on Enter or a real click).
 - Choosing dropdown rows other than 0.

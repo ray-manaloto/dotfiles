@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from . import mcp, station
-from .ide import TIMEOUT, IdeError
+from .ide import IdeError, helper_timeout
 from .models import Install
 
 # JBCTL_TOOLBOX replaces this, for a stand-in Toolbox.
@@ -100,7 +100,7 @@ def running(app: Path) -> int:
         capture_output=True,
         text=True,
         check=False,
-        timeout=TIMEOUT,
+        timeout=helper_timeout(),
     ).stdout
     inside = f"{app.resolve()}/Contents/MacOS/"
     pids = [
@@ -147,7 +147,7 @@ def mcp_url(found: Install, pid: int) -> str:
         ["lsof", "-nP", "-b", "-w", "-a", "-p", str(pid), f"-iTCP@127.0.0.1:{port}", "-sTCP:LISTEN", "-t"],
         capture_output=True,
         check=False,
-        timeout=TIMEOUT,
+        timeout=helper_timeout(),
     )
     if not listening.stdout or not mcp.answers(url):
         msg = f"pid {pid} has no MCP server on port {port} ({source})"
