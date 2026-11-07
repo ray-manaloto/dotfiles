@@ -18,6 +18,13 @@ description = "ruff check, ruff format --check, ty check, and models.py matches 
 depends = ["sync", "codegen --check"]
 run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 
+# Run by hand, never from a hook: it writes ~/.agents/skills and ~/.claude/skills. Reads the install's jars on disk and
+# contacts no IDE. E.g. mise run //jbctl:skills -- --ide clion --skill clion-debugger (--check writes nothing).
+[tasks.skills]
+description = "Copy bundled skills out of a Toolbox install for Claude Code and Codex (jbctl skills)"
+depends = ["sync"]
+run = "uv run --locked jbctl skills"
+
 # The live tests are skipped unless JBCTL_IDE is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
@@ -36,7 +43,8 @@ run = "uv run --locked pytest"
 # which a headless run reaches only when a station open is still landing; and lifecycle states no run produces on
 # demand: two new IDEs at once, windows jbax cannot inspect, a pid that changes between the check and /exit, a
 # dialog that appears while stop waits before --force, and psutil's SystemError for a process that ends while it is
-# read (toolbox.snapshot). All are left visible as uncovered rather than marked.
+# read (toolbox.snapshot); and in skills, a copy or link that someone changes between the check and the swap, which
+# is swapped back or fails the run. All are left visible as uncovered rather than marked.
 # --foreground also runs the debug route against the real IDE, which brings it forward once.
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"

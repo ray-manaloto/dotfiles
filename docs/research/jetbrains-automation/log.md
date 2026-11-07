@@ -221,3 +221,24 @@
   default options, which keep it. So the skill should work in DIRECT, but do not count on it before the live
   check. **To confirm live**: the next time CLion runs, a read-only `tools/list` should list `execute_tool`.
   Tracked in #563.
+
+## 2026-11-07: jbctl skills, the copy task redone (#502)
+
+* **Built**: `jbctl skills --ide <script> | --product <tool id> --skill <name> [--skill ...] [--check]`, after a
+  grilling with the owner (Q1-Q21). It replaces the unmerged `clion:skills` mise task (33eec5c on
+  `feat/clion-ctl`).
+  * It reads the install's plugin jars on disk, at `bundledSkills/<name>/` or `<name>/` at a jar's root (the
+    Rider skills every air-plugin carries), and contacts no IDE. One CLion install ships 42 skill names, none in
+    two places; a name in two places fails rather than guess.
+  * One copy in `~/.agents/skills/<name>` (Codex reads it), a relative symlink to it in `~/.claude/skills`, and
+    never `~/.codex/skills`, which Codex also reads. Codex 0.167 reads both folders.
+  * One JSON line per skill per agent: copied, updated, unchanged, adopted, modified or unmanaged, with the
+    version from the skill's `metadata.json` when it has one. A run exits 1 when it left a copy alone;
+    `--check` writes nothing and exits 1 when any copy is not current.
+  * The copy is staged beside its place and exchanged with the old one in one step (macOS `renamex_np`,
+    `RENAME_SWAP`), under a filelock in jbctl's state folder. The swapped-out copy is checked again, and swapped
+    back if it changed meanwhile or cannot be read. Leftover staging folders are removed only when they hold
+    nothing anyone may have changed; the others are kept and reported.
+* **Terms**: "Bundled skill" and "Skill copy" in [[terms]].
+* **Measured** (`--check`, headless, 2026-11-07): `clion` ships clion-debugger 1.3.2; Codex has no copy
+  (`copied`), and Claude's copy from the earlier task is unchanged (`adopted`).
