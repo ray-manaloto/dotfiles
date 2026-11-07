@@ -1,0 +1,43 @@
+# The visual-plan renderer: plan.json in, one HTML page out. No [tools]: ruff, ty, uv and datamodel-codegen are
+# global (DL-757). From the repository root: //visualplan:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+[tasks.render]
+description = "Render a plan.json into one HTML page (replaces only a page visualplan wrote)"
+dir = "{{ cwd }}"
+usage = '''
+arg "<plan>" help="The plan.json to render"
+arg "<page>" help="The HTML page to write"
+'''
+# The paths reach uv as variables, never as shell source: MISE_CONFIG_ROOT is this root (mise src/task/task_executor.rs:3203).
+run = 'uv run --project "$MISE_CONFIG_ROOT" --locked visualplan render "$usage_plan" "$usage_page"'
+
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/visualplan/models.py from schema/visualplan.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real renders from real plan.json files at 100% line and branch coverage; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

@@ -23,6 +23,10 @@
         "main-guard-install",
         "main-guard-remove",
         "main-guard-armed",
+        "shell-apply",
+        "shell-rollback",
+        "scratch-env",
+        "toolchain-gate",
         "tools-install"
       ]
     },
@@ -74,6 +78,28 @@
       },
       "additionalProperties": false
     },
+    "ShellApply": {
+      "description": "Back up the live zsh files, check a shell from the new ones, then link them into $HOME.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ShellRollback": {
+      "description": "Restore the zsh files from the pre-apply backup.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ScratchEnv": {
+      "description": "Run one command from this checkout with every home path inside a scratch folder.",
+      "type": "object",
+      "properties": {
+        "folder": { "type": "string", "minLength": 1, "description": "The scratch folder; its home, config, data, state, cache and tmp are made if missing" },
+        "command": { "type": "array", "items": { "type": "string" }, "minItems": 1, "description": "The program and its arguments" }
+      },
+      "required": ["folder", "command"],
+      "additionalProperties": false
+    },
     "MainGuard": {
       "description": "Refuse a move of refs/heads/main, read from the reference-transaction rows on stdin, unless it is to origin/main.",
       "type": "object",
@@ -97,6 +123,12 @@
     },
     "MainGuardArmed": {
       "description": "Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ToolchainGate": {
+      "description": "Print run when the staged change can change what toolchain:verify sees on this Mac.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -180,7 +212,7 @@
       "additionalProperties": false
     },
     "Options": {
-      "description": "What a repotools command parses from its arguments.",
+      "description": "What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.",
       "anyOf": [
         { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
@@ -193,6 +225,9 @@
         { "$ref": "#/$defs/MainGuardInstall" },
         { "$ref": "#/$defs/MainGuardRemove" },
         { "$ref": "#/$defs/MainGuardArmed" },
+        { "$ref": "#/$defs/ShellApply" },
+        { "$ref": "#/$defs/ShellRollback" },
+        { "$ref": "#/$defs/ToolchainGate" },
         { "$ref": "#/$defs/ToolsInstall" }
       ]
     },
@@ -318,6 +353,10 @@
     "main_guard_install": { "$ref": "#/$defs/MainGuardInstall" },
     "main_guard_remove": { "$ref": "#/$defs/MainGuardRemove" },
     "main_guard_armed": { "$ref": "#/$defs/MainGuardArmed" },
+    "shell_apply": { "$ref": "#/$defs/ShellApply" },
+    "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
+    "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
+    "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
     "tool_action": { "$ref": "#/$defs/ToolAction" },
     "healthy": { "$ref": "#/$defs/Healthy" },

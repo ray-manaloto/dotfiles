@@ -128,7 +128,7 @@ class SharedAgentsInstallTest(unittest.TestCase):
     @classmethod
     def scratch(cls, *argv: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "tasks/scratch/env.sh", str(cls.root), *argv],
+            ["mise", "run", "scratch:env", str(cls.root), *argv],
             cwd=REPO,
             stdin=subprocess.DEVNULL,
             capture_output=True,

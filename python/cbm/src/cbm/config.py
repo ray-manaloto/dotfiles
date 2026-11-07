@@ -8,8 +8,9 @@ from pydantic import ValidationError
 
 from .models import Client, Config
 
-# The checks read ~/.claude.json, ~/.claude and ~/.codex, so a moved config folder is refused.
-MOVED = ("CLAUDE_CONFIG_DIR", "CODEX_HOME")
+# The checks read ~/.claude.json, ~/.claude, ~/.codex and ~/.config/opencode, so a moved config is refused.
+# OPENCODE_CONFIG moves the file CBM writes OpenCode's MCP entry to (src/cli/cli.c:2953-2958).
+MOVED = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "OPENCODE_CONFIG")
 # CBM_CACHE_DIR and CBM_RUNTIME_DIR select another cache or daemon namespace: never passed on.
 PRIVATE = ("CBM_CACHE_DIR", "CBM_RUNTIME_DIR")
 

@@ -16,6 +16,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `codebase-memory-mcp`), then confirm it with a real run. Say what stays unexplained and keep digging.
 - codebase-memory-mcp: install, reinstall and upgrade its agent setup only with `mise run //cbm:install`, never with
   its own `install`, `update` or `install.sh` (`docs/research/codebase-memory-mcp/install.md`).
+  Run the task only from the primary checkout on `main`; `CBM_INSTALL_ALLOW_NON_MAIN=1` is only for
+  qualifying a candidate from another checkout on purpose and still changes the live setup.
 - `mise run test` runs every root's `test` task; the root task lists them in `depends`
   (`//...:test` would include the root task itself and recurse).
 - Roots: `typescript/` (bun), `python/` (uv project), `cpp/` (CMake presets, C++26).
@@ -32,6 +34,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   in its own terminal pane, never inside a read-only Codex session: that sandbox denies mise's temp
   file, the git-dir report and the network, and the session gets no extra access. A read-only session
   reviews by reading the report and the changes under `python/`: staged, unstaged and untracked.
+- Large Codex reviews fan out: a read-only lead splits the change into slices of about 1,000 lines,
+  one subagent per slice works every (file, rule) row, and the lead verifies and merges, as
+  `tasks/review/python.md` does.
 - Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
   reviewer Codex in the checkout being committed and name its session once with
   `mise run //repo:pane-pin <session id>`. Stage everything, write the message to a file, run
@@ -59,8 +64,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   does the same by hand, and `//repo:main-guard-remove` switches it off until the next install. If the
   copy can't start (its Python pruned), every move of main fails with a hint to re-run the install. It is
   a local check that anyone running as this user can remove, so it catches mistakes, not a forger.
-- Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
-  this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
+- Run anything against a scratch home through `mise run scratch:env <empty folder> <command>`, from
+  this checkout. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.
 - `mise run shell:apply` links the six zsh files; run it before a bare `mise dot apply` and after each
   `shell:rollback`. A bare apply stops on `~/.zprofile` and `~/.zshrc`, and with `--force` replaces them

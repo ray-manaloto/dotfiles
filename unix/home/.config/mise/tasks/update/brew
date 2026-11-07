@@ -1,0 +1,14 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="update brew tools (refuses while the compiler toolchain is unpinned)"
+"""update:brew: hometools update-brew refuses unless the toolchain is pinned, then updates, upgrades and verifies."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash, #392): this launcher only finds the hometools
+# package in the checkout it is linked from and runs one command there. update:mise waits for this task and
+# update:all depends on it, both by name in the global config.
+
+import os
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/update/brew.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--locked", "hometools", "update-brew"])

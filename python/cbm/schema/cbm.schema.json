@@ -13,41 +13,26 @@
         "invalid_setting",
         "missing_binary",
         "install_busy",
+        "install_checkout_refused",
         "foreign_launcher",
         "installer_start_failed",
         "installer_failed",
+        "codex_hooks_seed_failed",
+        "codex_hook_migration_refused",
         "command_failed",
         "command_timeout",
         "invalid_json",
         "invalid_toml",
-        "invalid_mcp_response",
-        "update_check_incomplete",
-        "live_state_changed",
-        "unexpected_write",
-        "provenance_mismatch",
-        "artifact_changed",
-        "trial_check_failed",
-        "policy_violation",
-        "source_unclassified",
-        "review_invalid",
-        "review_incomplete",
-        "review_unqualified",
-        "changes_unaccepted",
-        "acceptance_stale",
-        "acceptance_unknown",
-        "skill_sync_unqualified",
-        "worktree_dirty"
+        "unreadable_file",
+        "invalid_mcp_response"
       ]
     },
     "Outcome": {
-      "description": "Completion outcomes shared by install, verify and the upgrade flow.",
+      "description": "Completion outcomes of install and verify.",
       "type": "string",
       "enum": [
         "done",
-        "failed",
-        "up_to_date",
-        "needs_review",
-        "pr_prepared"
+        "failed"
       ]
     },
     "Command": {
@@ -55,19 +40,7 @@
       "type": "string",
       "enum": [
         "install",
-        "verify",
-        "upgrade",
-        "accept"
-      ]
-    },
-    "UpgradeStep": {
-      "description": "Upgrade steps that can also be requested individually.",
-      "type": "string",
-      "enum": [
-        "check",
-        "trial",
-        "review",
-        "prepare"
+        "verify"
       ]
     },
     "Client": {
@@ -75,7 +48,8 @@
       "type": "string",
       "enum": [
         "claude",
-        "codex"
+        "codex",
+        "opencode"
       ]
     },
     "Config": {

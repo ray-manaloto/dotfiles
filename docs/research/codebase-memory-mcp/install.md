@@ -1,13 +1,13 @@
 ---
 okf_version: "0.2"
 type: "concept"
-title: "Installing codebase-memory-mcp for Claude Code and Codex"
+title: "Installing codebase-memory-mcp for Claude Code, Codex and OpenCode"
 description: "mise owns the CBM binary; the //cbm:install task runs CBM's own installer for the agent setup, writing one stable launcher path into every config, and works around a macOS --skip-binary bug."
 package: "github:DeusData/codebase-memory-mcp"
 version: "0.12.1"
 timestamp: "2026-11-03T23:50:00Z"
 status: "draft"
-tags: [codebase-memory-mcp, mise, claude-code, codex, mcp, install]
+tags: [codebase-memory-mcp, mise, claude-code, codex, opencode, mcp, install]
 sources:
   - id: cbm-cli
     resource: "https://github.com/DeusData/codebase-memory-mcp/blob/v0.12.1/src/cli/cli.c"
@@ -19,7 +19,7 @@ sources:
     resource: "repo:python/cbm"
 ---
 
-# Installing codebase-memory-mcp for Claude Code and Codex
+# Installing codebase-memory-mcp for Claude Code, Codex and OpenCode
 
 ## Layers
 
@@ -28,10 +28,11 @@ sources:
 | Binary | mise, exact pin | `"github:DeusData/codebase-memory-mcp" = { version = "0.12.1", minimum_release_age = "0s" }` in the global mise config |
 | Stable path | mise global runtime link (v2026.10.8+) | `~/.local/share/mise/installs/github-deus-data-codebase-memory-mcp/global/codebase-memory-mcp`; it follows the global config only, so a project pin cannot change it |
 | Launcher | `//cbm:install` | `~/.local/share/codebase-memory-mcp/bin/codebase-memory-mcp`, a symlink to the global link |
-| Agent setup | CBM's installer, run by `//cbm:install` | MCP entry, hooks, skill, three agents, Codex AGENTS.md pointer |
+| Agent setup | CBM's installer, run by `//cbm:install` | MCP entry, hooks, skill, three agents, Codex and OpenCode AGENTS.md pointers, OpenCode plugin |
 
-Every config names the launcher, so a version bump changes no config. No plugin is used: the upstream Claude plugin
-exists only on `main` (not in the v0.12.1 tag) and launches a second, npx-downloaded copy.
+Every config names the launcher, so a version bump changes no config. No Claude plugin is used: the upstream Claude
+plugin exists only on `main` (not in the v0.12.1 tag) and launches a second, npx-downloaded copy. OpenCode gets the
+installer's own `cbm-augment.ts` plugin, which runs the launcher too.
 
 ## Run
 
@@ -41,10 +42,12 @@ mise run //cbm:install       # agent setup, then the checks
 mise run //cbm:verify        # the checks only
 ```
 
-Run them from a dotfiles checkout: the tasks belong to the `python/cbm` package (`//cbm` is its monorepo alias), so
-any checkout or worktree that holds the package works, before or after the merge. Then restart Claude and Codex
-sessions. Codex lists the two new hooks under `/hooks` until they are trusted.
-`CBM_CLIENTS` overrides the client list (default `claude,codex`; Antigravity and OpenCode come later).
+The tasks belong to the `python/cbm` package (`//cbm` is its monorepo alias). Run `//cbm:install` only from the
+primary dotfiles checkout on `main`. To deliberately install from another branch or a linked worktree, opt in
+with `CBM_INSTALL_ALLOW_NON_MAIN=1 mise run //cbm:install`; this still changes the live setup. `//cbm:verify`
+works from any checkout or worktree that holds the package. After installation, restart Claude, Codex and
+OpenCode sessions. Codex lists the two new hooks under `/hooks` until they are trusted.
+`CBM_CLIENTS` overrides the client list (default `claude,codex,opencode`; Antigravity comes later).
 One install runs at a time (`~/.local/share/codebase-memory-mcp/cbm-install.lock`); a second is refused.
 `//cbm:verify` also opens a live MCP session over stdio through the launcher.
 
@@ -91,13 +94,34 @@ Other installer facts at v0.12.1:
 
 Created: `~/.claude/agents/codebase-memory{,-scout,-auditor}.md`, `~/.claude/hooks/cbm-{code-discovery-gate,
 session-reminder,subagent-reminder}`, `~/.claude/skills/codebase-memory/SKILL.md`,
-`~/.codex/agents/codebase-memory{,-scout,-auditor}.toml`, `~/.codex/skills/codebase-memory/SKILL.md`.
+`~/.codex/agents/codebase-memory{,-scout,-auditor}.toml`, `~/.codex/skills/codebase-memory/SKILL.md`,
+`~/.config/opencode/agents/codebase-memory{,-scout,-auditor}.md`, `~/.config/opencode/skills/codebase-memory/SKILL.md`,
+`~/.config/opencode/plugins/cbm-augment.ts`.
 Edited: `~/.claude.json` (one `mcpServers` entry), `~/.claude/settings.json` (7 hook groups), `~/.codex/config.toml`
-(one `mcp_servers` table forwarding `CBM_CACHE_DIR` and `CBM_RUNTIME_DIR`), `~/.codex/hooks.json` (2 hooks),
-`~/.codex/AGENTS.md` (a managed pointer). `config set auto_index false` creates CBM's `config.json`.
+(one `mcp_servers` table forwarding `CBM_CACHE_DIR` and `CBM_RUNTIME_DIR`), `~/.codex/hooks.json` (2 hooks; see below),
+`~/.codex/AGENTS.md` (a managed pointer), OpenCode's `opencode.jsonc` if it exists, else `opencode.json` (one
+`mcp` entry with the launcher as its whole command; cli.c:2953-2975), `~/.config/opencode/AGENTS.md` (a managed
+pointer). `OPENCODE_CONFIG` would move that file, so `//cbm:install` refuses it like `CODEX_HOME`. `config set auto_index false` creates CBM's `config.json`.
 
 A rollback removes those created files and only CBM's entries from the edited ones. Copying a backup back would also
 undo unrelated changes made since (another session enabled a plugin between the backup and the install here).
+
+### Codex hooks: `hooks.json` only
+
+`hooks.json` is the only supported layout for Codex hooks. CBM writes its two hooks there only if the file
+already exists. Otherwise it puts a managed block in `config.toml` (cli.c:9736-9738, :9786-9798), and Codex warns
+about the two layouts. `//cbm:install` creates `~/.codex/hooks.json` as `{"hooks": {}}` before it runs the
+installer. It does that only when Codex is a selected client and nothing is at that path. An existing file or link
+is never replaced. Once `hooks.json` exists, the installer moves its old block out of `config.toml` (:9791-9796).
+If the block no longer matches what CBM wrote, the installer refuses (:9743-9764): it logs an `agent_config ...
+op=hook_preflight` line (:8485-8498), keeps the hook block and skips the rest of its Codex steps (MCP entry,
+skill, agent profiles and hooks, :9766-9806). The `AGENTS.md` activation pointer is already written by then (:9733). When the installer fails while `hooks.json` was there
+and a CBM hook is still in `config.toml`, install fails with `codex_hook_migration_refused`. The reason is in the
+installer's Codex `agent_config` line: `op=hook_preflight` for a refusal, `op=hook_install` when writing
+`hooks.json` or removing the block fails (:9800-9801). No such line means the installer failed before its Codex
+step. You then remove the hook by hand; cbm never edits it. Any other installer failure stays `installer_failed`. `//cbm:verify`
+fails `Codex config.toml has no CBM hooks; hooks.json holds them` when a CBM hook is still in `config.toml`. That
+covers a marked block, an unmarked one and an inline table alike.
 
 ## Settings
 
