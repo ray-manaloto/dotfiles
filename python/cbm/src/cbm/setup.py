@@ -256,6 +256,12 @@ def read_config(path: Path) -> str | None:
         return None
 
 
+def read_text(path: Path) -> str:
+    """A plain text file's contents; empty when it is missing or, after read_config's unreadable_file event, when it
+    cannot be read, so only the check reading it fails."""
+    return read_config(path) or ""
+
+
 def read_json(path: Path, *, jsonc: bool = False) -> dict[str, Any]:
     """The file's JSON (or JSONC) object; a missing file is empty, one that cannot be read (read_config) or parsed,
     or whose top level is not an object, an error event and empty."""
@@ -314,17 +320,34 @@ def serves(cfg: Config, version: str) -> bool:
     """A live MCP session through the launcher: the mise build's version and every read-only tool."""
     done = probe(cfg, input_text=HANDSHAKE)
     try:
-        replies = {reply.get("id"): reply.get("result", {}) for reply in map(json.loads, done.stdout.splitlines())}
+        replies = [json.loads(line) for line in done.stdout.splitlines()]
+        msg = "" if all(isinstance(reply, dict) for reply in replies) else "a JSON line that is not an object"
     except json.JSONDecodeError as error:
-        msg = f"cbm: the MCP server answered something other than JSON: {error}"
-        emit(Error(code=ErrorCode.invalid_mcp_response, message=msg, path=config.launcher(cfg)))
-        replies = {}
-    name = replies.get(1, {}).get("serverInfo", {}).get("version", "")
-    tools = {tool.get("name") for tool in replies.get(2, {}).get("tools", [])}
+        replies, msg = [], f"something other than JSON: {error}"
+    if msg:  # one error event, and no replies, so only the serves check fails
+        emit(Error(code=ErrorCode.invalid_mcp_response, message=f"cbm: the MCP server answered {msg}",
+                   path=config.launcher(cfg)))  # fmt: skip
+        replies = []
+    served = table(answer(replies, 1), "serverInfo").get("version")
+    name = served if isinstance(served, str) else ""
+    tools = set(listed_tools(answer(replies, 2).get("tools")))
     missing = sorted(READ_ONLY - tools)
     ok = done.returncode == 0 and bool(name) and version.split()[-1:] == [name] and not missing
     detail = f"{name or 'no version'}, {len(tools)} tools" + (f", missing {','.join(missing)}" if missing else "")
     return check("MCP server answers over stdio: the mise build, every read-only tool", ok=ok, detail=detail)
+
+
+def answer(replies: list[dict[str, Any]], request: int) -> dict[str, Any]:
+    """The result of the last reply to this request id; a result of any other shape, or a reply whose id is not this
+    integer, answers nothing, so only the serves check fails."""
+    results = [table(reply, "result") for reply in replies if type(reply.get("id")) is int and reply["id"] == request]
+    return results[-1] if results else {}
+
+
+def listed_tools(value: object) -> list[str]:
+    """The tool names of a tools/list result; a list holding anything but objects with a text name lists none."""
+    tools = value if isinstance(value, list) and all(isinstance(tool, dict) for tool in value) else []
+    return tool_names([tool.get("name") for tool in tools])
 
 
 def verify_claude(cfg: Config, target: str) -> list[bool]:
@@ -344,7 +367,7 @@ def verify_claude(cfg: Config, target: str) -> list[bool]:
     ))  # fmt: skip
     for name in AGENTS:
         path = cfg.home / ".claude/agents" / f"{name}.md"
-        head = path.read_text().split("\n---", 1)[0] if path.is_file() else ""
+        head = read_text(path).split("\n---", 1)[0]
         tools = [line.strip().removeprefix(CLAUDE_TOOL) for line in head.splitlines()
                  if line.strip().startswith(CLAUDE_TOOL)]  # fmt: skip
         known = bool(tools) and len(set(tools)) == len(tools) and set(tools) <= READ_ONLY
@@ -391,7 +414,7 @@ def verify_codex(cfg: Config, target: str) -> list[bool]:
 
 
 def agents_md(path: Path, client: str) -> bool:
-    text = path.read_text() if path.is_file() else ""
+    text = read_text(path)
     start, end = AGENTS_MD_BLOCK
     after = text.split(start, 1)[1] if start in text else ""
     inside = after.split(end, 1)[0] if end in after else ""
@@ -432,13 +455,13 @@ def verify_opencode(cfg: Config, target: str) -> list[bool]:
     results = [check("OpenCode MCP entry names the launcher, no args or env", ok=plain)]
     for name in AGENTS:
         path = folder / "agents" / f"{name}.md"
-        ok = opencode_agent(path.read_text() if path.is_file() else "")
+        ok = opencode_agent(read_text(path))
         results.append(check(f"OpenCode agent {name}: a subagent, read-only CBM tools only", ok=ok))
     skill = (folder / "skills/codebase-memory/SKILL.md").is_file()
     results.append(check("OpenCode skill codebase-memory", ok=skill))
     results.append(agents_md(folder / "AGENTS.md", "OpenCode"))
     # The plugin runs `<launcher> hook-augment` around grep, glob and read; it names its binary once.
     plugin = folder / "plugins/cbm-augment.ts"
-    names = f"const BIN = '{target}';" in (plugin.read_text().splitlines() if plugin.is_file() else [])
+    names = f"const BIN = '{target}';" in read_text(plugin).splitlines()
     results.append(check("OpenCode plugin cbm-augment runs the launcher", ok=names))
     return results
