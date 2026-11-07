@@ -1,18 +1,25 @@
 """shell:apply and shell:rollback: real mise and zsh, a repo copy, a temporary HOME."""
 
+import json
 import os
 import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 UNIX_HOME = REPO / "unix/home"
-IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__")
+IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*")
 MISE = Path(shutil.which("mise") or "mise").resolve()
+UV = Path(shutil.which("uv") or "uv").resolve()
+# The tasks run repotools through uv run; the scratch HOME has no uv cache or Python of its own, so the
+# copy's venv is built from this machine's cache, downloading what it lacks, with the interpreter
+# running these tests.
+UV_CACHE = subprocess.run([UV, "cache", "dir"], capture_output=True, check=True, text=True).stdout.strip()
 
 STARTUP = (".zshenv", ".zprofile", ".zshrc")
 DROP_INS = (".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh")
@@ -22,6 +29,17 @@ AGENT_TOOLS = ".zshrc.d/60-agent-tools.zsh"
 HISTORY = b": 1:0;echo before\n"
 GROWN = HISTORY + b": 2:0;echo after\n"
 WRITER = ("/bin/sh", "-c", "while :; do echo '# installer' >> .zshrc; done")
+# The record mise 2026.11.3 keeps of each task run, written by the outer mise after the task ends: one
+# JSON file per task and its lock, under a folder per project (src/task/task_history.rs:175-194, 344-401).
+TASK_HISTORY = re.compile(r"state/mise/task-history/[0-9a-f]{16}/[0-9a-f]{16}\.(json|lock)")
+# What a cold scratch:env run may write outside its folder (owner's ruling on #390): the config links
+# mise keeps (src/config/tracking.rs:22-27), its trust and monorepo markers (config_file/mod.rs:1298-1319),
+# its one-time marker migration (toolset/install_state.rs:1419), its task history, and the bytecode of a
+# first import.
+COLD_WRITES = re.compile(
+    r"state/mise/(tracked-configs/.+|trusted-configs/.+|incomplete-installs/\.migrated)|repo/.*/__pycache__/.+"
+    rf"|{TASK_HISTORY.pattern}"
+)
 # /bin/date +%Y%m%dT%H%M%S.%N%z
 REPLACED_NAME = re.compile(r"replaced-\d{8}T\d{6}\.\d{9}[+-]\d{4}")
 
@@ -39,6 +57,32 @@ def snapshot(home: Path) -> dict[str, tuple[int, bytes]]:
     }
 
 
+def written(root: Path, folder: Path) -> dict[str, tuple[int, int]]:
+    """The time and size of every entry under root but outside folder; a folder's time also moves when a file
+    is made and removed in it. The shared uv cache sits outside root."""
+    return {
+        str(path.relative_to(root)): (path.lstat().st_mtime_ns, path.lstat().st_size)
+        for path in root.rglob("*")
+        if not path.is_relative_to(folder)
+    }
+
+
+def assert_only(test: unittest.TestCase, before: dict[str, tuple[int, int]], after: dict[str, tuple[int, int]],
+                allowed: re.Pattern[str]) -> None:
+    """Every entry that changed matches allowed, or is a folder holding one that does."""
+    changed = [name for name in after if before.get(name) != after[name]]
+    matched = [name for name in changed if allowed.fullmatch(name)]
+    for name in changed:
+        test.assertTrue(name in matched or any(file.startswith(f"{name}/") for file in matched), name)
+
+
+def scratch_runs(state: Path) -> list[str]:
+    """The status of each scratch:env run in mise's task history, oldest first."""
+    (record,) = (state / "mise/task-history").glob("*/*.json")
+    runs = json.loads(record.read_text())["runs"]
+    return [run["status"] for run in runs if run["task"] == "//:scratch:env"]
+
+
 class ShellApplyTest(unittest.TestCase):
     def setUp(self) -> None:
         root = Path(tempfile.mkdtemp()).resolve()
@@ -53,7 +97,10 @@ class ShellApplyTest(unittest.TestCase):
         self.env = {
             "HOME": str(self.home),
             "USER": os.environ["USER"],  # the root mise.toml renders env.USER
-            "PATH": f"{MISE.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{MISE.parent}:{UV.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "UV_CACHE_DIR": UV_CACHE,
+            "UV_PYTHON": str(Path(sys.executable).resolve()),
+            "UV_PYTHON_DOWNLOADS": "never",
             "XDG_CONFIG_HOME": str(root / "config"),
             "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(self.state),
@@ -61,6 +108,9 @@ class ShellApplyTest(unittest.TestCase):
             "MISE_TRUSTED_CONFIG_PATHS": str(self.repo),
             "MISE_CEILING_PATHS": str(root),
             "MISE_AUTO_INSTALL": "0",
+            # Task history is on in the global config; pinned here so the scratch config can't drop it.
+            "MISE_TASK_HISTORY": "1",
+            "MISE_TASK_HISTORY_LIMIT": "20",
         }
         for name in STARTUP:
             (self.home / name).parent.mkdir(parents=True, exist_ok=True)
@@ -267,7 +317,7 @@ class ShellApplyTest(unittest.TestCase):
 
     def test_scratch_env_keeps_every_home_path_in_its_folder(self) -> None:
         folder = self.home.parent / "scratch"
-        done = self.spawn("bash", "tasks/scratch/env.sh", folder, "/usr/bin/env")
+        done = self.spawn(MISE, "run", "scratch:env", folder, "/usr/bin/env")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         seen = dict(line.split("=", 1) for line in done.stdout.splitlines())
         for name in (
@@ -280,6 +330,33 @@ class ShellApplyTest(unittest.TestCase):
         ):
             self.assertTrue(seen[name].startswith(f"{folder}/"), name)
         self.assertEqual(seen["MISE_AUTO_INSTALL"], "0")
+        # mise's own tool paths go first (owner's ruling on #390), the caller's PATH after them in its order,
+        # and uv's copy of the venv is gone.
+        self.assertTrue(seen["PATH"].endswith(self.env["PATH"]), seen["PATH"])
+        self.assertNotIn("/.venv/", seen["PATH"])
+        # raw_args: a --help reaches the command, not mise.
+        done = self.spawn(MISE, "run", "scratch:env", folder, "/usr/bin/printf", "%s\\n", "--help")
+        self.assertEqual((done.returncode, done.stdout), (0, "--help\n"), done.stderr)
+
+    def test_scratch_env_writes_only_into_its_folder(self) -> None:
+        # From a synced python/repo, with no mise state yet: a cold run may leave mise's own state and
+        # Python's bytecode in the checkout, a warm one only its next task-history record.
+        self.run_ok("//repo:sync")
+        root = self.home.parent
+        for name in ("config", "data", "state", "cache"):
+            shutil.rmtree(root / name, ignore_errors=True)
+        folder = root / "scratch"
+        before = written(root, folder)
+        self.assertEqual(self.spawn(MISE, "run", "scratch:env", folder, "/usr/bin/true").returncode, 0)
+        cold = written(root, folder)
+        self.assertEqual(set(before) - set(cold), set())
+        assert_only(self, before, cold, COLD_WRITES)
+        self.assertEqual(scratch_runs(self.state), ["ok"])
+        self.assertEqual(self.spawn(MISE, "run", "scratch:env", folder, "/usr/bin/true").returncode, 0)
+        warm = written(root, folder)
+        self.assertEqual(set(warm), set(cold))
+        assert_only(self, cold, warm, TASK_HISTORY)
+        self.assertEqual(scratch_runs(self.state), ["ok", "ok"])
 
     def test_apply_refuses_and_changes_nothing(self) -> None:
         drop_in = self.repo / "unix/home/.zshrc.d/90-mise.zsh"

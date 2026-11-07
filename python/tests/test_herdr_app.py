@@ -1,9 +1,9 @@
-"""Herdr.app setup: the global post-tools hook and the hc-codex blocks, run in a scratch home."""
+"""Agent skills setup: the global post-tools hook, the linked skills and the hc-codex blocks."""
 
-# Both run through tasks/scratch/env.sh, so every home path is inside a temporary folder. The hook
-# runs with the real `skills` CLI. Where herdr-core is already in the scratch home its install is
-# skipped; where it is not, the scratch home's git config points GitHub at a local repository. Its
-# other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
+# All run through `mise run scratch:env`, so every home path is inside a temporary folder. The hook
+# runs with the real `skills` CLI, and the scratch home's git config points GitHub at local
+# repositories: herdr-core at its tag (installed only when missing) and agent-desktop at its tag
+# (installed on every run). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
 # dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a closed local port and fail,
 # which skills tolerates, so nothing leaves the machine.
 
@@ -25,12 +25,22 @@ POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
 [TAG] = re.findall(r"herdrdev/herdr-core#(\S+)", " ".join(POST_TOOLS))
+[DESKTOP_TAG] = re.findall(r"vercel-labs/agent-desktop#(\S+)", " ".join(POST_TOOLS))
+DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
+DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
+# A skill written in this repo, linked for both agents by [dotfiles] in mise.toml.
+PERMISSIONS = "macos-agent-permissions"
 BLOCKS = ("~/.claude/CLAUDE.md/hc-codex", "~/.codex/AGENTS.md/hc-codex")
 
 # What `skills add herdrdev/herdr` installed in September, as the skills lock records it.
 OLD = ("herdr", "herdr-pre-release-audit", "herdr-throwaway-repro", "triage")
 OLD_LOCK_ONLY = "writing-commit-messages"
-CORE = {".agents/skills/herdr-core", ".claude/skills/herdr-core"}
+# What the hook leaves in every scratch home: herdr-core and agent-desktop's skills, for both agents.
+CORE = {
+    f"{folder}/{name}"
+    for folder in (".agents/skills", ".claude/skills")
+    for name in ("herdr-core", *DESKTOP)
+}
 
 
 class HerdrAppTest(unittest.TestCase):
@@ -38,7 +48,7 @@ class HerdrAppTest(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, self.root)
         self.home = self.root / "home"
-        # skills keeps its lock under $XDG_STATE_HOME, which env.sh sets.
+        # skills keeps its lock under $XDG_STATE_HOME, which scratch:env sets.
         self.lock = self.root / "state/skills/.skill-lock.json"
         self.skills: dict[str, dict[str, str]] = {}
         # Bound but never listening, so every connection to it is refused.
@@ -55,6 +65,7 @@ class HerdrAppTest(unittest.TestCase):
         self.install(
             "herdr-core", "herdrdev/herdr-core", ".agents/skills", ".claude/skills"
         )
+        self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
 
     def install(self, name: str, source: str, *folders: str) -> None:
         """A skill as `skills add -g` leaves it: a folder per agent and a lock entry."""
@@ -78,7 +89,7 @@ class HerdrAppTest(unittest.TestCase):
 
     def scratch(self, *argv: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["bash", "tasks/scratch/env.sh", str(self.root), *argv],
+            ["mise", "run", "scratch:env", str(self.root), *argv],
             cwd=REPO,
             stdin=subprocess.DEVNULL,
             capture_output=True,
@@ -87,20 +98,21 @@ class HerdrAppTest(unittest.TestCase):
             check=False,
         )
 
-    def github(self) -> None:
-        """herdrdev/herdr-core at the pinned tag, served from a local repository."""
-        source = self.root / "source"
-        (source / "skills/herdr-core").mkdir(parents=True)
-        (source / "skills/herdr-core/SKILL.md").write_text(
-            "---\nname: herdr-core\ndescription: from the tag\n---\n"
-        )
+    def github(self, repo: str, tag: str, skills: tuple[str, ...]) -> None:
+        """A GitHub repository at one tag with these skills, served from a local repository."""
+        source = self.root / "source" / repo
+        for name in skills:
+            (source / "skills" / name).mkdir(parents=True)
+            (source / "skills" / name / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: from the tag\n---\n"
+            )
         remote = self.root / "remote"
         for command in (
             ["git", "init", "-q"],
             ["git", "add", "."],
             ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "t"],
-            ["git", "tag", TAG],
-            ["git", "clone", "-q", "--bare", ".", str(remote / "herdr-core.git")],
+            ["git", "tag", tag],
+            ["git", "clone", "-q", "--bare", ".", str(remote / f"{repo}.git")],
         ):
             # HK=0: the user's global git hooks run `mise x hk`, which has no config here.
             subprocess.run(
@@ -111,7 +123,7 @@ class HerdrAppTest(unittest.TestCase):
                 capture_output=True,
             )
         (self.home / ".gitconfig").write_text(
-            f'[url "file://{remote}/"]\n\tinsteadOf = https://github.com/herdrdev/\n'
+            f'[url "file://{remote}/"]\n\tinsteadOf = https://github.com/\n'
         )
 
     def post_tools(self) -> None:
@@ -135,7 +147,7 @@ class HerdrAppTest(unittest.TestCase):
         self.install("keep-me", "someone/else", ".agents/skills")
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE | {".agents/skills/keep-me"})
-        self.assertEqual(self.locked(), {"herdr-core", "keep-me"})
+        self.assertEqual(self.locked(), {"herdr-core", *DESKTOP, "keep-me"})
 
     def test_a_herdr_folder_with_no_lock_entry_is_removed_too(self) -> None:
         self.install("herdr", "herdrdev/herdr", ".claude/skills")
@@ -148,17 +160,46 @@ class HerdrAppTest(unittest.TestCase):
         self.post_tools()
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
-        self.assertEqual(self.locked(), {"herdr-core"})
+        self.assertEqual(self.locked(), {"herdr-core", *DESKTOP})
 
     def test_a_codex_only_herdr_core_gets_its_claude_copy(self) -> None:
         shutil.rmtree(self.home / ".claude/skills/herdr-core")
-        self.github()
+        self.github("herdrdev/herdr-core", TAG, ("herdr-core",))
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
         self.assertIn(
             "from the tag",
             (self.home / ".claude/skills/herdr-core/SKILL.md").read_text(),
         )
+
+    def test_agent_desktop_skills_come_from_the_pinned_tag(self) -> None:
+        self.assertEqual(DESKTOP_TAG, f"v{DESKTOP_PIN}")
+
+    def test_an_installed_agent_desktop_skill_is_replaced_from_the_tag(self) -> None:
+        self.install("agent-desktop", "vercel-labs/agent-desktop", ".agents/skills")
+        self.post_tools()
+        self.assertEqual(self.on_disk(), CORE)
+        for folder in (".agents/skills", ".claude/skills"):
+            for name in DESKTOP:
+                self.assertIn(
+                    "from the tag",
+                    (self.home / folder / name / "SKILL.md").read_text(),
+                )
+        entries = json.loads(self.lock.read_text())["skills"]
+        self.assertEqual({entries[name]["ref"] for name in DESKTOP}, {DESKTOP_TAG})
+
+    def test_claude_and_codex_share_the_repos_permissions_skill(self) -> None:
+        targets = [
+            f"~/{folder}/{PERMISSIONS}"
+            for folder in (".agents/skills", ".claude/skills")
+        ]
+        done = self.scratch("mise", "dot", "apply", *targets)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        source = REPO / "unix/home/.agents/skills" / PERMISSIONS
+        for folder in (".agents/skills", ".claude/skills"):
+            self.assertEqual((self.home / folder / PERMISSIONS).resolve(), source)
+        self.assertTrue((source / "scripts/tcc_who.py").is_file())
+        self.assertIn(f"name: {PERMISSIONS}\n", (source / "SKILL.md").read_text())
 
     def test_claude_and_codex_open_watched_agents_as_tabs(self) -> None:
         done = self.scratch("mise", "dot", "apply", *BLOCKS)

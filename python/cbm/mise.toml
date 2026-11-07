@@ -7,11 +7,11 @@
 _.python.venv = { path = ".venv" }
 
 [tasks.install]
-description = "Run codebase-memory-mcp's installer for Claude and Codex (MCP, hooks, skills, agents), then verify"
+description = "Run codebase-memory-mcp's installer for Claude, Codex and OpenCode (MCP, hooks, plugin, skills, agents), then verify"
 run = "uv run --locked cbm install"
 
 [tasks.verify]
-description = "Check the codebase-memory-mcp setup for Claude and Codex without changing it"
+description = "Check the codebase-memory-mcp setup for Claude, Codex and OpenCode without changing it"
 run = "uv run --locked cbm verify"
 
 # Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
@@ -37,6 +37,13 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
 depends = ["sync"]
 run = "uv run --locked pytest"
+
+[tasks."test:focus"]
+# For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
+# coverage without failing on it. The command-line --cov-fail-under overrides the one in addopts.
+description = "Focused tests: coverage reported, not gated; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest --cov-fail-under=0"
 
 [tasks.check]
 description = "lint and test"

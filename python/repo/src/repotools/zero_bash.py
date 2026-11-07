@@ -7,6 +7,7 @@
 import re
 import shlex
 import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import PurePosixPath
 from typing import cast
@@ -15,7 +16,7 @@ import tomlkit
 from tomlkit.items import String
 
 from . import process
-from .models import Finding, Rule
+from .models import Finding, Rule, ZeroBash
 
 SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh", ".csh", ".fish")
 SHELLS = frozenset({"sh", "bash", "dash", "ash", "ksh", "mksh", "pdksh", "zsh", "csh", "tcsh", "fish", "yash", "posh"})
@@ -163,3 +164,11 @@ def findings() -> list[Finding]:
         for mode, blob, path in entries
         for finding in check_entry(path, content[blob] if mode in FILE_MODES else None)
     ]
+
+
+def report(options: ZeroBash) -> None:
+    """Print every finding; --strict fails on any."""
+    found = findings()
+    sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
+    if options.strict and found:
+        raise SystemExit(1)

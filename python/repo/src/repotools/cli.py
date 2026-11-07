@@ -6,7 +6,18 @@ from collections.abc import Callable, Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, te_carry, te_receipts, te_report, te_review, zero_bash
+from . import (
+    gates,
+    main_guard,
+    pane_approval,
+    scratch_env,
+    shell,
+    te_carry,
+    te_receipts,
+    te_report,
+    te_review,
+    zero_bash,
+)
 from .models import (
     Command,
     CommitText,
@@ -24,12 +35,16 @@ from .models import (
     PublicFailure,
     ReviewApproved,
     ReviewPython,
+    ScratchEnv,
+    ShellApply,
+    ShellRollback,
     TeReviewCarry,
     TeReviewCollect,
     TeReviewCommand,
     TeReviewReceiptsCommand,
     TeReviewReceiptsDraft,
     TeReviewReport,
+    ToolchainGate,
     ZeroBash,
 )
 
@@ -48,6 +63,9 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
     Command.main_guard_armed: MainGuardArmed,
+    Command.shell_apply: ShellApply,
+    Command.shell_rollback: ShellRollback,
+    Command.toolchain_gate: ToolchainGate,
 }
 # te-review takes a subcommand first, one word or receipts and its own word; each has its own model.
 TE_REVIEW: dict[tuple[str, ...], type[Options]] = {
@@ -64,11 +82,16 @@ TE_REVIEW_RUNS: dict[type[TeReviewReceiptsDraft | TeReviewCarry], Callable[..., 
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
 
-def parse(argv: Sequence[str]) -> tuple[Command, Options]:
+def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
     if not argv or argv[0] not in set(Command):
         msg = f"repotools: the first argument is one of {', '.join(Command)}"
         raise ValueError(msg)
     command, words = Command(argv[0]), 1
+    # scratch-env takes the folder, then the command, by position. CliApp reads a field by position only when its
+    # annotation carries CliPositionalArg (pydantic-settings 2.16.2 sources/providers/cli.py:352,955), which
+    # datamodel-codegen cannot write into the generated model, so the schema's model validates them here.
+    if command is Command.scratch_env:
+        return command, ScratchEnv.model_validate({"folder": argv[1] if argv[1:] else "", "command": argv[2:]})
     if command is Command.te_review:
         given = [key for key in TE_REVIEW if tuple(argv[1 : 1 + len(key)]) == key]
         if not given:
@@ -99,14 +122,13 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
 
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
-        found = zero_bash.findings()
-        sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
-        if options.strict and found:
-            raise SystemExit(1)
-    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan):
+        zero_bash.report(options)
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
         gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
+    elif isinstance(options, ShellApply | ShellRollback):
+        shell.dispatch(options)
     elif isinstance(options, TeReviewCollect | TeReviewReport):
         te_report.dispatch(options)
     elif isinstance(options, TeReviewReceiptsDraft | TeReviewCarry):
@@ -123,7 +145,11 @@ def run(command: Command, options: Options) -> None:
 
 def main(argv: Sequence[str] | None = None) -> None:
     try:
-        run(*parse(sys.argv[1:] if argv is None else argv))
+        command, options = parse(sys.argv[1:] if argv is None else argv)
+        if isinstance(options, ScratchEnv):  # parsed by position, so it stays out of run()
+            scratch_env.run(options)
+        else:
+            run(command, options)
     except te_review.TeReviewError as error:
         failure = PublicFailure(code=error.failure.code) if error.public else error.failure
         sys.stderr.write(failure.model_dump_json() + "\n")

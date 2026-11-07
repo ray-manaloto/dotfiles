@@ -27,3 +27,8 @@ file holds the judgement calls. Each finding cites the rule number and `path:lin
    local file operations and test setup may stay synchronous.
 8. **Match the surrounding code**: its comment density, naming, one-line module docstrings and
    idiom.
+9. **Outside text is escaped for the place it lands.** Text from outside the code (a plan or config
+   file, a report, the user, a child process) is escaped for where it goes: HTML text, an HTML
+   attribute value, a URL, a shell argument; escaping for one place does not cover another. An
+   attribute or element name never comes from it unless picked from a fixed set. A test feeds that
+   path a hostile but valid input and checks that it comes out inert.

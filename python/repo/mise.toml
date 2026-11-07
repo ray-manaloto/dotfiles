@@ -77,6 +77,14 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'r=$(uv run --project python/repo --locked repotools main-guard-armed) && { test "$r" != install || mise run //repo:main-guard-install; }'
 
+# hk's pre-commit step for the toolchain tasks (#391): their real-toolchain test only when the staged change
+# reaches what they run from, so a bump of an unrelated pin never waits on this Mac's Homebrew.
+[tasks.toolchain-gate]
+description = "Run //home:check, the real-toolchain test included, when the staged change reaches the toolchain tasks"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:check; }'
+
 [tasks.main-guard-remove]
 description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"
 depends = ["sync"]
@@ -147,6 +155,13 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv", "ast-
 description = "Real tests (no mocking library) at 100% line and branch coverage"
 depends = ["sync"]
 run = "uv run --locked pytest"
+
+[tasks."test:focus"]
+# For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
+# coverage without failing on it. The command-line --cov-fail-under overrides the one in addopts.
+description = "Focused tests: coverage reported, not gated; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest --cov-fail-under=0"
 
 [tasks.check]
 description = "lint and test"

@@ -1,0 +1,16 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Render conf.d/toolchain.toml from [vars], install from it, then verify (DL-770)"
+#MISE env.TOOLCHAIN_GCC="{{ vars.gcc }}"
+#MISE env.TOOLCHAIN_LLVM="{{ vars.llvm }}"
+"""bootstrap:toolchain: hometools bootstrap-toolchain refuses on a missing brew version, bootstraps twice, then verifies."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the hometools package
+# in the checkout it is linked from and runs one command there. The #MISE env lines render [vars] and the brew
+# prefix as the TOML task's templates did; a caller's own TOOLCHAIN_* value is replaced, never read.
+
+import os
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/bootstrap/toolchain.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--locked", "hometools", "bootstrap-toolchain"])

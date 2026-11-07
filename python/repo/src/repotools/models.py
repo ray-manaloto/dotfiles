@@ -25,6 +25,10 @@ class Command(StrEnum):
     main_guard_install = "main-guard-install"
     main_guard_remove = "main-guard-remove"
     main_guard_armed = "main-guard-armed"
+    shell_apply = "shell-apply"
+    shell_rollback = "shell-rollback"
+    scratch_env = "scratch-env"
+    toolchain_gate = "toolchain-gate"
     te_review = "te-review"
 
 
@@ -40,6 +44,47 @@ class ZeroBash(BaseModel):
     strict: bool = False
     """
     Exit 1 when anything is left
+    """
+
+
+class ShellApply(BaseModel):
+    """
+    Back up the live zsh files, check a shell from the new ones, then link them into $HOME.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ShellRollback(BaseModel):
+    """
+    Restore the zsh files from the pre-apply backup.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ScratchEnv(BaseModel):
+    """
+    Run one command from this checkout with every home path inside a scratch folder.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folder: Annotated[str, Field(min_length=1)]
+    """
+    The scratch folder; its home, config, data, state, cache and tmp are made if missing
+    """
+    command: Annotated[list[str], Field(min_length=1)]
+    """
+    The program and its arguments
     """
 
 
@@ -83,6 +128,17 @@ class MainGuardRemove(BaseModel):
 class MainGuardArmed(BaseModel):
     """
     Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ToolchainGate(BaseModel):
+    """
+    Print run when the staged change can change what toolchain:verify sees on this Mac.
     """
 
     model_config = ConfigDict(
@@ -2959,13 +3015,16 @@ type Options = (
     | MainGuardInstall
     | MainGuardRemove
     | MainGuardArmed
+    | ShellApply
+    | ShellRollback
+    | ToolchainGate
     | TeReviewCollect
     | TeReviewReport
     | TeReviewReceiptsDraft
     | TeReviewCarry
 )
 """
-What a repotools command parses from its arguments.
+What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
 """
 
 
@@ -3303,6 +3362,10 @@ class Repotools(BaseModel):
     main_guard_install: MainGuardInstall | None = None
     main_guard_remove: MainGuardRemove | None = None
     main_guard_armed: MainGuardArmed | None = None
+    shell_apply: ShellApply | None = None
+    shell_rollback: ShellRollback | None = None
+    scratch_env: ScratchEnv | None = None
+    toolchain_gate: ToolchainGate | None = None
     options: Options | None = None
     finding: Finding | None = None
     fingerprint: Fingerprint | None = None

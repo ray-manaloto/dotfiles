@@ -1,8 +1,15 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # CBM upgrades go through a trial PR, then a separate apply
+
+> **Superseded (2026-11-04).** The owner dropped this pipeline before it was built. A CBM upgrade is rare and
+> easily reversed, so it is done by hand: close the sessions that use CBM and stop its daemon, bump the pin in
+> the global mise config and run `mise install`, run `mise run //cbm:install`, then reindex each project once.
+> A rollback is the same steps with the previous version. The steps are in
+> `docs/research/codebase-memory-mcp/upgrades.md`; spec #412 and its tickets are closed as wontfix. The text
+> below is kept as the record of what was decided and why it was dropped.
 
 A new codebase-memory-mcp (CBM) release will reach the live setup in two steps (designed in spec #412, not
 built yet). The first is a pull request that `python/cbm` will prepare; the second is an apply step, run only
