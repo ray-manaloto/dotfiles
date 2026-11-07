@@ -19,5 +19,8 @@
   },
   "skillOverrides": {
     "agent-desktop": "off"
+  },
+  "attribution": {
+    "sessionUrl": false
   }
 }
