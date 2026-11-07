@@ -25,6 +25,37 @@ local linters = new Mapping<String, Step> {
         glob = List("python/workflow/**")
         check = "mise run //workflow:check"
     }
+    // DL-758: the hometools package (#391, the global toolchain tasks), as p2996, and the file tasks and
+    // config it checks, on a scratch copy of this Mac's toolchain; pre-commit adds the real-toolchain test.
+    ["home"] {
+        glob = List(
+            "python/home/**",
+            "unix/home/.config/mise/tasks/toolchain/**",
+            "unix/home/.config/mise/tasks/bootstrap/**",
+            "unix/home/.config/mise/config.toml"
+        )
+        check = "mise run //home:unit"
+    }
+    ["cbm"] {
+        glob = List("python/cbm/**")
+        check = "mise run //cbm:check"
+    }
+    // python/jbctl (#502): lint and the non-live tests; the live 100% gate (//jbctl:coverage) brings the IDE forward.
+    ["jbctl"] {
+        glob = List("python/jbctl/**")
+        check = "mise run //jbctl:check"
+    }
+    // swift/ (jbax, #502): SwiftLint as hk's builtin; swift format, build and the non-live tests through the root's
+    // mise task. The live-IDE coverage gate (//swift:coverage) brings the IDE forward, so it is never a hook.
+    ["swiftlint"] = (Builtins.swiftlint) {
+        glob = List("swift/**/*.swift")
+        // macOS only, like jbax and its swiftlint pin (os = ["macos"] in the global mise config).
+        condition = "exec_ok('test \"$(uname -s)\" = Darwin')"
+    }
+    ["swift"] {
+        glob = List("swift/**")
+        check = "mise run //swift:check"
+    }
     // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
     ["frontmatter"] {
         glob = List("**/*.md", "**/*.yml", "**/*.yaml")
@@ -44,6 +75,12 @@ hooks {
             // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
             // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
             ["no-commit-to-main"] = Builtins.no_commit_to_branch
+            // #391: //home:check, the real-toolchain test included, for a commit that reaches the toolchain tasks.
+            // No glob: hk drops a filtered step whose files were all deleted; toolchain-gate picks the paths.
+            ["home"] {
+                glob = null
+                check = "mise run //repo:toolchain-gate"
+            }
             // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
             ["python-review"] {
                 glob = List("python/**")

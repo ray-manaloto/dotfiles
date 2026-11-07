@@ -980,26 +980,26 @@ url = "https://github.com/ocaml/opam/releases/download/2.6.1/opam-2.6.1-arm64-ma
 url_api = "https://api.github.com/repos/ocaml/opam/releases/assets/618597847"
 
 [[tools."github:vercel-labs/agent-desktop"]]
-version = "1.1.0"
+version = "1.2.0"
 backend = "github:vercel-labs/agent-desktop"
-specifiers = ["1.1.0"]
+specifiers = ["1.2.0"]
 
 [tools."github:vercel-labs/agent-desktop"."platforms.linux-arm64"]
-checksum = "sha256:252c17e271a444352a5ba1e9f8fcbace89fa7b6b0bfcc4abebad2b35eb1f7a4d"
-url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242465"
+checksum = "sha256:68e8ebbb4f80e44485d2f1cf972943a38ee43108e2e0ce56bdfa641fd1599f68"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.2.0/agent-desktop-v1.2.0-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/711802320"
 provenance = "github-attestations"
 
 [tools."github:vercel-labs/agent-desktop"."platforms.linux-x64"]
-checksum = "sha256:efbdcf4caf10132e4fe915db1ec643184c947c65e0511845aeb4839445d7ea43"
-url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242502"
+checksum = "sha256:591ae7f4a38479dc045df97e27447c0c8b530441730ab6b990e27c813162af44"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.2.0/agent-desktop-v1.2.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/711802329"
 provenance = "github-attestations"
 
 [tools."github:vercel-labs/agent-desktop"."platforms.macos-arm64"]
-checksum = "sha256:3048e00aa0741bf25ffe0326f78c966408be4490ce13513f3f94ecf2a0b5270d"
-url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0/agent-desktop-v1.1.0-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/704242421"
+checksum = "sha256:219813428bb1ad8decae172faed05c5964a2415170df402e2786ccfa6452ba82"
+url = "https://github.com/vercel-labs/agent-desktop/releases/download/v1.2.0/agent-desktop-v1.2.0-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/vercel-labs/agent-desktop/releases/assets/711802291"
 provenance = "github-attestations"
 
 [[tools."gitlab:graphviz/graphviz"]]
@@ -1637,9 +1637,9 @@ uv = { path = "locks/pipx-datamodel-code-generator/0.89.0~6617cedc", digest = "s
 python = "3.14.8"
 
 [[tools."pipx:graphifyy"]]
-version = "0.9.102"
+version = "0.9.103"
 backend = "pipx:graphifyy"
-specifiers = ["0.9.102"]
+specifiers = ["0.9.103"]
 
 [tools."pipx:graphifyy".options]
 extras = "all"
@@ -1703,27 +1703,27 @@ url_api = "https://api.github.com/repos/prefix-dev/pixi/releases/assets/71023770
 provenance = "github-attestations"
 
 [[tools.pkl]]
-version = "0.32.2"
+version = "0.33.0"
 backend = "aqua:apple/pkl"
-specifiers = ["0.32.2"]
+specifiers = ["0.33.0"]
 
 [tools.pkl."platforms.linux-arm64"]
-checksum = "sha256:e60744e17d4ddc0257a35260998b5f98387b5d6a5e868317cccfbebe8d962ae3"
+checksum = "sha256:edcea361402ecab0f3a93f86b1a896c41d00a9241f4962f70278254b08fbd26d"
 checksum_source = "mise-versions"
-url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-aarch64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850794"
+url = "https://github.com/apple/pkl/releases/download/0.33.0/pkl-linux-aarch64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/714756970"
 
 [tools.pkl."platforms.linux-x64"]
-checksum = "sha256:874c75484c79add77fb2346ea4ab2e8875eea35fb707894bf5457a2df5d03def"
+checksum = "sha256:b9a6ddea6b382b7d4db4cf78e77aa3858e0c8a7e02939d2ba298574b5d1fcc69"
 checksum_source = "mise-versions"
-url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-linux-amd64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850808"
+url = "https://github.com/apple/pkl/releases/download/0.33.0/pkl-linux-amd64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/714756975"
 
 [tools.pkl."platforms.macos-arm64"]
-checksum = "sha256:466952f0b30c93dfa36393a5b3695159917ce4291e3c936a18a0a240cfbe98e9"
+checksum = "sha256:e39c157df0f00a35d34b46270a768784edcaf509aafbf743849b27b4c83ef83b"
 checksum_source = "mise-versions"
-url = "https://github.com/apple/pkl/releases/download/0.32.2/pkl-macos-aarch64"
-url_api = "https://api.github.com/repos/apple/pkl/releases/assets/663850972"
+url = "https://github.com/apple/pkl/releases/download/0.33.0/pkl-macos-aarch64"
+url_api = "https://api.github.com/repos/apple/pkl/releases/assets/714757040"
 
 [[tools.pre-commit]]
 version = "4.7.0"
@@ -2072,6 +2072,17 @@ checksum = "sha256:951ba00a33ea09b9e64c8ab7b71443b9be4d65f6f6c91b184fbec6d684d9d
 checksum_source = "mise-versions"
 url = "https://github.com/stern/stern/releases/download/v1.35.0/stern_1.35.0_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/stern/stern/releases/assets/666034869"
+
+[[tools.swiftlint]]
+version = "0.65.1"
+backend = "aqua:realm/SwiftLint"
+specifiers = ["0.65.1"]
+
+[tools.swiftlint."platforms.macos-arm64"]
+checksum = "sha256:c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0"
+checksum_source = "mise-versions"
+url = "https://github.com/realm/SwiftLint/releases/download/0.65.1/portable_swiftlint.zip"
+url_api = "https://api.github.com/repos/realm/SwiftLint/releases/assets/524187565"
 
 [[tools.tmux]]
 version = "3.7c"

@@ -31,11 +31,12 @@ about it.
 | `unix/home/.zshenv`, `.zprofile`, `.zshrc`, `.zshrc.d/`, `.config/zsh/`, or a new `.zprofile.d/` | `mise run //python:test` |
 | `unix/home/.config/starship.toml` | `mise run //python:test` |
 | anything else under `python/`: `src/`, `tests/`, `pyproject.toml`, `uv.lock`, `mise.toml` | `mise run //python:test` |
-| `shell:apply`, `shell:rollback` or `shell_backup_paths` in `mise.toml`, `tasks/shell/` | `mise run //python:test` |
+| `shell:apply`, `shell:rollback` or `shell_backup_paths` in `mise.toml`, `python/repo/src/repotools/shell.py` | `mise run //python:test` |
 | `python/toolchains/p2996/` | `mise run //p2996:check` |
 | `python/repo/` | `mise run //repo:check` |
 | `typescript/` | `mise run //typescript:test` |
 | `cpp/` | `mise run //cpp:test` |
+| `python/jbctl/`, `swift/` (jbctl, jbax) | drive the CLIs against a running JetBrains IDE, headless only: `python/jbctl/.venv/bin/jbctl resolve --ide clion`, `python/jbctl/.venv/bin/jbctl check-direct --ide clion`, `python/jbctl/.venv/bin/jbctl settings-open --ide clion --page "Exposed Tools"` then `python/jbctl/.venv/bin/jbctl settings-press --ide clion --label Cancel` (`settings-open` refuses while a Settings window is already open, and `settings-press`/`settings-goto` refuse a window `settings-open` did not open: it may hold the owner's unapplied edits, so ask them to close it rather than pressing anything), and `~/.local/bin/jbax windows <pid>` (`mise run //swift:install` first). A change to `jbax select` or `router-direct` needs a headless run of that command too: `python/jbctl/.venv/bin/jbctl router-direct --ide clion` applies DIRECT with OK, so run it only with the owner's go. Log `lsappinfo front` while driving: the front app must not change. Never set `JETBRAINS_FOREGROUND=1` or pass `--foreground` without the owner's go for that exact run |
 | any other task: `tasks/privacy/`, `tasks/review/`, `hk.pkl`, a task in a `mise.toml` | that task itself, through `mise run`, on an input that reaches the change |
 
 A change to the shell tests is verified here: they are the instrument, and a broken instrument
@@ -53,7 +54,7 @@ and the task exits non-zero. Quote the summary and the name and first lines of e
 
 The task is the shell probe: the startup tests copy the tracked files into a temporary HOME and
 start zsh the four ways a shell starts (login and not, interactive and not), and the interactive
-tests type into it. Don't hand-run zsh in `tasks/scratch/env.sh`: it gives an empty HOME without
+tests type into it. Don't hand-run zsh in `mise run scratch:env`: it gives an empty HOME without
 the tracked files, so its output says nothing about them. Never touch the live `~/.zshrc` or the
 other live startup files.
 

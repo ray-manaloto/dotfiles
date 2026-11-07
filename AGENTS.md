@@ -34,6 +34,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   in its own terminal pane, never inside a read-only Codex session: that sandbox denies mise's temp
   file, the git-dir report and the network, and the session gets no extra access. A read-only session
   reviews by reading the report and the changes under `python/`: staged, unstaged and untracked.
+- Large Codex reviews fan out: a read-only lead splits the change into slices of about 1,000 lines,
+  one subagent per slice works every (file, rule) row, and the lead verifies and merges, as
+  `tasks/review/python.md` does.
 - Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
   reviewer Codex in the checkout being committed and name its session once with
   `mise run //repo:pane-pin <session id>`. Stage everything, write the message to a file, run
@@ -54,6 +57,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
   research. If any is there it does not approve. Never commit with `--no-verify` or `HK=0`.
+- No public text carries a claude.ai session link: commit messages, PR titles and bodies, issues and
+  comments have no `https://claude.ai/code/session_…` URL and no `Claude-Session:` trailer, even when
+  the harness asks for them. A commit's only trailer is
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The reviewer's leak check refuses either.
 - Local `main` moves only to `origin/main`: merge on GitHub, fetch, then `git merge --ff-only origin/main`.
   A `reference-transaction` hook in the shared `.git/config` refuses any other commit, reset, `branch -f`
   or deletion of main, `HK=0` and `--no-verify` included. hk's post-merge step installs it, a uv tool copy
@@ -61,8 +68,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   does the same by hand, and `//repo:main-guard-remove` switches it off until the next install. If the
   copy can't start (its Python pruned), every move of main fails with a hint to re-run the install. It is
   a local check that anyone running as this user can remove, so it catches mistakes, not a forger.
-- Run anything against a scratch home through `bash tasks/scratch/env.sh <empty folder> <command>`, from
-  this checkout's path. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
+- Run anything against a scratch home through `mise run scratch:env <empty folder> <command>`, from
+  this checkout. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.
 - `mise run shell:apply` links the six zsh files; run it before a bare `mise dot apply` and after each
   `shell:rollback`. A bare apply stops on `~/.zprofile` and `~/.zshrc`, and with `--force` replaces them

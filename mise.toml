@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "cpp"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -10,6 +10,9 @@ p2996 = "python/toolchains/p2996"
 repo = "python/repo"
 workflow = "python/workflow"
 cbm = "python/cbm"
+home = "python/home"
+visualplan = "python/visualplan"
+jbctl = "python/jbctl"
 
 [settings]
 lockfile = true
@@ -20,7 +23,7 @@ lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//cpp:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own
@@ -44,12 +47,21 @@ run = 'uv run --project python/repo --locked repotools privacy-scan --patterns="
 [tasks."shell:apply"]
 description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "bash tasks/shell/apply.sh"
+run = "uv run --project python/repo --locked repotools shell-apply"
 
 [tasks."shell:rollback"]
 description = "Restore the zsh files from the pre-apply backup"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "bash tasks/shell/rollback.sh"
+run = "uv run --project python/repo --locked repotools shell-rollback"
+
+# Here, not in python/repo: that config's _.python.venv takes a lock under ~/.cache/mise on every run.
+# No usage spec, so mise appends the arguments to the line, each quoted; raw keeps both streams unprefixed, and
+# raw_args hands a --help to the command, not to mise (v2026.11.2 src/cli/run.rs:911-915).
+[tasks."scratch:env"]
+description = "Run one command from this checkout with every home path inside a scratch folder"
+raw = true
+raw_args = true
+run = "uv run --project python/repo --locked repotools scratch-env"
 
 [tasks.pre-commit]
 run = "hk run pre-commit"
@@ -94,6 +106,11 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
+# A skill written here: Codex reads ~/.agents/skills and Claude ~/.claude/skills, so both link to it.
+"~/.agents/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
+"~/.claude/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
+"~/.agents/skills/visual-plan" = { source = "unix/home/.agents/skills/visual-plan", mode = "symlink" }
+"~/.claude/skills/visual-plan" = { source = "unix/home/.agents/skills/visual-plan", mode = "symlink" }
 # TokenEconomizer's global policy, copied (TE rewrites the file, which would break a symlink). Change it
 # with `te --host claude config set --global ...`, then capture it from the main checkout with
 # `mise dot add ~/.tokeneconomizer/config.json` before any `mise dot apply`: an apply overwrites an

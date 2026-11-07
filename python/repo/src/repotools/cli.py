@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, zero_bash
+from . import gates, main_guard, pane_approval, scratch_env, shell, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -22,6 +22,10 @@ from .models import (
     PrText,
     ReviewApproved,
     ReviewPython,
+    ScratchEnv,
+    ShellApply,
+    ShellRollback,
+    ToolchainGate,
     ZeroBash,
 )
 
@@ -40,15 +44,23 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.main_guard_install: MainGuardInstall,
     Command.main_guard_remove: MainGuardRemove,
     Command.main_guard_armed: MainGuardArmed,
+    Command.shell_apply: ShellApply,
+    Command.shell_rollback: ShellRollback,
+    Command.toolchain_gate: ToolchainGate,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
 
 
-def parse(argv: Sequence[str]) -> tuple[Command, Options]:
+def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
     if not argv or argv[0] not in set(Command):
         msg = f"repotools: the first argument is one of {', '.join(Command)}"
         raise ValueError(msg)
     command = Command(argv[0])
+    # scratch-env takes the folder, then the command, by position. CliApp reads a field by position only when its
+    # annotation carries CliPositionalArg (pydantic-settings 2.16.2 sources/providers/cli.py:352,955), which
+    # datamodel-codegen cannot write into the generated model, so the schema's model validates them here.
+    if command is Command.scratch_env:
+        return command, ScratchEnv.model_validate({"folder": argv[1] if argv[1:] else "", "command": argv[2:]})
     model = OPTIONS[command]
     cli = CliSettingsSource(
         # CliApp.run documents BaseModel input; CliSettingsSource's annotation says BaseSettings only.
@@ -63,18 +75,13 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options]:
 
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
-        found = zero_bash.findings()
-        sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
-        if options.strict and found:
-            raise SystemExit(1)
-    elif isinstance(options, ReviewPython):
-        gates.review(options)
-    elif isinstance(options, ReviewApproved):
-        gates.approved()
-    elif isinstance(options, PrivacyScan):
-        gates.privacy_scan(options)
+        zero_bash.report(options)
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
+        gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
+    elif isinstance(options, ShellApply | ShellRollback):
+        shell.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
@@ -87,7 +94,11 @@ def run(command: Command, options: Options) -> None:
 
 def main(argv: Sequence[str] | None = None) -> None:
     try:
-        run(*parse(sys.argv[1:] if argv is None else argv))
+        command, options = parse(sys.argv[1:] if argv is None else argv)
+        if isinstance(options, ScratchEnv):  # parsed by position, so it stays out of run()
+            scratch_env.run(options)
+        else:
+            run(command, options)
     except subprocess.CalledProcessError as error:
         stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr
         sys.stderr.write(Failure(error=f"{error.cmd[0]} failed: {stderr}").model_dump_json() + "\n")

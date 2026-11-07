@@ -14,6 +14,7 @@
 !/mise.toml
 !/cpp/
 !/python/
+!/swift/
 !/tasks/
 !/tests/
 !/typescript/
@@ -28,10 +29,15 @@
 
 # Build and environment outputs inside the allowed roots.
 /cpp/build/
+/swift/.build/
+/swift/.swiftpm/
 /python/.venv/
 /python/toolchains/p2996/.venv/
 /python/repo/.venv/
 /python/workflow/.venv/
+/python/home/.venv/
+/python/visualplan/.venv/
+/python/jbctl/.venv/
 /typescript/node_modules/
 __pycache__/
 .coverage
