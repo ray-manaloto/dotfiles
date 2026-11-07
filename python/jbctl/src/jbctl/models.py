@@ -358,12 +358,12 @@ class Restart(BaseModel):
 
 class IdeState(StrEnum):
     """
-    Where a Toolbox IDE is in its life.
+    Where a Toolbox IDE is in its life: not-ready runs but /api/about has not answered with its build.
     """
 
     stopped = "stopped"
     starting = "starting"
-    running = "running"
+    not_ready = "not-ready"
     ready = "ready"
 
 
@@ -400,12 +400,14 @@ class IdeStatus(BaseModel):
 
 class Action(StrEnum):
     """
-    What a lifecycle command did, or would do, to one IDE.
+    What a lifecycle command did, or would do, to one IDE (*-not-ready: launched, running, not ready).
     """
 
     started = "started"
+    started_not_ready = "started-not-ready"
     stopped = "stopped"
     restarted = "restarted"
+    restarted_not_ready = "restarted-not-ready"
     refused = "refused"
     skipped = "skipped"
     would_start = "would-start"

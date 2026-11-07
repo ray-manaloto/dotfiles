@@ -101,21 +101,26 @@ def about(install: Install, life: Lifetime) -> Answer:
     return Answer(ready=False, busy=False, detail="; ".join(said) or nothing)
 
 
+class NotReadyError(IdeError):
+    """The IDE runs but was not ready in time: unlike a refusal, jbctl has already started it."""
+
+
 def ready(install: Install, life: Lifetime, deadline: float) -> None:
     asked, answer = 0.0, Answer(ready=False, busy=False, detail="not asked yet")
-    while time.monotonic() < deadline:
-        if not alive(life):
-            msg = f"pid {life.pid} ended before it was ready"
-            raise IdeError(msg)
+    while alive(life):  # checked once more after the deadline: it may have ended during the last request or sleep
+        if time.monotonic() >= deadline:
+            msg = (
+                f"pid {life.pid} is still running but was not ready in time: /api/about did not answer with build "
+                f"{install.build} ({answer.detail}); wait and check jbctl status, or stop it with jbctl stop"
+            )
+            raise NotReadyError(msg)
         if time.monotonic() >= asked:
             answer = about(install, life)
             if answer.ready:
                 return
             asked = time.monotonic() + (BACKOFF if answer.busy else ASK)
         time.sleep(POLL)
-    msg = (
-        f"pid {life.pid} was not ready in time: /api/about did not answer with build {install.build} ({answer.detail})"
-    )
+    msg = f"pid {life.pid} ended before it was ready"
     raise IdeError(msg)
 
 
@@ -237,7 +242,11 @@ def start(target: Install, everything: list[Install], project: str | None, timeo
         os.posix_spawn(target.launch, argv, os.environ, file_actions=null, setsid=True)
         deadline = time.monotonic() + timeout
         life = arrival(target, before, deadline)
-        ready(target, life, deadline)
+        try:
+            ready(target, life, deadline)
+        # jbctl launched it and it still runs: say so, rather than "refused", so nothing starts it a second time.
+        except NotReadyError as error:
+            return Lifecycle(script=target.script, action=Action.started_not_ready, pid=life.pid, reason=str(error))
     return Lifecycle(script=target.script, action=Action.started, pid=life.pid)
 
 
@@ -267,6 +276,10 @@ def restart(target: Install, everything: list[Install], timeout: float, *, check
         life = one(target)
         if reason := dialogs(life.pid) or occupant(target, everything, life):
             raise IdeError(reason)
+        # One /api/about request: a restart of an IDE that is still starting (perhaps from the last restart) waits.
+        if not about(target, life).ready:
+            msg = f"pid {life.pid} is still starting; wait (jbctl status) or stop it"
+            raise IdeError(msg)
         if check:
             return Lifecycle(script=target.script, action=Action.would_restart, pid=life.pid)
         before = set(toolbox.lifetimes(Path(target.app)))
@@ -275,7 +288,13 @@ def restart(target: Install, everything: list[Install], timeout: float, *, check
             raise IdeError(still(life, timeout))
         deadline = time.monotonic() + timeout
         new = arrival(target, before, deadline)
-        ready(target, new, deadline)
+        try:
+            ready(target, new, deadline)
+        except NotReadyError as error:
+            not_ready = Action.restarted_not_ready
+            return Lifecycle(
+                script=target.script, action=not_ready, pid=new.pid, previous_pid=life.pid, reason=str(error)
+            )
     return Lifecycle(script=target.script, action=Action.restarted, pid=new.pid, previous_pid=life.pid)
 
 
@@ -341,7 +360,7 @@ def describe(install: Install) -> IdeStatus:
     # Two IDEs from one install (one started outside jbctl): status shows the first, stop and restart refuse.
     pids = ", ".join(str(pid) for pid in sorted(other.pid for other in lives))
     notes = [f"{len(lives)} IDEs run from this install (pids {pids})"] if len(lives) > 1 else []
-    update: dict[str, object] = {"state": IdeState.ready if answer.ready else IdeState.running, "pid": life.pid}
+    update: dict[str, object] = {"state": IdeState.ready if answer.ready else IdeState.not_ready, "pid": life.pid}
     try:
         port, source = toolbox.mcp_port(install)
     # An unreadable or malformed mcpServer.xml (ET.ParseError is a SyntaxError), or a port that is not a number.
