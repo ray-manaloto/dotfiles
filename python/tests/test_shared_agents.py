@@ -59,6 +59,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Workflow",
                 "Commit and pull-request approval",
                 "Cross-review",
+                "Large reviews fan out",
                 "context7 snapshot",
                 "Steps",  # Inside the verbatim context7 snapshot.
             ],

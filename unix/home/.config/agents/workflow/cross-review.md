@@ -23,13 +23,13 @@ Never read an approval from the screen. No hc template is needed: the pane is an
 
 ## Three review kinds
 
-| Kind | When | In the tab | Effort |
-|------|------|------------|--------|
-| Uncommitted changes | Before each commit | `/review` -> Review uncommitted changes | medium |
-| Base branch | Before the pull request | `/review` -> Custom review instructions: the acceptance criteria and `git diff origin/<default>...HEAD` | high |
-| Document | Specs, ticket bodies, pull-request text | A typed brief in a read-only tab | high |
+| Kind | When | In the tab |
+|------|------|------------|
+| Uncommitted changes | Before each commit | `/review` -> Review uncommitted changes |
+| Base branch | Before the pull request | `/review` -> Custom review instructions: the acceptance criteria and `git diff origin/<default>...HEAD` |
+| Document | Specs, ticket bodies, pull-request text | A typed brief in a read-only tab |
 
-Set the effort in the tab's argv (`-c model_reasoning_effort=...`); the session default may differ.
+Every review runs at Codex's default model and effort: the tab's argv sets neither.
 
 A document review brief names the file's absolute path and that it is read-only, then asks by
 document type: a spec for gaps, untestable criteria, missing seams and contradictions with the

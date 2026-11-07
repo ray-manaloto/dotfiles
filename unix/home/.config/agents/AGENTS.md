@@ -64,6 +64,15 @@ own session; a commit is approved only for the fingerprint `repotools pane-finge
 For structural codebase exploration, use the installed `codebase-memory` skill.
 <!-- codebase-memory-mcp:end -->
 
+## Large reviews fan out
+
+A review or sweep bigger than about 1,000 changed lines fans out: split it into slices by file group
+and give each slice to one of your own subagents, at most 6 at once, starting the rest in later
+batches. Each subagent works the full (file, rule) checklist past the first finding and returns
+finding lines plus one checklist line per file. You then check each finding at its path:line, drop
+with a one-line reason the ones that don't hold, merge duplicates, and report every confirmed
+finding in one pass.
+
 ## context7 snapshot
 
 A kept copy of the block ctx7 wrote for Gemini and MCP. `ctx7 setup` never runs against a linked
