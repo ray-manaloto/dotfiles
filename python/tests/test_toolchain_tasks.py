@@ -46,6 +46,18 @@ def refusal(err: str) -> list[str]:
     return lines
 
 
+def errors(err: str) -> list[str]:
+    """The {"error"} JSON events in err, whole: uv and mise print their own lines plain."""
+    events = []
+    for line in err.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        events.append(event["error"])
+    return events
+
+
 def program(*argv: str | Path) -> str:
     return subprocess.run(
         argv, capture_output=True, text=True, check=True
@@ -109,6 +121,49 @@ class ToolchainTasksTest(unittest.TestCase):
         if message is not None:
             self.assertIn(message, lines, err)
         return lines
+
+    # uv exits 1 on a user error such as a missing lock, and a missing uv made the launchers'
+    # execvp raise: each launcher syncs hometools' environment first and names the failure.
+    def without_lock(self) -> None:
+        """No uv.lock in the candidate's hometools, a uv user error, until the test ends."""
+        lock = self.candidate / "python/home/uv.lock"
+        aside = lock.with_name("uv.lock.aside")
+        lock.rename(aside)
+        self.addCleanup(aside.rename, lock)
+
+    def without_uv(self) -> None:
+        self.tc.unlink(self.tc.tools / "uv")
+
+    def extra_package(self) -> Path:
+        """A package hometools' lock doesn't list, in the candidate's venv, until the test ends."""
+        site = next((self.candidate / "python/home/.venv/lib").glob("python3*/site-packages"))
+        extra = site / "extra_package-1.0.dist-info"
+        extra.mkdir()
+        self.addCleanup(shutil.rmtree, extra, ignore_errors=True)
+        files = {
+            "METADATA": "Metadata-Version: 2.1\nName: extra-package\nVersion: 1.0\n",
+            "INSTALLER": "uv\n",
+        }
+        for name, text in files.items():
+            (extra / name).write_text(text)
+        record = [f"{extra.name}/{name},," for name in [*files, "RECORD"]]
+        (extra / "RECORD").write_text("\n".join(record) + "\n")
+        return extra
+
+    def assert_hometools_could_not_start(self, task: str, why: str) -> None:
+        """The task exits 2, not a failed check's 1, with one JSON error naming why, and runs nothing."""
+        done, out, err = self.run_task(task)
+        self.assertEqual(done, 2, out + err)
+        self.assertEqual(errors(err), [f"{task}: hometools could not start ({why})"])
+        self.assertEqual(out, "")
+
+    def assert_sync_keeps_an_extra_package(self, task: str) -> None:
+        # The first run builds hometools' venv; the second syncs it with the extra package in it.
+        self.assertEqual(self.run_task(task)[0], 0)
+        extra = self.extra_package()
+        code, out, err = self.run_task(task)
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(extra.is_dir(), err)
 
 
 class VerifyTest(ToolchainTasksTest):
@@ -256,6 +311,18 @@ class VerifyTest(ToolchainTasksTest):
         names = sorted(line.split()[1].split("@")[0] for line in mismatched)
         self.assertEqual(names, ["gdb", "make"], lines)
 
+    def test_a_failed_uv_sync_exits_2_and_names_it(self) -> None:
+        self.without_lock()
+        self.assert_hometools_could_not_start("toolchain:verify", "uv sync exited 1")
+
+    def test_a_uv_that_cannot_start_exits_2_and_names_it(self) -> None:
+        self.without_uv()
+        why = "uv: No such file or directory"
+        self.assert_hometools_could_not_start("toolchain:verify", why)
+
+    def test_hometools_sync_keeps_a_package_its_lock_does_not_list(self) -> None:
+        self.assert_sync_keeps_an_extra_package("toolchain:verify")
+
 
 class BootstrapTest(ToolchainTasksTest):
     def missing(self, name: str) -> str:
@@ -303,6 +370,23 @@ class BootstrapTest(ToolchainTasksTest):
         self.tc.keg("llvm", "0.0.1")
         code, _out, err = self.run_task("bootstrap:toolchain")
         self.assertEqual(code, 0, err)
+
+    # Each also leaves the fragment unwritten: the launcher stopped before bootstrap-toolchain ran.
+    def test_a_failed_uv_sync_exits_2_and_names_it(self) -> None:
+        self.tc.unlink(self.fragment)
+        self.without_lock()
+        self.assert_hometools_could_not_start("bootstrap:toolchain", "uv sync exited 1")
+        self.assertFalse(self.fragment.exists())
+
+    def test_a_uv_that_cannot_start_exits_2_and_names_it(self) -> None:
+        self.tc.unlink(self.fragment)
+        self.without_uv()
+        why = "uv: No such file or directory"
+        self.assert_hometools_could_not_start("bootstrap:toolchain", why)
+        self.assertFalse(self.fragment.exists())
+
+    def test_hometools_sync_keeps_a_package_its_lock_does_not_list(self) -> None:
+        self.assert_sync_keeps_an_extra_package("bootstrap:toolchain")
 
 
 del ToolchainTasksTest  # only its subclasses hold tests
