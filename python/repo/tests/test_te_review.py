@@ -6,6 +6,7 @@ import json
 import math
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -324,20 +325,50 @@ def test_a_ledger_that_changes_while_it_is_read_fails_midway_and_leaves_nothing(
                 gone = True
             else:
                 # A reader before ENXIO may be the re-read already: closing gives it no bytes, a change too.
-                os.write(descriptor, second.encode() if gone else b"")
-                os.close(descriptor)
+                try:
+                    os.write(descriptor, second.encode() if gone else b"")
+                except BrokenPipeError:  # the first reader closed after the open: the next open sees ENXIO
+                    continue
+                finally:
+                    os.close(descriptor)  # a leaked write end would keep the re-read waiting for EOF forever
                 if gone:
                     return
             time.sleep(0.001)
 
+    def hung(*_: object) -> None:  # the read of the FIFO ledger took over 10 seconds: fail, don't hang
+        raise TimeoutError
+
     thread = threading.Thread(target=writer, daemon=True)
+    previous = signal.signal(signal.SIGALRM, hung)
+    signal.alarm(10)
     thread.start()
     try:
         error = refused(capsys, tmp_path / "te", tmp_path / "out")
     finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
         done.set()
         thread.join(5)
     assert error == {"code": "SOURCE_CHANGED", "error": "repos/a-1/claude/ledger.jsonl changed while it was read"}
+
+
+def test_a_file_put_in_the_reserved_out_dir_survives_the_failed_publication(tmp_path: Path) -> None:
+    # The reservation is empty until the build moves in; a file another process puts there first makes
+    # the move fail, and the cleanup must not take that file with it.
+    ledger(tmp_path / "te", "a-1", [session("s1", START)])
+    out = tmp_path / "out"
+
+    def intrude(event: str, args: tuple[object, ...]) -> None:
+        if event == "os.rename" and args[1] == str(out) and not (out / "theirs").exists():
+            (out / "theirs").write_text("not the collection's\n")
+
+    sys.addaudithook(intrude)  # hooks can't be removed; this one only acts on this test's out (passed as str)
+    with pytest.raises(SystemExit) as stop:
+        collect(tmp_path / "te", out)
+    assert stop.value.code == 1
+    assert sorted(tmp_path.iterdir()) == [out, tmp_path / "te"]  # the staging folder is gone
+    assert [path.name for path in out.iterdir()] == ["theirs"]
+    assert (out / "theirs").read_text() == "not the collection's\n"
 
 
 def test_an_existing_out_dir_is_refused_and_left_unchanged(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

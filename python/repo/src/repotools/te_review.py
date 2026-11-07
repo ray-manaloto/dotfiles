@@ -7,6 +7,8 @@
 # meaning to an owner-set status mark, and hledger/Hledger/Cli/CliOptions.hs:224 ends a period before
 # --end. Here the owner's judgment comes later, against the frozen evidence this writes.
 
+import contextlib
+import functools
 import hashlib
 import json
 import math
@@ -286,15 +288,18 @@ def collect(options: TeReviewCollect) -> None:
         out.mkdir(mode=0o700)
     except FileExistsError:
         raise TeReviewError(ErrorCode.OUT_EXISTS, f"{out} exists; a collection is never rewritten") from None
-    made = [out]  # what a failure removes: the reserved folder, then the staging folder until it moves
+    # What a failure undoes, last first. Until the build moves in, only the empty reservation is this
+    # run's: rmdir removes it, and leaves it, with whatever someone else put in it, if it is not empty.
+    undo = [out.rmdir]
     try:
         staging = Path(tempfile.mkdtemp(prefix=f".{out.name}.", dir=out.parent))  # 0700, and only this run's
-        made.append(staging)
+        undo.append(functools.partial(shutil.rmtree, staging))
         collection_id = build(root, ledgers, options, span, staging)
         staging.rename(out)  # onto the empty reserved folder; fails if anything was put in it
-        made.remove(staging)
+        undo = [functools.partial(shutil.rmtree, out)]  # everything in it now is this run's build
         write(out, "COMPLETE", (collection_id + "\n").encode())
-    except BaseException:  # any failure, including an interrupt: leave no folder behind
-        for folder in made:
-            shutil.rmtree(folder)
+    except BaseException:  # any failure, including an interrupt: leave nothing of this run behind
+        for step in reversed(undo):
+            with contextlib.suppress(OSError):  # the failure that got here is the one to report
+                step()
         raise
