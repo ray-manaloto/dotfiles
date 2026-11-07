@@ -203,3 +203,21 @@
   * A launch where nothing comes up, or where the IDE ends before it is ready, stays `refused`, since nothing runs.
   * Follow-up (owner's decision, 2026-11-07): `restart`'s refusal now reads "pid N is not ready yet; wait (jbctl
     status) or stop it", in the words of the term "Not ready".
+
+## 2026-11-07: the CLion MCP note, ported from feat/clion-ctl
+
+* **Added**: [CLion MCP server](clion-mcp.md), ported from 51e12ad on the unmerged `feat/clion-ctl` branch. That
+  commit's own `docs/research/index.md` and `log.md` were left out, since this bundle has its own.
+* **Measured** (headless: config files, app bundles, the MCP plugin's bytecode and `lsof`; no request to the
+  IDE): all three CLion installs are 2026.3, CL-263.7307.209, and each bundles clion-debugger 1.3.2, the version
+  installed. No CLion was running, and nothing listened on 64362.
+* **Changed** (corrections to the 2026-11-03 note):
+  * the port is CLion's default (64342 + 20), not chosen per machine;
+  * CLion 2026.3 is in DIRECT (no `mcpToolFilter.xml`), not router-only. The skill is written for
+    `execute_tool`.
+* **Found** (the MCP plugin's bytecode; an inference, not observed): DIRECT probably still lists `execute_tool`
+  for Claude Code. `withRouterTool` adds it back for every session that does not opt out. Only the ACP sessions
+  of agents CLion starts itself opt out (the AI-agents plugin's ACP module). An external HTTP client gets
+  default options, which keep it. So the skill should work in DIRECT, but do not count on it before the live
+  check. **To confirm live**: the next time CLion runs, a read-only `tools/list` should list `execute_tool`.
+  Tracked in #563.
