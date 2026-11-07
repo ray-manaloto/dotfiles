@@ -429,6 +429,42 @@ def test_a_turn_with_no_answer_withdraws_an_approval(repo: Path, capsys: pytest.
     assert "no completed last turn" in refusal(capsys)
 
 
+def emptied(root: Path, turn_id: str) -> list[dict[str, Any]]:
+    """A turn whose final answer is empty, as Codex 0.167.0 recorded a reviewer's reply to a broadcast
+    (#562): one output_text part with no text, then task_complete with last_agent_message null."""
+    records = turn(root, turn_id, "")
+    records[3]["payload"]["last_agent_message"] = None
+    records.insert(3, {"type": "event_msg", "payload": {"type": "token_count"}})
+    return records
+
+
+def test_a_turn_with_an_empty_answer_leaves_the_session_usable(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    write_log(repo, [*emptied(repo, "t0"), *records])
+    main(["pane-approved", *text()])
+
+
+def test_a_turn_with_an_empty_answer_withdraws_an_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    write_log(repo, [*approve(repo, capsys), *emptied(repo, "t2")])
+    assert "no completed last turn" in refusal(capsys)
+
+
+def test_an_empty_answer_the_end_reports_otherwise_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = emptied(repo, "t0")
+    records[4]["payload"]["last_agent_message"] = "Reviewed."
+    write_log(repo, [*records, *approve(repo, capsys)])
+    assert refusal(capsys) == "turn t0 completed without matching settings and answer"
+
+
+def test_an_interrupted_turn_after_an_empty_answer_leaves_the_session_usable(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    records = approve(repo, capsys)
+    started = {"type": "event_msg", "payload": {"type": "task_started", "turn_id": "t1a"}}
+    write_log(repo, [*emptied(repo, "t0"), started, aborted("t1a"), *records])
+    main(["pane-approved", *text()])
+
+
 def test_an_answer_the_end_does_not_report_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # A final answer, then an end that reports none: not a turn with no answer, so still a mismatch.
     write_log(repo, reported(approve(repo, capsys), None))
