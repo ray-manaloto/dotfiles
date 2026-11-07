@@ -5,7 +5,7 @@ title: "CLion MCP server: the connection and the clion-debugger skill"
 description: "How Claude Code reaches CLion's MCP server, which IDE holds the port, why sessions show ECONNREFUSED, where the clion-debugger skill comes from, and the options that were rejected."
 resource: "~/.claude.json mcpServers.clion and CLion's bundled clion-debugger skill"
 version: "2026-11-07"
-timestamp: "2026-11-07T20:00:00Z"
+timestamp: "2026-11-07T23:00:00Z"
 status: "draft"
 stale_after: "2027-05-07T00:00:00Z"
 tags: [clion, mcp, claude-code, skills, jetbrains]
@@ -88,17 +88,22 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   `Contents/plugins/air-plugin/lib/modules/intellij.aiagentextensions.contrib.ide.clion.jar`. On 2026-11-07
   all three installs carried version 1.3.2. In 2026.2.4.1 the AI Assistant plugin (`air-plugin`) was a
   separate install under the config's `plugins/` folder, and its jar of the same name carried 1.1.4.
-- Install (user scope): in CLion, Settings › AI › Skills (where 2026.3 registers the page). Find
-  `clion-debugger` under Bundled skills, open its menu and pick Claude Agent (Global). The steps after the page
-  are from the 2026-11-03 RC and were not rerun.
-  The export writes `~/.claude/skills/clion-debugger/`.
-  Codex has a matching "Codex (Global)" choice. Without the IDE: unzip `bundledSkills/clion-debugger/*` from
-  the jar into an empty folder, then copy its `bundledSkills/clion-debugger/` folder to
-  `~/.claude/skills/clion-debugger/` (the archive keeps the `bundledSkills/` prefix).
-- After each CLion update, redo the export, so the copy matches the IDE's tools. Compare `version` in
-  `~/.claude/skills/clion-debugger/metadata.json` with the jar's. On 2026-11-07 the installed copy was 1.3.2,
-  and its `SKILL.md` matched the jar's byte for byte. It carries the marker file
-  (`.dotfiles-clion-skills.json`) of the unmerged copy task below, from a run on 2026-11-03.
+- Install (user scope), without the IDE: `mise run //jbctl:skills -- --ide clion --skill clion-debugger`
+  (`jbctl skills`). It reads the install's jars on disk and contacts no IDE, so CLion may be stopped. It writes
+  one copy to `~/.agents/skills/clion-debugger/`, which Codex reads, and links
+  `~/.claude/skills/clion-debugger` to it, as `skills add -g` lays out the other skills. It keeps a
+  `.jbctl-skill.json` marker in the copy, and leaves alone a copy someone changed or one it did not write.
+  `--check` reports what a run would do and writes nothing. See the terms "Bundled skill" and "Skill copy" in
+  [[terms]].
+- Install from the IDE instead: Settings › AI › Skills (where 2026.3 registers the page). Find
+  `clion-debugger` under Bundled skills, open its menu and pick Claude Agent (Global), or "Codex (Global)".
+  The steps after the page are from the 2026-11-03 RC and were not rerun. The export writes
+  `~/.claude/skills/clion-debugger/`.
+- After each CLion update, run `jbctl skills` again: it updates a copy nobody changed to what the install
+  ships. On 2026-11-07 the installed copy was 1.3.2, matched the jar byte for byte, and carried the marker
+  (`.dotfiles-clion-skills.json`) of the earlier copy task. `jbctl skills --check --ide clion --skill
+  clion-debugger` reported `copied` for Codex and `adopted` for Claude: the first run moves that copy under
+  jbctl's marker and replaces the Claude folder with the link.
 
 ## Rejected options and failed searches (2026-11-03)
 
@@ -111,7 +116,7 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   has no license.
 - **Committing the skill folder here**: rejected. The files are JetBrains' proprietary content in a public
   repo, and a copy would go stale with every CLion update.
-- **A task that copies the skill from the installed CLion**: deferred. Toolbox keeps several CLion apps side
-  by side, so a task has to pick the one that serves the port. `feat/clion-ctl` (33eec5c, not merged) has a
-  first cut as a mise file task. It is not ported, since it predates this repo's rule that Python lives in
-  packages under `python/`.
+- **A task that copies the skill from the installed CLion**: built as `jbctl skills` (2026-11-07), not as
+  the mise file task on `feat/clion-ctl` (33eec5c), which predates this repo's rule that Python lives in
+  packages under `python/`. Toolbox keeps several CLion apps side by side, so it takes the install by
+  `--ide`, not by which one serves the MCP port.

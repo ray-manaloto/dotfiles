@@ -4,8 +4,8 @@ type: "glossary"
 title: "Terms"
 description: "The words this bundle and jbctl/jbax use for how an IDE is reached and named."
 resource: "python/jbctl and swift/"
-version: "2026-11-06"
-timestamp: "2026-11-06T03:00:00Z"
+version: "2026-11-07"
+timestamp: "2026-11-07T00:00:00Z"
 status: "draft"
 stale_after: "2026-12-06T00:00:00Z"
 tags: [glossary, jbctl, jbax]
@@ -72,3 +72,14 @@ _Avoid_: force kill, Force Quit.
 Where an install keeps its settings (`idea.config.path`). Several installs of one product can share one,
 as the three CLion installs here do, and then a setting one of them saves applies to all of them.
 _Avoid_: profile, settings folder.
+
+**Bundled skill**:
+An agent skill that ships inside a Toolbox IDE (CLion's `clion-debugger`, for one): a folder with a
+`SKILL.md`, carried in the IDE's plugins. Each install carries its own version of it.
+_Avoid_: built-in skill, plugin skill.
+
+**Skill copy**:
+A bundled skill's files, copied out of one install into the folder where Claude Code or Codex looks for the
+user's skills. jbctl looks after a skill copy it wrote that nobody has changed since; it leaves alone a copy
+someone has changed and one it did not write.
+_Avoid_: export, install, vendored copy.
