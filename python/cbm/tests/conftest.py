@@ -4,7 +4,9 @@
 # (initialize, tools/list), and on `install` writes the agent setup the way CBM 0.12.1 does, for the
 # clients and launcher folder it is given. HOME/mode picks how `install` behaves: ok, fail, hang, link
 # (it leaves a launcher behind) or missing-hook; HOME/mcp-old, mcp-missing-tool and mcp-garbage break
-# the MCP session; HOME/mcp-hang stalls it beyond the command's real timeout.
+# the MCP session; HOME/mcp-hang stalls it beyond the command's real timeout. HOME/mcp-fault, a JSON
+# {"at": ..., "value": ...}, puts that value at one place in the replies: a line of its own before them,
+# either request's result, the server info, the tool list, a tool entry, a tool's name or each reply's id.
 #
 # Why not the real CBM binary: every CBM process meets in one account-wide daemon rendezvous, whatever
 # HOME says (src/daemon/bootstrap.c:243-255 at v0.12.1; only CBM_RUNTIME_DIR moves it, and the package
@@ -79,16 +81,28 @@ if not args:  # an MCP session over stdio: answer initialize and tools/list, the
              "index_status", "check_index_coverage", "detect_changes", "index_repository"]
     if (home / "mcp-missing-tool").exists():
         tools.remove("trace_path")
+    fault = json.loads((home / "mcp-fault").read_text()) if (home / "mcp-fault").exists() else {}
+    at, bad = fault.get("at"), fault.get("value")
+    if at == "line":
+        print(json.dumps(bad), flush=True)
     for line in sys.stdin:
         request = json.loads(line)
+        # The initialize result (src/mcp/mcp.c:1484-1489) and the tools/list result (:1095), one line each.
         if request.get("method") == "initialize":
             info = {"name": "codebase-memory-mcp", "version": version}
-            result = {"protocolVersion": "2025-11-25", "serverInfo": info}
+            result = {"protocolVersion": "2025-11-25", "serverInfo": bad if at == "serverInfo" else info}
         elif request.get("method") == "tools/list":
-            result = {"tools": [{"name": name} for name in tools]}
+            entries = [{"name": name} for name in tools]
+            if at == "tool":
+                entries.append(bad)
+            if at == "name":
+                entries[0]["name"] = bad
+            result = {"tools": bad if at == "tools" else entries}
         else:
             continue
-        print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}), flush=True)
+        result = bad if at == request["method"] else result
+        reply = bad if at == "id" else request["id"]
+        print(json.dumps({"jsonrpc": "2.0", "id": reply, "result": result}), flush=True)
     sys.exit(0)
 if args[0] != "install":
     sys.exit(64)

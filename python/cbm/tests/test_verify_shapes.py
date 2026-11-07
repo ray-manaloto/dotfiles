@@ -45,6 +45,15 @@ def edit_json(path: Path, change: Callable[[dict[str, Any]], object]) -> Callabl
     return edit
 
 
+def splice(path: Path, old: str, new: str) -> None:
+    """Replace the first `old` in the stand-in's file with `new`, asserting that changed it: a change to what the
+    stand-in writes then fails the test instead of leaving the file as it was."""
+    text = path.read_text()
+    spliced = text.replace(old, new, 1)
+    assert spliced != text, f"{old!r} is not in {path}:\n{text}"
+    path.write_text(spliced)
+
+
 def quiet(done: subprocess.CompletedProcess[str]) -> None:
     """No error event and no traceback: stderr stays empty."""
     assert done.stderr == ""
@@ -95,8 +104,7 @@ def test_a_codex_role_mcp_level_that_is_not_a_table_fails_only_its_check(home: P
 @pytest.mark.parametrize("tools", ["[{ name = 1 }]", '[["search_graph"]]', '["search_graph", 1]', '"search_graph"'])
 def test_codex_role_tools_that_are_not_names_fail_only_its_check(home: Path, tools: str) -> None:
     def edit() -> None:
-        text = role(home).read_text()
-        role(home).write_text(text.replace('enabled_tools = ["search_graph"]', f"enabled_tools = {tools}"))
+        splice(role(home), 'enabled_tools = ["search_graph"]', f"enabled_tools = {tools}")
 
     quiet(check_after(home, edit, SCOUT))
 
@@ -129,12 +137,11 @@ def test_malformed_entries_beside_the_cbm_entries_do_not_hide_them(home: Path) -
     # the other entries are spliced in the same way.
     opencode = home / ".config/opencode/opencode.json"
     others = '"other": 4, "listed": [1], "none": null, '
-    opencode.write_text(opencode.read_text().replace('{"mcp": {', '{"mcp": {' + others, 1))
+    splice(opencode, '{"mcp": {', '{"mcp": {' + others)
     config = home / ".codex/config.toml"
     config.write_text('[mcp_servers]\nother = 4\nlisted = [1]\ntext = "x"\n\n' + config.read_text())
-    text = role(home).read_text()
     head = f"[mcp_servers.{SERVER}]"
-    role(home).write_text(text.replace(head, f"[mcp_servers]\nother = 4\nlisted = [1]\n\n{head}", 1))
+    splice(role(home), head, f"[mcp_servers]\nother = 4\nlisted = [1]\n\n{head}")
     done = cbm("verify", cwd=home / "checkout")
     assert done.returncode == 0, done.stdout + done.stderr
     quiet(done)
