@@ -41,6 +41,7 @@ class ErrorCode(StrEnum):
     cbm_failed = "cbm_failed"
     no_map = "no_map"
     invalid_manifest = "invalid_manifest"
+    unowned_folder = "unowned_folder"
 
 
 class Config(BaseModel):
@@ -169,9 +170,9 @@ class Manifest(BaseModel):
     """
     The tag the source is checked out at
     """
-    commit: str
+    commit: Annotated[str, Field(pattern="^[0-9a-f]{40}([0-9a-f]{24})?$")]
     """
-    The commit the tag points at
+    The commit the tag points at: a full SHA-1 or SHA-256 object name, never a git option
     """
     project: str
     """

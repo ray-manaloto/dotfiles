@@ -140,10 +140,41 @@ def test_map(env: Env) -> None:
 
 def test_map_finishes_a_map_cut_short(env: Env) -> None:
     env.folder("1.1.0").mkdir(parents=True)
+    (env.folder("1.1.0") / ".depmaps-building").write_text("")
     (env.folder("1.1.0") / "partial").write_text("")
     result = env.run("map", env.name, "--version", "1.1.0")
     assert result.returncode == 0, result.stderr
     assert sorted(path.name for path in env.folder("1.1.0").iterdir()) == ["manifest.json", "src"]
+
+
+@pytest.mark.parametrize("kind", ["folder", "symlink", "marker link"])
+def test_map_never_deletes_a_folder_it_did_not_make(env: Env, kind: str) -> None:
+    assert env.run("map", env.name).returncode == 0
+    mine = env.root / "mine"
+    mine.mkdir()
+    (mine / "notes.md").write_text("keep\n")
+    target = env.folder("1.1.0")
+    if kind == "folder":
+        mine.rename(target)
+        mine = target
+    elif kind == "marker link":
+        # A marker that links out never makes a folder depmaps' own, and writing it never empties the file.
+        target.mkdir()
+        (target / ".depmaps-building").symlink_to(mine / "notes.md")
+    else:
+        # Even a folder that looks like this map's own is never reached through a link.
+        made = json.loads((env.folder("1.0.0") / "manifest.json").read_text())
+        (mine / "manifest.json").write_text(json.dumps(made | {"version": "1.1.0"}))
+        (mine / ".depmaps-building").write_text("")
+        target.symlink_to(mine)
+    before = sorted(path.name for path in mine.iterdir())
+    result = env.run("map", env.name, "--version", "1.1.0")
+    assert result.returncode == 1
+    message = f"depmaps: {target} is not a map folder depmaps made; move it away to map {env.name} 1.1.0"
+    assert errors(result.stderr) == [("unowned_folder", message)]
+    assert sorted(path.name for path in mine.iterdir()) == before
+    assert (mine / "notes.md").read_text() == "keep\n"
+    assert target.is_symlink() == (kind == "symlink")
 
 
 def test_map_fetches_a_later_tag(env: Env) -> None:
@@ -270,13 +301,15 @@ def test_sync_goes_on_after_a_failure(env: Env) -> None:
     assert done(result.stdout)["message"] == "depmaps: sync mapped 1, pruned 0; 1 failed"
 
 
-@pytest.mark.parametrize("damage", ["not json", "folder", "other map"])
+@pytest.mark.parametrize("damage", ["not json", "folder", "other map", "option commit"])
 def test_invalid_manifest_is_an_error(env: Env, damage: str) -> None:
     assert env.run("map", env.name).returncode == 0
     path = env.folder("1.0.0") / "manifest.json"
     if damage == "folder":
         path.unlink()
         path.mkdir()
+    elif damage == "option commit":
+        path.write_text(json.dumps(json.loads(path.read_text()) | {"commit": "--output=written"}))
     else:
         text = path.read_text()
         path.write_text("{" if damage == "not json" else text.replace(f'"{env.name}"', '"another"'))
@@ -288,6 +321,27 @@ def test_invalid_manifest_is_an_error(env: Env, damage: str) -> None:
         assert str(path) in error["message"]
         assert done(result.stdout)["message"].endswith("; 1 failed")
     assert path.exists(), "an invalid manifest is reported, never rebuilt over"
+
+
+def test_diff_never_passes_a_manifest_commit_to_git_as_an_option(env: Env) -> None:
+    for version in ("1.0.0", "1.1.0"):
+        assert env.run("map", env.name, "--version", version).returncode == 0
+    written = env.root / "written"
+    path = env.folder("1.1.0") / "manifest.json"
+    path.write_text(json.dumps(json.loads(path.read_text()) | {"commit": f"--output={written}"}))
+    result = env.run("diff", env.name, "1.0.0", "1.1.0")
+    assert result.returncode == 1
+    assert [code for code, _ in errors(result.stderr)] == ["invalid_manifest"]
+    assert not written.exists()
+
+
+@pytest.mark.parametrize(
+    "task", [["map", "a b *"], ["map", "a b *", "--version", "1.0.0"], ["diff", "a b *", "1.0.0", "1.1.0"]],
+)  # fmt: skip
+def test_tasks_pass_each_argument_through_unchanged(env: Env, task: list[str]) -> None:
+    # A space would split the name and `*` would expand to the package's files, were the task unquoted.
+    found = [(each["code"], each["message"]) for each in events(env.task(*task).stderr)]
+    assert found == [("unknown_dep", "depmaps: a b * is not in the registry")]
 
 
 def test_diff(env: Env) -> None:

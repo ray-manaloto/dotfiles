@@ -9,6 +9,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -21,6 +22,7 @@ import pytest
 
 # The installed command, as `uv run depmaps` and the mise tasks start it.
 DEPMAPS = Path(sys.executable).parent / "depmaps"
+PACKAGE = Path(__file__).parents[1]
 CBM = Path.home() / ".local/share/mise/installs/github-deus-data-codebase-memory-mcp/global/codebase-memory-mcp"
 TIMEOUT = 120
 # Seconds: far longer than a whole run of this suite.
@@ -110,7 +112,8 @@ class Env:
 
     def __init__(self, root: Path, repo: Path) -> None:
         self.root, self.repo = root, repo
-        self.name = f"dmtest-{uuid.uuid4().hex[:12]}"
+        # The second the test started goes into the name, so a later sweep reads its age from the name.
+        self.name = f"dmtest-{int(time.time()):08x}-{uuid.uuid4().hex[:8]}"
         self.registry, self.lock, self.store = root / "deps.json", root / "mise.lock", root / "store"
 
     def deps(self, deps: dict[str, dict[str, Any]]) -> None:
@@ -133,6 +136,16 @@ class Env:
             [str(DEPMAPS), *args], env=os.environ.copy(), stdin=subprocess.DEVNULL, capture_output=True,
             text=True, timeout=TIMEOUT, cwd=cwd or self.root, check=False,
         )  # fmt: skip
+
+    def task(self, name: str, *args: str) -> subprocess.CompletedProcess[str]:
+        """The package's mise task of that name, as a person starts it; stderr keeps depmaps' lines and
+        drops mise's own, which start with the task's name in brackets."""
+        done = subprocess.run(
+            ["mise", "run", f"//depmaps:{name}", *args], env=os.environ.copy(), stdin=subprocess.DEVNULL,
+            capture_output=True, text=True, timeout=TIMEOUT, cwd=PACKAGE, check=False,
+        )  # fmt: skip
+        mine = "".join(line for line in done.stderr.splitlines(keepends=True) if not line.startswith("[//"))
+        return subprocess.CompletedProcess(done.args, done.returncode, done.stdout, mine)
 
 
 def cbm_tool(name: str, arguments: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -157,15 +170,15 @@ def delete(project: str) -> str:
 @pytest.fixture(scope="session", autouse=True)
 def sweep() -> None:
     """Delete the projects of an earlier run that was killed before its teardown. Only this suite names
-    projects dmtest-<12 hex>-v<version>, so nothing else in the live cache matches. A map younger than
-    STALE may belong to a run still going in another checkout, so it waits for a later sweep."""
+    projects dmtest-<start, 8 hex>-<8 hex>-v<version>, so nothing else in the live cache matches. A map
+    younger than STALE may belong to a run still going in another checkout, so it waits for a later sweep.
+    The age comes from the name, never from a stat of a file that run's teardown may be deleting. An
+    older checkout names them dmtest-<12 hex>-v<version>, with no start time, so they are left alone."""
     for db in database("dmtest-").parent.glob("dmtest-*-v*.db"):
-        try:
-            age = time.time() - db.stat().st_mtime
-        except FileNotFoundError:  # that run's own teardown deleted it after the glob
-            continue
-        if age > STALE:
-            assert delete(db.name.removesuffix(".db")) in {"deleted", "not_found"}, db
+        project = db.name.removesuffix(".db")
+        named = re.fullmatch(r"dmtest-([0-9a-f]{8})-[0-9a-f]{8}-v.+", project)
+        if named and time.time() - int(named[1], 16) > STALE:
+            assert delete(project) in {"deleted", "not_found"}, db
 
 
 @pytest.fixture

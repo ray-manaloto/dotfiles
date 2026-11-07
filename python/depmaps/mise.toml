@@ -16,7 +16,7 @@ usage = '''
 arg "<dep>" help="A dependency name from the registry"
 flag "--version <version>" help="Map this version instead of the pinned one"
 '''
-run = "uv run --locked depmaps map ${usage_dep} ${usage_version:+--version $usage_version}"
+run = 'uv run --locked depmaps map "$usage_dep" ${usage_version:+--version "$usage_version"}'
 
 [tasks.sync]
 description = "Map every registry dependency whose pinned version has no map, then prune old maps"
@@ -29,7 +29,7 @@ arg "<dep>" help="A dependency name from the registry"
 arg "<old>" help="The older mapped version"
 arg "<new>" help="The newer mapped version"
 '''
-run = "uv run --locked depmaps diff ${usage_dep} ${usage_old} ${usage_new}"
+run = 'uv run --locked depmaps diff "$usage_dep" "$usage_old" "$usage_new"'
 
 # Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
 [tasks.venv]

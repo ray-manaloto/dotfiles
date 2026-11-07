@@ -12,6 +12,9 @@ from .events import DepmapsError
 from .git import commit, git
 from .models import Config, Dep, ErrorCode, Manifest
 
+# The file build writes into a version folder before anything else and deletes once manifest.json is in.
+BUILDING = ".depmaps-building"
+
 
 def bare(cfg: Config, name: str) -> Path:
     # A version starts with a letter or digit (registry.VERSION), so no version folder, in any case, is this one.
@@ -63,9 +66,26 @@ def maps(cfg: Config, name: str) -> list[Manifest]:
     return sorted(found, key=lambda each: order(each.version))
 
 
-def remove(cfg: Config, name: str, version: str) -> None:
-    """Delete the cbm project, the worktree and the folder (manifest.json last, so a failure leaves it listed)."""
+def owned(cfg: Config, name: str, version: str) -> bool:
+    """The version folder is one depmaps made: a real folder, not a link, holding this map's manifest or
+    the marker build writes first. A marker that is a link counts against it, since remove writes the
+    marker. A manifest naming another map raises invalid_manifest."""
     target = folder(cfg, name, version)
+    marker = target / BUILDING
+    if target.is_symlink() or marker.is_symlink():
+        return False
+    return marker.is_file() or manifest(cfg, name, version) is not None
+
+
+def remove(cfg: Config, name: str, version: str) -> None:
+    """Delete the cbm project, the worktree and the folder, only when depmaps made the folder. The marker
+    goes in first, so a removal cut short leaves a folder the next map still owns."""
+    target = folder(cfg, name, version)
+    if not owned(cfg, name, version):
+        message = f"depmaps: {target} is not a map folder depmaps made; move it away to map {name} {version}"
+        raise DepmapsError(ErrorCode.unowned_folder, message)
+    if not (target / BUILDING).is_file():
+        (target / BUILDING).open("x").close()  # exclusive: never opens a file that is already there
     cbm.delete(cfg, f"{name}-v{version}")
     if (target / "src").exists():
         git("worktree", "remove", "--force", target / "src", cwd=bare(cfg, name))
@@ -76,9 +96,10 @@ def build(cfg: Config, name: str, dep: Dep, version: str) -> Manifest:
     tag = dep.tag.replace("{version}", version)
     sha = commit(dep.repo, bare(cfg, name), tag)
     target = folder(cfg, name, version)
-    if target.exists():  # an earlier map, or one cut short: rebuild it from nothing
+    if target.exists() or target.is_symlink():  # an earlier map, or one cut short: rebuild it from nothing
         remove(cfg, name, version)
     target.mkdir(parents=True)
+    (target / BUILDING).open("x").close()  # before anything else, so a build cut short is still depmaps' own
     source = target / "src"
     # A worktree folder deleted by hand stays registered, and add refuses its path until pruned.
     git("worktree", "prune", cwd=bare(cfg, name))
@@ -93,6 +114,7 @@ def build(cfg: Config, name: str, dep: Dep, version: str) -> Manifest:
         nodes=artifact["nodes"], edges=artifact["edges"],
     )  # fmt: skip
     (target / "manifest.json").write_text(made.model_dump_json(indent=2) + "\n")
+    (target / BUILDING).unlink()
     return made
 
 
