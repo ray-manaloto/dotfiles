@@ -6,9 +6,29 @@
 # package in the checkout it is linked from and runs one command there. update:mise waits for this task and
 # update:all depends on it, both by name in the global config.
 
+import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 # ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/update/brew.
 PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
-os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--locked", "hometools", "update-brew"])
+
+# The package's environment is synced as its own step first, so a uv that fails or can't start there ends the
+# task with one JSON error naming it, as hometools' own steps do: uv sync's exit code, or 127 for no uv.
+# --inexact keeps packages the lock doesn't list, as uv run did: uv sync removes them by default
+# (uv 0.13.7 crates/uv-cli/src/settings.rs:851-855 for run, 2003-2007 for sync).
+try:
+    synced = subprocess.run(["uv", "sync", "--project", str(PACKAGE), "--locked", "--inexact"], check=False).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    error = f"update:brew: hometools could not start ({why})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(synced)
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--no-sync", "hometools", "update-brew"])

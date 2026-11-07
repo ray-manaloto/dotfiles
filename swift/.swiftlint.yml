@@ -1,0 +1,4 @@
+# SwiftLint (hk builtin `swiftlint`); layout is swift-format's job, so its overlapping rules are off.
+included: [Package.swift, Sources, Tests]
+disabled_rules: [trailing_comma, opening_brace, line_length]
+opt_in_rules: [empty_count, first_where, contains_over_filter_count, sorted_first_last, force_unwrapping]

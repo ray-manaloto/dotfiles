@@ -249,7 +249,6 @@ def test_this_repository_reports_no_zsh_startup_file(
         monkeypatch.delenv(name)
     monkeypatch.chdir(REPO)
     paths = [finding["path"] for finding in report(capsys)]
-    assert "unix/home/.config/mise/config.toml" in paths
     assert not [path for path in paths if path.startswith(("unix/home/.z", "unix/home/.config/zsh/"))]
 
 

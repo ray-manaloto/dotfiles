@@ -292,6 +292,8 @@ lua = { version = "5.5.1", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
 ruff = { version = "0.17.3", minimum_release_age = "0s" }
 ty = { version = "0.0.97", minimum_release_age = "0s" }
+# swift/ (jbax): hk's swiftlint builtin; macOS only, like jbax. Formatting is the toolchain's own `swift format`.
+swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 
 # --- webclaw: local browser-enabled build -------------------------------------
 # Added 2026-10-20. The prebuilt release (github:0xMassi/webclaw) is compiled
@@ -494,12 +496,10 @@ includes = ["{{ mise_config_dir }}/agentsview-native/tasks.toml", "{{ mise_confi
 
 # D268: adopt existing Docker Desktop; updater lifecycle stays docker desktop CLI.
 # DL-714: Ruby before the package plan, which evaluates the Orca cask.
+# One line (zero-bash rule). Off macOS it renders empty and mise runs `sh -c ""`, exit 0, as the
+# blank lines the multi-line form rendered did.
 [bootstrap.hooks.pre-packages]
-run = '''
-{% if os() == "macos" %}
-mise bootstrap packages apply brew:ruby --yes
-{% endif %}
-'''
+run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% endif %}'
 
 # hc's skill is a mise-run install, so it waits for the tools phase; what is installed is skipped:
 # Codex reads ~/.agents/skills, and Claude needs its own link in ~/.claude/skills.

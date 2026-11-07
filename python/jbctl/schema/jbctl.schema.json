@@ -1,0 +1,536 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "jbctl",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Types of jbctl (issue #502); mise run //jbctl:codegen writes src/jbctl/models.py from this file.",
+  "properties": {
+    "command": {
+      "$ref": "#/$defs/Command"
+    },
+    "options": {
+      "$ref": "#/$defs/Options"
+    },
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "failure": {
+      "$ref": "#/$defs/Failure"
+    }
+  },
+  "$defs": {
+    "Command": {
+      "description": "The jbctl subcommands.",
+      "type": "string",
+      "enum": [
+        "resolve",
+        "map",
+        "settings-open",
+        "settings-goto",
+        "settings-press",
+        "router-direct",
+        "check-direct",
+        "rea-patch",
+        "coverage-gate"
+      ]
+    },
+    "Map": {
+      "description": "Save rea's accessibility map of one IDE window (layer-0 windows only).",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        },
+        "window": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "CG window id, as agent-desktop lists it without the w- prefix"
+        },
+        "out": {
+          "type": "string",
+          "minLength": 1,
+          "description": "File to write the map to; never overwritten"
+        }
+      },
+      "required": [
+        "ide",
+        "window",
+        "out"
+      ],
+      "additionalProperties": false
+    },
+    "SettingsOpen": {
+      "description": "Open Settings on a page, in the background (JETBRAINS_FOREGROUND=1: from the menu bar).",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        },
+        "page": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The page's display name, as the breadcrumb shows it"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ide",
+        "page"
+      ]
+    },
+    "SettingsGoto": {
+      "description": "Go to a Settings page through the search field, in the background; the breadcrumb confirms it.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        },
+        "page": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The page name as the breadcrumb shows it"
+        }
+      },
+      "required": [
+        "ide",
+        "page"
+      ],
+      "additionalProperties": false
+    },
+    "SettingsPress": {
+      "description": "Press a button in the open Settings dialog, in the background (jbax press).",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The button's exact label"
+        }
+      },
+      "required": [
+        "ide",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "RouterDirect": {
+      "description": "Set MCP Server > Exposed Tools router-only mode to ACP agents only (DIRECT) and verify it over MCP.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        },
+        "mcp_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initialize and tools/list are sent"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ide"
+      ]
+    },
+    "CheckDirect": {
+      "description": "Fail unless an MCP tools/list shows more than the router tool alone (DIRECT): the IDE's own server, or --mcp-url.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "mcp_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initialize and tools/list are sent"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReaPatch": {
+      "description": "Apply jbctl's patch to rea's native UI helper (launch-time fallback, same-size windows, Swing labels).",
+      "type": "object",
+      "properties": {
+        "helper": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ReaNativeUI.swift to patch; default the one in the global rea-agents install"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Options": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Resolve"
+        },
+        {
+          "$ref": "#/$defs/Map"
+        },
+        {
+          "$ref": "#/$defs/SettingsOpen"
+        },
+        {
+          "$ref": "#/$defs/SettingsGoto"
+        },
+        {
+          "$ref": "#/$defs/SettingsPress"
+        },
+        {
+          "$ref": "#/$defs/RouterDirect"
+        },
+        {
+          "$ref": "#/$defs/CheckDirect"
+        },
+        {
+          "$ref": "#/$defs/ReaPatch"
+        },
+        {
+          "$ref": "#/$defs/CoverageGate"
+        }
+      ]
+    },
+    "PatchState": {
+      "description": "What rea-patch found.",
+      "type": "string",
+      "enum": [
+        "applied",
+        "already"
+      ]
+    },
+    "Event": {
+      "description": "One JSON line on stdout.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ide"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "settings_window": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "front_restored": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "breadcrumb": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "pressed": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "selected": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "tools": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "direct": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "patch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "map": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "nodes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Coverage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "Failure": {
+      "description": "The JSON line on stderr when a command fails.",
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "IdeName": {
+      "description": "The IDE by its Toolbox shell-script name (channel tool.extensions[type=shell].name): clion, pycharm, clion1",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*$"
+    },
+    "Resolve": {
+      "description": "Resolve a Toolbox install to its running IDE: app, product, build, pid and MCP endpoint.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "$ref": "#/$defs/IdeName"
+        }
+      },
+      "required": [
+        "ide"
+      ],
+      "additionalProperties": false
+    },
+    "Ide": {
+      "description": "One running IDE, as resolve reports it.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "The .app bundle (state.json installLocation)"
+        },
+        "product_code": {
+          "type": "string",
+          "description": "product-info.json productCode, e.g. CL"
+        },
+        "build": {
+          "type": "string",
+          "description": "product-info.json buildNumber"
+        },
+        "pid": {
+          "type": "integer"
+        },
+        "mcp_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "product_code",
+        "build",
+        "pid",
+        "mcp_url"
+      ],
+      "additionalProperties": false
+    },
+    "CoverageGate": {
+      "description": "Gate an llvm-cov JSON export: every source file present and covered to the minimum.",
+      "type": "object",
+      "properties": {
+        "report": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The export, e.g. swift test's codecov/<package>.json"
+        },
+        "sources": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The folder whose *.swift files must all be covered"
+        },
+        "skip": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Foreground.swift"
+            ]
+          },
+          "default": [],
+          "description": "Files left out: only Foreground.swift (only the debug route reaches it) is allowed"
+        },
+        "minimum": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 100,
+          "description": "Percent of lines and of regions each file needs"
+        }
+      },
+      "required": [
+        "report",
+        "sources"
+      ],
+      "additionalProperties": false
+    },
+    "Coverage": {
+      "description": "What coverage-gate found.",
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileCoverage"
+          }
+        },
+        "short": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files missing from the export or below 100%"
+        }
+      },
+      "required": [
+        "files",
+        "short"
+      ],
+      "additionalProperties": false
+    },
+    "FileCoverage": {
+      "description": "One source file's counts from the export.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[covered, total]"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[covered, total]"
+        }
+      },
+      "required": [
+        "file",
+        "lines",
+        "regions"
+      ],
+      "additionalProperties": false
+    },
+    "Install": {
+      "description": "One Toolbox install, as toolbox.install reads it.",
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "The .app bundle (state.json installLocation)"
+        },
+        "product_code": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "config": {
+          "type": "string",
+          "description": "The effective idea.config.path: a -Didea.config.path option, else Toolbox's default"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The JVM's -D properties, in launcher order (later ones win)"
+        }
+      },
+      "required": [
+        "app",
+        "product_code",
+        "build",
+        "config",
+        "properties"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

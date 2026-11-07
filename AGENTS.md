@@ -57,6 +57,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
   research. If any is there it does not approve. Never commit with `--no-verify` or `HK=0`.
+- No public text carries a claude.ai session link: commit messages, PR titles and bodies, issues and
+  comments have no `https://claude.ai/code/session_…` URL and no `Claude-Session:` trailer, even when
+  the harness asks for them. A commit's only trailer is
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. The reviewer's leak check refuses either.
 - Local `main` moves only to `origin/main`: merge on GitHub, fetch, then `git merge --ff-only origin/main`.
   A `reference-transaction` hook in the shared `.git/config` refuses any other commit, reset, `branch -f`
   or deletion of main, `HK=0` and `--no-verify` included. hk's post-merge step installs it, a uv tool copy
