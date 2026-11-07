@@ -1,5 +1,6 @@
 """--ide: a Toolbox shell-script name to the running IDE, against a stand-in Toolbox and stand-in IDE processes."""
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from .conftest import Start, install, product_info, run, settings
 
 
 def test_resolve_reports_the_running_ide(capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start) -> None:
-    ide = start("http", "mcp")
+    ide = start("--http", "--mcp")
     # The port the MCP plugin saved (it does when the default was busy, or the user set one).
     settings(toolbox / "fake-config", f"mcpServerPort={ide.ports[1]}")
     assert run(capsys, "resolve", "--ide", "fake") == (0, [{"ide": {
@@ -22,7 +23,7 @@ def test_resolve_reports_the_running_ide(capsys: pytest.CaptureFixture[str], too
 
 
 def test_a_forced_port_wins_over_the_saved_one(capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start) -> None:
-    ide = start("mcp", "http")
+    ide = start("--mcp", "--http")
     config = toolbox / "fake-config"
     settings(config, f"mcpServerPort={ide.ports[1]}")
     # The user's own .vmoptions (Help > Edit Custom VM Options) comes after the app's.
@@ -55,7 +56,7 @@ def test_otherwise_the_product_default_is_checked(  # noqa: PLR0913 - one parame
     if saved:
         settings(toolbox / "fake-config", *saved)
     # The stand-in listens elsewhere, so the default (whoever else holds it) is not this IDE's.
-    ide = start("mcp")
+    ide = start("--mcp")
     error = run(capsys, "resolve", "--ide", "fake")[2]
     assert error == f"pid {ide.process.pid} has no MCP server on port {port} ({source})"
 
@@ -63,7 +64,7 @@ def test_otherwise_the_product_default_is_checked(  # noqa: PLR0913 - one parame
 def test_a_port_that_does_not_answer_mcp_is_refused(
     capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start
 ) -> None:
-    ide = start("http")
+    ide = start("--http")
     settings(toolbox / "fake-config", f"mcpServerPort={ide.ports[0]}")
     source = toolbox / "fake-config/options/mcpServer.xml"
     error = run(capsys, "resolve", "--ide", "fake")[2]
@@ -72,7 +73,7 @@ def test_a_port_that_does_not_answer_mcp_is_refused(
 
 def test_the_numbered_install_is_its_own_ide(capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start) -> None:
     """fake1 is the product's second install (Toolbox's clion1): the running fake.app is not it."""
-    start("mcp")
+    start("--mcp")
     error = run(capsys, "resolve", "--ide", "fake1")[2]
     assert error == f"0 running IDEs are from {toolbox / 'fake-2.app'}; want exactly one"
 
@@ -97,8 +98,8 @@ def test_the_app_overrules_a_stale_toolbox_record(capsys: pytest.CaptureFixture[
 
 
 def test_two_running_from_one_app_are_refused(capsys: pytest.CaptureFixture[str], start: Start) -> None:
-    start("mcp")
-    start("mcp")
+    start("--mcp")
+    start("--mcp")
     assert run(capsys, "resolve", "--ide", "fake")[2].startswith("2 running IDEs are from")
 
 
@@ -115,7 +116,7 @@ def test_the_user_vmoptions_file_follows_the_launcher(
     capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start
 ) -> None:
     """Toolbox's <app>.vmoptions beside the bundle is the user file; then <config>/<launcher>.vmoptions is not read."""
-    ide = start("mcp", "http")
+    ide = start("--mcp", "--http")
     config = toolbox / "fake-config"
     config.mkdir()
     (config / "fake.vmoptions").write_text(f"-Didea.mcp.server.force.port={ide.ports[1]}\n")
@@ -130,7 +131,7 @@ def test_an_idea_config_path_option_moves_the_settings(
 ) -> None:
     """-Didea.config.path wins over Toolbox's default, read as PathManager does: quotes stripped, ~/ is home."""
     monkeypatch.setenv("HOME", str(toolbox))
-    ide = start("mcp")
+    ide = start("--mcp")
     settings(toolbox / "moved", f"mcpServerPort={ide.ports[0]}")
     value = f'"{toolbox}/moved/"' if quoted else "~/moved"
     product_info(toolbox / "fake.app", f"-Didea.config.path={value}")
@@ -145,21 +146,23 @@ def test_a_relative_idea_config_path_is_refused(capsys: pytest.CaptureFixture[st
     assert error.endswith("idea.config.path 'config' is relative; only an absolute or ~/ path can be resolved")
 
 
-@pytest.mark.usefixtures("toolbox")
+@pytest.mark.skipif(not shutil.which("jbax"), reason="jbax is not installed (mise run //swift:install)")
 def test_a_helper_that_does_not_answer_is_one_failure_line(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    capsys: pytest.CaptureFixture[str], start: Start, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hung helper (the real ps, given no time) is one Failure line; the command it ran is left out."""
+    """A hung helper (the real jbax, asked for the IDE's windows before stop, given no time) is one Failure line;
+    the command it ran is left out."""
+    start()
     monkeypatch.setenv("JBCTL_TIMEOUT", "0")
-    assert run(capsys, "resolve", "--ide", "fake") == (1, [], "a helper did not answer within 0 s")
+    assert run(capsys, "stop", "--ide", "fake") == (1, [], "a helper did not answer within 0 s")
 
 
 # Not a number (with a quote and a newline: JBCTL_TIMEOUT is outside text, inert in the Failure line), out of range,
 # or a float the wait would overflow on.
 @pytest.mark.parametrize("raw", ['6"0\n', "-1", "nan", "inf", "1e309", "1e300"])
-@pytest.mark.usefixtures("toolbox")
 def test_a_timeout_jbctl_cannot_wait_is_one_failure_line(
-    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, raw: str
+    capsys: pytest.CaptureFixture[str], start: Start, monkeypatch: pytest.MonkeyPatch, raw: str
 ) -> None:
+    start()
     monkeypatch.setenv("JBCTL_TIMEOUT", raw)
-    assert run(capsys, "resolve", "--ide", "fake") == (1, [], f"JBCTL_TIMEOUT is {raw!r}; want seconds from 0 to 86400")
+    assert run(capsys, "stop", "--ide", "fake") == (1, [], f"JBCTL_TIMEOUT is {raw!r}; want seconds from 0 to 86400")

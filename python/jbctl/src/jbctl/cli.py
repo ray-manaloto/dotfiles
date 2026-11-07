@@ -6,10 +6,13 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import httpx
+import psutil
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import covgate, ide, mcp, rea, toolbox
+from . import covgate, ide, lifecycle, mcp, rea, toolbox
 from .models import (
+    Action,
     CheckDirect,
     Command,
     CoverageGate,
@@ -20,10 +23,14 @@ from .models import (
     Options,
     ReaPatch,
     Resolve,
+    Restart,
     RouterDirect,
     SettingsGoto,
     SettingsOpen,
     SettingsPress,
+    Start,
+    Status,
+    Stop,
 )
 
 OPTIONS: dict[Command, type[Options]] = {
@@ -36,6 +43,10 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.check_direct: CheckDirect,
     Command.rea_patch: ReaPatch,
     Command.coverage_gate: CoverageGate,
+    Command.status: Status,
+    Command.start: Start,
+    Command.stop: Stop,
+    Command.restart: Restart,
 }
 ROUTER_MODE = "Enable router-only mode for:"
 DIRECT = "ACP agents only"
@@ -113,8 +124,22 @@ def run(options: Options) -> None:
         case CheckDirect():
             msg = "check-direct needs --ide or --mcp-url"
             raise ValueError(msg)
+        case Status():
+            emit(Event(ides=lifecycle.status(options)))
+        case Start() | Stop() | Restart():
+            cycle(options)
         case _:
             drive(options)
+
+
+def cycle(options: Start | Stop | Restart) -> None:
+    """One line per IDE; exit 1 when any of them was refused."""
+    refused = False
+    for result in lifecycle.act(options):
+        emit(Event(lifecycle=result))
+        refused |= result.action == Action.refused
+    if refused:
+        raise SystemExit(1)
 
 
 def drive(options: Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect) -> None:
@@ -159,7 +184,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         sys.stderr.write(failure.model_dump_json() + "\n")
         raise SystemExit(1) from None
     # IdeError: the IDE is not in a state the step can act on. ValueError: pydantic's and json's errors.
-    # OSError: an unreadable helper, an existing map file, or an unreachable MCP endpoint (URLError).
-    except (ide.IdeError, ValueError, OSError) as error:
+    # OSError: an unreadable helper or an existing map file. httpx.HTTPError: an unreachable station or MCP
+    # endpoint. psutil.Error: a process that ended or is not this user's while jbctl read it.
+    except (ide.IdeError, ValueError, OSError, httpx.HTTPError, psutil.Error) as error:
         sys.stderr.write(Failure(error=str(error)).model_dump_json() + "\n")
         raise SystemExit(1) from None

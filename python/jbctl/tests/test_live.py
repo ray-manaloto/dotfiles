@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from jbctl import ide, mcp
+from jbctl import ide, lifecycle, mcp
 
 from .conftest import run
 
@@ -67,6 +67,23 @@ def test_live_foreground(capsys: pytest.CaptureFixture[str], live: int) -> None:
             ide.jbax("press", str(live), "--label", "Cancel")
 
 
+def quits_refused(capsys: pytest.CaptureFixture[str], pid: int) -> None:
+    """With Settings open, stop and restart refuse, and send the IDE nothing, so it keeps running with the dialog
+    open. Settings is not AX-modal: the refusal rests on jbax's window kinds."""
+    # Checked first, read-only, with the same check stop makes: were Settings not seen, stop would quit the IDE.
+    assert lifecycle.dialogs(pid), "jbctl must see the open Settings window before stop is tried"
+    # --check runs every guard and sends nothing, so even a race that closed Settings first could not quit the IDE.
+    for command in ("stop", "restart"):
+        code, [event], _ = jb(capsys, command, "--check")
+        reason = event["lifecycle"]["reason"]
+        assert (code, event["lifecycle"]["action"], "dialog or unreadable windows are open" in reason) == (
+            1,
+            "refused",
+            True,
+        )
+    assert jb(capsys, "resolve")[1][0]["ide"]["pid"] == pid, "the IDE was sent nothing"
+
+
 def session(capsys: pytest.CaptureFixture[str], tmp_path: Path, via_router: str, pid: int) -> None:
     # A page the IDE does not have: it says so, and no dialog opens.
     code, events, error = jb(capsys, "settings-open", "--page", "No such page")
@@ -107,6 +124,7 @@ def session(capsys: pytest.CaptureFixture[str], tmp_path: Path, via_router: str,
     code, events, error = jb(capsys, "map", "--window", "1", "--out", str(tmp_path / "none.json"))
     assert (code, events, "rea" in error) == (1, [], True)
     assert jb(capsys, "settings-press", "--label", "No such button")[0] == 1
+    quits_refused(capsys, pid)
     assert ide.settings_window(pid) is not None, "refusals leave the dialog open"
     # router-direct opens its own dialog too, so it refuses this one; Cancel closes it, applying nothing.
     code, events, error = jb(capsys, "router-direct", "--mcp-url", via_router)

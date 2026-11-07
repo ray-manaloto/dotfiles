@@ -3,7 +3,13 @@ name = "jbctl"
 version = "0.1.0"
 description = "Drive JetBrains IDEs from code through macOS accessibility (rea, jbax, agent-desktop); issue #502"
 requires-python = ">=3.15"
-dependencies = ["pydantic", "pydantic-settings"]
+dependencies = [
+    "filelock>=4.2.9",
+    "httpx>=0.28.1",
+    "psutil>=7.2.2",
+    "pydantic",
+    "pydantic-settings",
+]
 
 [dependency-groups]
 dev = ["pytest", "pytest-cov"]
@@ -25,7 +31,7 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 "src/jbctl/models.py" = ["I001"]
 
 [tool.pytest.ini_options]
-# The coverage gate (98.08%, #502 MVP) is //jbctl:coverage <ide> (sets JBCTL_IDE): the live tests drive a running IDE in the
+# The coverage gate (97.68%, #502) is //jbctl:coverage <ide> (sets JBCTL_IDE): the live tests drive a running IDE in the
 # background, so a hook runs the rest without it.
 addopts = "--cov=jbctl --cov-branch --cov-report=term-missing"
 testpaths = ["tests"]

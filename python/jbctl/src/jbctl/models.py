@@ -19,6 +19,10 @@ class Command(StrEnum):
     check_direct = "check-direct"
     rea_patch = "rea-patch"
     coverage_gate = "coverage-gate"
+    status = "status"
+    start = "start"
+    stop = "stop"
+    restart = "restart"
 
 
 type McpUrl = Annotated[str, Field(min_length=1)]
@@ -172,6 +176,18 @@ class Install(BaseModel):
         extra="forbid",
         frozen=True,
     )
+    script: str
+    """
+    The Toolbox shell-script name (--ide)
+    """
+    tool_id: str
+    """
+    state.json toolId, e.g. CLion, PyCharm-P
+    """
+    launch: str
+    """
+    state.json launchCommand: the app's executable, as Toolbox's background mode runs it
+    """
     app: str
     """
     The .app bundle (state.json installLocation)
@@ -186,6 +202,265 @@ class Install(BaseModel):
     """
     The JVM's -D properties, in launcher order (later ones win)
     """
+
+
+type Product = Annotated[str, Field(min_length=1)]
+"""
+A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product
+"""
+
+
+class Status(BaseModel):
+    """
+    Every running Toolbox IDE, or the ones picked: pid, state and MCP; no IDE is touched.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: list[IdeName] = []
+    """
+    Toolbox script names; repeat --ide for several
+    """
+    product: Product | None = None
+    """
+    A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product
+    """
+    all: bool = False
+    """
+    Every Toolbox IDE (status), or every one the command applies to
+    """
+
+
+type Project = Annotated[str, Field(min_length=1)]
+"""
+A project folder for the IDE to open
+"""
+
+
+class Start(BaseModel):
+    """
+    Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: list[IdeName] = []
+    """
+    Toolbox script names; repeat --ide for several
+    """
+    product: Product | None = None
+    """
+    A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product
+    """
+    all: bool = False
+    """
+    Every Toolbox IDE (status), or every one the command applies to
+    """
+    yes: bool = False
+    """
+    Act on the --all plan; without it, --all only prints the plan
+    """
+    timeout: Annotated[float, Field(gt=0.0, le=86400.0)] = 120
+    """
+    Seconds to wait for each IDE
+    """
+    project: Project | None = None
+    """
+    A project folder for the IDE to open
+    """
+    foreground: bool = False
+    """
+    Allow bringing the IDE forward, as start and restart do (or JETBRAINS_FOREGROUND=1); only with the owner's go
+    """
+
+
+class Stop(BaseModel):
+    """
+    Ask running IDEs to quit, as Toolbox's Quit does, and wait until each has ended; nothing is killed.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: list[IdeName] = []
+    """
+    Toolbox script names; repeat --ide for several
+    """
+    product: Product | None = None
+    """
+    A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product
+    """
+    all: bool = False
+    """
+    Every Toolbox IDE (status), or every one the command applies to
+    """
+    yes: bool = False
+    """
+    Act on the --all plan; without it, --all only prints the plan
+    """
+    timeout: Annotated[float, Field(gt=0.0, le=86400.0)] = 120
+    """
+    Seconds to wait for each IDE
+    """
+    force: bool = False
+    """
+    After --timeout, send a forced quit (only when no dialog is open)
+    """
+    check: bool = False
+    """
+    Run every guard and report would-stop or would-restart (or the refusal), sending the IDE nothing
+    """
+
+
+class Restart(BaseModel):
+    """
+    Have running IDEs restart themselves and wait until each new one is ready (a foreground action).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: list[IdeName] = []
+    """
+    Toolbox script names; repeat --ide for several
+    """
+    product: Product | None = None
+    """
+    A Toolbox tool id (CLion, PyCharm-P, IDEA-U): the one install of that product
+    """
+    all: bool = False
+    """
+    Every Toolbox IDE (status), or every one the command applies to
+    """
+    yes: bool = False
+    """
+    Act on the --all plan; without it, --all only prints the plan
+    """
+    timeout: Annotated[float, Field(gt=0.0, le=86400.0)] = 120
+    """
+    Seconds to wait for each IDE
+    """
+    foreground: bool = False
+    """
+    Allow bringing the IDE forward, as start and restart do (or JETBRAINS_FOREGROUND=1); only with the owner's go
+    """
+    check: bool = False
+    """
+    Run every guard and report would-stop or would-restart (or the refusal), sending the IDE nothing
+    """
+
+
+class IdeState(StrEnum):
+    """
+    Where a Toolbox IDE is in its life.
+    """
+
+    stopped = "stopped"
+    starting = "starting"
+    running = "running"
+    ready = "ready"
+
+
+class McpState(StrEnum):
+    """
+    What the IDE's MCP port did when asked; not-answering does not mean the server is switched off.
+    """
+
+    answering = "answering"
+    not_answering = "not-answering"
+    unknown = "unknown"
+
+
+class IdeStatus(BaseModel):
+    """
+    One Toolbox IDE, as status reports it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    script: str
+    tool_id: str
+    pid: int | None = None
+    state: IdeState
+    mcp: McpState | None = None
+    mcp_port: int | None = None
+    note: str | None = None
+    """
+    Why the MCP state is unknown, or why the IDE is not managed
+    """
+
+
+class Action(StrEnum):
+    """
+    What a lifecycle command did, or would do, to one IDE.
+    """
+
+    started = "started"
+    stopped = "stopped"
+    restarted = "restarted"
+    refused = "refused"
+    skipped = "skipped"
+    would_start = "would-start"
+    would_stop = "would-stop"
+    would_restart = "would-restart"
+
+
+class Lifecycle(BaseModel):
+    """
+    One IDE's outcome from start, stop or restart.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    script: str
+    action: Action
+    pid: int | None = None
+    previous_pid: int | None = None
+    reason: str | None = None
+
+
+class Lifetime(BaseModel):
+    """
+    One run of an IDE process: a pid is unique only while it runs, so its start time pins this run.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    pid: int
+    created: float
+    """
+    The process's start time (psutil create_time)
+    """
+    socket: str
+    """
+    The station socket it owns
+    """
+
+
+class Answer(BaseModel):
+    """
+    What the IDE's built-in web server said to /api/about: ready, asked too often (HTTP 429), or why not.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ready: bool
+    busy: bool
+    detail: str
 
 
 class Map(BaseModel):
@@ -289,7 +564,19 @@ class CheckDirect(BaseModel):
 
 
 type Options = (
-    Resolve | Map | SettingsOpen | SettingsGoto | SettingsPress | RouterDirect | CheckDirect | ReaPatch | CoverageGate
+    Resolve
+    | Map
+    | SettingsOpen
+    | SettingsGoto
+    | SettingsPress
+    | RouterDirect
+    | CheckDirect
+    | ReaPatch
+    | CoverageGate
+    | Status
+    | Start
+    | Stop
+    | Restart
 )
 
 
@@ -330,6 +617,8 @@ class Event(BaseModel):
     map: str | None = None
     nodes: int | None = None
     coverage: Coverage | None = None
+    ides: list[IdeStatus] | None = None
+    lifecycle: Lifecycle | None = None
 
 
 class Jbctl(BaseModel):
