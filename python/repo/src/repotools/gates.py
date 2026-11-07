@@ -44,12 +44,36 @@ def approval_file() -> Path:
     return Path(git("rev-parse", "--git-path", "review-python.approved").strip())
 
 
+def merged_in(path: str) -> list[str]:
+    """Files under path only main changed and the merge leaves as main has them; the rest stay in the review."""
+    # Not a merge, or one of a commit origin/main does not hold, exits non-zero: then nothing is left out.
+    reviewed = ["git", "merge-base", "--is-ancestor", "MERGE_HEAD", "origin/main"]
+    if subprocess.run(reviewed, capture_output=True, check=False).returncode:
+        return []
+    # The working tree, as the reviewer reads git diff HEAD. Quoted as git quotes a name in that diff, so a
+    # newline, quote or byte that is not ASCII is escaped and one name cannot pose as another Merged: line.
+    ours, main = (
+        set(git("-c", "core.quotePath=true", "diff", "--name-only", "--no-renames", side, "--", path).splitlines())
+        for side in ("HEAD", "MERGE_HEAD")
+    )
+    # A file the branch's own commits changed stays in, even resolved to main's side: dropping the branch's
+    # change is a decision of this merge (pre-commit/pre-commit pre_commit/git.py keeps conflicted files too).
+    # So does an earlier merge's: --diff-merges=separate lists its files against each parent, and --sparse keeps
+    # one that matches the branch parent, as when it rejected main's change (git revision.c, dense mode).
+    log = ["log", "--format=", "--name-only", "--no-renames", "--diff-merges=separate", "--sparse"]
+    log += ["HEAD", "^MERGE_HEAD", "--", path]
+    branch = set(git("-c", "core.quotePath=true", *log).splitlines())
+    return sorted(ours - main - branch)
+
+
 def review(options: ReviewPython) -> None:
     """Codex reads the prompt and writes its report; a PASS on python/ as staged records that index."""
     out = options.out or git("rev-parse", "--git-path", "review-python.md").strip()
     # Taken before Codex reads, so anything staged during the review stays unapproved.
     staged = staged_python()
     prompt = PROMPT.read_bytes() + f"Path: {options.path}\nCommit: {options.commit or 'none'}\n".encode()
+    if options.commit is None:
+        prompt += "".join(f"Merged: {name}\n" for name in merged_in(options.path)).encode()
     # One word, as codex's clap parser reads a separate value that starts with - as an option.
     # multi_agent_v2 counts the lead in its thread total (default 4), and this override merges with a
     # plain `multi_agent_v2 = true` in config.toml (codex-rs/config/src/merge.rs:63-98 at rust-v0.167.0).
