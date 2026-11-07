@@ -1,0 +1,5 @@
+interface:
+  display_name: "To tickets"
+  short_description: "Split a spec issue into approved ticket issues, each with its plan."
+policy:
+  allow_implicit_invocation: true

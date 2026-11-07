@@ -25,6 +25,14 @@ ENTRIES = (
     "~/.agents/skills/ticket-retro",
     "~/.claude/skills/work",
     "~/.agents/skills/work",
+    "~/.claude/skills/to-spec",
+    "~/.agents/skills/to-spec",
+    "~/.claude/skills/to-tickets",
+    "~/.agents/skills/to-tickets",
+    "~/.claude/skills/implement",
+    "~/.agents/skills/implement",
+    "~/.claude/skills/implement-spec",
+    "~/.agents/skills/implement-spec",
 )
 # Frozen from the live source ranges in #449's brief before writing the shared file.
 TABS_SHA256 = "01ac699d9ef173bcb243c4ca126fb3b4ea41e4f317907a18a354503a0b1cc5b9"
@@ -166,7 +174,7 @@ class SharedAgentsInstallTest(unittest.TestCase):
 
     def test_the_skills_folder_resolves(self) -> None:
         self.assertTrue((self.home / ".config/agents/skills/LICENSE").is_file())
-        for skill in ("ticket-retro", "work"):
+        for skill in ("ticket-retro", "work", "to-spec", "to-tickets", "implement", "implement-spec"):
             for scope in (".claude", ".agents"):
                 with self.subTest(skill=skill, scope=scope):
                     path = self.home / scope / "skills" / skill

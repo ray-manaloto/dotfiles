@@ -135,6 +135,16 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # work (#455): sets a repository up on first use; user scope only, like ticket-retro.
 "~/.claude/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
 "~/.agents/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
+# to-spec and to-tickets (#451): the publishing skills; user scope only, like ticket-retro.
+"~/.claude/skills/to-spec" = { source = "unix/home/.config/agents/skills/to-spec", mode = "symlink" }
+"~/.agents/skills/to-spec" = { source = "unix/home/.config/agents/skills/to-spec", mode = "symlink" }
+"~/.claude/skills/to-tickets" = { source = "unix/home/.config/agents/skills/to-tickets", mode = "symlink" }
+"~/.agents/skills/to-tickets" = { source = "unix/home/.config/agents/skills/to-tickets", mode = "symlink" }
+# implement, implement-spec (#452): worker skills pinned by PLAN_ID; user scope only, like ticket-retro.
+"~/.claude/skills/implement" = { source = "unix/home/.config/agents/skills/implement", mode = "symlink" }
+"~/.agents/skills/implement" = { source = "unix/home/.config/agents/skills/implement", mode = "symlink" }
+"~/.claude/skills/implement-spec" = { source = "unix/home/.config/agents/skills/implement-spec", mode = "symlink" }
+"~/.agents/skills/implement-spec" = { source = "unix/home/.config/agents/skills/implement-spec", mode = "symlink" }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
