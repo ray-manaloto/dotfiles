@@ -85,6 +85,8 @@ def review(options: ReviewPython) -> None:
         "-c",
         'sandbox_mode="read-only"',
         "-c",
+        'approval_policy="never"',
+        "-c",
         f"features.multi_agent_v2.max_concurrent_threads_per_session={THREADS}",
         f"--output-last-message={out}",
         "-",
