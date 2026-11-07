@@ -397,6 +397,44 @@ def test_an_abort_of_no_running_turn_is_refused(repo: Path, capsys: pytest.Captu
     assert "belongs to no running turn" in refusal(capsys)
 
 
+def unanswered(root: Path, turn_id: str) -> list[dict[str, Any]]:
+    """A turn that ends with no answer, as Codex 0.166.0 recorded one refused at the usage limit:
+    the user's message, then task_complete with last_agent_message null and no final answer."""
+    settings = {
+        "turn_id": turn_id,
+        "cwd": str(root),
+        "approval_policy": "never",
+        "sandbox_policy": {"type": "read-only"},
+        "permission_profile": READ_ONLY,
+    }
+    asked = {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Review it."}]}
+    return [
+        {"type": "event_msg", "payload": {"type": "task_started", "turn_id": turn_id}},
+        {"type": "turn_context", "payload": settings},
+        {"type": "response_item", "payload": asked},
+        {"type": "event_msg", "payload": {"type": "token_count"}},
+        {"type": "event_msg", "payload": {"type": "task_complete", "turn_id": turn_id, "last_agent_message": None}},
+    ]
+
+
+def test_a_turn_with_no_answer_leaves_the_session_usable(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    write_log(repo, [*unanswered(repo, "t0"), *records])
+    main(["pane-approved", *text()])
+
+
+def test_a_turn_with_no_answer_withdraws_an_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = approve(repo, capsys)
+    write_log(repo, [*records, *unanswered(repo, "t2")])
+    assert "no completed last turn" in refusal(capsys)
+
+
+def test_an_answer_the_end_does_not_report_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # A final answer, then an end that reports none: not a turn with no answer, so still a mismatch.
+    write_log(repo, reported(approve(repo, capsys), None))
+    assert refusal(capsys) == "turn t1 completed without matching settings and answer"
+
+
 def test_a_trailing_newline_after_the_approval_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     main(["pane-pin", "--session", SESSION])
     capsys.readouterr()
@@ -426,7 +464,7 @@ def test_an_unreadable_rollout_is_a_named_failure(repo: Path, capsys: pytest.Cap
     assert "rollout-" in refusal(capsys)
 
 
-def reported(records: list[dict[str, Any]], shown: str) -> list[dict[str, Any]]:
+def reported(records: list[dict[str, Any]], shown: str | None) -> list[dict[str, Any]]:
     """The turn's end reports the answer as Codex shows it, its memory citations removed."""
     records[3]["payload"]["last_agent_message"] = shown
     return records
@@ -547,6 +585,12 @@ def pr_refusal_of(capsys: pytest.CaptureFixture[str], command: str, options: lis
 
 def pr_refusal(capsys: pytest.CaptureFixture[str], options: list[str]) -> str:
     return pr_refusal_of(capsys, "pr-approved", options)
+
+
+def test_a_turn_with_no_answer_before_a_pull_request_approval(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = pr_approve(repo, capsys)
+    write_log(repo, [*unanswered(repo, "t0"), *records])
+    main(["pr-approved", *pr()])
 
 
 def test_an_approved_pull_request_text_passes(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
