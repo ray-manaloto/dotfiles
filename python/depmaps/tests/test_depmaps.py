@@ -343,6 +343,31 @@ def test_diff_reads_quoted_and_spaced_names(env: Env, monkeypatch: pytest.Monkey
     assert sorted(listed) == sorted([("R100", new)] + [("M", name) for name in names])
 
 
+def test_diff_reads_an_added_line_that_looks_like_a_header(env: Env) -> None:
+    # The added line `++ count;` shows as `+++ count;` inside its hunk. It names no file, so the next
+    # hunk, in g, still belongs to count.c. Both bodies are too small for cbm to hash.
+    before = "int f(int count) {\n    return count;\n}\n\nint g(void) {\n    return 1;\n}\n"
+    after = "int f(int count) {\n++ count;\n    return count;\n}\n\nint g(void) {\n    return 2;\n}\n"
+    release(env.repo, "1.3.0", {"count.c": before})
+    release(env.repo, "1.4.0", {"count.c": after})
+    for version in ("1.3.0", "1.4.0"):
+        assert env.run("map", env.name, "--version", version).returncode == 0
+    result = env.run("diff", env.name, "1.3.0", "1.4.0")
+    assert result.returncode == 0, result.stderr
+    changed = [each for each in events(result.stdout) if each["event"] == "change"]
+    assert sorted((each["kind"], each["file"], each["name"].rsplit(".", 1)[-1]) for each in changed) == [
+        ("body", "count.c", "f"),
+        ("body", "count.c", "g"),
+    ]
+
+
+def test_a_relative_store_is_read_from_the_working_folder(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEP_MAPS_STORE", env.store.name)
+    assert env.run("map", env.name).returncode == 0
+    assert (env.folder("1.0.0") / "manifest.json").exists()
+    assert events(env.run("list").stdout)[0]["mapped"] is True
+
+
 def test_diff_needs_both_maps(env: Env) -> None:
     assert env.run("map", env.name).returncode == 0
     result = env.run("diff", env.name, "1.0.0", "1.1.0")

@@ -45,15 +45,21 @@ def nodes(project: str) -> dict[NodeKey, NodeShape]:
 def hunks(bare: Path, old: str, new: str) -> dict[str, list[tuple[int, int]]]:
     """The new side of each `git diff -U0` hunk, as inclusive line ranges by file."""
     found: dict[str, list[tuple[int, int]]] = {}
-    path = None
+    path, header = None, False
     # Explicit prefixes, as diff.noprefix or diff.mnemonicPrefix would change them, and every non-ASCII
     # byte octal-escaped, as core.quotePath=false would leave it raw inside a quoted name.
     args = ("-c", "core.quotePath=true", "diff", "-U0", "--no-color", "--no-ext-diff")
     listing = git(*args, "--src-prefix=a/", "--dst-prefix=b/", old, new, cwd=bare)
     for line in listing.splitlines():
-        if line.startswith("+++ "):
+        # `+++ ` names a file only in a file's header: inside a hunk it is an added line, such as `++ count;`.
+        if line.startswith("diff --git "):
+            path, header = None, True
+        elif header and line.startswith("+++ "):
             path = target(line)
-        elif (match := HUNK.match(line)) and path is not None:
+        elif match := HUNK.match(line):
+            header = False
+            if path is None:
+                continue
             # A pure deletion (+start,0) sits between lines start and start + 1: the empty range (start + 1, start)
             # meets only a function holding both lines.
             start, count = int(match[1]), int(match[2] or 1)

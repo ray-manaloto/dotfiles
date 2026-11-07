@@ -17,6 +17,8 @@ def load() -> Config:
         "lock": home / ".config/mise/mise.lock",
         "cbm": home / ".local/share/mise/installs/github-deus-data-codebase-memory-mcp/global/codebase-memory-mcp",
     }
-    return Config.model_validate(
-        {key: os.environ.get(f"DEP_MAPS_{key.upper()}") or str(value) for key, value in defaults.items()}
-    )
+    found = {key: os.environ.get(f"DEP_MAPS_{key.upper()}") or str(value) for key, value in defaults.items()}
+    # git runs inside the store (git.commit clones from the dependency's folder), so a relative store
+    # would name a second store inside the first.
+    found["store"] = str(Path(found["store"]).absolute())
+    return Config.model_validate(found)
