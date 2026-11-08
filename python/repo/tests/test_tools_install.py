@@ -199,9 +199,16 @@ def test_a_pruned_python_reinstalls(tool_env: Path, capsys: pytest.CaptureFixtur
     python = tool_env / "uv" / "tools" / "workflowtools" / "bin" / "python"
     python.unlink()
     python.symlink_to(tool_env / "pruned" / "python3")
-    # With its interpreter gone the console script exits 126 (observed on macOS) rather than raising OSError.
+    # uv writes a #!/bin/sh trampoline instead of #!<python> when the shebang line would pass 127 bytes or the
+    # path has a space (format_shebang in crates/uv-install-wheel/src/wheel.rs at 0.13.7), so the form follows
+    # the length of the test's temporary folder. With its interpreter gone, the trampoline's sh exits 126 (observed
+    # on macOS), while a direct shebang makes execve raise ENOENT.
     executable = tool_env / "uv" / "bin" / "workflowtools"
-    assert repaired(capsys) == [f"tools-install: workflowtools: {executable} did not answer the start probe (exit 126)"]
+    if executable.read_bytes().startswith(b"#!/bin/sh\n"):
+        problem = "did not answer the start probe (exit 126)"
+    else:
+        problem = f"did not start: [Errno 2] No such file or directory: {executable!r}"
+    assert repaired(capsys) == [f"tools-install: workflowtools: {executable} {problem}"]
     assert python.exists()
 
 
