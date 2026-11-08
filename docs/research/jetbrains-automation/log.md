@@ -242,3 +242,16 @@
 * **Terms**: "Bundled skill" and "Skill copy" in [[terms]].
 * **Measured** (`--check`, headless, 2026-11-07): `clion` ships clion-debugger 1.3.2; Codex has no copy
   (`copied`), and Claude's copy from the earlier task is unchanged (`adopted`).
+
+## 2026-11-07: the coverage floor re-measured after jbctl skills (#502)
+
+* **Measured** (headless, no `--foreground`; `clion` started for the run with `jbctl start --foreground` on the
+  owner's go and left running; `jbctl check-direct --ide clion` after the run: DIRECT, 88 tools):
+  `mise run //jbctl:coverage clion` passed with 133 tests and 2 skipped (the foreground and lifecycle-live
+  tests) at 97.75%: 1285 statements with 25 missed, and 360 branches with 12 missed (in 10 partly covered
+  branch points).
+* **Changed**: the floor is 97.63%, down from 97.68%. This run reached the cli.py page move, which the floor
+  assumes a run does not reach; without that line and its branch, the same run is 97.63%. The drop is the eight
+  lines of `skills.py` not covered by this run: a `renamex_np` that fails, and the swap-backs when the
+  swapped-out copy changed since the check, cannot be read, or is no longer a folder, or the run is stopped
+  mid-check. The other uncovered lines are the ones the floor's comment already lists.
