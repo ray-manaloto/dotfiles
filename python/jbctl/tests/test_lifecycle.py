@@ -4,11 +4,15 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
+import threading
 from pathlib import Path
 
 import filelock
 import pytest
+
+from jbctl import mcp
 
 from .conftest import Start, install, launcher, run, settings
 
@@ -232,6 +236,83 @@ def test_start_reports_an_ide_that_runs_but_is_not_ready(capsys: pytest.CaptureF
     again = f"fake already runs as pid {started['pid']}"
     refused = {"script": "fake", "action": "refused", "reason": again}
     assert run(capsys, "start", "--foreground", "--ide", "fake") == (1, [{"lifecycle": refused}], "")
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@needs_jbax
+def test_start_waits_for_a_turned_on_mcp_server(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
+    """With the MCP server turned on, started means it answers too: the stand-in opens it after /api/about."""
+    port = free_port()
+    settings(toolbox / "fake-config", "enableMcpServer=true", f"mcpServerPort={port}")
+    flags(toolbox / "fake.app", f"--mcp-late={port}")
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "20")
+    assert (code, event["lifecycle"]["action"]) == (0, "started")
+    assert mcp.answers(f"http://127.0.0.1:{port}/stream")
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
+
+
+@needs_jbax
+def test_start_follows_an_mcp_port_saved_during_startup(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
+    """The plugin saves another port when the one it wanted is busy: ready reads the settings again on each poll."""
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        config, port = toolbox / "fake-config", free_port()
+        settings(config, "enableMcpServer=true", f"mcpServerPort={busy.getsockname()[1]}")
+        flags(toolbox / "fake.app", f"--mcp-late={port}")
+        saved = threading.Timer(1.5, settings, (config, "enableMcpServer=true", f"mcpServerPort={port}"))
+        saved.start()
+        code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "20")
+        saved.join()
+    assert (code, event["lifecycle"]["action"]) == (0, "started")
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
+
+
+@needs_jbax
+@pytest.mark.parametrize("force", [None, "TRUE", "false"])
+def test_start_reports_a_turned_on_mcp_server_that_does_not_answer(
+    capsys: pytest.CaptureFixture[str], toolbox: Path, force: str | None
+) -> None:
+    """/api/about answers but the MCP server never does: started-not-ready, exit 75, saying which port. It is turned
+    on in its settings, or by -Didea.mcp.server.force.enable=true (any case) in the user's .vmoptions; =false does not
+    turn off what the settings turned on."""
+    port, config = free_port(), toolbox / "fake-config"
+    if force != "TRUE":
+        settings(config, "enableMcpServer=true", f"mcpServerPort={port}")
+    if force:
+        config.mkdir(exist_ok=True)
+        (config / "fake.vmoptions").write_text(
+            f"-Didea.mcp.server.force.enable={force}\n-Didea.mcp.server.force.port={port}\n"
+        )
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "3")
+    started = event["lifecycle"]
+    assert (code, started["action"]) == (75, "started-not-ready")
+    assert f"its MCP server did not answer on port {port}" in started["reason"]
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
+
+
+@needs_jbax
+@pytest.mark.parametrize("broken", ["<application>", None])
+def test_start_reports_unreadable_mcp_settings(
+    capsys: pytest.CaptureFixture[str], toolbox: Path, broken: str | None
+) -> None:
+    """A malformed mcpServer.xml, or one jbctl cannot read: jbctl launched the IDE, so started-not-ready, exit 75,
+    with the error, not refused."""
+    options = toolbox / "fake-config/options"
+    options.mkdir(parents=True)
+    if broken is None:  # a folder in the file's place: reading it is an OSError
+        (options / "mcpServer.xml").mkdir()
+    else:
+        (options / "mcpServer.xml").write_text(broken)
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "3")
+    started = event["lifecycle"]
+    assert (code, started["action"]) == (75, "started-not-ready")
+    assert "its MCP settings cannot be read" in started["reason"]
     assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
 
 

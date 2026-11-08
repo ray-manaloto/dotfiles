@@ -242,7 +242,7 @@ A project folder for the IDE to open
 
 class Start(BaseModel):
     """
-    Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).
+    Start Toolbox IDEs as Toolbox's background mode does; wait until each is ready, MCP too (a foreground action).
     """
 
     model_config = ConfigDict(
@@ -320,7 +320,7 @@ class Stop(BaseModel):
 
 class Restart(BaseModel):
     """
-    Have running IDEs restart themselves and wait until each new one is ready (a foreground action).
+    Have running IDEs restart themselves and wait until each new one is ready, MCP too (a foreground action).
     """
 
     model_config = ConfigDict(

@@ -652,7 +652,7 @@
       "additionalProperties": false
     },
     "Start": {
-      "description": "Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).",
+      "description": "Start Toolbox IDEs as Toolbox's background mode does; wait until each is ready, MCP too (a foreground action).",
       "type": "object",
       "properties": {
         "ide": {
@@ -770,7 +770,7 @@
       "additionalProperties": false
     },
     "Restart": {
-      "description": "Have running IDEs restart themselves and wait until each new one is ready (a foreground action).",
+      "description": "Have running IDEs restart themselves and wait until each new one is ready, MCP too (a foreground action).",
       "type": "object",
       "properties": {
         "ide": {
