@@ -1,0 +1,96 @@
+#!/usr/bin/env -S python3 -I
+"""hc-safe: one hc call to a known, running core that can never start a second one (docs/agents/herdr-core.md)."""
+
+# usage: hc-safe [--own-env] <expected-core-pid> <socket> -- <hc args...>
+#
+# hc starts a core itself when it cannot connect, and HC_SOCKET does not stop that, so a bare hc call can start the
+# very core a check is meant to detect. hc-safe:
+#   1. refuses unless lsof shows exactly one process holding <socket>, and it is <expected-core-pid>;
+#   2. runs hc with HC_SOCKET=<socket> (--own-env: the caller's environment unchanged, to test its own routing)
+#      under sandbox-exec with (deny process-fork). Talking to a running core starts no process, starting one
+#      does, by either route (directly, or launchctl for the launchd start), so a core that vanished between the
+#      check and the call makes hc fail instead of starting another;
+#   3. runs it with subprocess.run, not exec, so it checks the listener again after the call.
+#
+# Exit codes: 0 hc succeeded and the listener is unchanged; 80 core-gone (the pre-check failed, hc exited 5
+# "unavailable", or the listener changed during the call); 81 a usage error in hc-safe's own arguments (not
+# argparse's 2, which hc's clap also uses); 82 sandbox-exec is missing or could not apply its profile, as in a
+# Codex -s read-only shell, whose own seatbelt can't be nested: the caller reports that check BLOCKED. Any other
+# code is hc's own. 80-82 are outside hc's observed codes (0, 2, 5).
+
+import argparse
+import os
+import subprocess
+import sys
+from typing import NoReturn
+
+PROFILE = "(version 1)(allow default)(deny process-fork)"
+CORE_GONE, USAGE, SANDBOX = 80, 81, 82
+UNAVAILABLE = 5
+# sandbox-exec's own failure to apply the profile: EX_OSERR with this message (S0, 2026-11-07).
+SANDBOX_FAILED, SANDBOX_MESSAGE = 71, "sandbox_apply"
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        sys.stderr.write(f"hc-safe: {message}\n")
+        raise SystemExit(USAGE)
+
+
+def holders(found: list[int] | None) -> str:
+    return "lsof could not read it" if found is None else f"pids {found}"
+
+
+def listeners(socket: str) -> list[int] | None:
+    """The pids holding socket, or None when lsof failed or warned; it exits 1 with no output when nothing does."""
+    try:
+        done = subprocess.run(["lsof", "-F", "p", "--", socket], capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    if done.returncode not in {0, 1} or (done.returncode == 1 and done.stderr.strip()):
+        return None
+    return sorted({int(line[1:]) for line in done.stdout.splitlines() if line.startswith("p")})
+
+
+def gone(why: str) -> NoReturn:
+    sys.stderr.write(f"hc-safe: core-gone: {why}\n")
+    raise SystemExit(CORE_GONE)
+
+
+def main() -> None:
+    parser = Parser(prog="hc-safe", usage="hc-safe [--own-env] <expected-core-pid> <socket> -- <hc args...>")
+    parser.add_argument("--own-env", action="store_true", help="keep the caller's environment; no HC_SOCKET")
+    parser.add_argument("pid", type=int, help="the core's pid, as lsof shows it holding the socket")
+    parser.add_argument("socket", help="the core's socket")
+    # Split at the first -- by hand: argparse drops a -- before a remainder, so it can't tell one was given.
+    argv = sys.argv[1:]
+    split = argv.index("--") if "--" in argv else len(argv)
+    args = parser.parse_args(argv[:split])
+    hc = argv[split + 1 :]
+    if not hc:
+        parser.error("hc's arguments follow --")
+    want = [args.pid]
+    before = listeners(args.socket)
+    if before != want:
+        gone(f"{args.socket}: {holders(before)}, not exactly {want}")
+    env = dict(os.environ) if args.own_env else os.environ | {"HC_SOCKET": args.socket}
+    try:
+        done = subprocess.run(["sandbox-exec", "-p", PROFILE, "hc", *hc], env=env, stderr=subprocess.PIPE, check=False)
+    except OSError as failed:
+        sys.stderr.write(f"hc-safe: sandbox-exec: {failed.strerror}\n")
+        raise SystemExit(SANDBOX) from None
+    err = done.stderr.decode(errors="replace")
+    sys.stderr.write(err)
+    if done.returncode == SANDBOX_FAILED and SANDBOX_MESSAGE in err:
+        raise SystemExit(SANDBOX)
+    after = listeners(args.socket)
+    if after != want:
+        gone(f"{args.socket} after the call: {holders(after)}, not exactly {want}")
+    if done.returncode == UNAVAILABLE:
+        gone("hc exited 5 (unavailable)")
+    raise SystemExit(done.returncode)
+
+
+if __name__ == "__main__":
+    main()

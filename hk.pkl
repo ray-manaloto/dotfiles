@@ -36,6 +36,20 @@ local linters = new Mapping<String, Step> {
         )
         check = "mise run //home:unit"
     }
+    // The herdr doctor and hc-safe (docs/agents/herdr-core.md): lint and their unit and contract tests, never a live
+    // check. Off in CI: the stand-ins and Unix sockets they test with are macOS-only.
+    ["herdr"] {
+        glob = List(
+            "unix/home/.config/mise/tasks/herdr/**",
+            "unix/home/.local/bin/hc-safe",
+            "python/home/src/hometools/herdr.py",
+            "python/home/tests/test_herdr_*",
+            ".claude/skills/verify/SKILL.md",
+            "python/home/mise.toml"
+        )
+        profiles = List("!ci")
+        check = "mise run //home:herdr-unit"
+    }
     ["cbm"] {
         glob = List("python/cbm/**")
         check = "mise run //cbm:check"
@@ -80,6 +94,12 @@ hooks {
             ["home"] {
                 glob = null
                 check = "mise run //repo:toolchain-gate"
+            }
+            // As home: no glob, so a commit that only deletes a herdr file still runs it; herdr-gate picks the paths.
+            ["herdr"] {
+                glob = null
+                profiles = List("!ci")
+                check = "mise run //repo:herdr-gate"
             }
             // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
             ["python-review"] {

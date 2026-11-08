@@ -28,6 +28,7 @@ class Command(StrEnum):
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
     toolchain_gate = "toolchain-gate"
+    herdr_gate = "herdr-gate"
     tools_install = "tools-install"
 
 
@@ -198,6 +199,17 @@ class ToolchainGate(BaseModel):
     )
 
 
+class HerdrGate(BaseModel):
+    """
+    Print run when the staged change reaches the herdr doctor, hc-safe or their tests, deletions included.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
 class Rule(StrEnum):
     """
     What a zero-bash finding breaks.
@@ -349,6 +361,7 @@ type Options = (
     | ShellApply
     | ShellRollback
     | ToolchainGate
+    | HerdrGate
     | ToolsInstall
 )
 """
@@ -595,6 +608,7 @@ class Repotools(BaseModel):
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
     toolchain_gate: ToolchainGate | None = None
+    herdr_gate: HerdrGate | None = None
     tools_install: ToolsInstall | None = None
     tool_action: ToolAction | None = None
     healthy: Healthy | None = None

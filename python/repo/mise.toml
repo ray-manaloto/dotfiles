@@ -92,6 +92,14 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:check; }'
 
+# hk's pre-commit herdr step: //home:herdr-unit only when the staged change reaches the herdr doctor or hc-safe,
+# a deletion included, so a commit that touches neither never waits on it.
+[tasks.herdr-gate]
+description = "Run //home:herdr-unit when the staged change reaches the herdr doctor, hc-safe or their tests"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'r=$(uv run --project python/repo --locked repotools herdr-gate) && { test "$r" != run || mise run //home:herdr-unit; }'
+
 [tasks.main-guard-remove]
 description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"
 depends = ["sync"]

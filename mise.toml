@@ -109,6 +109,10 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
+# hc calls that can't start a second core (docs/agents/herdr-core.md): the herdr cutover's coordinator and /verify.
+"~/.local/bin/hc-safe" = { source = "unix/home/.local/bin/hc-safe", mode = "symlink" }
+# The Codex profile for isolated, read-only adversarial reviews (codex exec --profile adversarial-review).
+"~/.codex/adversarial-review.config.toml" = { source = "unix/home/.codex/adversarial-review.config.toml", mode = "symlink" }
 # A skill written here: Codex reads ~/.agents/skills and Claude ~/.claude/skills, so both link to it.
 "~/.agents/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
 "~/.claude/skills/macos-agent-permissions" = { source = "unix/home/.agents/skills/macos-agent-permissions", mode = "symlink" }
