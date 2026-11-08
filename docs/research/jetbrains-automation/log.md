@@ -279,3 +279,12 @@
 * **Measured** (headless, read-only): `jbctl check-direct --ide clion` against CLion 2026.3 in DIRECT printed
   `{"tools":88,"direct":true,"router":true}` and exited 0.
 * **Changed**: [CLion MCP server](clion-mcp.md) says how to check it again. This closes #563.
+
+## 2026-11-07: jbctl on PATH as a uv tool (#502)
+
+* **Added**: `mise run //jbctl:install` installs this checkout's `jbctl` as a uv tool, so `jbctl` runs by name from
+  any folder, without `python/jbctl/.venv`. It works like `//workflow:install`, kept apart from `//repo:tools-install`
+  so that a `python/jbctl` edit never blocks the repotools and workflowtools the approvals use. The installed copy
+  does not follow later edits or pulls, so run it again after jbctl changes land. The live tests run the worktree's
+  code in-process and `/verify` runs its `.venv/bin/jbctl`, so both check the code being changed rather than the
+  installed copy.
