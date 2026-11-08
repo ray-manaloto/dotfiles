@@ -92,3 +92,20 @@ The five default roles, each label named as its role (`needs-triage`, `needs-inf
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Workflow facts
+
+- Check: `hk check --all && mise run test` runs the hk checks and every root's tests; it passes before each
+  commit. A change under `python/<package>/` or `swift/` also runs that root's `check` task (lint, types,
+  codegen), e.g. `mise run //visualplan:check`.
+- Shipping: a branch and a pull request into `main`, opened with `mise run //repo:pr-create`
+  (it wraps `repotools pr-create`); the owner merges on GitHub, and local `main` only fast-forwards
+  to `origin/main`.
+- Research: notes go in `docs/research/`.
+- Review approval: the pinned reviewer pane approves each commit (`repotools pane-pin`,
+  `repotools pane-fingerprint`, through `mise run //repo:pane-pin` and `//repo:pane-fingerprint`;
+  see `~/.config/agents/workflow/cross-review.md`). The hk `commit-msg` step `pane-approval` runs
+  `mise run //repo:pane-approved` and refuses a commit the pane has not approved.
+- Content guard: the reviewer's leak check on the exact bytes, bound to the approval fingerprint. The
+  reviewer approves only bytes it has read and found free of private content. Any change to those bytes
+  changes the fingerprint and voids the approval. The home-path scan is not the content guard.
