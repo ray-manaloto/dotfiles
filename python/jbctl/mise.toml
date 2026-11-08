@@ -25,6 +25,14 @@ description = "Copy bundled skills out of a Toolbox install for Claude Code and 
 depends = ["sync"]
 run = "uv run --locked jbctl skills"
 
+# jbctl on PATH, run by name from any folder. Like //workflow:install, it installs this checkout as it is, apart from
+# //repo:tools-install, so a python/jbctl edit never blocks the repotools and workflowtools the approvals use. The
+# installed copy does not follow later edits or pulls: run this again after jbctl changes land.
+[tasks.install]
+description = "Install this checkout's jbctl as a uv tool, so jbctl runs by name"
+dir = "{{ config_root }}/../.."
+run = "uv tool install --reinstall ./python/jbctl"
+
 # The live tests are skipped unless JBCTL_IDE is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
