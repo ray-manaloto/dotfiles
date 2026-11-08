@@ -143,6 +143,31 @@ vanished in between can't be restarted by the call; then checks the listener aga
 | 82 | `sandbox-exec` is missing or could not apply (a Codex `-s read-only` shell): report BLOCKED |
 | other | hc's own exit code |
 
+## Updating herdr
+
+- **A new Mac: open Herdr first.** No package ships herdr-core; Herdr.app's first run installs it,
+  `hc` included. Until then the post-tools skill hook prints "herdr-core is not installed yet; open
+  Herdr once, then rerun mise bootstrap", installs no herdr-core skill and lets bootstrap go on, so
+  the doctor's V10 shows the gap. Open Herdr once, then run `mise bootstrap` again.
+- **The core: `hc update` from a clean shell.** Run it from a shell started with `env -i`, for
+  example `env -i HOME="$HOME" USER="$USER" /bin/zsh -lc 'hc update'`, and run it again when hc asks
+  you to. An update keeps the terminals running; `hc server stop` followed by a start ends them.
+  From herdr-core 0.1.19, updates and `hc server restart` keep the environment the core started with.
+  The update to 0.1.19 itself still takes the updater's environment once, which is why the clean shell
+  matters (herdr-core CHANGELOG, 0.1.19).
+- **Herdr.app: only its own updater.** The `brew-cask:herdr-app` entry in the mise config only adopts
+  the app, and the Homebrew cask can lag behind the app's releases: on 2026-11-08 the cask offered
+  0.1.13 while the app had already updated itself to Herdr 0.1.14. Never update the app through brew.
+- **The doctor's V10 after a core update.** V10 stays red until the post-tools skill hook runs again.
+  The hook installs the herdr-core skill tag that matches `hc --version`, so the rerun brings it back
+  to green.
+- **Detached programs outlive their tab.** From herdr-core 0.1.19 on macOS and Linux, a program that a
+  terminal started with `nohup`, `setsid` or as a daemon keeps running after its tab closes, so its
+  port may stay busy until you stop it. Terminals opened before the update keep the old behavior, which
+  ends such programs with the tab, until they are reopened (herdr-core CHANGELOG, 0.1.19).
+- **Local network prompt.** After a core update, macOS may ask once more to let Herdr Core reach the
+  local network. Allow it (herdr-core CHANGELOG, 0.1.18).
+
 ## Test cores stay isolated
 
 A test or scratch core never shares a socket or state folder with the real one. Run it under
