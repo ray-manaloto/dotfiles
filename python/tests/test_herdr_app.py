@@ -2,14 +2,16 @@
 
 # All run through `mise run scratch:env`, so every home path is inside a temporary folder. The hook
 # runs with the real `skills` CLI, and the scratch home's git config points GitHub at local
-# repositories: herdr-core and agent-desktop, each at its tag and installed on every run. The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
+# repositories: herdr-core and agent-desktop, each at its tag and installed on every run. The
+# herdr-core line runs the installed hc's `--version`, which starts no core (see REAL_HC). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
 # dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a closed local port and fail,
 # which skills tolerates, so nothing leaves the machine.
 
+import functools
 import json
 import os
-import plistlib
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -30,11 +32,38 @@ POST_TOOLS = [
 # mise runs each hook command with its default inline shell, unix_default_inline_shell_args
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
-[TAG] = re.findall(r"herdrdev/herdr-core#(\S+)", " ".join(POST_TOOLS))
+[HC_LINE] = [command for command in POST_TOOLS if "herdrdev/herdr-core#" in command]
+[LINK_LINE] = [command for command in POST_TOOLS if "ln -s" in command]
+# Only the system folders: no hc, as on a new Mac before Herdr's first run.
+NO_HC_PATH = "PATH=/usr/bin:/bin"
+# What the hook lines print, each as a whole stderr line: scratch:env echoes the command itself to
+# stderr first, so a substring match would find the message in the echoed command.
+NO_HC = "post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap"
+NO_COPY = "post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link"
+# The installed hc, linked first on PATH so the herdr-core line runs the real `hc --version`. Its
+# output gives the tag the line must install. It is read under macOS's `(deny process-fork)`, which
+# proves the call prints the version without starting a core: a core start forks, and the sandbox
+# refuses it. Without hc or sandbox-exec (Linux) the hook tests skip; the module still imports.
+REAL_HC = shutil.which("hc")
+SANDBOX = shutil.which("sandbox-exec")
+NO_FORK = "(version 1)(allow default)(deny process-fork)"
+
+
+@functools.cache
+def installed_tag() -> str:
+    """`v` and the X.Y.Z the installed hc prints, read where it cannot start a core."""
+    assert REAL_HC and SANDBOX
+    printed = subprocess.run(
+        [SANDBOX, "-p", NO_FORK, REAL_HC, "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    [version] = re.findall(r"^hc (\d+\.\d+\.\d+)$", printed, re.MULTILINE)
+    return f"v{version}"
+
+
 [DESKTOP_TAG] = re.findall(r"vercel-labs/agent-desktop#(\S+)", " ".join(POST_TOOLS))
-# The installed hc's version, from the bundle herdr:doctor reads too (hometools.herdr HC_PLIST); hc itself is
-# never run. No mise pin carries it: Herdr.app's first run installs herdr-core.
-HC_PLIST = Path.home() / ".local/share/herdr-core/current/Contents/Info.plist"
 DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
 DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
 # A skill written in this repo, linked for both agents by [dotfiles] in mise.toml.
@@ -80,9 +109,22 @@ class HerdrAppTest(unittest.TestCase):
             f"HTTPS_PROXY={proxy}",
             f"HTTP_PROXY={proxy}",
         )
+        if REAL_HC is None:
+            self.skipTest("no hc on PATH: open Herdr once to install herdr-core")
+        if SANDBOX is None:
+            self.skipTest("no sandbox-exec to read hc --version without a core start")
+        self.tag = installed_tag()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        (self.bin / "hc").symlink_to(REAL_HC)
         self.install(HC, "herdrdev/herdr-core", CODEX, CLAUDE)
-        self.github("herdrdev/herdr-core", TAG, (HC,))
+        self.github("herdrdev/herdr-core", self.tag, (HC,))
         self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
+
+    def run_hook(self, command: str) -> subprocess.CompletedProcess[str]:
+        """One hook command as mise runs it, with this test's hc first on PATH."""
+        line = f"PATH={shlex.quote(str(self.bin))}:$PATH; {command}"
+        return self.scratch("env", *self.offline, *SHELL, line)
 
     def install(self, name: str, source: str, *folders: str) -> None:
         """A skill as `skills add -g` leaves it: a folder per agent and a lock entry."""
@@ -145,7 +187,7 @@ class HerdrAppTest(unittest.TestCase):
 
     def post_tools(self) -> None:
         for command in POST_TOOLS:
-            done = self.scratch("env", *self.offline, *SHELL, command)
+            done = self.run_hook(command)
             self.assertEqual(done.returncode, 0, (command, done.stdout, done.stderr))
 
     def on_disk(self) -> set[str]:
@@ -180,10 +222,26 @@ class HerdrAppTest(unittest.TestCase):
         self.assertEqual(self.on_disk(), CORE)
         self.assertEqual(self.locked(), {HC, *DESKTOP})
 
-    @unittest.skipUnless(HC_PLIST.is_file(), "no installed herdr-core")
     def test_herdr_core_comes_from_the_installed_hc_tag(self) -> None:
-        installed = plistlib.loads(HC_PLIST.read_bytes())["CFBundleShortVersionString"]
-        self.assertEqual(TAG, f"v{installed}")
+        self.post_tools()
+        self.assertEqual(
+            json.loads(self.lock.read_text())["skills"][HC]["ref"], self.tag
+        )
+
+    def test_the_herdr_core_line_skips_without_hc(self) -> None:
+        done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, HC_LINE)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(NO_HC, done.stderr.splitlines())
+        # setUp's stale copy is left as it was, and nothing is installed.
+        self.assertNotIn("ref", json.loads(self.lock.read_text())["skills"][HC])
+
+    def test_the_link_line_skips_quietly_without_hc(self) -> None:
+        shutil.rmtree(self.root / CODEX / HC)
+        done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, LINK_LINE)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(NO_COPY, done.stderr.splitlines())
+        for folder in LINKED:
+            self.assertFalse((self.root / folder / HC).is_symlink())
 
     def test_a_codex_only_herdr_core_reaches_every_harness(self) -> None:
         shutil.rmtree(self.root / CLAUDE / HC)
@@ -205,10 +263,9 @@ class HerdrAppTest(unittest.TestCase):
 
     def test_the_link_line_fails_without_the_codex_copy(self) -> None:
         shutil.rmtree(self.root / CODEX / HC)
-        [line] = [command for command in POST_TOOLS if "ln -s" in command]
-        done = self.scratch("env", *self.offline, *SHELL, line)
+        done = self.run_hook(LINK_LINE)
         self.assertNotEqual(done.returncode, 0)
-        self.assertIn("herdr-core is missing", done.stderr)
+        self.assertIn(NO_COPY, done.stderr.splitlines())
         for folder in LINKED:
             self.assertFalse((self.root / folder / HC).is_symlink())
 
@@ -216,8 +273,7 @@ class HerdrAppTest(unittest.TestCase):
         # A file where Antigravity's folder goes makes its mkdir fail; OpenCode's after it would succeed.
         (self.root / LINKED[0]).parent.mkdir(parents=True)
         (self.root / LINKED[0]).write_text("")
-        [line] = [command for command in POST_TOOLS if "ln -s" in command]
-        done = self.scratch("env", *self.offline, *SHELL, line)
+        done = self.run_hook(LINK_LINE)
         self.assertNotEqual(done.returncode, 0)
         self.assertFalse((self.root / LINKED[1] / HC).is_symlink())
 
@@ -229,7 +285,9 @@ class HerdrAppTest(unittest.TestCase):
                 "herdrdev/herdr-core",
                 (self.root / folder / HC / "SKILL.md").read_text(),
             )
-        self.assertEqual(json.loads(self.lock.read_text())["skills"][HC]["ref"], TAG)
+        self.assertEqual(
+            json.loads(self.lock.read_text())["skills"][HC]["ref"], self.tag
+        )
 
     def test_agent_desktop_skills_come_from_the_pinned_tag(self) -> None:
         self.assertEqual(DESKTOP_TAG, f"v{DESKTOP_PIN}")
