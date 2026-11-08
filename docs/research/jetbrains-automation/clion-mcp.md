@@ -5,7 +5,7 @@ title: "CLion MCP server: the connection and the clion-debugger skill"
 description: "How Claude Code reaches CLion's MCP server, which IDE holds the port, why sessions show ECONNREFUSED, where the clion-debugger skill comes from, and the options that were rejected."
 resource: "~/.claude.json mcpServers.clion and CLion's bundled clion-debugger skill"
 version: "2026-11-07"
-timestamp: "2026-11-07T23:00:00Z"
+timestamp: "2026-11-08T00:40:00Z"
 status: "draft"
 stale_after: "2027-05-07T00:00:00Z"
 tags: [clion, mcp, claude-code, skills, jetbrains]
@@ -42,7 +42,8 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   The older `CLion2026.2` config still says VIA_ROUTER.
 - The clion-debugger skill (1.3.2) is written for the router. Its `allowed-tools` is `execute_tool`, and it
   says "Do not call the underlying handles directly". So the skill depends on `execute_tool` being listed.
-- **DIRECT probably keeps `execute_tool` for Claude Code (inferred from bytecode on 2026-11-07, not observed).**
+- **DIRECT keeps `execute_tool` for external clients such as Claude Code** (its listing was seen live on
+  2026-11-07, below). Why, from the bytecode:
   `McpServerService.getMcpToolsFiltered` builds each session's list and passes it through `withRouterTool`. That
   adds the router tool back in every mode unless the session opts out with
   `McpSessionOptions.withUnusedRouterToolOmitted()`. An opted-out session keeps it only in
@@ -52,14 +53,18 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   starts itself. An external client such as Claude Code gets the defaults instead:
   `McpServerService.getSessionOptions` builds fresh options (RESPECT_GLOBAL_SETTINGS) when none are registered
   for the session, and those do not opt out. So in DIRECT, Claude Code should get every tool directly **and**
-  `execute_tool`, and the skill's calls should work. In VIA_ROUTER it got `execute_tool` alone (measured on
-  2026-11-05).
-- **Still to confirm live, and until then do not count on the skill in DIRECT:** this is read from bytecode, not
-  seen in a `tools/list`. Next time CLion runs, one read-only `initialize` and `tools/list` on the endpoint
-  settles it: `execute_tool` should be in the list. No tool call is needed. `jbctl check-direct` sends exactly
-  these, but it reports only the count, not whether `execute_tool` is listed. If `execute_tool` is missing, set
-  the mode back to "All agents" (VIA_ROUTER) before using the skill. Tracked in #563, which also covers
-  `check-direct` reporting it.
+  `execute_tool`. In VIA_ROUTER it got `execute_tool` alone (measured on 2026-11-05).
+- **Listed live on 2026-11-07 (00:30 UTC on 2026-11-08), #563.** Measured: one `initialize` and `tools/list` on
+  `http://127.0.0.1:64362/stream` from a small script on jbctl's MCP client, which sends only those two requests
+  and `notifications/initialized`. The server answered as "CLion MCP Server" 2026.3 (protocol 2025-06-18) and
+  listed 88 tools on one page. `execute_tool` ("Universal tool executor that can invoke specific IDE MCP tool
+  dynamically") was one of them, and so were all 17 tools the clion-debugger skill's `reference/tools/`
+  documents. Context, read from local files rather than the response: the port was held by `clion` (CLion
+  2026.3, CL-263.7307.209), whose config had no `options/mcpToolFilter.xml`, so DIRECT. The script is a client
+  like Claude Code that registers no session options, which is the case the bytecode reading covers; Claude
+  Code itself was not the client. This shows the tools are advertised, not that they work: no tool was called,
+  so whether `execute_tool` dispatches to them in DIRECT is untested. `jbctl check-direct` still reports only
+  the count; having it also say whether `execute_tool` is listed stays open in #563.
 
 ## Which IDE serves the port
 
@@ -75,7 +80,8 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   list showed `clion` as failed with ECONNREFUSED.
 - On 2026-11-03, the 2026.3 RC (CL-263.7307.108) imported the 2026.2 settings and served the same endpoint,
   so `~/.claude.json` did not change. It added MCP tools that load CMake projects (`load_cmake`, and the
-  CMake profile and toolchain tools). That list was not rechecked on 2026.3.
+  CMake profile and toolchain tools). The 2026.3 listing of 2026-11-07 still has them: `load_cmake`,
+  `check_toolchain`, and the tools that create, update, delete, enable or disable CMake profiles and toolchains.
 
 ## The clion-debugger skill
 

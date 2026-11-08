@@ -255,3 +255,17 @@
   lines of `skills.py` not covered by this run: a `renamex_np` that fails, and the swap-backs when the
   swapped-out copy changed since the check, cannot be read, or is no longer a folder, or the run is stopped
   mid-check. The other uncovered lines are the ones the floor's comment already lists.
+
+## 2026-11-07: DIRECT lists execute_tool, seen live (#563)
+
+* **Measured** (headless, at 00:30 UTC on 2026-11-08): one `initialize` and `tools/list` on
+  `http://127.0.0.1:64362/stream` from a script on jbctl's MCP client, with no tool call. The server answered as
+  "CLion MCP Server" 2026.3 and listed 88 tools on one page, `execute_tool` among them. The 17 tools the
+  clion-debugger skill documents in `reference/tools/` were all listed too.
+* **Context** (from local files, not the response): `clion` (CLion 2026.3, CL-263.7307.209) held the port, started
+  earlier for the coverage run on the owner's go. Its config had no `mcpToolFilter.xml`, so DIRECT. No setting
+  was changed.
+* **Changed**: [CLion MCP server](clion-mcp.md) records the listing and no longer says to wait for it. It says
+  the tools are advertised, while dispatch through `execute_tool` in DIRECT stays untested. It also says the
+  2026.3 listing still has the CMake and toolchain tools. #563 stays open for `jbctl check-direct` to report
+  whether `execute_tool` is listed.
