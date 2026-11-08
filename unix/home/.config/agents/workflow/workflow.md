@@ -58,7 +58,7 @@ Before the first ticket in a repository, `/work` runs setup once: `setup-matt-po
 | 5 | Branch review | The reviewer tab, after the ticket's commits | Findings against the acceptance criteria | None: findings are hypotheses | Base-branch review with the criteria supplied |
 | 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the exact bytes | Home-path scan, then a document review with the leak check |
 | 7 | Close-out | The coordinator, after the owner merges (or earlier on a shared branch, see [ship](ship.md)) | Issue closed, roadmap line ticked; worktree removed only after the merge | The merge, or a spec's early-close rule in [ship](ship.md) | None |
-| 8 | `/retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
+| 8 | `/ticket-retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
 
 `/implement-spec` runs step 4 for every open ticket of a spec, frontier first. Off the chain:
 `triage` is for issues other people filed; `diagnosing-bugs` replaces step 1 for a bug;
