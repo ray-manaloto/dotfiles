@@ -532,7 +532,7 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
-  "mise exec -- skills add herdrdev/herdr-core#v0.1.18 -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
+  "mise exec -- skills add herdrdev/herdr-core#v0.1.19 -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
   "[ -d ~/.agents/skills/herdr-core ] || { echo 'post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link' >&2; exit 1; }; for d in ~/.gemini/antigravity-cli/skills ~/.config/opencode/skills; do mkdir -p \"$d\" && rm -rf \"$d/herdr-core\" && ln -s ~/.agents/skills/herdr-core \"$d/herdr-core\" || exit 1; done",
   "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
   "{% set repo = (env.HOME ~ '/.config/mise/config.toml') | canonicalize | dirname | dirname | dirname | dirname | dirname %}DEP_MAPS_REGISTRY={{ (repo ~ '/unix/home/.config/dep-maps/deps.json') | quote }} mise -C {{ repo | quote }} run //depmaps:sync </dev/null",
