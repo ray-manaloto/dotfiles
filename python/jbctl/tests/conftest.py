@@ -15,8 +15,9 @@ import psutil
 import pytest
 
 from jbctl.cli import main
+from jbctl.mcp import ROUTER
 
-from .standin import DIRECT, mcp_server
+from .standin import CURSOR, DIRECT, mcp_server
 
 STANDIN = Path(__file__).with_name("standin.py")
 
@@ -41,6 +42,32 @@ def via_router() -> Iterator[str]:
 @pytest.fixture
 def direct() -> Iterator[str]:
     yield from mcp_server(DIRECT, sse=False)
+
+
+@pytest.fixture
+def unrouted() -> Iterator[str]:
+    """DIRECT without the router tool, as a server that never lists execute_tool would answer."""
+    yield from mcp_server([tool for tool in DIRECT if tool != ROUTER], sse=False)
+
+
+@pytest.fixture(params=[(CURSOR, True), ("", False)], ids=["quoted-sse", "empty-json"])
+def paged(request: pytest.FixtureRequest) -> Iterator[str]:
+    """DIRECT two tools a page, with the router tool alone on the last page. Its cursor holds JSON-significant
+    characters, or is empty: a cursor still, since nextCursor is there."""
+    cursor, sse = request.param
+    yield from mcp_server([*DIRECT[1:], DIRECT[0]], sse=sse, page=2, cursors=[cursor])
+
+
+@pytest.fixture(params=[{"page": 2}, None], ids=["object", "null"])
+def number_cursor(request: pytest.FixtureRequest) -> Iterator[str]:
+    """A server whose nextCursor is there but not text, as the protocol says it must be: an object, or null."""
+    yield from mcp_server(DIRECT, sse=False, page=2, cursors=[request.param])
+
+
+@pytest.fixture
+def stuck() -> Iterator[str]:
+    """A pager, one tool a page, that hands out the same cursor for the second page and the third."""
+    yield from mcp_server(DIRECT, sse=False, page=1, cursors=[CURSOR, CURSOR])
 
 
 @pytest.fixture

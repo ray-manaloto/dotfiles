@@ -733,7 +733,7 @@ class RouterDirect(BaseModel):
 
 class CheckDirect(BaseModel):
     """
-    Fail unless an MCP tools/list shows more than the router tool alone (DIRECT): the IDE's own server, or --mcp-url.
+    Fail unless MCP tools/list (every page) shows more than the router tool (DIRECT); say if it lists the router.
     """
 
     model_config = ConfigDict(
@@ -798,6 +798,10 @@ class Event(BaseModel):
     selected: str | None = None
     tools: int | None = None
     direct: bool | None = None
+    router: bool | None = None
+    """
+    Whether tools/list names the router tool (execute_tool), which a router-only skill such as clion-debugger calls
+    """
     patch: PatchState | None = None
     map: str | None = None
     nodes: int | None = None

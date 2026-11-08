@@ -269,3 +269,13 @@
   the tools are advertised, while dispatch through `execute_tool` in DIRECT stays untested. It also says the
   2026.3 listing still has the CMake and toolchain tools. #563 stays open for `jbctl check-direct` to report
   whether `execute_tool` is listed.
+
+## 2026-11-07: check-direct reports the router tool (#563)
+
+* **Changed**: `jbctl check-direct` prints `router` beside `tools` and `direct`, saying whether `tools/list`
+  names `execute_tool`. It now reads every page of the list, following `nextCursor` until there is none (an
+  empty cursor is still a cursor). A repeated cursor, or one that is not text, fails the run. After a listing
+  that succeeds, it exits 1 only when not DIRECT, as before. `router-direct` prints the same line.
+* **Measured** (headless, read-only): `jbctl check-direct --ide clion` against CLion 2026.3 in DIRECT printed
+  `{"tools":88,"direct":true,"router":true}` and exited 0.
+* **Changed**: [CLion MCP server](clion-mcp.md) says how to check it again. This closes #563.

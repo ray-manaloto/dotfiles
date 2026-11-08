@@ -100,10 +100,10 @@ def press(pid: int, label: str) -> None:
 
 
 def check(url: str) -> None:
-    """Exit 1 unless the MCP server lists more than the router tool (DIRECT)."""
-    tools = mcp.tool_count(url)
-    direct = tools > 1
-    emit(Event(tools=tools, direct=direct))
+    """Exit 1 unless the MCP server lists more than the router tool (DIRECT); either way, say if it lists the router."""
+    names = mcp.tool_names(url)
+    direct = len(names) > 1
+    emit(Event(tools=len(names), direct=direct, router=mcp.ROUTER in names))
     if not direct:
         raise SystemExit(1)
 
