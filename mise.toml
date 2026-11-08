@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "cpp", "swift"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "python/depmaps", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -13,6 +13,7 @@ cbm = "python/cbm"
 home = "python/home"
 visualplan = "python/visualplan"
 jbctl = "python/jbctl"
+depmaps = "python/depmaps"
 
 [settings]
 lockfile = true
@@ -23,7 +24,7 @@ lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//cpp:test", "//swift:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//depmaps:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own
@@ -94,6 +95,8 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.config/mise/tasks" = { source = "unix/home/.config/mise/tasks", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
 "~/.config/starship.toml" = { source = "unix/home/.config/starship.toml", mode = "symlink" }
+# The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
+"~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 "~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
 # Separate entries, so ~/.zshrc.d stays a real folder. Applied by shell:apply, which backs up first.
