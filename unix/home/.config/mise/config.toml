@@ -147,7 +147,7 @@ pixi = { version = "0.84.1", minimum_release_age = "0s" }
 uv = { version = "0.13.7", minimum_release_age = "0s" }
 chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
-hk = { version = "2.11.1", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
+hk = { version = "2.11.1", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
 fnox = { version = "1.47.0", workflow = "release.yml", minimum_release_age = "0s" }
 pitchfork = { version = "2.33.1", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
@@ -369,8 +369,8 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # Run `update-all` (the guarded alias in [shell_alias]) on its own: it already runs brew
 # update/upgrade, mise self-update and mise upgrade, so running those first repeats the work.
 # DAG: mise tasks deps --compact; plan: mise run -n update:all
-# A wedged install that holds mise's tool-version lock blocks every later `mise run`
-# (knowledge-base #418); scripts/mise_update_guard.py detects it (see [shell_alias]).
+# An unfinished tool install that holds mise's tool-version lock wedges every later `mise run`;
+# scripts/mise_update_guard.py detects it (see [shell_alias]).
 # update:brew and update:check are file tasks in tasks/update/: hometools update-brew and update-check
 # do their work (#392).
 
@@ -465,7 +465,7 @@ run = ["mise doctor", "mise run toolchain:verify"]
 # It must NOT be wired as a mise task (`file = ...`). A mise task runs INSIDE
 # `mise run`, which resolves tools first — so the guard would block on the very
 # lock it exists to detect, and report nothing. Running it outside mise is what
-# lets it observe the lock rather than join the queue. See knowledge-base #418.
+# lets it observe the lock rather than join the queue, where an unfinished tool install wedges it.
 #
 # Bypass deliberately with `mise run update:all` if you ever need the unguarded
 # path; the guard is a seatbelt, not a cage.
@@ -501,9 +501,16 @@ includes = ["{{ mise_config_dir }}/agentsview-native/tasks.toml", "{{ mise_confi
 [bootstrap.hooks.pre-packages]
 run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% endif %}'
 
-# hc's skill is a mise-run install, so it waits for the tools phase; what is installed is skipped:
-# Codex reads ~/.agents/skills, and Claude needs its own link in ~/.claude/skills.
-# It is only a pointer to `hc --skill`, so the tag needs no bump to follow hc.
+# hc's skill is a mise-run install, so it waits for the tools phase. It goes to all four harnesses,
+# whose folders herdr:doctor checks (V10): Claude (~/.claude/skills), Codex (~/.agents/skills),
+# Antigravity CLI (~/.gemini/antigravity-cli/skills) and OpenCode (~/.config/opencode/skills). The tag
+# matches the installed `hc --version`. Like agent-desktop's line, it is not skipped when installed: a
+# re-run puts the tag's files back, so a stale copy is replaced and a bumped tag reaches every folder.
+# The skills CLI names the agents claude-code, codex, antigravity-cli and opencode, but a global install
+# for the last two writes ~/.agents/skills only, since their project folder is .agents/skills (skills
+# 1.7.6 isUniversalAgent). The next line replaces whatever their own folders hold with a link to it, and
+# fails, linking nothing, when that copy is missing. `|| exit 1` stops at a failed folder: errexit ignores
+# a failure inside an && list, so the loop would otherwise end 0 after the next folder succeeds.
 # The removal comes first: `skills add herdrdev/herdr` installed the Herdr TUI's skill, which tells
 # agents to drive a TUI that no longer runs, and four skills for working on Herdr's own repo. The
 # name matches the folder, and the source matches every lock entry from that repo (skills 1.7.5
@@ -525,7 +532,8 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
-  "[ -e ~/.agents/skills/herdr-core ] && [ -e ~/.claude/skills/herdr-core ] || mise exec -- skills add herdrdev/herdr-core#v0.1.17 -g -a claude-code codex -s herdr-core -y </dev/null",
+  "mise exec -- skills add herdrdev/herdr-core#v0.1.18 -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
+  "[ -d ~/.agents/skills/herdr-core ] || { echo 'post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link' >&2; exit 1; }; for d in ~/.gemini/antigravity-cli/skills ~/.config/opencode/skills; do mkdir -p \"$d\" && rm -rf \"$d/herdr-core\" && ln -s ~/.agents/skills/herdr-core \"$d/herdr-core\" || exit 1; done",
   "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
   "{% set repo = (env.HOME ~ '/.config/mise/config.toml') | canonicalize | dirname | dirname | dirname | dirname | dirname %}DEP_MAPS_REGISTRY={{ (repo ~ '/unix/home/.config/dep-maps/deps.json') | quote }} mise -C {{ repo | quote }} run //depmaps:sync </dev/null",
 ]
