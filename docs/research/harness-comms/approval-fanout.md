@@ -94,7 +94,7 @@ can hold one: `[rules]` in `/etc/codex/requirements.toml`, a cloud bundle or man
 execpolicy/src/parser.rs:358-360), and its `prompt` goes to the configured reviewer, which is the auto-reviewer here. Such a request
 skips the auto-reviewer and goes straight to the approval prompt (core/src/tools/approvals.rs:686-688). A
 permission-request hook's allow cannot clear it (approvals.rs:605). Under `never` it is rejected (approvals.rs:521-527),
-and so is it when strict auto-review is on, when requirements forbid reviewer `user`, or when they require
+and so is it under a `granular` policy that disables rule approvals (exec_policy.rs:220-231), when strict auto-review is on, when requirements forbid reviewer `user`, or when they require
 auto-review for the model (approvals.rs:530-539). Holding `[rules]` in a requirements file does not by itself reject it. A `forbidden` rule blocks
 the command under every policy (exec_policy.rs:416). Rules match a command's leading words, so `git push --force`
 does not match `git push origin main --force`. The owner's `~/.codex/rules/default.rules` holds five `allow` rules

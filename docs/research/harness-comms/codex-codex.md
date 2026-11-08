@@ -83,8 +83,8 @@ same app-server, or by one Codex's subagent tools inside one process.
   was aborted, for example interrupted. Both are persisted. The `EventMsg` enum is internally tagged with
   `rename_all = "snake_case"` (protocol.rs:1515), so `TurnAborted` serializes as `turn_aborted` (variant at :1699, no
   rename); `TurnComplete` carries an explicit `rename = "task_complete"` with alias `turn_complete` (:1577). The
-  `reason` values are `interrupted`, `replaced`, `review_ended`, `budget_limited` (:4551-4558). A reader that matches
-  the Rust name `TurnAborted` misses interrupted turns; match the serialized names, and handle both.
+  `reason` values are `interrupted`, `replaced`, `review_ended`, `budget_limited` (:4551-4558).
+  Match the serialized names.
   core/src/tasks/mod.rs:871-903; rollout/src/policy.rs:137-140; rollout/src/recorder.rs:1770-1790;
   protocol/src/protocol.rs:1515, 1577, 1699, 2383-2395, 4526-4558.
 
