@@ -25,7 +25,8 @@ ignored_config_paths = [
   "~/.codex/worktrees/research-performance-successor/dotfiles",
   "~/.codex/worktrees/research-python-sdks/dotfiles",
   "~/.codex/worktrees/worktree-graph-readiness/dotfiles",
-  # Source mirrors kept for reading.
+  # The retired marketplace project: this folder is a read-only mirror kept for reading.
+  # mise must never load a config from it, so it stays on this list.
   "~/dev/github/ray-manaloto/claude-code-marketplace/offline",
   # Third-party clones, one folder per GitHub owner. A clone under a new owner stays untrusted
   # (mise refuses it) until it is listed here or approved with `mise trust`.

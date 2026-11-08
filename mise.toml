@@ -72,7 +72,8 @@ run = "hk run pre-commit"
 # review-python does the work (python/repo/src/repotools/gates.py).
 # Pattern: jazzsequence/jazz-nextjs@9c427f84 .githooks/lib/approval.sh:48-64 (index fingerprint from
 # `git ls-files -s`, so a later `git add` voids the approval); Open-BFME/Open-BFME-1@5a6f78cf
-# .githooks/pre-commit:411,640 does it with `git write-tree`. Marketplace saved searches review-gate-*.
+# .githooks/pre-commit:411,640 does it with `git write-tree`. Both were found by the review-gate-* saved
+# searches of the retired marketplace project.
 [tasks."review:python"]
 description = "A read-only Codex reviewer checks the uncommitted changes against CODING_STANDARDS.md"
 usage = '''
