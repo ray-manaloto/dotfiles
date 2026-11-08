@@ -36,25 +36,27 @@ run = "uv run --locked pytest"
 # <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1). The live tests run in the background,
 # Settings included (opened through the IDE's station socket). Only the debug route that brings the IDE forward is
 # marked out of the count ("# pragma: foreground"; //jbctl:markers refuses any other pragma). The #502 floor
-# is 97.68%, measured with Q5's lifecycle (2026-11-07) in a run that did not reach the cli.py page move below,
-# which the floor assumes a run does not reach. What stays uncovered: three guards no working IDE or jbax
+# is 97.63%: a headless run on 2026-11-07, with jbctl skills, measured 97.75% (1260 of 1285 lines, 348 of 360
+# branches), but it reached the cli.py page move below, which the floor assumes a run does not reach; without
+# that line and its branch, the same run is 97.63%. What stays uncovered: three guards no working IDE or jbax
 # trips, "Settings did not open" (ide.py), a Settings window without a search field (rea.py) and a jbax that
 # crashed without printing JSON (ide.py); the move to the page asked for when Settings opens elsewhere (cli.py),
 # which a headless run reaches only when a station open is still landing; and lifecycle states no run produces on
 # demand: two new IDEs at once, windows jbax cannot inspect, a pid that changes between the check and /exit, a
 # dialog that appears while stop waits before --force, and psutil's SystemError for a process that ends while it is
-# read (toolbox.snapshot); and in skills, a copy or link that someone changes between the check and the swap, which
-# is swapped back or fails the run. All are left visible as uncovered rather than marked.
+# read (toolbox.snapshot); and in skills, a renamex_np that fails, and the swap-backs for a swapped-out copy or folder
+# that changed since the check, cannot be read, or is no longer a folder, or a run stopped mid-check. All are left
+# visible as uncovered rather than marked.
 # --foreground also runs the debug route against the real IDE, which brings it forward once.
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
-description = "Every test, live ones included; line and branch coverage of at least 97.68% (#502)"
+description = "Every test, live ones included; line and branch coverage of at least 97.63% (#502)"
 depends = ["sync"]
 usage = """
 arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
 flag "--foreground" help="Also run the debug route that brings the IDE forward (menu-bar Settings)"
 """
-run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=97.68'
+run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=97.63'
 
 # start, restart and stop of a real spare IDE: it comes forward and is quit, so the owner runs this, never a hook
 # or the coverage gate. The IDE opens a throwaway worktree of ~/dev/github/jdx/mise (JBCTL_LIFECYCLE_REPO) under
