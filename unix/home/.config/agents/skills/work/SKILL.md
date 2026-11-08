@@ -29,8 +29,8 @@ then write.
    - `hk.pkl`, and whether `repotools` is on `PATH`. If it is not, ask the owner to run
      `mise run //repo:tools-install` from dotfiles, and stop.
 3. **Draft.** Show the owner the section below with every `<...>` filled in from what you found, and the `hk.pkl`
-   change. Ask about each item you could not settle, putting your recommended answer first. Let the owner edit the
-   draft.
+   change from step 5, if any. Ask about each item you could not settle, putting your recommended answer first.
+   Let the owner edit the draft.
 4. **Write the section.** Write it in the root `AGENTS.md` and create the file if it is missing. If a `CLAUDE.md`
    exists and does not import `@AGENTS.md`, ask the owner before changing it. Never replace other sections.
 
@@ -43,15 +43,16 @@ then write.
    - Research: notes go in `<folder>`.
    - Review approval: the pinned reviewer pane approves each commit (`repotools pane-pin`,
      `repotools pane-fingerprint`, see `~/.config/agents/workflow/cross-review.md`). The hk `commit-msg` step
-     `pane-approval` runs `repotools pane-approved` and refuses a commit the pane has not approved.
+     `<step name>` runs `<command>` and refuses a commit the pane has not approved.
    - Content guard: the reviewer's leak check on the exact bytes, bound to the approval fingerprint. The
      reviewer approves only bytes it has read and found free of private content. Any change to those bytes
      changes the fingerprint and voids the approval. The home-path scan is not the content guard.
    ```
 
-5. **Add the hk step.** If there is no `hk.pkl`, run `hk init`. Then add the `commit-msg` hook from
-   [hk-approval.pkl](hk-approval.pkl) to `hk.pkl`'s `hooks` block, and create the block if it is missing. Keep
-   the step's name and command exactly as they are. Run `hk validate`. If
+5. **Add the hk step.** Unless `hk.pkl` already has a `commit-msg` step that runs `repotools pane-approved`,
+   directly or through a task, add the `commit-msg` hook from [hk-approval.pkl](hk-approval.pkl) to `hk.pkl`'s
+   `hooks` block, running `hk init` first if there is no `hk.pkl`. Keep the step's name and command exactly as
+   they are, and run `hk validate`. If
    `git config --get-regexp '^hook\..*commit-msg'` shows no hk hook (`hk install --global` puts one in the
    user's git config), run `hk install`.
 6. **Prove it.** Run `hk run commit-msg <file>` with a short message in a scratch file. It must fail, because the
