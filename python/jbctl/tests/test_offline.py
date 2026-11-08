@@ -10,6 +10,7 @@ import pytest
 from jbctl import rea
 
 from .conftest import run
+from .standin import CURSOR
 
 
 @pytest.mark.parametrize("argv", [[], ["click"]])
@@ -24,11 +25,43 @@ def test_a_required_option_is_enforced(capsys: pytest.CaptureFixture[str]) -> No
 
 
 def test_check_direct_reads_the_tool_list(capsys: pytest.CaptureFixture[str], direct: str) -> None:
-    assert run(capsys, "check-direct", "--mcp-url", direct) == (0, [{"tools": 3, "direct": True}], "")
+    assert run(capsys, "check-direct", "--mcp-url", direct) == (0, [{"tools": 3, "direct": True, "router": True}], "")
 
 
 def test_check_direct_fails_while_router_only(capsys: pytest.CaptureFixture[str], via_router: str) -> None:
-    assert run(capsys, "check-direct", "--mcp-url", via_router) == (1, [{"tools": 1, "direct": False}], "")
+    assert run(capsys, "check-direct", "--mcp-url", via_router) == (
+        1,
+        [{"tools": 1, "direct": False, "router": True}],
+        "",
+    )
+
+
+def test_check_direct_reports_a_missing_router_tool(capsys: pytest.CaptureFixture[str], unrouted: str) -> None:
+    """DIRECT without execute_tool is still DIRECT: the router field says a router-only skill cannot run."""
+    assert run(capsys, "check-direct", "--mcp-url", unrouted) == (
+        0,
+        [{"tools": 2, "direct": True, "router": False}],
+        "",
+    )
+
+
+def test_check_direct_reads_every_page(capsys: pytest.CaptureFixture[str], paged: str) -> None:
+    """The second page, with the router tool, comes only if the cursor goes back exactly as sent, empty or not: only
+    a missing nextCursor ends the list."""
+    assert run(capsys, "check-direct", "--mcp-url", paged) == (0, [{"tools": 3, "direct": True, "router": True}], "")
+
+
+def test_a_cursor_that_is_not_text_is_a_failure(capsys: pytest.CaptureFixture[str], number_cursor: str) -> None:
+    assert run(capsys, "check-direct", "--mcp-url", number_cursor) == (
+        1,
+        [],
+        f"{number_cursor}: tools/list gave a nextCursor that is not text",
+    )
+
+
+def test_a_repeated_cursor_is_a_failure(capsys: pytest.CaptureFixture[str], stuck: str) -> None:
+    """The server's cursor stays inert in the one Failure line (run parses stderr as a single JSON object)."""
+    assert run(capsys, "check-direct", "--mcp-url", stuck) == (1, [], f"{stuck}: tools/list repeated cursor {CURSOR}")
 
 
 def test_a_tools_list_without_a_tool_list_is_a_failure(capsys: pytest.CaptureFixture[str], no_tool_list: str) -> None:

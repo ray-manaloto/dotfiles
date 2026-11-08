@@ -5,7 +5,7 @@ title: "CLion MCP server: the connection and the clion-debugger skill"
 description: "How Claude Code reaches CLion's MCP server, which IDE holds the port, why sessions show ECONNREFUSED, where the clion-debugger skill comes from, and the options that were rejected."
 resource: "~/.claude.json mcpServers.clion and CLion's bundled clion-debugger skill"
 version: "2026-11-07"
-timestamp: "2026-11-08T00:40:00Z"
+timestamp: "2026-11-08T02:30:00Z"
 status: "draft"
 stale_after: "2027-05-07T00:00:00Z"
 tags: [clion, mcp, claude-code, skills, jetbrains]
@@ -63,8 +63,12 @@ request to the IDE. Every CLion install was then 2026.3, build CL-263.7307.209.
   2026.3, CL-263.7307.209), whose config had no `options/mcpToolFilter.xml`, so DIRECT. The script is a client
   like Claude Code that registers no session options, which is the case the bytecode reading covers; Claude
   Code itself was not the client. This shows the tools are advertised, not that they work: no tool was called,
-  so whether `execute_tool` dispatches to them in DIRECT is untested. `jbctl check-direct` still reports only
-  the count; having it also say whether `execute_tool` is listed stays open in #563.
+  so whether `execute_tool` dispatches to them in DIRECT is untested.
+- **To check it again:** `jbctl check-direct --ide clion` sends only `initialize` and `tools/list`, reading
+  every page. It prints `{"tools": 88, "direct": true, "router": true}`, where `router` says whether
+  `execute_tool` is listed. When the listing succeeds, it exits 1 only if the server is not in DIRECT; DIRECT
+  without the router still exits 0, and `router: false` then means the clion-debugger skill cannot run. A
+  listing that fails (no answer, no tool list, a bad or repeated cursor) exits 1 with a Failure line instead.
 
 ## Which IDE serves the port
 

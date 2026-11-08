@@ -32,7 +32,7 @@ def live(capsys: pytest.CaptureFixture[str]) -> int:
     assert shutil.which(os.environ.get("JBAX", "jbax")), "install jbax first (mise run //swift:install)"
     code, [resolved], _ = jb(capsys, "resolve")
     assert code == 0
-    assert mcp.tool_count(resolved["ide"]["mcp_url"]) > 1, "start from DIRECT, so the run changes nothing"
+    assert len(mcp.tool_names(resolved["ide"]["mcp_url"])) > 1, "start from DIRECT, so the run changes nothing"
     # An open dialog may hold the user's unapplied edits: never cancel it on their behalf.
     assert ide.settings_window(resolved["ide"]["pid"]) is None, "close Settings first"
     return resolved["ide"]["pid"]
@@ -139,7 +139,7 @@ def session(capsys: pytest.CaptureFixture[str], tmp_path: Path, via_router: str,
     assert events[1:] == [
         {"selected": "ACP agents only"},
         {"pressed": "OK"},
-        {"tools": 1, "direct": False},
+        {"tools": 1, "direct": False, "router": True},
     ]
     assert ide.settings_window(pid) is None
 
@@ -154,6 +154,12 @@ def session(capsys: pytest.CaptureFixture[str], tmp_path: Path, via_router: str,
         code, events, error = jb(capsys, *refused)
         assert (code, events, "not opened by jbctl" in error) == (1, [], True)
     assert ide.settings_window(pid) is not None, "refused, so still open"
+
+
+def test_live_check_direct(capsys: pytest.CaptureFixture[str]) -> None:
+    """Read-only: initialize and tools/list, no tool call. An IDE in DIRECT names the router tool as well (#563)."""
+    code, [checked], error = jb(capsys, "check-direct")
+    assert (code, error, checked["direct"], checked["router"]) == (0, "", True, True)
 
 
 def test_live_skills_check(capsys: pytest.CaptureFixture[str]) -> None:
