@@ -3,7 +3,7 @@ okf_version: "0.2"
 type: "process"
 title: "Cross-review"
 description: "Who reviews what, in which tab, and how review findings are handled."
-timestamp: "2026-11-04T00:00:00Z"
+timestamp: "2026-11-07T00:00:00Z"
 status: "current"
 tags: [workflow, review, codex]
 ---
@@ -20,6 +20,19 @@ Pin its session once with the repository's pane-pin command. Resume it only read
 (`codex resume <id> -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
 that line, read from the session log by the repository's approval check, is the only approval.
 Never read an approval from the screen. No hc template is needed: the pane is an ordinary tab.
+
+## Waiting on the pane
+
+Send the brief with `hc send <terminal> "<text>"`, then wait with `hc wait <terminal>`, or use
+`hc send --wait`. Never sleep and grep `hc read`: while the pane works, `hc read` shows only its screen,
+so a loop can miss the answer. A wait that ends with reason `message` or `timeout` is a check-in:
+handle it and wait again. Once the pane stops, read its findings or question with
+`hc read --lines 100 <terminal>`, and reply to a question. Whether it approved is only what the
+repository's approval check reads from the session log, never the screen.
+
+A brief that limits the pane names what stays allowed: "Do not contact <service>; read-only local
+shell commands are allowed". Never write "do not call any tool": a reviewer reads that as a ban on the
+shell it needs, and it stops to ask.
 
 ## Three review kinds
 
