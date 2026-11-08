@@ -29,7 +29,9 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 [tasks.test]
 description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
 
 [tasks."test:focus"]
 # For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports

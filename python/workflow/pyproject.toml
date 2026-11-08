@@ -6,7 +6,7 @@ requires-python = ">=3.15"
 dependencies = ["pydantic", "pydantic-settings", "pyyaml"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [tool.ruff]
 line-length = 120

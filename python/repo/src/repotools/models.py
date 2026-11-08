@@ -30,6 +30,7 @@ class Command(StrEnum):
     toolchain_gate = "toolchain-gate"
     herdr_gate = "herdr-gate"
     tools_install = "tools-install"
+    test_times = "test-times"
 
 
 class ToolsInstall(BaseModel):
@@ -41,6 +42,41 @@ class ToolsInstall(BaseModel):
         extra="forbid",
         frozen=True,
     )
+
+
+class TestTimes(BaseModel):
+    """
+    Each test task's run history and its last run's slowest tests, from mise's records
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class TestTime(BaseModel):
+    """
+    One test task: mise tasks history --summary, and the slowest-durations block of its last log.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    task: str
+    runs: int
+    failures: int
+    median_ms: int | None
+    """
+    Median of the runs that ran and succeeded
+    """
+    last_ms: int | None
+    last_status: str
+    slowest: list[str]
+    """
+    pytest --durations lines; empty without a log or a block
+    """
 
 
 class ToolAction(StrEnum):
@@ -363,6 +399,7 @@ type Options = (
     | ToolchainGate
     | HerdrGate
     | ToolsInstall
+    | TestTimes
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -610,6 +647,8 @@ class Repotools(BaseModel):
     toolchain_gate: ToolchainGate | None = None
     herdr_gate: HerdrGate | None = None
     tools_install: ToolsInstall | None = None
+    test_times: TestTimes | None = None
+    test_time: TestTime | None = None
     tool_action: ToolAction | None = None
     healthy: Healthy | None = None
     tool_receipt: ToolReceipt | None = None

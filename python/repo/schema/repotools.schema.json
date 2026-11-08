@@ -28,13 +28,35 @@
         "scratch-env",
         "toolchain-gate",
         "herdr-gate",
-        "tools-install"
+        "tools-install",
+        "test-times"
       ]
     },
     "ToolsInstall": {
       "description": "Install workflowtools and repotools as uv tools from the committed trees",
       "type": "object",
       "properties": {},
+      "additionalProperties": false
+    },
+    "TestTimes": {
+      "description": "Each test task's run history and its last run's slowest tests, from mise's records",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "TestTime": {
+      "description": "One test task: mise tasks history --summary, and the slowest-durations block of its last log.",
+      "type": "object",
+      "properties": {
+        "task": { "type": "string" },
+        "runs": { "type": "integer" },
+        "failures": { "type": "integer" },
+        "median_ms": { "type": ["integer", "null"], "description": "Median of the runs that ran and succeeded" },
+        "last_ms": { "type": ["integer", "null"] },
+        "last_status": { "type": "string" },
+        "slowest": { "type": "array", "items": { "type": "string" }, "description": "pytest --durations lines; empty without a log or a block" }
+      },
+      "required": ["task", "runs", "failures", "median_ms", "last_ms", "last_status", "slowest"],
       "additionalProperties": false
     },
     "ToolAction": {
@@ -236,7 +258,8 @@
         { "$ref": "#/$defs/ShellRollback" },
         { "$ref": "#/$defs/ToolchainGate" },
         { "$ref": "#/$defs/HerdrGate" },
-        { "$ref": "#/$defs/ToolsInstall" }
+        { "$ref": "#/$defs/ToolsInstall" },
+        { "$ref": "#/$defs/TestTimes" }
       ]
     },
     "Fingerprint": {
@@ -367,6 +390,8 @@
     "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
     "herdr_gate": { "$ref": "#/$defs/HerdrGate" },
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
+    "test_times": { "$ref": "#/$defs/TestTimes" },
+    "test_time": { "$ref": "#/$defs/TestTime" },
     "tool_action": { "$ref": "#/$defs/ToolAction" },
     "healthy": { "$ref": "#/$defs/Healthy" },
     "tool_receipt": { "$ref": "#/$defs/ToolReceipt" },

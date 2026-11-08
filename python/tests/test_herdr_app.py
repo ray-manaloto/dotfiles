@@ -4,8 +4,9 @@
 # runs with the real `skills` CLI, and the scratch home's git config points GitHub at local
 # repositories: herdr-core and agent-desktop, each at its tag and installed on every run. The
 # herdr-core line runs the installed hc's `--version`, which starts no core (see REAL_HC). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
-# dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a closed local port and fail,
-# which skills tolerates, so nothing leaves the machine.
+# dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a local server that answers
+# every request 502 and fail, which skills tolerates, so nothing leaves the machine. A closed port
+# instead made Node retry the refused connection for about 16 s on each `skills add`.
 
 import functools
 import json
@@ -13,11 +14,12 @@ import os
 import re
 import shlex
 import shutil
-import socket
 import subprocess
 import tempfile
+import threading
 import tomllib
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -90,6 +92,18 @@ CORE = {f"{folder}/{HC}" for folder in HARNESSES} | {
 }
 
 
+class BadGateway(BaseHTTPRequestHandler):
+    """The test proxy: every method gets 502 and the connection closes."""
+
+    def refuse(self) -> None:
+        self.send_error(502)
+
+    do_CONNECT = do_GET = do_HEAD = do_POST = refuse
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Keep the test output clean."""
+
+
 class HerdrAppTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp()).resolve()
@@ -98,11 +112,12 @@ class HerdrAppTest(unittest.TestCase):
         # skills keeps its lock under $XDG_STATE_HOME, which scratch:env sets.
         self.lock = self.root / "state/skills/.skill-lock.json"
         self.skills: dict[str, dict[str, str]] = {}
-        # Bound but never listening, so every connection to it is refused.
-        closed = socket.socket()
-        self.addCleanup(closed.close)
-        closed.bind(("127.0.0.1", 0))
-        proxy = f"http://127.0.0.1:{closed.getsockname()[1]}"
+        # Answers every request, CONNECT included, with 502, so each call fails at once.
+        proxy_server = ThreadingHTTPServer(("127.0.0.1", 0), BadGateway)
+        self.addCleanup(proxy_server.server_close)
+        self.addCleanup(proxy_server.shutdown)
+        threading.Thread(target=proxy_server.serve_forever, daemon=True).start()
+        proxy = f"http://127.0.0.1:{proxy_server.server_address[1]}"
         self.offline = (
             "DO_NOT_TRACK=1",  # no install telemetry
             "NODE_USE_ENV_PROXY=1",  # Node's fetch reads HTTP(S)_PROXY only with this
