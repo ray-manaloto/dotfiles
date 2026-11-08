@@ -25,6 +25,7 @@ class Command(StrEnum):
     bootstrap_toolchain = "bootstrap-toolchain"
     update_brew = "update-brew"
     update_check = "update-check"
+    herdr_doctor = "herdr-doctor"
 
 
 class Bootstrap(BaseModel):
@@ -106,3 +107,186 @@ class Failure(BaseModel):
     """
     The lines the shell task printed, joined by newlines.
     """
+
+
+class Result(StrEnum):
+    """
+    One herdr-doctor check: pass, fail, or unknown when an input it needs could not be read (unknown blocks green).
+    """
+
+    pass_ = "pass"
+    fail = "fail"
+    unknown = "unknown"
+
+
+class Window(BaseModel):
+    """
+    One running Herdr.app process and the HC_SOCKET its environment holds.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    pid: int
+    """
+    The app's pid (pgrep -x Herdr).
+    """
+    hc_socket: str | None
+    """
+    HC_SOCKET in its environment (sysctl KERN_PROCARGS2), home as ~; null when unset.
+    """
+
+
+class Routing(BaseModel):
+    """
+    A routing input set to a value other than hc's default: it can send a client to another socket.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    where: str
+    """
+    login-shell, launchd, app <pid>, or config (~/.config/herdr-core/config.toml).
+    """
+    name: str
+    """
+    HC_SOCKET, XDG_RUNTIME_DIR, HC_SESSION, XDG_STATE_HOME, or socket for the config key.
+    """
+    value: str
+    """
+    Its value, home as ~.
+    """
+
+
+class Observation(BaseModel):
+    """
+    What herdr-doctor read from outside herdr-core: sockets, processes, files and environments, never an hc call.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    hc: str | None
+    """
+    herdr-core's version, from the Info.plist of ~/.local/share/herdr-core/current; null when it is not installed.
+    """
+    app: str | None
+    """
+    Herdr.app's version, from its Info.plist; null when it is not installed.
+    """
+    skill_tag: str | None
+    """
+    The herdr-core skill's ref in the skills CLI lock; null when the lock has none.
+    """
+    skills_missing: list[str]
+    """
+    The harness skill folders (home as ~) with no herdr-core SKILL.md.
+    """
+    cores: list[int]
+    """
+    Core processes: argv hc or herdr-core followed by --hc-launchd or serve (pgrep -f).
+    """
+    listeners: list[int]
+    """
+    The pids holding ~/.local/state/herdr-core/default/default.sock (lsof); empty when it is not a socket.
+    """
+    lock_path: str | None
+    """
+    The socket path core.lock advertises, home as ~; null when the file is missing.
+    """
+    core_started: str | None
+    """
+    The one core's start time (ps -o lstart=); null unless exactly one core runs.
+    """
+    old_path_holders: list[int]
+    """
+    The pids holding anything under ~/.local/run/herdr-core (lsof +D).
+    """
+    windows: list[Window]
+    """
+    Each running Herdr.app whose environment could be read.
+    """
+    routing: list[Routing]
+    """
+    Every routing input set to a value other than the default.
+    """
+    references: list[str]
+    """
+    path:line of each retired-project reference outside the V11 allowlist.
+    """
+    guard: list[str]
+    """
+    What the V15 structural guard found in herdr.py: a named hc program or a process started outside read().
+    """
+    unchanged: bool
+    """
+    The socket files, and the core pids when pgrep read them, were the same before and after the doctor's reads.
+    """
+    unknown: list[str]
+    """
+    Inputs not read; each makes the checks needing it unknown unless what was read fails them.
+    """
+
+
+class Checks(BaseModel):
+    """
+    The doctor's checks by ID (docs/designs/herdr-core-socket-cutover.md, The checks).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    V1: Result
+    """
+    XDG_RUNTIME_DIR is absent from a new login shell and from launchctl getenv.
+    """
+    V2: Result
+    """
+    No routing input is set in a login shell, launchd, the running app or the herdr-core config.
+    """
+    V3: Result
+    """
+    Exactly one process holds the default socket.
+    """
+    V4: Result
+    """
+    Exactly one core, it is that holder, and core.lock names the default socket.
+    """
+    V5: Result
+    """
+    Nothing holds anything under the old path ~/.local/run/herdr-core.
+    """
+    V7: Result
+    """
+    No running Herdr.app has HC_SOCKET in its environment.
+    """
+    V10: Result
+    """
+    The herdr-core skill is in all four harness folders at the installed hc's tag.
+    """
+    V11: Result
+    """
+    No retired-project reference outside the allowlist.
+    """
+    V15: Result
+    """
+    herdr.py names no hc program, only read() starts a process, and the run left cores and sockets as they were.
+    """
+
+
+class DoctorReport(BaseModel):
+    """
+    herdr-doctor's one JSON line: what it read and each check's result.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    observation: Observation
+    checks: Checks

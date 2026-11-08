@@ -1,4 +1,4 @@
-"""The commit gates: review:python, review:python:approved, privacy:scan and toolchain-gate."""
+"""The commit gates: review:python, review:python:approved, privacy:scan, toolchain-gate and herdr-gate."""
 
 # Ported from the shell runs in mise.toml and tasks/privacy/scan.sh (#388) with the same arguments and output.
 # Their report and refusal lines stay plain text, as hk and AGENTS.md show them, not JSON events.
@@ -11,7 +11,7 @@ import tomllib
 from pathlib import Path
 
 from .git import git
-from .models import PrivacyScan, ReviewApproved, ReviewPython, ToolchainGate
+from .models import HerdrGate, PrivacyScan, ReviewApproved, ReviewPython, ToolchainGate
 from .pane_approval import hashed
 
 PROMPT = Path("tasks/review/python.md")
@@ -33,6 +33,16 @@ TOOLCHAIN_PATHS = (
     "unix/home/.config/mise/tasks/bootstrap/",
 )
 GLOBAL_CONFIG = "unix/home/.config/mise/config.toml"
+# What hk's herdr step tests (//home:herdr-unit): the doctor's task folder, hc-safe, the doctor, its two test files,
+# the /verify section the contract test reads and the package's tasks, by any change, deletion included.
+HERDR_PATHS = (
+    "unix/home/.config/mise/tasks/herdr/",
+    "unix/home/.local/bin/hc-safe",
+    "python/home/src/hometools/herdr.py",
+    "python/home/tests/test_herdr_",
+    ".claude/skills/verify/SKILL.md",
+    "python/home/mise.toml",
+)
 # The [tools] pins the toolchain tasks run with; a bump of any other pin leaves what toolchain:verify sees alone.
 TASK_TOOLS = frozenset({"uv", "python", "mise", "hk"})
 
@@ -195,10 +205,9 @@ def global_config(tree: str) -> dict[str, object]:
 def toolchain_gate() -> None:
     """run on stdout when the staged change reaches what toolchain:verify runs from; the reason otherwise."""
     # Printed, not an exit status, as main-guard-armed: a failing check must never read as "skip".
-    # --no-renames: a rename is its old path deleted and its new one added, so both are seen.
     # Any [vars] change runs: //home:integration is the only test that compares the [vars] toolchain versions
     # with this Mac's install (the unit tests take theirs from the install), so a bump fails until installed.
-    changed = git("diff", "--cached", "--name-only", "--no-renames", "-z").split("\0")
+    changed = staged_paths()
     if any(path.startswith(TOOLCHAIN_PATHS) for path in changed) or (
         GLOBAL_CONFIG in changed and global_config("HEAD") != global_config("")
     ):
@@ -207,7 +216,24 @@ def toolchain_gate() -> None:
         sys.stderr.write("toolchain-gate: nothing the toolchain tasks run from is staged; //home:check skipped\n")
 
 
-def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate) -> None:
+def staged_paths() -> list[str]:
+    """Every path the staged change touches. --no-renames: a rename is its old path deleted and its new one added,
+    so both are seen."""
+    return git("diff", "--cached", "--name-only", "--no-renames", "-z").split("\0")
+
+
+def herdr_gate() -> None:
+    """run on stdout when the staged change reaches what //home:herdr-unit tests; the reason otherwise."""
+    # Printed, not an exit status, as toolchain-gate: a failing check must never read as "skip".
+    if any(path.startswith(HERDR_PATHS) for path in staged_paths()):
+        sys.stdout.write("run\n")
+    else:
+        sys.stderr.write(
+            "herdr-gate: nothing the herdr doctor or hc-safe runs from is staged; //home:herdr-unit skipped\n"
+        )
+
+
+def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate | HerdrGate) -> None:
     match options:
         case ReviewPython():
             review(options)
@@ -215,5 +241,7 @@ def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan | ToolchainGat
             approved()
         case PrivacyScan():
             privacy_scan(options)
-        case _:  # ToolchainGate
+        case ToolchainGate():
             toolchain_gate()
+        case _:  # HerdrGate
+            herdr_gate()

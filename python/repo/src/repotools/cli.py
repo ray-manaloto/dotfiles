@@ -12,6 +12,7 @@ from .models import (
     CommitText,
     Failure,
     Fingerprint,
+    HerdrGate,
     MainGuard,
     MainGuardArmed,
     MainGuardInstall,
@@ -48,6 +49,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.shell_apply: ShellApply,
     Command.shell_rollback: ShellRollback,
     Command.toolchain_gate: ToolchainGate,
+    Command.herdr_gate: HerdrGate,
     Command.tools_install: ToolsInstall,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
@@ -78,7 +80,7 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
         zero_bash.report(options)
-    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate | HerdrGate):
         gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)

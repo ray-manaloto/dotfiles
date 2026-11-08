@@ -22,8 +22,9 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 [tool.ruff.lint.per-file-ignores]
 # S101: pytest checks with assert. PLR2004: tests compare against literal exit codes.
 "tests/**" = ["S101", "PLR2004"]
-# Generated (DL-762): datamodel-codegen orders its imports its own way; every other rule applies.
-"src/hometools/models.py" = ["I001"]
+# Generated (DL-762): datamodel-codegen orders its imports its own way; every other rule applies. S105: the
+# herdr-doctor Result enum's pass_ = "pass" is a check result, not a password.
+"src/hometools/models.py" = ["I001", "S105"]
 
 [tool.pytest.ini_options]
 # The integration tier runs the real toolchain on this Mac; //home:integration selects it, the last -m wins.

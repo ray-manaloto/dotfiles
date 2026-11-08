@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -44,6 +44,82 @@
       "required": ["error"],
       "properties": {
         "error": {"type": "string", "description": "The lines the shell task printed, joined by newlines."}
+      }
+    },
+    "Result": {
+      "description": "One herdr-doctor check: pass, fail, or unknown when an input it needs could not be read (unknown blocks green).",
+      "type": "string",
+      "enum": ["pass", "fail", "unknown"]
+    },
+    "Window": {
+      "description": "One running Herdr.app process and the HC_SOCKET its environment holds.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "hc_socket"],
+      "properties": {
+        "pid": {"type": "integer", "description": "The app's pid (pgrep -x Herdr)."},
+        "hc_socket": {"type": ["string", "null"], "description": "HC_SOCKET in its environment (sysctl KERN_PROCARGS2), home as ~; null when unset."}
+      }
+    },
+    "Routing": {
+      "description": "A routing input set to a value other than hc's default: it can send a client to another socket.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["where", "name", "value"],
+      "properties": {
+        "where": {"type": "string", "description": "login-shell, launchd, app <pid>, or config (~/.config/herdr-core/config.toml)."},
+        "name": {"type": "string", "description": "HC_SOCKET, XDG_RUNTIME_DIR, HC_SESSION, XDG_STATE_HOME, or socket for the config key."},
+        "value": {"type": "string", "description": "Its value, home as ~."}
+      }
+    },
+    "Observation": {
+      "description": "What herdr-doctor read from outside herdr-core: sockets, processes, files and environments, never an hc call.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hc", "app", "skill_tag", "skills_missing", "cores", "listeners", "lock_path", "core_started", "old_path_holders", "windows", "routing", "references", "guard", "unchanged", "unknown"],
+      "properties": {
+        "hc": {"type": ["string", "null"], "description": "herdr-core's version, from the Info.plist of ~/.local/share/herdr-core/current; null when it is not installed."},
+        "app": {"type": ["string", "null"], "description": "Herdr.app's version, from its Info.plist; null when it is not installed."},
+        "skill_tag": {"type": ["string", "null"], "description": "The herdr-core skill's ref in the skills CLI lock; null when the lock has none."},
+        "skills_missing": {"type": "array", "items": {"type": "string"}, "description": "The harness skill folders (home as ~) with no herdr-core SKILL.md."},
+        "cores": {"type": "array", "items": {"type": "integer"}, "description": "Core processes: argv hc or herdr-core followed by --hc-launchd or serve (pgrep -f)."},
+        "listeners": {"type": "array", "items": {"type": "integer"}, "description": "The pids holding ~/.local/state/herdr-core/default/default.sock (lsof); empty when it is not a socket."},
+        "lock_path": {"type": ["string", "null"], "description": "The socket path core.lock advertises, home as ~; null when the file is missing."},
+        "core_started": {"type": ["string", "null"], "description": "The one core's start time (ps -o lstart=); null unless exactly one core runs."},
+        "old_path_holders": {"type": "array", "items": {"type": "integer"}, "description": "The pids holding anything under ~/.local/run/herdr-core (lsof +D)."},
+        "windows": {"type": "array", "items": {"$ref": "#/$defs/Window"}, "description": "Each running Herdr.app whose environment could be read."},
+        "routing": {"type": "array", "items": {"$ref": "#/$defs/Routing"}, "description": "Every routing input set to a value other than the default."},
+        "references": {"type": "array", "items": {"type": "string"}, "description": "path:line of each retired-project reference outside the V11 allowlist."},
+        "guard": {"type": "array", "items": {"type": "string"}, "description": "What the V15 structural guard found in herdr.py: a named hc program or a process started outside read()."},
+        "unchanged": {"type": "boolean", "description": "The socket files, and the core pids when pgrep read them, were the same before and after the doctor's reads."},
+        "unknown": {"type": "array", "items": {"type": "string"}, "description": "Inputs not read; each makes the checks needing it unknown unless what was read fails them."}
+      }
+    },
+    "Checks": {
+      "description": "The doctor's checks by ID (docs/designs/herdr-core-socket-cutover.md, The checks).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["V1", "V2", "V3", "V4", "V5", "V7", "V10", "V11", "V15"],
+      "properties": {
+        "V1": {"$ref": "#/$defs/Result", "description": "XDG_RUNTIME_DIR is absent from a new login shell and from launchctl getenv."},
+        "V2": {"$ref": "#/$defs/Result", "description": "No routing input is set in a login shell, launchd, the running app or the herdr-core config."},
+        "V3": {"$ref": "#/$defs/Result", "description": "Exactly one process holds the default socket."},
+        "V4": {"$ref": "#/$defs/Result", "description": "Exactly one core, it is that holder, and core.lock names the default socket."},
+        "V5": {"$ref": "#/$defs/Result", "description": "Nothing holds anything under the old path ~/.local/run/herdr-core."},
+        "V7": {"$ref": "#/$defs/Result", "description": "No running Herdr.app has HC_SOCKET in its environment."},
+        "V10": {"$ref": "#/$defs/Result", "description": "The herdr-core skill is in all four harness folders at the installed hc's tag."},
+        "V11": {"$ref": "#/$defs/Result", "description": "No retired-project reference outside the allowlist."},
+        "V15": {"$ref": "#/$defs/Result", "description": "herdr.py names no hc program, only read() starts a process, and the run left cores and sockets as they were."}
+      }
+    },
+    "DoctorReport": {
+      "description": "herdr-doctor's one JSON line: what it read and each check's result.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation", "checks"],
+      "properties": {
+        "observation": {"$ref": "#/$defs/Observation"},
+        "checks": {"$ref": "#/$defs/Checks"}
       }
     }
   }
