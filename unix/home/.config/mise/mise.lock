@@ -957,6 +957,69 @@ checksum_source = "mise-versions"
 url = "https://github.com/kenn-io/agentsview/releases/download/v0.46.1/agentsview_0.46.1_darwin_arm64.tar.gz"
 url_api = "https://api.github.com/repos/kenn-io/agentsview/releases/assets/667831247"
 
+[[tools."github:microsoft/vcpkg-tool"]]
+version = "2026-10-29"
+backend = "github:microsoft/vcpkg-tool"
+specifiers = ["2026-10-29"]
+
+[tools."github:microsoft/vcpkg-tool".options]
+additional_asset_patterns = "vcpkg-standalone-bundle.tar.gz"
+asset_pattern = "vcpkg-glibc-arm64"
+
+[tools."github:microsoft/vcpkg-tool"."platforms.linux-arm64"]
+checksum = "sha256:e59a1f42de574dbceec05e4f90630898a33150f27c5a999e0f2d9b80a17001e3"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-glibc-arm64"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264305"
+provenance = "github-attestations"
+
+[[tools."github:microsoft/vcpkg-tool"."platforms.linux-arm64".additional_artifacts]]
+checksum = "sha256:3e128d4e44dfb0400bfef92d00e259a7095db2a2ca218e0c483145aa16e41b62"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-standalone-bundle.tar.gz"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264684"
+provenance = "github-attestations"
+
+[[tools."github:microsoft/vcpkg-tool"]]
+version = "2026-10-29"
+backend = "github:microsoft/vcpkg-tool"
+specifiers = ["2026-10-29"]
+
+[tools."github:microsoft/vcpkg-tool".options]
+additional_asset_patterns = "vcpkg-standalone-bundle.tar.gz"
+asset_pattern = "vcpkg-glibc"
+
+[tools."github:microsoft/vcpkg-tool"."platforms.linux-x64"]
+checksum = "sha256:8b10d43c1392a2d51622b1e439cb952289dcf56cbb595eb935847e79fe00d303"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-glibc"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264152"
+provenance = "github-attestations"
+
+[[tools."github:microsoft/vcpkg-tool"."platforms.linux-x64".additional_artifacts]]
+checksum = "sha256:3e128d4e44dfb0400bfef92d00e259a7095db2a2ca218e0c483145aa16e41b62"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-standalone-bundle.tar.gz"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264684"
+provenance = "github-attestations"
+
+[[tools."github:microsoft/vcpkg-tool"]]
+version = "2026-10-29"
+backend = "github:microsoft/vcpkg-tool"
+specifiers = ["2026-10-29"]
+
+[tools."github:microsoft/vcpkg-tool".options]
+additional_asset_patterns = "vcpkg-standalone-bundle.tar.gz"
+asset_pattern = "vcpkg-macos"
+
+[tools."github:microsoft/vcpkg-tool"."platforms.macos-arm64"]
+checksum = "sha256:754638ffd0d4c85ee194a2a215d4a6727b1d33829944667d74e7397459e54005"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-macos"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264531"
+provenance = "github-attestations"
+
+[[tools."github:microsoft/vcpkg-tool"."platforms.macos-arm64".additional_artifacts]]
+checksum = "sha256:3e128d4e44dfb0400bfef92d00e259a7095db2a2ca218e0c483145aa16e41b62"
+url = "https://github.com/microsoft/vcpkg-tool/releases/download/2026-10-29/vcpkg-standalone-bundle.tar.gz"
+url_api = "https://api.github.com/repos/microsoft/vcpkg-tool/releases/assets/690264684"
+provenance = "github-attestations"
+
 [[tools."github:ocaml/opam"]]
 version = "2.6.1"
 backend = "github:ocaml/opam"
