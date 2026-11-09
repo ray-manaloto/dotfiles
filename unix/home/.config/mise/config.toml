@@ -484,7 +484,7 @@ gemini_yolo = "gemini --yolo"
 # (repotools toolchain-gate), which fails until the installs match: a typo or an uninstalled version stops it.
 gcc = "16.2.0"
 gcc_major = "16"
-llvm = "23.1.4"
+llvm = "23.1.5"
 llvm_major = "23"
 iwyu = "0.27"
 gdb = "18.1"
