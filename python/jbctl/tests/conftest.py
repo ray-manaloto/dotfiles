@@ -1,5 +1,6 @@
 """The command line run in-process, stand-in MCP servers, and a stand-in Toolbox with a stand-in IDE."""
 
+import contextlib
 import json
 import os
 import shlex
@@ -163,9 +164,17 @@ def toolbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     yield tmp_path
     shutil.rmtree(station)
     # Stand-in IDEs that jbctl started or restarted run in their own session until /exit; end any left over.
-    for process in psutil.process_iter(["cmdline"]):
-        if (process.info["cmdline"] or [""])[0].startswith(str(tmp_path)):
-            process.terminate()
+    for process in psutil.process_iter():
+        try:
+            cmdline = process.cmdline()
+        # Ended, or another user's (so not ours). SystemError: psutil 7.2.2 on macOS raises it from proc_cmdline for
+        # a process that exits while it is read, which a busy machine (parallel test roots) makes likely.
+        except psutil.NoSuchProcess, psutil.AccessDenied, SystemError:
+            continue
+        if (cmdline or [""])[0].startswith(str(tmp_path)):
+            # A stand-in that ended on its own after its cmdline was read leaves nothing to end.
+            with contextlib.suppress(psutil.NoSuchProcess):
+                process.terminate()
 
 
 @pytest.fixture

@@ -36,7 +36,9 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 [tasks.test]
 description = "Real renders from real plan.json files at 100% line and branch coverage; extra args go to pytest"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
 
 [tasks.check]
 description = "lint and test"

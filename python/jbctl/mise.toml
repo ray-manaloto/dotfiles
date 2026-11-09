@@ -39,7 +39,11 @@ run = "uv tool install --reinstall ./python/jbctl"
 skip_if = "{{ os() != 'macos' }}"
 description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_IDE set"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+# Serial: jbctl finds IDEs by the machine-wide web ports 63342-63361 and process list, so a stand-in IDE
+# from a parallel worker shows up in another test's status.
+run = "uv run --locked pytest --durations=25"
 
 # <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1). The live tests run in the background,
 # Settings included (opened through the IDE's station socket). Only the debug route that brings the IDE forward is

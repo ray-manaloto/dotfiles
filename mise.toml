@@ -21,11 +21,17 @@ lockfile = true
 pin = true
 minimum_release_age = "0s"
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
+# Keep each task's last output for `mise tasks log` (and `mise run test:times`).
+task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
 depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//depmaps:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
+
+[tasks."test:times"]
+description = "Each test task's runs, median and last time, and its last run's 25 slowest tests, one JSON line per task"
+run = "uv run --project python/repo --locked repotools test-times"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own
 # environment, so the repo never holds them; privacy:scan reads them through its env.

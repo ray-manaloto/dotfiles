@@ -176,14 +176,17 @@ def test_start_refuses_a_second_install_of_the_product(capsys: pytest.CaptureFix
     assert run(capsys, "start", "--foreground", "--ide", "fake1") == (1, [{"lifecycle": refused}], "")
 
 
+# {pid} is this process's pid, filled in when the test runs: a pid in the test id differs between xdist
+# workers, and xdist refuses workers that collect different tests.
 @pytest.mark.parametrize(
     ("owner", "reason"),
-    [(str(os.getpid()), f"its config directory is in use by pid {os.getpid()}"), ("1x", "names no pid")],
+    [("{pid}", "its config directory is in use by pid {pid}"), ("1x", "names no pid")],
 )
 def test_start_refuses_a_config_directory_in_use(
     capsys: pytest.CaptureFixture[str], toolbox: Path, owner: str, reason: str
 ) -> None:
     """The IDE writes its pid to <config>/.lock: a live one, or one jbctl cannot read, holds the directory."""
+    owner, reason = owner.format(pid=os.getpid()), reason.format(pid=os.getpid())
     lock = toolbox / "fake-config/.lock"
     lock.parent.mkdir()
     lock.write_text(owner)
