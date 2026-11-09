@@ -79,8 +79,8 @@ def handler(
     return Handler
 
 
-def serve(handler_class: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_class)
+def serve(handler_class: type[BaseHTTPRequestHandler], port: int = 0) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler_class)
     # A short poll, so shutdown() in a fixture's teardown returns at once.
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     return server
@@ -175,14 +175,19 @@ def web(handler_class: type[socketserver.BaseRequestHandler]) -> socketserver.TC
 
 
 if __name__ == "__main__":
-    # argv: flags (--mcp and --http each add a loopback listener) and an IDE's own arguments (project paths, written
-    # to STANDIN_RECORD when it is set). Prints the listeners' ports as one JSON line, then serves until /exit, or
-    # with --stdin until stdin closes.
+    # argv: flags (--mcp and --http each add a loopback listener, --mcp-late=PORT a late MCP one) and an IDE's own
+    # arguments (project paths, written to STANDIN_RECORD when it is set). Prints the listeners' ports as one JSON
+    # line, then serves until /exit, or with --stdin until stdin closes.
     flags = {arg for arg in sys.argv[1:] if arg.startswith("--")}
     if record := os.environ.get("STANDIN_RECORD"):
         Path(record).write_text(json.dumps([arg for arg in sys.argv[1:] if not arg.startswith("--")]))
     kinds = [arg for arg in sys.argv[1:] if arg in {"--mcp", "--http"}]
     servers = [serve(handler(DIRECT, sse=False) if kind == "--mcp" else NotMcp) for kind in kinds]
+    if late := [int(flag.removeprefix("--mcp-late=")) for flag in flags if flag.startswith("--mcp-late=")]:
+        # An MCP server that opens on the given port 1.5 s after the web server, as a real IDE's comes up after it.
+        timer = threading.Timer(1.5, serve, (handler(DIRECT, sse=False), late[0]))
+        timer.daemon = True
+        timer.start()
     if "--no-about" not in flags:
         web(Hangup if "--not-http" in flags else about(flags))
     if "--no-station" not in flags:

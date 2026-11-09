@@ -288,3 +288,16 @@
   does not follow later edits or pulls, so run it again after jbctl changes land. The live tests run the worktree's
   code in-process and `/verify` runs its `.venv/bin/jbctl`, so both check the code being changed rather than the
   installed copy.
+
+## 2026-11-08: start and restart wait for the MCP server (#502)
+
+* **Measured** (owner's go, foreground): after the herdr move, `jbctl start --ide clion --foreground` reported
+  `started`, and a `jbctl check-direct --ide clion` straight after it failed with "has no MCP server on port 64362":
+  `/api/about` answers before the MCP server listens. Once the port listened, check-direct printed
+  `{"tools":88,"direct":true,"router":true}`.
+* **Changed**: `start` and `restart` count an IDE ready only when its MCP server also answers initialize on its own
+  port, when the server is turned on (`-Didea.mcp.server.force.enable=true`, or `enableMcpServer` in
+  `options/mcpServer.xml`). The settings are read on each poll, since the plugin saves another port when the one it
+  wanted is busy. An IDE with the server off is ready on `/api/about` alone, as before. One whose server never
+  answers, or whose settings jbctl cannot read, is `started-not-ready` (exit 75), with a reason that names the port
+  or the error. Checked against stand-in IDEs only: a live run needs CLion stopped and started again.

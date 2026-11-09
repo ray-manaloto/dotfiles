@@ -8,6 +8,7 @@
 import hashlib
 import os
 import time
+import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from contextlib import ExitStack, suppress
 from http import HTTPStatus
@@ -17,7 +18,7 @@ import filelock
 import httpx
 import psutil
 
-from . import ide, mcp, station, toolbox
+from . import ide, station, toolbox
 from .ide import IdeError
 from .models import (
     Action,
@@ -105,19 +106,38 @@ class NotReadyError(IdeError):
     """The IDE runs but was not ready in time: unlike a refusal, jbctl has already started it."""
 
 
+def mcp_missing(install: Install, life: Lifetime) -> str | None:
+    """Why the IDE's MCP server is not ready, or None when it answers or is turned off. The settings are read on each
+    call, since the plugin saves another port when the one it wanted is busy."""
+    try:
+        if not toolbox.mcp_enabled(install):
+            return None
+        port, source = toolbox.mcp_port(install)
+    # An unreadable or malformed mcpServer.xml (ET.ParseError is a SyntaxError), or a port that is not a number.
+    except (OSError, ET.ParseError, ValueError) as error:
+        return f"its MCP settings cannot be read ({error})"
+    return None if toolbox.mcp_answers(life.pid, port) else f"its MCP server did not answer on port {port} ({source})"
+
+
 def ready(install: Install, life: Lifetime, deadline: float) -> None:
-    asked, answer = 0.0, Answer(ready=False, busy=False, detail="not asked yet")
+    """Wait until /api/about answers with the install's build and, when the MCP server is turned on, it answers too,
+    so a check-direct straight after start or restart finds it."""
+    asked, why = 0.0, f"/api/about did not answer with build {install.build} (not asked yet)"
     while alive(life):  # checked once more after the deadline: it may have ended during the last request or sleep
         if time.monotonic() >= deadline:
             msg = (
-                f"pid {life.pid} is still running but was not ready in time: /api/about did not answer with build "
-                f"{install.build} ({answer.detail}); wait and check jbctl status, or stop it with jbctl stop"
+                f"pid {life.pid} is still running but was not ready in time: {why}; wait and check jbctl status, "
+                "or stop it with jbctl stop"
             )
             raise NotReadyError(msg)
         if time.monotonic() >= asked:
             answer = about(install, life)
+            why = f"/api/about did not answer with build {install.build} ({answer.detail})"
             if answer.ready:
-                return
+                missing = mcp_missing(install, life)
+                if missing is None:
+                    return
+                why = missing
             asked = time.monotonic() + (BACKOFF if answer.busy else ASK)
         time.sleep(POLL)
     msg = f"pid {life.pid} ended before it was ready"
@@ -367,7 +387,7 @@ def describe(install: Install) -> IdeStatus:
     except (OSError, SyntaxError, ValueError) as error:
         notes += [str(error), *([] if answer.ready else [f"/api/about: {answer.detail}"])]
         return row.model_copy(update=update | {"mcp": McpState.unknown, "note": "; ".join(notes)})
-    answering = port in toolbox.listening(life.pid) and mcp.answers(f"http://127.0.0.1:{port}/stream")
+    answering = toolbox.mcp_answers(life.pid, port)
     notes += [] if answering else [f"nothing answered MCP on {port} ({source})"]
     notes += [] if answer.ready else [f"/api/about: {answer.detail}"]
     mcp_state = McpState.answering if answering else McpState.not_answering
