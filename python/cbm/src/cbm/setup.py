@@ -71,8 +71,6 @@ HANDSHAKE = "".join(
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     )
 )  # fmt: skip
-# A launcher that never answers fails its check instead of hanging the run.
-TIMEOUT = 60
 
 
 class InstallError(Exception):
@@ -92,7 +90,7 @@ def probe(
     try:
         return process.run(
             path, *args, cwd=cfg.home, env=config.child_env(), input_text=input_text, capture_output=True,
-            timeout=TIMEOUT,
+            timeout=cfg.probe_timeout,
         )  # fmt: skip
     except (OSError, subprocess.TimeoutExpired) as error:  # one error event, then a failed run
         if isinstance(error, FileNotFoundError):

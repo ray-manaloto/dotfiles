@@ -90,6 +90,10 @@ class Config(BaseModel):
     """
     The clients to install and check (CBM_CLIENTS, comma-separated; default every client)
     """
+    probe_timeout: Annotated[float, Field(gt=0.0, le=60.0)] = 60
+    """
+    Seconds a launcher run may take before it fails its check (CBM_PROBE_TIMEOUT_SECONDS, default 60)
+    """
 
     @field_validator("clients", mode="after")
     @classmethod

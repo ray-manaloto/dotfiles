@@ -24,7 +24,10 @@ def snapshot(root: Path) -> dict[str, tuple[int, bytes | str | None]]:
     }
 
 
-@pytest.fixture(params=["branch", "worktree", "linked-main", "detached", "outside", "bare"])
+UNSAFE = ("branch", "worktree", "linked-main", "detached", "outside", "bare")
+
+
+@pytest.fixture(params=UNSAFE)
 def unsafe_checkout(home: Path, request: pytest.FixtureRequest) -> Path:
     checkout = home / "checkout"
     match request.param:
@@ -70,7 +73,12 @@ def assert_refused(home: Path, cwd: Path, *message_parts: str) -> None:
     assert snapshot(home) == before
 
 
-@pytest.mark.parametrize("existing", [False, True])
+# An existing setup goes through the same snapshot comparison, so one kind with it is enough.
+@pytest.mark.parametrize(
+    ("unsafe_checkout", "existing"),
+    [*((kind, False) for kind in UNSAFE), ("outside", True)],
+    indirect=["unsafe_checkout"],
+)
 def test_unsafe_install_changes_nothing(home: Path, unsafe_checkout: Path, *, existing: bool) -> None:
     if existing:
         # A separate real main checkout provisions the existing setup, including its launcher symlink.
@@ -82,6 +90,8 @@ def test_unsafe_install_changes_nothing(home: Path, unsafe_checkout: Path, *, ex
     assert_refused(home, unsafe_checkout)
 
 
+# The opt-in is one check before Git runs; a branch and a bare repository reach it two different ways.
+@pytest.mark.parametrize("unsafe_checkout", ["branch", "bare"], indirect=True)
 def test_explicit_opt_in_allows_install(home: Path, unsafe_checkout: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CBM_INSTALL_ALLOW_NON_MAIN", "1")
     done = cbm("install", cwd=unsafe_checkout)
@@ -235,8 +245,11 @@ def test_undecodable_git_output_is_a_refusal(home: Path, monkeypatch: pytest.Mon
     assert_refused(home, checkout, "git", "decode")
 
 
-@pytest.mark.parametrize("value", ["", "invalid", "0", "-1", "11", "nan", "inf"])
-@pytest.mark.parametrize("git_available", [True, False])
+# Without Git on PATH, the setting error still comes first: it is checked before Git discovery.
+@pytest.mark.parametrize(
+    ("value", "git_available"),
+    [*((value, True) for value in ("", "invalid", "0", "-1", "11", "nan", "inf")), ("invalid", False)],
+)
 def test_invalid_git_timeout_is_a_setting_error(
     home: Path, monkeypatch: pytest.MonkeyPatch, value: str, *, git_available: bool
 ) -> None:
@@ -345,6 +358,8 @@ def test_inherited_git_location_cannot_disguise_a_linked_checkout(home: Path, mo
     assert_refused(home, linked)
 
 
+# verify never runs the checkout check, so one unsafe kind shows it.
+@pytest.mark.parametrize("unsafe_checkout", ["worktree"], indirect=True)
 def test_verify_from_any_checkout_preserves_setup(
     home: Path, unsafe_checkout: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

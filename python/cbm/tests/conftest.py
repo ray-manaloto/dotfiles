@@ -296,7 +296,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A temporary HOME with the stand-in at the mise global link, in mode ok."""
     root = tmp_path.resolve()
     for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "OPENCODE_CONFIG", "CBM_CACHE_DIR",
-                 "CBM_RUNTIME_DIR", "CBM_INSTALL_GIT_TIMEOUT_SECONDS",
+                 "CBM_RUNTIME_DIR", "CBM_INSTALL_GIT_TIMEOUT_SECONDS", "CBM_PROBE_TIMEOUT_SECONDS",
                  "CBM_INSTALL_ALLOW_NON_MAIN", *(key for key in os.environ if key.startswith("GIT_"))):  # fmt: skip
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
