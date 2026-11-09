@@ -96,6 +96,9 @@ HK_MISE = "1"
 #MISE_ARCH = "arm"
 CONDA_SUBDIR = "osx-arm64"
 GIT_TERMINAL_PROMPT = "0"
+# vcpkg's root is the mise vcpkg-tool install (see [tools]); no telemetry.
+VCPKG_ROOT = { value = "{{ tools['github:microsoft/vcpkg-tool'].path }}", tools = true }
+VCPKG_DISABLE_METRICS = "1"
 # NotebookLM auth: standardize paths so agents find credentials consistently
 NOTEBOOKLM_HOME = "~/.notebooklm"
 # Mossop pattern: name the brew prefix once; PATH entries below expand it (env_shell_expand).
@@ -278,6 +281,10 @@ topgrade = { version = "17.15.0", minimum_release_age = "0s" }
 cmake = { version = "4.4.5", minimum_release_age = "0s" }
 ninja = { version = "1.13.2", minimum_release_age = "0s" }
 sccache = { version = "0.19.0", minimum_release_age = "0s" }
+# vcpkg in manifest mode, no microsoft/vcpkg clone: the release binary with the standalone bundle laid
+# over it (scripts/, triplets/), as ray-manaloto/cpp-utilities mise.toml pins it. VCPKG_ROOT
+# in [env] names this install, so CMake presets use $env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake.
+"github:microsoft/vcpkg-tool" = { version = "2026-10-29", minimum_release_age = "0s", additional_asset_patterns = ["vcpkg-standalone-bundle.tar.gz"], rename_exe = "vcpkg", platforms = { macos-arm64 = { asset_pattern = "vcpkg-macos" }, linux-x64 = { asset_pattern = "vcpkg-glibc" }, linux-arm64 = { asset_pattern = "vcpkg-glibc-arm64" } } }
 
 # P2996 build extras (DL-756, DL-757): tools live here, never in a project; mise registry first, then
 # conda (swig, doxygen and ocaml are not in the mise registry), then brew. SWIG generates lldb's Python
