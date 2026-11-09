@@ -59,6 +59,11 @@ local linters = new Mapping<String, Step> {
         glob = List("python/jbctl/**")
         check = "mise run //jbctl:check"
     }
+    // depmaps is out of `mise run test` and bootstrap, so this is what runs its tests: the real cbm, isolated per test.
+    ["depmaps"] {
+        glob = List("python/depmaps/**")
+        check = "mise run //depmaps:check"
+    }
     // swift/ (jbax, #502): SwiftLint as hk's builtin; swift format, build and the non-live tests through the root's
     // mise task. The live-IDE coverage gate (//swift:coverage) brings the IDE forward, so it is never a hook.
     ["swiftlint"] = (Builtins.swiftlint) {

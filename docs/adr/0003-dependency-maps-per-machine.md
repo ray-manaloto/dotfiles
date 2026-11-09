@@ -5,9 +5,14 @@ status: accepted
 # Dependency maps: SCIP computes blast radius, cbm is for browsing, each machine builds its own
 
 A dependency map is built on each machine from the dependency's tagged source, at the version that
-machine pins. `mise run //depmaps:sync` does it during `mise bootstrap`, after the tools phase
-(`[bootstrap.hooks.post-tools]`), and keeps the maps outside the repo, in `~/.local/share/dep-maps` and cbm's own cache. Nothing syncs a
+machine pins. A person runs `mise run //depmaps:sync` by hand, after `mise bootstrap` has installed the
+tools; it keeps the maps outside the repo, in `~/.local/share/dep-maps` and cbm's own cache. Nothing syncs a
 map between machines.
+
+Bootstrap does not make the maps. A `[bootstrap.hooks.post-tools]` entry did, until it put about 20 s per
+dependency, and a dependency on the live cbm daemon, on every bootstrap and every `//depmaps:test` run.
+The package keeps its tasks. Its `test` task runs the real cbm with a cache and daemon of each test's own,
+and is left out of `mise run test`.
 
 We chose this because a map is too big to carry: mise's cbm artifact is 30.6 MB, and mise dotfiles'
 private history leaves out any file over 16 MiB (`crates/mise-system/src/history/shadow.rs:25`,

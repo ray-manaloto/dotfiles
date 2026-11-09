@@ -26,7 +26,7 @@ task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//depmaps:test", "//cpp:test", "//swift:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 [tasks."test:times"]

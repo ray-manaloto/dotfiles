@@ -8,9 +8,9 @@ from .models import Config
 
 def load() -> Config:
     home = Path.home()
-    # mise's link to the globally pinned cbm, which the tools phase of `mise bootstrap` makes before the
-    # post-tools hook runs depmaps; cbm's own launcher, which points at it, comes only with //cbm:install
-    # (docs/research/codebase-memory-mcp/install.md).
+    # mise's link to the globally pinned cbm, which the tools phase of `mise bootstrap` makes; depmaps runs
+    # by hand (`mise run //depmaps:sync`), after it. cbm's own launcher, which points at it, comes only with
+    # //cbm:install (docs/research/codebase-memory-mcp/install.md).
     defaults = {
         "registry": home / ".config/dep-maps/deps.json",
         "store": home / ".local/share/dep-maps",
