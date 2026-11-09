@@ -19,6 +19,11 @@ with exit 2 and a message naming the variable, before Git discovery. Actual Git 
 checkout refusals with exit 1. SIGINT or SIGTERM during discovery emits the refusal and failed Done
 events without setup changes, then exits with status `128 + signal`.
 
+Each launcher run that install or verify makes has a 60-second timeout; one that stalls fails its check with
+`command_timeout` instead of hanging the run. `CBM_PROBE_TIMEOUT_SECONDS` can shorten it to a number of
+seconds greater than zero and at most 60. Invalid values produce `invalid_setting` with exit 2 and a
+message naming the variable.
+
 For a deliberate install from another checkout, opt in for that invocation:
 
 ```text

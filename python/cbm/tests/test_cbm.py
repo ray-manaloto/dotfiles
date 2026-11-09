@@ -219,6 +219,19 @@ def test_bad_client_lists_exit_2(home: Path, monkeypatch: pytest.MonkeyPatch, va
     assert not calls(home)
 
 
+@pytest.mark.parametrize("value", ["", "x", "0", "-1", "60.5", "nan", "inf"])
+def test_a_bad_probe_timeout_exits_2(home: Path, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    # A typo must not turn into a probe that never waits or one that hangs verify.
+    monkeypatch.setenv("CBM_PROBE_TIMEOUT_SECONDS", value)
+    done = cbm("verify", cwd=home / "checkout")
+    assert done.returncode == 2
+    [error] = events(done.stderr)
+    assert error["code"] == "invalid_setting"
+    assert error["message"] == f"cbm: CBM_PROBE_TIMEOUT_SECONDS must be greater than 0 and at most 60: {value}"
+    assert not done.stdout
+    assert not calls(home)
+
+
 def test_a_repeated_client_is_named_as_the_reason(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CBM_CLIENTS", "claude,claude")
     [error] = events(cbm("install", cwd=home / "checkout").stderr)
@@ -510,11 +523,12 @@ def test_auto_index_left_on_fails(home: Path) -> None:
 MCP = "MCP server answers over stdio: the mise build, every read-only tool"
 
 
-def test_mcp_server_timeout_has_its_own_error_code(home: Path) -> None:
+def test_mcp_server_timeout_has_its_own_error_code(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert cbm("install", cwd=home / "checkout").returncode == 0
     (home / "mcp-hang").touch()
-    # Exercise the real 60-second timeout; the outer test deadline leaves time for cleanup and checks.
-    done = cbm("verify", timeout=90, cwd=home / "checkout")
+    # A stalled launcher fails its check, not the run; the setting keeps the wait at 1 s instead of 60.
+    monkeypatch.setenv("CBM_PROBE_TIMEOUT_SECONDS", "1")
+    done = cbm("verify", cwd=home / "checkout")
     assert done.returncode == 1
     [error] = events(done.stderr)
     assert error["code"] == "command_timeout"
