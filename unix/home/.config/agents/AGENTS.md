@@ -11,6 +11,14 @@ Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as 
 Each agent step starts in its own herdr-app tab session; subagents and subagent teams inside that session
 are allowed.
 
+When you mention a herdr terminal to the owner, write its tab name first and the id in brackets, e.g.
+`test-speed-pr1 (t26q)`. The name is the tab part of the `where` label from `hc ls` / `hc get <t> --json`.
+Never a bare id.
+
+A Claude tab needs a first message: pass `--task "<task>"` or put the prompt last in `--argv`, e.g.
+`--argv '["claude", "<task>"]'`. A bare `claude` opens the agents dashboard, not a session. After any
+`tab.new`, check with `hc read <t>` that the task arrived; the launch reply only proves the terminal exists.
+
 ## Research evidence across workspaces
 
 For a request to research current tools, libraries, agent workflows, or best
