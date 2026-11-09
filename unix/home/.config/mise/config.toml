@@ -526,22 +526,12 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 # `agent-desktop skills get`. Windows and Linux are left out. jev needs an agent-desktop clone. The tag
 # must equal the agent-desktop pin above (python/tests/test_herdr_app.py checks it). It is not skipped
 # when installed: a re-run puts the tag's files back, so a bumped tag replaces the old ones.
-# Last, the dependency maps (#510): `//depmaps:sync` maps each registry dep at its new pin and prunes old
-# maps. The global config is a link into the checkout (unix/home/.config/mise/config.toml), so five
-# dirnames of its canonicalized target are the checkout whose monorepo tasks run it
-# (crates/mise-util/src/tera.rs:509-531 at v2026.11.2). The parentheses make the filters take the whole
-# path: without them they took only the literal, and canonicalize found no such file. The hook names the
-# checkout's own registry: with this layout, a bootstrap from ~ does not find the checkout's root
-# mise.toml, whose [dotfiles] links ~/.config/dep-maps/deps.json, through the global-config link
-# (src/config/mod.rs:3146-3230 at v2026.11.3), and a failed hook fails bootstrap
-# (crates/mise-system/src/hooks.rs:240-245).
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
   "command -v hc >/dev/null || exit 0; [ -d ~/.agents/skills/herdr-core ] || { echo 'post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link' >&2; exit 1; }; for d in ~/.gemini/antigravity-cli/skills ~/.config/opencode/skills; do mkdir -p \"$d\" && rm -rf \"$d/herdr-core\" && ln -s ~/.agents/skills/herdr-core \"$d/herdr-core\" || exit 1; done",
   "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
-  "{% set repo = (env.HOME ~ '/.config/mise/config.toml') | canonicalize | dirname | dirname | dirname | dirname | dirname %}DEP_MAPS_REGISTRY={{ (repo ~ '/unix/home/.config/dep-maps/deps.json') | quote }} mise -C {{ repo | quote }} run //depmaps:sync </dev/null",
 ]
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]

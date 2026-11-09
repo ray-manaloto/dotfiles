@@ -1,18 +1,17 @@
 """Fixtures: a real git repository with tagged releases, a registry for it, and the real cbm."""
 
-# No mocking library and no cbm stand-in: depmaps runs the cbm of mise's global pin, and git.
-# The tests keep the real HOME. Every cbm process meets the one account-wide daemon, and a run from a
-# temporary HOME brings a second cache root into it, which the live daemon refuses (python/cbm/tests/conftest.py,
-# src/daemon/bootstrap.c:243-255 at v0.12.1). So the maps go to the real cbm cache under a dependency name
-# no one else uses, and each test deletes its cbm projects when it ends. DEP_MAPS_* point everything else
-# (registry, store, lockfile) into the test's own folder.
+# No mocking library and no cbm stand-in: depmaps runs the cbm of mise's global pin, and git. Each test gives
+# cbm a cache and a daemon rendezvous of its own, in its own folder: CBM_CACHE_DIR moves the cache
+# (src/foundation/platform.c:635-648 at v0.12.1) and CBM_RUNTIME_DIR the rendezvous, which every cbm process
+# otherwise shares account-wide (src/daemon/bootstrap.c:238-246). So no test meets the user's live daemon or
+# cache, and the maps go when the folder does. DEP_MAPS_* point everything else (registry, store, lockfile)
+# into the test's own folder too.
 
 import json
 import os
-import re
 import subprocess
 import sys
-import time
+import tempfile
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -25,9 +24,6 @@ DEPMAPS = Path(sys.executable).parent / "depmaps"
 PACKAGE = Path(__file__).parents[1]
 CBM = Path.home() / ".local/share/mise/installs/github-deus-data-codebase-memory-mcp/global/codebase-memory-mcp"
 TIMEOUT = 120
-# Seconds: far longer than a whole run of this suite.
-STALE = 3600
-VERSIONS = ("1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0", "1.9.0", "1.10.0", "1.11.0")
 
 CORE_1_0 = """\
 def keep(count):
@@ -112,14 +108,11 @@ class Env:
 
     def __init__(self, root: Path, repo: Path) -> None:
         self.root, self.repo = root, repo
-        # The second the test started goes into the name, so a later sweep reads its age from the name.
-        self.name, self.spare = (f"dmtest-{int(time.time()):08x}-{uuid.uuid4().hex[:8]}" for _ in range(2))
+        self.name, self.spare = (f"dmtest-{uuid.uuid4().hex[:8]}" for _ in range(2))
         self.registry, self.lock, self.store = root / "deps.json", root / "mise.lock", root / "store"
 
     def deps(self, deps: dict[str, dict[str, Any]]) -> None:
-        """Write the registry. Only the dependencies under this test's own two names, name and spare, may
-        get mapped: teardown deletes the cbm projects of those names alone, never a shared name such as
-        broken-v1.0.0."""
+        """Write the registry."""
         self.registry.write_text(json.dumps({"deps": deps}))
 
     def dep(self, **extra: object) -> dict[str, object]:
@@ -160,33 +153,21 @@ def database(project: str) -> Path:
     return Path(os.environ.get("CBM_CACHE_DIR") or Path.home() / ".cache/codebase-memory-mcp") / f"{project}.db"
 
 
-def delete(project: str) -> str:
-    """Delete one cbm project and return cbm's status, deleted or not_found. A reply that isn't cbm's
-    JSON raises, and the next session's sweep deletes what that left behind."""
-    done = cbm_tool("delete_project", {"project": project})
-    # A project already gone is an error reply, which cbm prints on stderr (src/main.c:711-736 at 0.12.1).
-    return json.loads(done.stdout or done.stderr)["status"]
-
-
-@pytest.fixture(scope="session", autouse=True)
-def sweep() -> None:
-    """Delete the projects of an earlier run that was killed before its teardown. Only this suite names
-    projects dmtest-<start, 8 hex>-<8 hex>-v<version>, so nothing else in the live cache matches. A map
-    younger than STALE may belong to a run still going in another checkout, so it waits for a later sweep.
-    The age comes from the name, never from a stat of a file that run's teardown may be deleting. An
-    older checkout names them dmtest-<12 hex>-v<version>, with no start time, so they are left alone."""
-    for db in database("dmtest-").parent.glob("dmtest-*-v*.db"):
-        project = db.name.removesuffix(".db")
-        named = re.fullmatch(r"dmtest-([0-9a-f]{8})-[0-9a-f]{8}-v.+", project)
-        if named and time.time() - int(named[1], 16) > STALE:
-            assert delete(project) in {"deleted", "not_found"}, db
+@pytest.fixture
+def runtime() -> Iterator[Path]:
+    """cbm's runtime folder, which must exist: a short one under /tmp, as the socket path inside it must
+    fit sun_path (src/daemon/ipc.c:836 at v0.12.1; 104 bytes on macOS), which pytest's tmp_path overruns."""
+    with tempfile.TemporaryDirectory(prefix="cbm-", dir="/tmp") as folder:
+        yield Path(folder)
 
 
 @pytest.fixture
-def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Env]:
+def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: Path) -> Env:
     root = tmp_path.resolve()
     for key in [key for key in os.environ if key.startswith(("GIT_", "DEP_MAPS_"))]:
         monkeypatch.delenv(key)
+    monkeypatch.setenv("CBM_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("CBM_CACHE_DIR", str(root / "cbm-cache"))  # cbm makes this folder itself
     # Real git without the machine's identity, hooks, signing or URL rewrites, for the fixture and depmaps alike.
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
@@ -211,8 +192,4 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Env]:
     monkeypatch.setenv("DEP_MAPS_STORE", str(found.store))
     found.deps({found.name: found.dep(files=["settings.toml", "schema/*.json"])})
     found.pin("1.0.0")
-    yield found
-    # Runs when the test fails too. Every reply is collected before any is checked, so a status other
-    # than deleted or not_found leaves none of the rest behind.
-    replies = [delete(f"{name}-v{version}") for name in (found.name, found.spare) for version in VERSIONS]
-    assert all(reply in {"deleted", "not_found"} for reply in replies), replies
+    return found
