@@ -16,7 +16,7 @@ CODEX = """\
 import sys
 args = sys.argv[1:]
 assert args[:2] == ["exec", "-C"], args
-assert args[3:5] == ["-c", 'sandbox_mode="read-only"'], args
+assert args[3:7] == ["-c", 'sandbox_mode="read-only"', "-c", 'approval_policy="never"'], args
 assert args[-1] == "-" and not {"-s", "--ephemeral", "--dangerously-bypass-hook-trust"} & set(args), args
 out = args[args.index("-o") + 1]
 open(out, "w").write(f"cwd {args[2]}\\n" + sys.stdin.read())

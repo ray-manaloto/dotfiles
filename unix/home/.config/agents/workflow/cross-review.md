@@ -15,9 +15,9 @@ sees the author's transcript.
 
 ## The reviewer pane
 
-One reviewer tab per worktree: `codex-hc -s read-only`, opened as a herdr-app tab in that worktree.
+One reviewer tab per worktree: `codex-hc -a never -s read-only`, opened as a herdr-app tab in that worktree.
 Pin its session once with the repository's pane-pin command. Resume it only read-only
-(`codex resume <id> -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
+(`codex resume <id> -a never -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
 that line, read from the session log by the repository's approval check, is the only approval.
 Never read an approval from the screen. No hc template is needed: the pane is an ordinary tab.
 

@@ -47,7 +47,7 @@ committed and name its session once with `repotools pane-pin --session <session 
 worktree. Stage everything, write the message to a file, run `repotools pane-fingerprint --message <message file>`
 and commit with `git commit -F <message file>`. The reviewer's last final answer must end with the line
 `PANE-APPROVE <fingerprint>`; any later final answer withdraws it, and a new commit, a changed index or a changed
-message voids it. Resume the reviewer with `codex resume <id> -s read-only`. Open a pull request only with
+message voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`. Open a pull request only with
 `repotools pr-create --title <title> --body-file <body file>`, after the reviewer approved the output of
 `repotools pr-fingerprint --title <title> --body-file <body file>` the same way. `repotools` and
 `workflowtools` are uv tools that `mise run //repo:tools-install` installs from dotfiles. The pin and the
