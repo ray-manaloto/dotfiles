@@ -2,11 +2,11 @@
 
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, scratch_env, shell, test_times, tools_install, zero_bash
+from . import gates, main_guard, pane_approval, scratch_env, shell, test_times, tools_install, trust, zero_bash
 from .models import (
     Command,
     CommitText,
@@ -29,6 +29,7 @@ from .models import (
     TestTimes,
     ToolchainGate,
     ToolsInstall,
+    Trust,
     ZeroBash,
 )
 
@@ -53,8 +54,15 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.herdr_gate: HerdrGate,
     Command.tools_install: ToolsInstall,
     Command.test_times: TestTimes,
+    Command.trust: Trust,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
+# The commands that take no options, by their model.
+NO_OPTIONS: dict[type[Options], Callable[[], None]] = {
+    ToolsInstall: tools_install.run,
+    TestTimes: test_times.report,
+    Trust: trust.run,
+}
 
 
 def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
@@ -92,10 +100,8 @@ def run(command: Command, options: Options) -> None:
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
         pane_approval.create(options)
-    elif isinstance(options, ToolsInstall):
-        tools_install.run()
-    elif isinstance(options, TestTimes):
-        test_times.report()
+    elif isinstance(options, ToolsInstall | TestTimes | Trust):
+        NO_OPTIONS[type(options)]()
     elif command in APPROVED:
         pane_approval.check(options)
     else:

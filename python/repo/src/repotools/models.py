@@ -31,6 +31,7 @@ class Command(StrEnum):
     herdr_gate = "herdr-gate"
     tools_install = "tools-install"
     test_times = "test-times"
+    trust = "trust"
 
 
 class ToolsInstall(BaseModel):
@@ -42,6 +43,57 @@ class ToolsInstall(BaseModel):
         extra="forbid",
         frozen=True,
     )
+
+
+class Trust(BaseModel):
+    """
+    Trust this repository's main checkout in Codex and Claude Code, backing up each file it changes
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class TrustHarness(StrEnum):
+    codex = "codex"
+    claude = "claude"
+
+
+class TrustAction(StrEnum):
+    """
+    added: the entry was written; unchanged: it was already trusted; untrusted: an explicit No is left alone.
+    """
+
+    added = "added"
+    unchanged = "unchanged"
+    untrusted = "untrusted"
+
+
+class Trusted(BaseModel):
+    """
+    One harness's trust entry for the main checkout, printed as a JSON line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    harness: TrustHarness
+    path: str
+    """
+    The main checkout, as the entry's key
+    """
+    file: str
+    """
+    The harness's config file
+    """
+    action: TrustAction
+    backup: str | None
+    """
+    The copy taken before writing, or null when nothing was written
+    """
 
 
 class TestTimes(BaseModel):
@@ -400,6 +452,7 @@ type Options = (
     | HerdrGate
     | ToolsInstall
     | TestTimes
+    | Trust
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -649,6 +702,10 @@ class Repotools(BaseModel):
     tools_install: ToolsInstall | None = None
     test_times: TestTimes | None = None
     test_time: TestTime | None = None
+    trust: Trust | None = None
+    trust_harness: TrustHarness | None = None
+    trust_action: TrustAction | None = None
+    trusted: Trusted | None = None
     tool_action: ToolAction | None = None
     healthy: Healthy | None = None
     tool_receipt: ToolReceipt | None = None
