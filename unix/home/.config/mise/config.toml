@@ -580,6 +580,17 @@ content = '''
 "brew-cask:herdr-app" = { os = "macos", adopt = true, appdir = "~/Applications" }
 # A current git instead of the one bundled with the Xcode Command Line Tools.
 "brew:git" = { os = "macos" }
+# Remote access to the x86 desktop. Tailscale is a pkg cask: installing it needs the owner's sudo.
+# Moonlight was installed by a bare brew install before this entry: mise sees Homebrew owns the cask
+# and leaves it unchanged. adopt keeps an existing app in place on a fresh mise install.
+"brew-cask:tailscale-app" = { os = "macos", adopt = true }
+"brew-cask:moonlight" = { os = "macos", adopt = true }
+# The Omarchy (Arch) x86 desktop: Tailscale, and the Sunshine game-stream host from Omarchy's own
+# pacman repository. mise runs `pacman -S --needed` with sudo; a machine without pacman skips
+# these. Keep updates with the distribution's own full upgrade: `mise bootstrap packages upgrade`
+# is an Arch partial upgrade.
+"pacman:tailscale" = { os = "linux" }
+"pacman:sunshine" = { os = "linux" }
 
 # DL-591: gcc/g++ wrappers retired; use the Homebrew gcc-16 and g++-16 names.
 
