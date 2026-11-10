@@ -3,6 +3,7 @@
 # The terminal is tmux, as in zsh-users/zsh-autosuggestions spec/terminal_session.rb.
 import fcntl
 import os
+import pwd
 import re
 import shlex
 import shutil
@@ -196,8 +197,13 @@ class InteractiveShellTest(unittest.TestCase):
             (home / name).mkdir()
         path = f"{Path(str(STARSHIP)).parent}:/usr/bin:/bin:/usr/sbin:/sbin"
         # C.UTF-8 orders the completion list by byte, whatever locales this machine has.
+        # Without LOGNAME, zsh fills it from getlogin(), which is root under a terminal that never runs
+        # login(1), and starship's username module then puts the user in the prompt.
+        user = pwd.getpwuid(os.getuid()).pw_name
         variables = (
             f"HOME={home}",
+            f"USER={user}",
+            f"LOGNAME={user}",
             "TERM=xterm-256color",
             "LC_ALL=C.UTF-8",
             f"PATH={path}",
