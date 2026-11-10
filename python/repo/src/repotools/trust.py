@@ -20,23 +20,28 @@ from .models import TrustAction, Trusted, TrustHarness
 
 
 def main_checkout() -> Path:
-    """This checkout's top level, when it is the main working tree; a linked worktree or a bare repository is refused.
-
-    Both harnesses resolve a linked worktree to its main checkout, so the main checkout's entry covers it. git cannot
-    name that checkout from a linked worktree in every layout: with --separate-git-dir /storage/project/.git,
-    `git worktree list` gives /storage/project, and there is no core.worktree. So /work runs this from the main
-    checkout. The top level, not the folder above the git dir, also keeps a submodule (git dir in .git/modules) right.
-    """
+    """The main checkout this run's trust entry is for: this checkout's top, or a linked worktree's main root."""
     if git("rev-parse", "--is-bare-repository").strip() == "true":
         msg = "trust: this is a bare repository; run it from a checkout"
         raise ValueError(msg)
-    git_dir, common, top = git(
-        "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir", "--show-toplevel"
-    ).splitlines()
-    if git_dir != common:
-        msg = "trust: this is a linked worktree; run it from the main checkout, whose entry covers its worktrees"
+    git_dir, common, top = (
+        Path(line)
+        for line in git(
+            "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir", "--show-toplevel"
+        ).splitlines()
+    )
+    if git_dir == common:
+        # The top level, not the folder above the git dir, keeps a submodule (git dir in .git/modules) right.
+        return top.resolve()
+    # A linked worktree, resolved as Codex 0.167.0 does (codex-rs/git-utils/src/trust.rs resolve_root, lines 152-223):
+    # its git dir is <common>/worktrees/<name>, and the main root is the folder above the common dir, kept only when
+    # that folder's own .git is the common dir. With --separate-git-dir /storage/project/.git that is
+    # /storage/project, the key Codex and Claude Code (2.1.319, its canonical git root) both look up for the worktree.
+    main_root = common.parent
+    if git_dir.parent != common / "worktrees" or (main_root / ".git").resolve() != common.resolve():
+        msg = f"trust: this worktree's common git dir {common} has no main checkout above it; Codex trusts none here"
         raise ValueError(msg)
-    return Path(top).resolve()
+    return main_root.resolve()
 
 
 def write(path: Path, text: str) -> None:

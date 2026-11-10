@@ -127,19 +127,16 @@ def refused_in(folder: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.Cap
     return json.loads(captured.err)["error"]
 
 
-def test_a_linked_worktree_is_refused_and_writes_nothing(
-    repo: Path,
-    homes: tuple[Path, Path, Path],
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+@pytest.mark.usefixtures("homes")
+def test_a_worktree_trusts_its_main_checkout(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Codex and Claude Code both resolve a linked worktree to its main checkout, so the main entry covers it.
     git("-C", repo, "worktree", "add", "-q", "-b", "side", tmp_path / "side")
+    monkeypatch.chdir(tmp_path / "side")
 
-    assert "run it from the main checkout" in refused_in(tmp_path / "side", monkeypatch, capsys)
-    assert not homes[0].exists()
-    assert not homes[1].exists()
+    main(["trust"])
+
+    assert {entry.path for entry in lines(capsys.readouterr().out).values()} == {str(repo)}
 
 
 def test_an_explicit_codex_no_is_left_alone_and_reported(
@@ -278,21 +275,40 @@ def test_quotes_and_backslashes_stay_one_literal_key(
     }
 
 
-@pytest.mark.usefixtures("homes")
-@pytest.mark.parametrize("store", ["store", "storage/project/.git"])
-def test_a_separate_git_dir_trusts_its_checkout_and_refuses_its_worktrees(
-    store: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # storage/project/.git: git worktree list names storage/project as the main tree there, not the checkout.
+def separate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, store: str) -> Path:
+    """A checkout made with --separate-git-dir <store>, and a linked worktree "side" beside it."""
     clean_git_env(monkeypatch)
     root = tmp_path / "checkout"
     (tmp_path / store).parent.mkdir(parents=True, exist_ok=True)
     git("init", "-q", "-b", "main", "--separate-git-dir", tmp_path / store, root)
     git("-C", root, "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "c")
     git("-C", root, "worktree", "add", "-q", "-b", "side", tmp_path / "side")
-    monkeypatch.chdir(root)
+    return root
 
+
+@pytest.mark.usefixtures("homes")
+def test_a_separate_git_dir_named_dot_git_trusts_the_key_codex_looks_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # From the worktree, Codex (trust.rs resolve_root) and Claude Code both take the folder above the common dir.
+    root = separate(tmp_path, monkeypatch, "storage/project/.git")
+    monkeypatch.chdir(root)
+    main(["trust"])
+    assert {entry.path for entry in lines(capsys.readouterr().out).values()} == {str(root.resolve())}
+
+    monkeypatch.chdir(tmp_path / "side")
     main(["trust"])
 
-    assert {entry.path for entry in lines(capsys.readouterr().out).values()} == {str(root.resolve())}
-    assert "run it from the main checkout" in refused_in(tmp_path / "side", monkeypatch, capsys)
+    out = lines(capsys.readouterr().out)
+    assert {entry.path for entry in out.values()} == {str((tmp_path / "storage" / "project").resolve())}
+    assert {entry.action.value for entry in out.values()} == {"added"}
+
+
+@pytest.mark.usefixtures("homes")
+def test_a_worktree_whose_common_dir_has_no_main_root_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The common dir "store" is not a .git folder of its parent, so Codex resolves no trust root.
+    separate(tmp_path, monkeypatch, "store")
+
+    assert "no main checkout" in refused_in(tmp_path / "side", monkeypatch, capsys)

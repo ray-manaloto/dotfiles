@@ -57,11 +57,11 @@ then write.
    user's git config), run `hk install`.
 6. **Prove it.** Run `hk run commit-msg <file>` with a short message in a scratch file. It must fail, because the
    pane has approved nothing yet. If it passes, the step is not wired: fix it before you go on.
-7. **Trust the repository.** From the main checkout, not a linked worktree (it refuses one), run
-   `repotools trust`. It trusts the main checkout in Codex (`~/.codex/config.toml`) and Claude Code
-   (`~/.claude.json`), backing up each file before it changes it, so new agent tabs here and in its worktrees
-   open without a trust prompt. It prints one line per harness: `added`, `unchanged`, or `untrusted` when Codex
-   already has an explicit No for this folder. It leaves that No as it is and exits 1; tell the owner and go on.
+7. **Trust the repository.** Run `repotools trust`. It trusts the repository's main checkout, found from a linked
+   worktree as Codex finds it, in Codex (`~/.codex/config.toml`) and Claude Code (`~/.claude.json`), backing up
+   each file before it changes it, so new agent tabs here and in its worktrees open without a trust prompt. It
+   prints one line per harness: `added`, `unchanged`, or `untrusted` when Codex already has an explicit No for
+   this folder. It leaves that No as it is and exits 1; tell the owner and go on.
 8. **Done.** Tell the owner which files changed. Committing them goes through the reviewer pane like any other
    commit (`~/.config/agents/workflow/ship.md`). You do not commit.
 
