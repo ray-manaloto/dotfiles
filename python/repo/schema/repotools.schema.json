@@ -29,13 +29,45 @@
         "toolchain-gate",
         "herdr-gate",
         "tools-install",
-        "test-times"
+        "test-times",
+        "trust"
       ]
     },
     "ToolsInstall": {
       "description": "Install workflowtools and repotools as uv tools from the committed trees",
       "type": "object",
       "properties": {},
+      "additionalProperties": false
+    },
+    "Trust": {
+      "description": "Trust this repository's main checkout in Codex and Claude Code, backing up each file it changes",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "TrustHarness": {
+      "type": "string",
+      "enum": ["codex", "claude"]
+    },
+    "TrustAction": {
+      "description": "added: the entry was written; unchanged: it was already trusted; untrusted: an explicit No is left alone.",
+      "type": "string",
+      "enum": ["added", "unchanged", "untrusted"]
+    },
+    "Trusted": {
+      "description": "One harness's trust entry for the main checkout, printed as a JSON line.",
+      "type": "object",
+      "properties": {
+        "harness": { "$ref": "#/$defs/TrustHarness" },
+        "path": { "type": "string", "description": "The main checkout, as the entry's key" },
+        "file": { "type": "string", "description": "The harness's config file" },
+        "action": { "$ref": "#/$defs/TrustAction" },
+        "backup": {
+          "type": ["string", "null"],
+          "description": "The copy taken before writing, or null when nothing was written"
+        }
+      },
+      "required": ["harness", "path", "file", "action", "backup"],
       "additionalProperties": false
     },
     "TestTimes": {
@@ -259,7 +291,8 @@
         { "$ref": "#/$defs/ToolchainGate" },
         { "$ref": "#/$defs/HerdrGate" },
         { "$ref": "#/$defs/ToolsInstall" },
-        { "$ref": "#/$defs/TestTimes" }
+        { "$ref": "#/$defs/TestTimes" },
+        { "$ref": "#/$defs/Trust" }
       ]
     },
     "Fingerprint": {
@@ -392,6 +425,10 @@
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
     "test_times": { "$ref": "#/$defs/TestTimes" },
     "test_time": { "$ref": "#/$defs/TestTime" },
+    "trust": { "$ref": "#/$defs/Trust" },
+    "trust_harness": { "$ref": "#/$defs/TrustHarness" },
+    "trust_action": { "$ref": "#/$defs/TrustAction" },
+    "trusted": { "$ref": "#/$defs/Trusted" },
     "tool_action": { "$ref": "#/$defs/ToolAction" },
     "healthy": { "$ref": "#/$defs/Healthy" },
     "tool_receipt": { "$ref": "#/$defs/ToolReceipt" },
