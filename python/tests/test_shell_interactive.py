@@ -198,7 +198,10 @@ class InteractiveShellTest(unittest.TestCase):
         path = f"{Path(str(STARSHIP)).parent}:/usr/bin:/bin:/usr/sbin:/sbin"
         # C.UTF-8 orders the completion list by byte, whatever locales this machine has.
         # Without LOGNAME, zsh fills it from getlogin(), which is root under a terminal that never runs
-        # login(1), and starship's username module then puts the user in the prompt.
+        # login(1), and starship's username module then puts the user in the prompt. starship always
+        # shows root, so the tests read the folder only for an ordinary user.
+        if os.getuid() == 0:
+            self.skipTest("starship puts root in the prompt, so the folder is not the first word")
         user = pwd.getpwuid(os.getuid()).pw_name
         variables = (
             f"HOME={home}",
@@ -300,6 +303,10 @@ class InteractiveShellTest(unittest.TestCase):
 
     def wait_for_line(self, text: str) -> None:
         self.wait(lambda: self.line() == text)
+
+    def test_the_prompt_starts_with_the_folder(self) -> None:
+        # The username module stays hidden for the login user, so the path is the first word.
+        self.wait(lambda: self.folder() == "~")
 
     def test_a_folder_name_alone_enters_it(self) -> None:
         self.run_line("work")
