@@ -1,2 +1,2 @@
-# Codex reads its MCP keys from the environment at launch.
-codex() { command codex-fnox "$@"; }
+# Codex and OpenCode start under fnox proxy run through the mise [wrappers] in ~/.config/mise/config.toml,
+# so no shell function stands in front of them here.

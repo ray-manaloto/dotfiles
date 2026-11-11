@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "apify": {
+      "type": "http",
+      "url": "https://mcp.apify.com/",
+      "headersHelper": "t=$(PATH=\"$HOME/.local/share/mise/shims:/usr/bin:/bin\" fnox -c \"$HOME/.config/fnox/config.toml\" -P mcp-apify --non-interactive get APIFY_TOKEN) && /usr/bin/jq -nc --arg v \"Bearer $t\" '{Authorization: $v}'"
+    }
+  }
+}
