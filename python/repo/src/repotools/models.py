@@ -364,16 +364,22 @@ class PrText(BaseModel):
 
 class PanePin(BaseModel):
     """
-    Name the Codex session whose approval this checkout accepts.
+    Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
-    session: Annotated[str, Field(pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
+    session: Annotated[str | None, Field(pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")] = (
+        None
+    )
     """
-    The session id, as in the rollout file's name
+    The Codex session id, as in the rollout file's name
+    """
+    subagent: Annotated[str | None, Field(pattern="(^|/)agent-[0-9a-z]+\\.jsonl$")] = None
+    """
+    The fallback reviewer's Claude subagent transcript, agent-<id>.jsonl, while the Codex quota is depleted
     """
 
 
@@ -657,6 +663,91 @@ class TaskEvent(BaseModel):
     """
 
 
+class AgentMeta(BaseModel):
+    """
+    A Claude Code subagent's agent-<id>.meta.json; only the fields the check reads.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    agent_type: Annotated[str, Field(alias="agentType")]
+    """
+    The agent type it ran as; reported, never trusted: the transcript's tool calls decide
+    """
+    finished: bool | None = None
+    """
+    true once the run ended; absent while it runs or after it was killed
+    """
+
+
+class AgentPart(BaseModel):
+    """
+    One content part of a subagent transcript's message.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    type: str
+    """
+    text, thinking, tool_use or tool_result
+    """
+    text: str | None = None
+    """
+    The words of a text part
+    """
+    name: str | None = None
+    """
+    The tool a tool_use part calls
+    """
+    input: dict[str, Any] | None = None
+    """
+    A tool_use part's arguments
+    """
+
+
+class AgentMessage(BaseModel):
+    """
+    The message of a user or assistant line; a prompt may be a plain string.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    role: str
+    content: str | list[AgentPart]
+    """
+    The text, or its parts
+    """
+
+
+class AgentLine(BaseModel):
+    """
+    One line of a Claude Code subagent transcript, agent-<id>.jsonl; only the fields the check reads.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    type: str
+    """
+    user, assistant, attachment, api-request and others
+    """
+    agent_id: Annotated[str | None, Field(alias="agentId")] = None
+    """
+    The subagent's id, as in the file name
+    """
+    is_sidechain: Annotated[bool | None, Field(alias="isSidechain")] = None
+    """
+    true on every line of a subagent's own run
+    """
+    message: AgentMessage | None = None
+    """
+    On user and assistant lines
+    """
+
+
 class Failure(BaseModel):
     """
     Why a command stopped, printed as a JSON line on stderr.
@@ -718,3 +809,5 @@ class Repotools(BaseModel):
     turn_context: TurnContext | None = None
     message: Message | None = None
     task_event: TaskEvent | None = None
+    agent_meta: AgentMeta | None = None
+    agent_line: AgentLine | None = None

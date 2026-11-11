@@ -3,7 +3,7 @@ okf_version: "0.2"
 type: "process"
 title: "Cross-review"
 description: "Who reviews what, in which tab, and how review findings are handled."
-timestamp: "2026-11-07T00:00:00Z"
+timestamp: "2026-11-10T00:00:00Z"
 status: "current"
 tags: [workflow, review, codex]
 ---
@@ -20,6 +20,33 @@ Pin its session once with the repository's pane-pin command. Resume it only read
 (`codex resume <id> -a never -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
 that line, read from the session log by the repository's approval check, is the only approval.
 Never read an approval from the screen. No hc template is needed: the pane is an ordinary tab.
+
+## The fallback reviewer
+
+When the reviewer's harness is out of quota (Codex: until its limit resets), a fresh Claude subagent in
+the author's own session gives the approval instead. Go back to the Codex pane when the quota returns.
+The subagent shares the author's model family, so it shares more blind spots; it is a stopgap.
+
+1. Stage everything and write the commit message (or pull request body) to a file with the line
+   `Reviewed by the fallback reviewer (Codex quota depleted).` in its body, not as a trailer. Then get
+   the fingerprint from the repository's pane-fingerprint (or pr-fingerprint) command: the line is part of
+   the approved bytes, so adding it later voids the approval.
+2. Write the staged diff to a file: `git diff --staged > <scratch>/review.diff`. The reviewer has no shell.
+3. Start one subagent of a type whose only tools are Read, Grep and Glob; dotfiles has
+   `fallback-reviewer`. Explore and Plan can run shell commands, so they do not qualify. Its prompt holds
+   only a line of its own, `Worktree: <absolute path>`, the diff file (or the pull request's title and body file), the
+   message file, the fingerprint, the repository's review rules, and "your last line is exactly
+   `PANE-APPROVE <fingerprint>` if nothing at P0-P2 is left, otherwise the findings". Never the author's
+   reasoning or conclusions.
+4. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with the
+   repository's pane-pin command and `--subagent`.
+5. Findings are handled as below; then a new subagent reviews afresh, at most one more round unless the
+   change is risky. A review over about 1,000 changed lines still fans out.
+
+The approval check reads the transcript itself, not the agent type: it refuses the subagent unless it
+finished, called no tool but Read, Grep and Glob (a background subagent may end with its handback),
+has exactly one `Worktree:` line naming this checkout's whole path (not a path inside or beside
+it) and the fingerprint in its prompt, and its answer ends with that `PANE-APPROVE` line.
 
 ## Waiting on the pane
 

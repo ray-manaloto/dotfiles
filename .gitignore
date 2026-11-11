@@ -19,10 +19,14 @@
 !/tests/
 !/typescript/
 !/unix/
-# The project's settings and /verify skill; settings.local.json and anything else under .claude stay out.
+# The project's settings, the fallback reviewer agent and /verify skill; settings.local.json and anything else
+# under .claude stay out.
 !/.claude/
 /.claude/*
 !/.claude/settings.json
+!/.claude/agents/
+/.claude/agents/*
+!/.claude/agents/fallback-reviewer.md
 !/.claude/skills/
 /.claude/skills/*
 !/.claude/skills/verify/
