@@ -32,3 +32,11 @@ file holds the judgement calls. Each finding cites the rule number and `path:lin
    attribute value, a URL, a shell argument; escaping for one place does not cover another. An
    attribute or element name never comes from it unless picked from a fixed set. A test feeds that
    path a hostile but valid input and checks that it comes out inert.
+
+## Exceptions
+
+- **Skill scripts.** A skill's `scripts/*.py` runs as `python3` from the skill's own folder, so it lives with
+  the skill, not as a package under `python/`, and has no tests or coverage: `macos-agent-permissions`
+  (`unix/home/.agents/skills/`), and `herdr-startup` and `herdr-shutdown` (`unix/home/.config/agents/skills/`,
+  tracked as they ran when they were moved in). Packaging the herdr scripts into `hometools` is a later
+  ticket.

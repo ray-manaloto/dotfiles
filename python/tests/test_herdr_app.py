@@ -29,13 +29,11 @@ POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
 [HC_LINE] = [command for command in POST_TOOLS if "herdrdev/herdr-core#" in command]
-[LINK_LINE] = [command for command in POST_TOOLS if "ln -s" in command]
 # Only the system folders: no hc, as on a new Mac before Herdr's first run.
 NO_HC_PATH = "PATH=/usr/bin:/bin"
 # What the hook lines print, each as a whole stderr line: scratch:env echoes the command itself to
 # stderr first, so a substring match would find the message in the echoed command.
 NO_HC = "post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap"
-NO_COPY = "post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link"
 # The installed hc, linked first on PATH so the herdr-core line runs the real `hc --version`. Its
 # output gives the tag the line must install. It is read under macOS's `(deny process-fork)`, which
 # proves the call prints the version without starting a core: a core start forks, and the sandbox
@@ -64,6 +62,8 @@ DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
 DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
 # A skill written in this repo, linked for both agents by [dotfiles] in mise.toml.
 PERMISSIONS = "macos-agent-permissions"
+# Skills written in the repo's shared agents folder, linked for both agents the same way.
+USER_SKILLS = ("chief-of-staff", "herdr-startup", "herdr-shutdown")
 ENTRIES = (
     "~/.config/agents/AGENTS.md",
     "~/.codex/AGENTS.md",
@@ -75,16 +75,13 @@ ENTRIES = (
 OLD = ("herdr", "herdr-pre-release-audit", "herdr-throwaway-repro", "triage")
 OLD_LOCK_ONLY = "writing-commit-messages"
 HC = "herdr-core"
-# Each harness's global skills folder, relative to the scratch root, as herdr:doctor checks them (V10).
+# The skill folders the hook writes, relative to the scratch root: Claude's, and the shared one that Codex
+# and OpenCode read. Antigravity CLI reads the shared one through mise.toml's ~/.gemini/config/skills link.
 CLAUDE, CODEX = "home/.claude/skills", "home/.agents/skills"
-# skills links Antigravity CLI's folder to the Codex copy itself; the hook's link line makes OpenCode's.
-ANTIGRAVITY, OPENCODE = "home/.gemini/config/skills", "home/.config/opencode/skills"
-HARNESSES = (CLAUDE, CODEX, ANTIGRAVITY, OPENCODE)
-# What the hook leaves in every scratch home: herdr-core for all four harnesses, and agent-desktop's
-# skills for Claude and Codex.
-CORE = {f"{folder}/{HC}" for folder in HARNESSES} | {
-    f"{folder}/{name}" for folder in (CLAUDE, CODEX) for name in DESKTOP
-}
+ANTIGRAVITY = "home/.gemini/config/skills"
+HARNESSES = (CLAUDE, CODEX)
+# What the hook leaves in every scratch home: herdr-core and agent-desktop's skills, for Claude and Codex.
+CORE = {f"{folder}/{name}" for folder in HARNESSES for name in (HC, *DESKTOP)}
 
 
 class BadGateway(BaseHTTPRequestHandler):
@@ -245,13 +242,6 @@ class HerdrAppTest(unittest.TestCase):
         # setUp's stale copy is left as it was, and nothing is installed.
         self.assertNotIn("ref", json.loads(self.lock.read_text())["skills"][HC])
 
-    def test_the_link_line_skips_quietly_without_hc(self) -> None:
-        shutil.rmtree(self.root / CODEX / HC)
-        done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, LINK_LINE)
-        self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotIn(NO_COPY, done.stderr.splitlines())
-        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
-
     def test_a_codex_only_herdr_core_reaches_every_harness(self) -> None:
         shutil.rmtree(self.root / CLAUDE / HC)
         self.post_tools()
@@ -261,29 +251,13 @@ class HerdrAppTest(unittest.TestCase):
                 "from the tag", (self.root / folder / HC / "SKILL.md").read_text()
             )
 
-    def test_antigravity_and_opencode_link_to_the_codex_copy(self) -> None:
-        # A stale real copy in either folder is replaced by the link too.
-        self.install(HC, "herdrdev/herdr-core", ANTIGRAVITY, OPENCODE)
+    def test_antigravity_reads_the_shared_copy_through_its_folder_link(self) -> None:
         self.post_tools()
-        for folder in (ANTIGRAVITY, OPENCODE):
-            link = self.root / folder / HC
-            self.assertTrue(link.is_symlink())
-            self.assertEqual(link.resolve(), (self.root / CODEX / HC).resolve())
-
-    def test_the_link_line_fails_without_the_codex_copy(self) -> None:
-        shutil.rmtree(self.root / CODEX / HC)
-        done = self.run_hook(LINK_LINE)
-        self.assertNotEqual(done.returncode, 0)
-        self.assertIn(NO_COPY, done.stderr.splitlines())
-        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
-
-    def test_the_link_line_fails_when_the_folder_cannot_be_made(self) -> None:
-        # A file where OpenCode's folder goes makes its mkdir fail, and nothing is linked.
-        (self.root / OPENCODE).parent.mkdir(parents=True)
-        (self.root / OPENCODE).write_text("")
-        done = self.run_hook(LINK_LINE)
-        self.assertNotEqual(done.returncode, 0)
-        self.assertFalse((self.root / OPENCODE).is_dir())
+        done = self.scratch("mise", "dot", "apply", "~/.gemini/config/skills")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        link = self.root / ANTIGRAVITY
+        self.assertEqual(os.readlink(link), "../../.agents/skills")
+        self.assertIn("from the tag", (link / HC / "SKILL.md").read_text())
 
     def test_an_installed_stale_herdr_core_is_replaced_from_the_tag(self) -> None:
         # setUp installed a stale copy for Claude and Codex, as v0.1.17's skip-if-present hook left it.
@@ -325,6 +299,35 @@ class HerdrAppTest(unittest.TestCase):
             self.assertEqual((self.home / folder / PERMISSIONS).resolve(), source)
         self.assertTrue((source / "scripts/tcc_who.py").is_file())
         self.assertIn(f"name: {PERMISSIONS}\n", (source / "SKILL.md").read_text())
+
+    def test_claude_and_codex_share_the_herdr_and_coordinator_skills(self) -> None:
+        folders = (".agents/skills", ".claude/skills")
+        targets = [f"~/{folder}/{name}" for folder in folders for name in USER_SKILLS]
+        done = self.scratch("mise", "dot", "apply", *targets)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for name in USER_SKILLS:
+            source = REPO / "unix/home/.config/agents/skills" / name
+            for folder in folders:
+                self.assertEqual((self.home / folder / name).resolve(), source)
+            self.assertIn(f"name: {name}\n", (source / "SKILL.md").read_text())
+
+    def test_skills_doctor_checks_every_skill_link(self) -> None:
+        doctor = ("python3", "-I", str(REPO / "unix/home/.config/mise/tasks/skills/doctor"))
+        self.assertEqual(self.scratch(*doctor).returncode, 1)
+        entries = tomllib.loads((REPO / "mise.toml").read_text())["dotfiles"]
+        targets = [target for target in entries if target.endswith("/skills") or "/skills/" in target]
+        self.assertIn("~/.gemini/config/skills", targets)
+        # setUp's herdr-core folders stand where the Antigravity CLI link goes, as on a Mac that had them.
+        shutil.rmtree(self.root / CLAUDE)
+        shutil.rmtree(self.root / CODEX)
+        done = self.scratch("mise", "dot", "apply", *targets)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        done = self.scratch(*doctor)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        (self.home / ".claude/skills/work").unlink()
+        done = self.scratch(*doctor)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("~/.claude/skills/work", done.stdout)
 
     def test_claude_and_codex_open_watched_agents_as_tabs(self) -> None:
         done = self.scratch("mise", "dot", "apply", *ENTRIES)
