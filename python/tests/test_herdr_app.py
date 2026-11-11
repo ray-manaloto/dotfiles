@@ -77,8 +77,9 @@ OLD_LOCK_ONLY = "writing-commit-messages"
 HC = "herdr-core"
 # Each harness's global skills folder, relative to the scratch root, as herdr:doctor checks them (V10).
 CLAUDE, CODEX = "home/.claude/skills", "home/.agents/skills"
-LINKED = ("home/.gemini/antigravity-cli/skills", "home/.config/opencode/skills")
-HARNESSES = (CLAUDE, CODEX, *LINKED)
+# skills links Antigravity CLI's folder to the Codex copy itself; the hook's link line makes OpenCode's.
+ANTIGRAVITY, OPENCODE = "home/.gemini/config/skills", "home/.config/opencode/skills"
+HARNESSES = (CLAUDE, CODEX, ANTIGRAVITY, OPENCODE)
 # What the hook leaves in every scratch home: herdr-core for all four harnesses, and agent-desktop's
 # skills for Claude and Codex.
 CORE = {f"{folder}/{HC}" for folder in HARNESSES} | {
@@ -249,8 +250,7 @@ class HerdrAppTest(unittest.TestCase):
         done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, LINK_LINE)
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertNotIn(NO_COPY, done.stderr.splitlines())
-        for folder in LINKED:
-            self.assertFalse((self.root / folder / HC).is_symlink())
+        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
 
     def test_a_codex_only_herdr_core_reaches_every_harness(self) -> None:
         shutil.rmtree(self.root / CLAUDE / HC)
@@ -262,10 +262,10 @@ class HerdrAppTest(unittest.TestCase):
             )
 
     def test_antigravity_and_opencode_link_to_the_codex_copy(self) -> None:
-        # A stale real copy in one linked folder is replaced by the link too.
-        self.install(HC, "herdrdev/herdr-core", LINKED[0])
+        # A stale real copy in either folder is replaced by the link too.
+        self.install(HC, "herdrdev/herdr-core", ANTIGRAVITY, OPENCODE)
         self.post_tools()
-        for folder in LINKED:
+        for folder in (ANTIGRAVITY, OPENCODE):
             link = self.root / folder / HC
             self.assertTrue(link.is_symlink())
             self.assertEqual(link.resolve(), (self.root / CODEX / HC).resolve())
@@ -275,16 +275,15 @@ class HerdrAppTest(unittest.TestCase):
         done = self.run_hook(LINK_LINE)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn(NO_COPY, done.stderr.splitlines())
-        for folder in LINKED:
-            self.assertFalse((self.root / folder / HC).is_symlink())
+        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
 
-    def test_the_link_line_fails_when_the_first_folder_cannot_be_made(self) -> None:
-        # A file where Antigravity's folder goes makes its mkdir fail; OpenCode's after it would succeed.
-        (self.root / LINKED[0]).parent.mkdir(parents=True)
-        (self.root / LINKED[0]).write_text("")
+    def test_the_link_line_fails_when_the_folder_cannot_be_made(self) -> None:
+        # A file where OpenCode's folder goes makes its mkdir fail, and nothing is linked.
+        (self.root / OPENCODE).parent.mkdir(parents=True)
+        (self.root / OPENCODE).write_text("")
         done = self.run_hook(LINK_LINE)
         self.assertNotEqual(done.returncode, 0)
-        self.assertFalse((self.root / LINKED[1] / HC).is_symlink())
+        self.assertFalse((self.root / OPENCODE).is_dir())
 
     def test_an_installed_stale_herdr_core_is_replaced_from_the_tag(self) -> None:
         # setUp installed a stale copy for Claude and Codex, as v0.1.17's skip-if-present hook left it.

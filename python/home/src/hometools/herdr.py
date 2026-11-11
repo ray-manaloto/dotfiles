@@ -29,11 +29,12 @@ OLD = ".local/run/herdr-core"
 CONFIG = ".config/herdr-core/config.toml"
 HC_PLIST = ".local/share/herdr-core/current/Contents/Info.plist"
 APP_PLIST = "Applications/Herdr.app/Contents/Info.plist"
-# The four harness folders (design G9): Claude, Codex and the skills CLI, agy (Antigravity CLI), OpenCode.
+# The four harness folders (design G9): Claude, Codex and the skills CLI, agy (Antigravity CLI, which reads
+# ~/.gemini/config/skills since 1.5; skills 1.8.1 installs there), OpenCode.
 SKILLS = (
     ".claude/skills/herdr-core",
     ".agents/skills/herdr-core",
-    ".gemini/antigravity-cli/skills/herdr-core",
+    ".gemini/config/skills/herdr-core",
     ".config/opencode/skills/herdr-core",
 )
 # hc's socket inputs (paths.rs:28-34): HC_SOCKET, the config's socket key, XDG_RUNTIME_DIR, HC_SESSION and the
