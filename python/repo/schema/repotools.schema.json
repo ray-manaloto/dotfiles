@@ -230,16 +230,22 @@
       "additionalProperties": false
     },
     "PanePin": {
-      "description": "Name the Codex session whose approval this checkout accepts.",
+      "description": "Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.",
       "type": "object",
       "properties": {
         "session": {
-          "type": "string",
+          "type": ["string", "null"],
+          "default": null,
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "The session id, as in the rollout file's name"
+          "description": "The Codex session id, as in the rollout file's name"
+        },
+        "subagent": {
+          "type": ["string", "null"],
+          "default": null,
+          "pattern": "(^|/)agent-[0-9a-z]+\\.jsonl$",
+          "description": "The fallback reviewer's Claude subagent transcript, agent-<id>.jsonl, while the Codex quota is depleted"
         }
       },
-      "required": ["session"],
       "additionalProperties": false
     },
     "ReviewPython": {
@@ -393,6 +399,52 @@
       },
       "required": ["turn_id"]
     },
+    "AgentMeta": {
+      "description": "A Claude Code subagent's agent-<id>.meta.json; only the fields the check reads.",
+      "type": "object",
+      "properties": {
+        "agentType": { "type": "string", "description": "The agent type it ran as; reported, never trusted: the transcript's tool calls decide" },
+        "finished": { "type": ["boolean", "null"], "description": "true once the run ended; absent while it runs or after it was killed" }
+      },
+      "required": ["agentType"]
+    },
+    "AgentPart": {
+      "description": "One content part of a subagent transcript's message.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "text, thinking, tool_use or tool_result" },
+        "text": { "type": ["string", "null"], "description": "The words of a text part" },
+        "name": { "type": ["string", "null"], "description": "The tool a tool_use part calls" },
+        "input": { "type": ["object", "null"], "description": "A tool_use part's arguments" }
+      },
+      "required": ["type"]
+    },
+    "AgentMessage": {
+      "description": "The message of a user or assistant line; a prompt may be a plain string.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "content": {
+          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "$ref": "#/$defs/AgentPart" } }],
+          "description": "The text, or its parts"
+        }
+      },
+      "required": ["role", "content"]
+    },
+    "AgentLine": {
+      "description": "One line of a Claude Code subagent transcript, agent-<id>.jsonl; only the fields the check reads.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "user, assistant, attachment, api-request and others" },
+        "agentId": { "type": ["string", "null"], "description": "The subagent's id, as in the file name" },
+        "isSidechain": { "type": ["boolean", "null"], "description": "true on every line of a subagent's own run" },
+        "message": {
+          "anyOf": [{ "$ref": "#/$defs/AgentMessage" }, { "type": "null" }],
+          "description": "On user and assistant lines"
+        }
+      },
+      "required": ["type"]
+    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -440,6 +492,8 @@
     "session_meta": { "$ref": "#/$defs/SessionMeta" },
     "turn_context": { "$ref": "#/$defs/TurnContext" },
     "message": { "$ref": "#/$defs/Message" },
-    "task_event": { "$ref": "#/$defs/TaskEvent" }
+    "task_event": { "$ref": "#/$defs/TaskEvent" },
+    "agent_meta": { "$ref": "#/$defs/AgentMeta" },
+    "agent_line": { "$ref": "#/$defs/AgentLine" }
   }
 }

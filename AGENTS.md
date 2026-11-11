@@ -47,6 +47,12 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   resume runs under the global config, full access here, and only a last turn under policy `never`
   and read-only approves. This is a local record: the pin and Codex's session log are plain files
   that anyone running as this user can edit, so it catches mistakes, not a forger.
+- While Codex is out of quota, the fallback reviewer approves instead
+  (`~/.config/agents/workflow/cross-review.md`): write the staged diff to a file, run a fresh
+  `fallback-reviewer` subagent (Read, Grep and Glob only; `.claude/agents/fallback-reviewer.md`) and pin
+  its transcript with `mise run //repo:pane-pin --subagent <agent-*.jsonl>`. The commit message or PR
+  body carries, from before the fingerprint, the line
+  `Reviewed by the fallback reviewer (Codex quota depleted).` Go back to the Codex pane when quota returns.
 - Open a pull request only with `mise run //repo:pr-create <title> <body file>`, after the reviewer
   approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
   bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new

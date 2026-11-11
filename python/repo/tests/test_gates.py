@@ -513,3 +513,17 @@ def test_outgoing_scans_every_unpushed_commit_on_branches_and_tags() -> None:
         ]
     ]
     assert sorted(lines[:-1]) == sorted(expected)
+
+
+def test_pane_pin_passes_a_hostile_transcript_path_through_mise_inert(copy: Path, tmp_path: Path) -> None:
+    """The --subagent path reaches repotools as one argument: no word split, no command or variable expansion."""
+    # The file name must be agent-<id>.jsonl, so the hostile part is the folder; any folder name is valid.
+    folder = tmp_path / 'sub agents $HOME $(touch ran1) `touch ran2`; touch ran3 "q" *'
+    folder.mkdir()
+    transcript = folder / "agent-a1.jsonl"
+    transcript.write_text("")
+    done = mise("//repo:pane-pin", "--subagent", str(transcript))
+    assert done.returncode == 0, done.stderr
+    pinned = Path(git("rev-parse", "--git-path", "review-python.pane-session").strip())
+    assert pinned.read_text() == f"{transcript.resolve()}\n"
+    assert not [path for path in (copy, tmp_path) for name in ("ran1", "ran2", "ran3") if (path / name).exists()]

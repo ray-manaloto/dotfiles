@@ -14,11 +14,14 @@ dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pane-fingerprint --message "$usage_message"'
 
 [tasks.pane-pin]
-description = "Name the reviewer's Codex session, started in this checkout, for this checkout's commits"
-usage = 'arg "<session>" help="The Codex session id"'
+description = "Name the reviewer for this checkout's commits: its Codex session, or with --subagent the fallback reviewer's transcript"
+usage = '''
+arg "[session]" help="The Codex session id, started in this checkout"
+flag "--subagent <transcript>" help="While Codex is depleted: the read-only Claude subagent's agent-<id>.jsonl"
+'''
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pane-pin --session "$usage_session"'
+run = 'uv run --project python/repo --locked repotools pane-pin ${usage_session:+--session "$usage_session"} ${usage_subagent:+--subagent "$usage_subagent"}'
 
 [tasks.pane-approved]
 description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD, index and message"

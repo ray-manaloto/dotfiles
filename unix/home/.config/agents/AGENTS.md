@@ -61,11 +61,23 @@ message voids it. Resume the reviewer with `codex resume <id> -a never -s read-o
 `workflowtools` are uv tools that `mise run //repo:tools-install` installs from dotfiles. The pin and the
 session log are plain files, so this catches mistakes, not a forger.
 
+While the reviewer's harness is out of quota, a fallback reviewer approves instead: a fresh Claude subagent in
+the author's own session, of an agent type whose only tools are Read, Grep and Glob (dotfiles has
+`fallback-reviewer`). Explore and Plan can run shell commands, so they do not qualify. Write the staged diff to a
+file first (`git diff --staged > <scratch>/review.diff`). The prompt holds only a line `Worktree: <absolute path>`, the
+diff file (or the pull request's title and body file), the message file, the fingerprint and the review rules; never the
+author's reasoning. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with
+`repotools pane-pin --subagent <transcript>`. The check refuses any tool call other than Read, Grep or Glob. Its
+last line must be `PANE-APPROVE <fingerprint>`, and the commit message or pull request body carries, from before the
+fingerprint, the line `Reviewed by the fallback reviewer (Codex quota depleted).` Fix its findings and run a fresh
+subagent, at most one more round unless the change is risky. Go back to the Codex pane when its quota returns.
+
 ## Cross-review
 
 Claude writes the change; Codex reviews it, so the reviewer is a different model family and never sees the author's transcript.
 Reviews run in the worktree's pinned reviewer pane, named with `repotools pane-pin`, never in the author's
-own session; a commit is approved only for the fingerprint `repotools pane-fingerprint` prints. Details:
+own session; a commit is approved only for the fingerprint `repotools pane-fingerprint` prints. While the
+reviewer's harness is out of quota, the fallback reviewer above takes its place until the quota returns. Details:
 `~/.config/agents/workflow/cross-review.md`.
 
 <!-- codebase-memory-mcp:start -->

@@ -15,11 +15,14 @@ import sys
 from pathlib import Path
 from typing import Any, cast
 
-from . import process
+from . import process, subagent_review
 from .git import git
 from .models import CommitText, Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
+# The body line a commit message or pull request carries when the fallback reviewer approved it (AGENTS.md). A body
+# line, not a trailer: the repository allows only the Co-Authored-By trailer.
+FALLBACK_LINE = "Reviewed by the fallback reviewer (Codex quota depleted)."
 CITATION_OPEN = "<oai-mem-citation>"
 CITATION_CLOSE = "</oai-mem-citation>"
 
@@ -88,8 +91,17 @@ def pin_file() -> Path:
     return Path(git("rev-parse", "--git-path", "review-python.pane-session").strip())
 
 
-def pin(session: PanePin) -> None:
-    pin_file().write_text(session.session + "\n")
+def pin(chosen: PanePin) -> None:
+    """One line: the Codex session id, or the subagent transcript's absolute path, which no session id can be."""
+    if (chosen.session is None) == (chosen.subagent is None):
+        msg = "pin one reviewer: --session <Codex session id> or --subagent <agent-*.jsonl>"
+        raise ValueError(msg)
+    if chosen.subagent is not None:
+        # Absolute now: the hook runs from the checkout's root, the author maybe from elsewhere.
+        transcript = Path(chosen.subagent).resolve(strict=True)
+        pin_file().write_text(f"{transcript}\n")
+    else:
+        pin_file().write_text(f"{chosen.session}\n")
 
 
 def pinned() -> PanePin:
@@ -97,7 +109,8 @@ def pinned() -> PanePin:
     if not path.exists():
         msg = "no reviewer session is pinned; mise run //repo:pane-pin <session id>"
         raise ValueError(msg)
-    return PanePin(session=path.read_text().strip())
+    line = path.read_text().strip()
+    return PanePin(subagent=line) if line.startswith("/") else PanePin(session=line)
 
 
 def rollout(session: str) -> str:
@@ -241,8 +254,34 @@ def read_only(context: TurnContext) -> bool:
     )
 
 
+def stated(text: CommitText | PrText, body: bytes | None) -> bool:
+    """Whether the commit message or the pull request body says, on a line of its own, that the fallback approved it."""
+    if isinstance(text, PrText):
+        words = (Path(text.body_file).read_bytes() if body is None else body).decode(errors="replace")
+    else:
+        words = stripped(text.message)
+    return FALLBACK_LINE in (line.rstrip("\r") for line in words.split("\n"))
+
+
+def check_subagent(transcript: str, text: CommitText | PrText, body: bytes | None) -> None:
+    root = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
+    printed = fingerprint(text, body)
+    answer = subagent_review.answer(Path(transcript), root, printed)
+    wanted = f"{APPROVAL} {printed}"
+    if answer.rstrip().split("\n")[-1] != wanted:
+        msg = f"the fallback reviewer's last answer does not end with: {wanted}"
+        raise ValueError(msg)
+    if not stated(text, body):
+        msg = f"a fallback approval needs this line in the commit message or pull request body: {FALLBACK_LINE}"
+        raise ValueError(msg)
+
+
 def check(text: CommitText | PrText, body: bytes | None = None) -> None:
-    session = pinned().session
+    chosen = pinned()
+    if chosen.subagent is not None:
+        check_subagent(chosen.subagent, text, body)
+        return
+    session = cast("str", chosen.session)
     meta, context, answer = last_turn(rollout(session), session)
     root = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
     if meta.forked_from_id is not None or {Path(meta.cwd).resolve(), Path(context.cwd).resolve()} != {root}:
