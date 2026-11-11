@@ -13,9 +13,6 @@
       "Bash(gh issue comment *)"
     ]
   },
-  "enabledPlugins": {
-    "code-modernization@claude-plugins-official": true
-  },
   "skillOverrides": {
     "agent-desktop": "off"
   },
