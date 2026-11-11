@@ -108,6 +108,8 @@ run = "mkdir -p ~/.agents/skills"
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
 "~/.config/mise/tasks" = { source = "unix/home/.config/mise/tasks", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
+"~/.config/fnox/proxy-codex.toml" = { source = "unix/home/.config/fnox/proxy-codex.toml", mode = "symlink" }
+"~/.config/fnox/proxy-opencode.toml" = { source = "unix/home/.config/fnox/proxy-opencode.toml", mode = "symlink" }
 "~/.config/starship.toml" = { source = "unix/home/.config/starship.toml", mode = "symlink" }
 # The OpenCode service binds loopback only (tailnet-only ruling, 2026-11-11): service.json also holds the
 # service password, so this owns only its hostname key and leaves the rest to opencode. Unset, opencode 2.2.7
@@ -118,9 +120,19 @@ run = "mkdir -p ~/.agents/skills"
 # supervisor starts it again on loopback. The target assumes neither OPENCODE_CONFIG_DIR nor XDG_CONFIG_HOME
 # moves opencode's config folder.
 "~/.config/opencode/service.json/bind" = { source = "unix/home/.config/opencode/service.bind.json", merge = true, permissions = "0600" }
+# OpenCode's context7 and exa servers send the key as a Bearer header from its own {env:VAR} syntax
+# (packages/core/src/config/variable.ts:25-28 at v2.2.7), so `fnox proxy run` can swap the placeholder for the real
+# key. This owns only those headers; the old literal "${CONTEXT7_API_KEY}" header is not removed by a merge.
+"~/.config/opencode/opencode.json/mcp-keys" = { source = "unix/home/.config/opencode/mcp-keys.json", merge = true }
+# Claude's apify MCP server gets its key from `fnox get` at each connect (headersHelper,
+# https://code.claude.com/docs/en/mcp; 10 s limit), with an explicit PATH as 1natsu172/dotfiles
+# bin/claude-utils/mcp-auth-header.sh:22,35 and fapont/dotfiles modules/agents/claude/mcp.json:6 do. A failed get exits
+# non-zero instead of sending an empty header. Claude Code rewrites ~/.claude.json, so this owns only these keys; a
+# static `headers` entry left from before stays (delete it once by hand) and the helper's Authorization overrides it.
+# Apply with every Claude tab closed, or re-apply if `mise dot status` shows drift.
+"~/.claude.json/mcp-apify" = { source = "unix/home/.claude.mcp-apify.json", merge = true, permissions = "0600" }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
-"~/.config/fnox/agent-tools.toml" = { source = "unix/home/.config/fnox/agent-tools.toml", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
 # Separate entries, so ~/.zshrc.d stays a real folder. Applied by shell:apply, which backs up first.
 "~/.zshenv" = { source = "unix/home/.zshenv", mode = "symlink" }
@@ -130,7 +142,6 @@ run = "mkdir -p ~/.agents/skills"
 "~/.zshrc.d/90-mise.zsh" = { source = "unix/home/.zshrc.d/90-mise.zsh", mode = "symlink" }
 "~/.config/zsh/path.zsh" = { source = "unix/home/.config/zsh/path.zsh", mode = "symlink" }
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
-"~/.local/bin/codex-fnox" = { source = "unix/home/.local/bin/codex-fnox", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
 # hc calls that can't start a second core (docs/agents/herdr-core.md): the herdr cutover's coordinator and /verify.
 "~/.local/bin/hc-safe" = { source = "unix/home/.local/bin/hc-safe", mode = "symlink" }

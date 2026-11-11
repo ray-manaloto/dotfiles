@@ -152,7 +152,8 @@ chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
 hk = { version = "2.12.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
-fnox = { version = "1.48.0", workflow = "release.yml", minimum_release_age = "0s" }
+# 1.47.0, not 1.48.0: 1.48.0 crashes on macOS below 26 (fnox #1156; owner ruling 2026-11-11).
+fnox = { version = "1.47.0", workflow = "release.yml", minimum_release_age = "0s" }
 pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 usage = { version = "7.3.0", workflow = "publish-cli.yml", minimum_release_age = "0s" }
 #communique = { version = "1.6.0", workflow = "release.yml@refs/heads/main", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
@@ -263,6 +264,9 @@ micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
 rumdl = { version = "0.3.3", minimum_release_age = "0s" }
 "github:asciimoo/hister" = { version = "0.21.0", minimum_release_age = "0s" }
 llmfit = { version = "1.1.20", minimum_release_age = "0s" }
+# Research pilot (owner, 2026-11-11). hyperresearch needs Python <3.15 (pyproject requires-python) and pulls
+# Crawl4AI; run `crawl4ai-setup` once for its browsers. Keys: fnox profile cli-hyperresearch.
+"pipx:hyperresearch" = { version = "0.13.1", extras = ["exa"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
 "github:kenn-io/agentsview" = { version = "0.46.1", minimum_release_age = "0s" }
 "npm:firecrawl-cli" = { version = "1.29.0", minimum_release_age = "0s" }
@@ -485,6 +489,26 @@ update-check = "$HOME/.config/mise/scripts/mise_update_guard.py update:check"
 claude_dangerous = "claude --dangerously-skip-permissions --brief"
 codex_yolo = "codex --yolo"
 gemini_yolo = "gemini --yolo"
+
+# Codex and OpenCode start under `fnox proxy run` with their own profile (agent-codex, agent-opencode in
+# ~/.config/fnox/config.toml): the harness gets placeholders and the proxy adds the real key to the hosts in
+# ~/.config/fnox/proxy-<harness>.toml (context7 and exa; OpenCode's model providers too), loaded with -c over the
+# global config. mise puts the command-wrappers dir first on PATH (v2026.11.6
+# src/toolset/toolset_paths.rs:183-195) and, while a wrapper runs, sends its command and everything it starts to the
+# real tool (src/cli/shim.rs:241-249), so fnox finds the real codex. Claude needs no wrapper: its apify key comes
+# from a headersHelper. A Doppler error starts the harness with placeholders that the proxy refuses until Doppler is
+# back. Shells only: herdr argv launches skip [wrappers] (codex-hc covers Codex).
+# OpenCode runs --standalone: its background service (`opencode serve --service`) makes the MCP calls otherwise,
+# outside the proxy (owner ruling 2026-11-11; packages/cli/src/services/server-connection.ts at v2.2.7).
+# Bypass, no keys: run the real binary by path (`~/.local/bin/codex`, `~/.opencode/bin/opencode`);
+# `mise exec -- codex` still goes through the wrapper. Run `mise reshim` after changing this table.
+[wrappers.codex]
+command = "fnox"
+args = ["-c", "{{ env.HOME }}/.config/fnox/proxy-codex.toml", "--non-interactive", "proxy", "run", "-P", "agent-codex", "--", "codex"]
+
+[wrappers.opencode]
+command = "fnox"
+args = ["-c", "{{ env.HOME }}/.config/fnox/proxy-opencode.toml", "--non-interactive", "proxy", "run", "-P", "agent-opencode", "--", "opencode", "--standalone"]
 
 [vars]
 # DL-764, DL-770: the one home for compiler and brew versions; conf.d/toolchain.toml renders

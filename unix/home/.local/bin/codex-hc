@@ -1,5 +1,18 @@
 #!/bin/sh
-# Codex for `hc run`, which starts programs without a shell and so never sees the codex function
-# in ~/.zshrc.d/60-agent-tools.zsh. hc needs --no-daemon to keep Codex's commands in hc.
+# Codex for herdr tabs and `hc run`, which start programs without a shell and so skip the mise [wrappers].
+# fnox proxy run gives it the agent-codex placeholders and adds the real keys to its MCP requests.
+# hc needs --no-daemon to keep Codex's commands in hc.
+# Inside an hc terminal, also passes hc's variables through shell_environment_policy.set, because
+# inherit = "core" in ~/.codex/config.toml drops them from the commands Codex runs, and hc send then looks
+# for the wrong socket. -c adds to the set table in config.toml. hc reads HC_SOCKET for its client socket,
+# not HC_TERMINAL_SOCKET.
 # Usage: hc run --bg --name fix codex-hc "task"
-exec "${0%/*}/codex-fnox" --no-daemon "$@"
+if [ -n "${HC_TERMINAL_ID:-}" ] && [ -n "${HC_TERMINAL_SOCKET:-}" ]; then
+  set -- \
+    -c "shell_environment_policy.set.HC_TERMINAL_SOCKET=\"$HC_TERMINAL_SOCKET\"" \
+    -c "shell_environment_policy.set.HC_TERMINAL_ID=\"$HC_TERMINAL_ID\"" \
+    ${HC_SCOPE:+-c "shell_environment_policy.set.HC_SCOPE=\"$HC_SCOPE\""} \
+    ${HC_SESSION:+-c "shell_environment_policy.set.HC_SESSION=\"$HC_SESSION\""} \
+    "$@"
+fi
+exec fnox -c "$HOME/.config/fnox/proxy-codex.toml" --non-interactive proxy run -P agent-codex -- codex --no-daemon "$@"

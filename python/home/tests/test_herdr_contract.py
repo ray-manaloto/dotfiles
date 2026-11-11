@@ -273,6 +273,6 @@ def test_hc_safe_usage_errors_exit_81_without_a_call(hc_safe: HcSafe, args: tupl
 
 
 def test_hc_safe_is_on_the_dotfiles_path() -> None:
-    # Linked from the root mise.toml, as codex-fnox is, so `mise dot apply` puts it on PATH.
+    # Linked from the root mise.toml, as codex-hc is, so `mise dot apply` puts it on PATH.
     text = (CHECKOUT / "mise.toml").read_text()
     assert '"~/.local/bin/hc-safe" = { source = "unix/home/.local/bin/hc-safe", mode = "symlink" }' in text
