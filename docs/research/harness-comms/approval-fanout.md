@@ -96,21 +96,68 @@ skips the auto-reviewer and goes straight to the approval prompt (core/src/tools
 permission-request hook's allow cannot clear it (approvals.rs:605). Under `never` it is rejected (approvals.rs:521-527),
 and so is it under a `granular` policy that disables rule approvals (exec_policy.rs:220-231), when strict auto-review is on, when requirements forbid reviewer `user`, or when they require
 auto-review for the model (approvals.rs:530-539). Holding `[rules]` in a requirements file does not by itself reject it. A `forbidden` rule blocks
-the command under every policy (exec_policy.rs:416). Rules match a command's leading words, so `git push --force`
-does not match `git push origin main --force`. The owner's `~/.codex/rules/default.rules` holds five `allow` rules
+the command under every policy (exec_policy.rs:416). Rules match a command's leading words, so a `git push --force`
+rule does not match `git push origin main --force`. The owner's `~/.codex/rules/default.rules` holds five `allow` rules
 and is not tracked in this repo.
 
 Decided 2026-11-07: `prompt-user` rules are the check on Claude's own instructions to a worker. They cover history
-rewrites, cleanup and GitHub writes: `git push --force`, `git push -f`, `git reset --hard`, `git clean`, `git branch -D`,
-`git worktree remove`, `rm -rf`, `rm -fr`, `gh pr merge` and `gh repo delete`. `rm -f` stays with the auto-reviewer, since a forced
-`rm` is on the dangerous-command list and prompts (exec_policy.rs:836-844). Plain `git push` is not on it, so on a
-danger-full-access worker under on-request it runs with no review at all (exec_policy.rs:859-863). The rules live in `[rules]` of `/etc/codex/requirements.toml`, from a source tracked in this repo, and the owner
-installs it with sudo. It applies to every Codex session on the machine. On a reviewer under `never` a matching
-command is rejected, which is harmless for a read-only session. They go live together with the on-request switch, after live test t27 shows a matching
-command reaching the person's prompt with no auto-review. Rules match leading words in order, and a pattern token is one word or a list of alternatives with no wildcard
-(execpolicy/src/rule.rs:23-26). Each rule lists the common spellings (`-f`, `--force`, `--force-with-lease`; `-rf`, `-fr`,
-`-Rf`). A reordered or prefixed command such as `git push origin main --force`, `git -C dir reset --hard` or `rm -r -f`
-is not caught. That gap is accepted: like the repo's other gates, these rules catch mistakes, not a forger.
+rewrites, cleanup and GitHub writes: `git reset --hard`, `git clean`, `git branch -D`, `git worktree remove`, `rm -rf`,
+`rm -fr`, `gh pr merge` and `gh repo delete`. `rm -f` stays with the auto-reviewer, since a forced `rm` is on the
+dangerous-command list and prompts (exec_policy.rs:836-844). The rules live in `[rules]` of
+`/etc/codex/requirements.toml`, from a source tracked in this repo, and the owner installs it with sudo. It applies to
+every Codex session on the machine. On a reviewer under `never` a matching command is rejected, which is harmless for a
+read-only session. They go live together with the on-request switch, after live test t27 shows a matching command
+reaching the person's prompt with no auto-review.
+
+Decided 2026-11-08: plain `git push` is not on the dangerous-command list, so on a danger-full-access worker under
+on-request it would run with no review at all (exec_policy.rs:859-863). The list therefore gains one bare `git push`
+prefix rule, which replaces the force-only push entries, and `gh pr create`, `gh pr edit`, `gh pr comment`,
+`gh issue create`, `gh issue edit`, `gh issue comment`, `gh api` and `gh release`.
+
+Rules match a command's leading words in order, and a pattern token is one word or a list of alternatives with no
+wildcard (execpolicy/src/rule.rs:23-26, `matches_prefix` at :55-71). Each rule lists the common spellings (`-rf`, `-fr`,
+`-Rf`). The bare `git push` rule catches any argument order after `push`, such as `git push origin main --force`.
+These ordinary forms are not caught, and that is an accepted gap: like the repo's other gates, the rules catch mistakes,
+not a forger.
+
+- **A global option before the subcommand**: `git -C dir push`, `git -c push.default=current push`,
+  `git -C dir reset --hard`. Matching is positional, so the second word is not `push`.
+- **A shell script the plain-command parser refuses.** A top-level `bash -lc '<script>'` is split into its commands
+  only when every part is a plain word-only command joined by `&&`, `||`, `;` or `|`
+  (exec_policy.rs:913-942, shell-command/src/bash.rs:29-78). A redirection, assignment, substitution or expansion
+  makes it fall back to matching the outer shell command, so `git push 2>&1` runs unchecked. A shell nested inside the
+  script is not unwrapped. A simple `bash -lc 'git push'` is caught.
+- **A wrapper command**: `env FOO=1 git push` starts with `env`, and a reordered flag such as `rm -r -f` is a different
+  word list.
+- **Anything a task runs**: `mise run <task>` is matched as `mise`, so the commands inside it are not seen. That
+  includes `mise run //repo:pr-create`, which runs `gh pr create` itself (python/repo/src/repotools/pane_approval.py:263-268).
+
+t27 runs each of these forms through the real execution path and records what each one does.
+
+Decided 2026-11-10 (d10, owner, with dotfiles-lead): `gh api` stays on the list, reads included. The rule catches reads, such as
+`gh api repos/<owner>/<repo>/pulls/<n>/comments`. A worker under on-request stops for the owner on every such lookup.
+A reviewer under `never` gets it rejected (exec_policy.rs:220-225), but a read-only reviewer has no network anyway.
+A prefix rule cannot pick out only the writes:
+
+- **The endpoint usually comes first**: in `gh api repos/... -X POST` the third word is the endpoint, so a
+  `gh api -X POST` rule never matches it.
+- **gh posts without `-X`**: with no `--method`, any `-f`, `-F` or `--input` makes the request a POST
+  (cli/cli `pkg/cmd/api/api.go:329-330` at v2.103.3).
+- **Other spellings**: `--method=POST`, `-XPOST`, and a `gh api graphql` mutation, which is always a POST.
+
+Reads that need no `gh api` remain: `gh pr view --json`, `gh pr diff`, `gh issue view` and `gh search` are not on the
+list. t27 adds a read-only `gh api` call and a `gh pr view --json` call.
+
+Rules see only the command the shell tool runs, never the processes it starts. The one backend that checked each
+`execve`, `shell_zsh_fork`, is a removed flag in 0.167.0 (features/src/lib.rs:170-171, 1179-1183). So any listed
+command run inside a script, a `mise run` task or a `uv run` tool, `git push` and `gh api` included, is neither
+caught nor blocked: a worker that wraps its commands passes the whole list. The repo's
+own reads run that way: `workflowtools tickets` (python/workflow/src/workflowtools/github.py:30) and the global
+`gh-env-token` and `gh-keyring` doctor checks (unix/home/.config/mise/config.toml:600, 606).
+
+Keeping the rule would hold up a Codex worker that follows docs/agents/issue-tracker.md, which counts open blockers and
+lists external PRs with `gh api` (lines 11, 28). A follow-up points the blocker count at the
+`gh issue view --json blockedBy` form that line 11 already gives.
 
 ## What counts as an answer
 
@@ -240,6 +287,8 @@ from this allowlist and reject any other key before sending.
   `guardianWarning`, and `completed` with status approved and risk low. It got no server request, and the command
   ran. A plain `touch` ran with no review. A `humanCommand` checkpoint and an "ask the user" result were not
   triggered.
+- t27 has not run: `prompt-user` routing on a scratch worker, and what each uncaught form listed under the decided
+  rules does.
 - Whether a request sent to a thread with no subscribers waits forever. Source suggests yes: an empty connection
   list sends nothing and keeps the callback.
 - `item/tool/call` (client-run dynamic tools) only arises if a client registered dynamic tools. The proposed client

@@ -33,3 +33,18 @@ them.
 - **Review before commit**: two more review rounds corrected the dangerous-command list (`sudo` itself is not on it),
   the auto-reviewer's scope and the `prompt-user` rejection conditions
   ([Approval fan-out](approval-fanout.md#whose-words-authorize-a-command)).
+
+## 2026-11-08
+
+- **Owner decision (d9)**: a bare `git push` rule and the GitHub write commands join the `prompt-user` list; the
+  forms it misses, from an adversarial Codex review checked against source, are written down as accepted gaps, and t27
+  covers them ([Approval fan-out](approval-fanout.md#whose-words-authorize-a-command)).
+- **Open (d10)**: the `gh api` rule also stops read-only lookups, and no prefix rule can match only its writes, since
+  gh posts on `-f` without `-X` and the endpoint comes first
+  ([Approval fan-out](approval-fanout.md#whose-words-authorize-a-command)).
+
+## 2026-11-10
+
+- **Owner decision (d10)**, after asking dotfiles-lead: `gh api` stays on the list; rules never see child processes,
+  so `gh api` inside a script or task is neither caught nor blocked
+  ([Approval fan-out](approval-fanout.md#whose-words-authorize-a-command)).
