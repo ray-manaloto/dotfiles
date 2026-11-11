@@ -183,6 +183,19 @@ An edge whose site is inside `#[cfg]` code that is off for the host build; kept 
 and flagged.
 _Avoid_: Dead edge
 
+### Agent sessions
+
+**Reviewer**:
+The read-only Codex session that reviews a change and gives the owner's approval line for it. It
+reads and judges; it never changes the files it reviews.
+_Avoid_: Approvals reviewer, guardian, checker
+
+**Auto-reviewer**:
+Codex's built-in model check that decides, in place of a person, whether an escalated command may
+run. It is consulted only when the session's approval policy asks for approvals. It judges a command
+against what the session's user messages asked for, whoever sent them.
+_Avoid_: Guardian, Reviewer, approvals reviewer (except as the name of the Codex setting)
+
 ### Labels
 
 **`needs-triage`**:
