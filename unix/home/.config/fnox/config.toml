@@ -1,7 +1,10 @@
 #:schema https://fnox.jdx.dev/schema.json
-# Global fnox config: one secret, the read-only Doppler service token for
-# dotfiles/dev_personal. Everything else is a Doppler reference in a project fnox.toml.
-# Replace the token with `fnox set DOPPLER_TOKEN --global --provider age`, then keep env = false.
+# Global fnox config: the read-only Doppler service token for dotfiles/dev_personal, and in the
+# doppler_write profile the owner's read/write one that only `mise run secret:set` uses.
+# Everything else is a Doppler reference in a project fnox.toml.
+# Replace the read token with `fnox set DOPPLER_TOKEN --global --provider age`, then keep env = false.
+# Never `fnox set` a secret on the doppler provider: fnox writes its value here in plain text.
+# Add a Doppler secret with `pbpaste | mise run secret:set NAME`.
 
 [providers.keychain]
 type = "keychain"
@@ -20,3 +23,11 @@ token = { secret = "DOPPLER_TOKEN" }
 
 [secrets]
 DOPPLER_TOKEN= { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvenQvY0o3bGFPTVJkS2xqYmczYXVtZGpYbUNmNHNudVl1Tk1waVJ0bTM0CndHL29BWWpza3Y0S2MzYmFRWFlYYk9tbHVJVTlXSjFMTWIyK0c3UW1EbTAKLT4gV2guXC1ncmVhc2UgfVZ0WGIgfgpscTJNSEFSUVdBbFU4ZDN3MlVlYS90OHZadHBPdjc4Ci0tLSBsT2JNZUw3TUM5Nm02L3VtUjZyMm8vSHJVQklYWGRrcjZzdzlRak44OTJRCppGClEbYWrtucIUZUnMN7za4O2J0ESzPbktwzADDK2g1ezltbrRde+6xEBCuYVoctmaSW9jnVgCPaUyoahVJbD4glH0+0x9wcbHGMGwy7yXiZPJrgqH07IRV/ZAEX0=", env = false }
+
+# The read/write token for dotfiles/dev_personal, for `mise run secret:set` alone: it is the profile's own
+# DOPPLER_TOKEN because that is the variable doppler reads, and only `fnox exec --profile doppler_write`
+# hands it out. The owner stores it with
+#   pbpaste | fnox set DOPPLER_TOKEN --global --profile doppler_write --provider age
+# which keeps env and if_missing. Until then the profile fails instead of running without a token.
+[profiles.doppler_write.secrets]
+DOPPLER_TOKEN = { provider = "age", env = "exec", if_missing = "error" }

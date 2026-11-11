@@ -32,6 +32,7 @@ class Command(StrEnum):
     tools_install = "tools-install"
     test_times = "test-times"
     trust = "trust"
+    fnox_refs = "fnox-refs"
 
 
 class ToolsInstall(BaseModel):
@@ -298,6 +299,46 @@ class HerdrGate(BaseModel):
     )
 
 
+class FnoxRefs(BaseModel):
+    """
+    Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class FnoxRule(StrEnum):
+    """
+    What a fnox-refs finding breaks: a Doppler entry's value that is not a secret name, or a default on one.
+    """
+
+    value_not_a_reference = "value-not-a-reference"
+    default_on_doppler = "default-on-doppler"
+
+
+class FnoxFinding(BaseModel):
+    """
+    One Doppler entry of a tracked fnox TOML that may hold a secret in plain text, printed as a JSON line without it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    path: str
+    """
+    Tracked file, relative to the repository root
+    """
+    key: str
+    """
+    The entry's dotted key, such as profiles.x.secrets.NAME
+    """
+    rule: FnoxRule
+
+
 class Rule(StrEnum):
     """
     What a zero-bash finding breaks.
@@ -459,6 +500,7 @@ type Options = (
     | ToolsInstall
     | TestTimes
     | Trust
+    | FnoxRefs
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -803,6 +845,8 @@ class Repotools(BaseModel):
     tool_installed: ToolInstalled | None = None
     options: Options | None = None
     finding: Finding | None = None
+    fnox_refs: FnoxRefs | None = None
+    fnox_finding: FnoxFinding | None = None
     fingerprint: Fingerprint | None = None
     rollout_line: RolloutLine | None = None
     session_meta: SessionMeta | None = None

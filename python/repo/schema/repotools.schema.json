@@ -30,7 +30,8 @@
         "herdr-gate",
         "tools-install",
         "test-times",
-        "trust"
+        "trust",
+        "fnox-refs"
       ]
     },
     "ToolsInstall": {
@@ -194,6 +195,28 @@
       "properties": {},
       "additionalProperties": false
     },
+    "FnoxRefs": {
+      "description": "Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "FnoxRule": {
+      "description": "What a fnox-refs finding breaks: a Doppler entry's value that is not a secret name, or a default on one.",
+      "type": "string",
+      "enum": ["value-not-a-reference", "default-on-doppler"]
+    },
+    "FnoxFinding": {
+      "description": "One Doppler entry of a tracked fnox TOML that may hold a secret in plain text, printed as a JSON line without it.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Tracked file, relative to the repository root" },
+        "key": { "type": "string", "description": "The entry's dotted key, such as profiles.x.secrets.NAME" },
+        "rule": { "$ref": "#/$defs/FnoxRule" }
+      },
+      "required": ["path", "key", "rule"],
+      "additionalProperties": false
+    },
     "Rule": {
       "description": "What a zero-bash finding breaks.",
       "type": "string",
@@ -298,7 +321,8 @@
         { "$ref": "#/$defs/HerdrGate" },
         { "$ref": "#/$defs/ToolsInstall" },
         { "$ref": "#/$defs/TestTimes" },
-        { "$ref": "#/$defs/Trust" }
+        { "$ref": "#/$defs/Trust" },
+        { "$ref": "#/$defs/FnoxRefs" }
       ]
     },
     "Fingerprint": {
@@ -487,6 +511,8 @@
     "tool_installed": { "$ref": "#/$defs/ToolInstalled" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
+    "fnox_refs": { "$ref": "#/$defs/FnoxRefs" },
+    "fnox_finding": { "$ref": "#/$defs/FnoxFinding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
     "rollout_line": { "$ref": "#/$defs/RolloutLine" },
     "session_meta": { "$ref": "#/$defs/SessionMeta" },
