@@ -84,6 +84,11 @@ local linters = new Mapping<String, Step> {
     ["zero-bash"] {
         check = "mise run //repo:zero-bash"
     }
+    // `fnox set` on a doppler provider writes the value into the TOML in plain text: a tracked fnox file's Doppler
+    // entries must hold Doppler secret names (repotools fnox-refs). It reads the index, so it runs on every commit.
+    ["fnox-refs"] {
+        check = "mise run //repo:fnox-refs"
+    }
 }
 
 hooks {

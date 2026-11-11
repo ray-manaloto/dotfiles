@@ -58,6 +58,13 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools zero-bash ${usage_strict:+--strict}'
 
+# hk's fnox-refs step: `fnox set` on a doppler provider writes the value into the TOML in plain text.
+[tasks.fnox-refs]
+description = "Fail when a tracked fnox TOML's Doppler entry holds anything but a Doppler secret name"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/repo --locked repotools fnox-refs"
+
 # The main guard (AGENTS.md): git runs it from the shared .git/config on every ref update, so it lives in a
 # uv tool outside every checkout, and the hook's shell line skips all but a prepared update of main.
 [tasks.main-guard-copy]

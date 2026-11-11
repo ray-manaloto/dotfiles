@@ -38,6 +38,15 @@ Last30Days plan, and the hook's output directory. A failed arm is a recorded
 blocker, not a successful five-provider audit. Respect a task's sole writer
 and do not edit another task's evidence index or native goal.
 
+## Adding a Doppler secret
+
+Never `fnox set` a secret on a doppler provider: fnox cannot write to Doppler, so it writes the value
+into the fnox TOML in plain text, and hk's `fnox-refs` step refuses that file. Add a new secret to
+Doppler `dotfiles/dev_personal` with `pbpaste | mise run secret:set NAME` (an UPPER_SNAKE name that
+Doppler does not have yet; the value is piped, never an argument). It runs under the owner's write
+token in the global fnox config's `doppler_write` profile. Changing or deleting an existing secret
+is the owner's job in the Doppler dashboard.
+
 ## Plugin changes need the owner's OK
 
 Never install, uninstall, update, enable, disable or switch the marketplace of a Claude Code plugin, and never change `~/.claude/plugins/**`, `enabledPlugins`, `extraKnownMarketplaces` or the marketplaces in any settings file, by any route (`claude plugin`, file edits, or a script, `sed`, `jq` or `cp` run through a shell), without the owner's explicit OK for that change. Reading them is fine. When a change is needed, stop, say what you would change, and wait.

@@ -26,6 +26,7 @@ class Command(StrEnum):
     update_brew = "update-brew"
     update_check = "update-check"
     herdr_doctor = "herdr-doctor"
+    secret_set = "secret-set"
 
 
 class Bootstrap(BaseModel):
