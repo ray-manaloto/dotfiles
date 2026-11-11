@@ -95,6 +95,12 @@ run = 'uv run --project python/repo --locked repotools review-python --path="$us
 description = "Refuse unless review:python passed on exactly the staged python/ files"
 run = "uv run --project python/repo --locked repotools review-python-approved"
 
+# The ~/.gemini/config/skills entry's source is ~/.agents/skills, outside the repo, and one missing source stops
+# the whole apply (mise 2026.11.6 crates/mise-system/src/files.rs:5722-5806). This hook runs before every
+# `mise dot apply` and bootstrap's dotfiles step (src/cli/dotfiles/apply.rs:27), so a new Mac has the folder.
+[bootstrap.hooks.pre-dotfiles]
+run = "mkdir -p ~/.agents/skills"
+
 [dotfiles]
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/miserc.toml" = { source = "unix/home/.config/mise/miserc.toml", mode = "symlink" }
@@ -170,6 +176,25 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 "~/.agents/skills/implement" = { source = "unix/home/.config/agents/skills/implement", mode = "symlink" }
 "~/.claude/skills/implement-spec" = { source = "unix/home/.config/agents/skills/implement-spec", mode = "symlink" }
 "~/.agents/skills/implement-spec" = { source = "unix/home/.config/agents/skills/implement-spec", mode = "symlink" }
+# chief-of-staff: the coordinator's role contract; user scope only, like ticket-retro.
+"~/.claude/skills/chief-of-staff" = { source = "unix/home/.config/agents/skills/chief-of-staff", mode = "symlink" }
+"~/.agents/skills/chief-of-staff" = { source = "unix/home/.config/agents/skills/chief-of-staff", mode = "symlink" }
+# herdr-startup and herdr-shutdown: reopen and close the herdr sessions around a reboot. Their scripts are tracked
+# as they run, outside python/ (CODING_STANDARDS.md, "Exceptions"); packaging them is a later ticket.
+"~/.claude/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
+"~/.agents/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
+"~/.claude/skills/herdr-shutdown" = { source = "unix/home/.config/agents/skills/herdr-shutdown", mode = "symlink" }
+"~/.agents/skills/herdr-shutdown" = { source = "unix/home/.config/agents/skills/herdr-shutdown", mode = "symlink" }
+# One skill set: ~/.agents/skills. Codex 0.167.1 reads it (codex-rs/ext/skills/src/host_roots.rs:134-147) and
+# OpenCode 2.2.7 reads it beside its own folder (packages/core/src/config/discovery.ts:69-73,157,163), so neither
+# needs a link. Antigravity CLI 1.5.6 reads only ~/.gemini/config/skills: the whole folder links to the shared one.
+# skills 1.8.1 `skills add -g` writes through the link once (createSymlink returns when both paths resolve to the
+# same folder, dist/_chunks/remove.mjs:2767-2773), but `skills remove -a <one agent>` through it deletes the shared
+# copy, for every harness: remove a skill for all agents or none. herdr:doctor names the Claude link that leaves
+# dangling, and `mise dot apply` restores a skill this repo owns. Claude Code stays per-skill (the entries above),
+# since agentsview and openwiki install a different copy into ~/.claude/skills. `mise run skills:doctor` checks
+# these entries, herdr:doctor that ~/.claude/skills lists every skill of ~/.agents/skills.
+"~/.gemini/config/skills" = { source = "~/.agents/skills", mode = "symlink", relative = true }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]

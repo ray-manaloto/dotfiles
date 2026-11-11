@@ -185,7 +185,7 @@ class Observation(BaseModel):
     """
     skills_missing: list[str]
     """
-    The harness skill folders (home as ~) with no herdr-core SKILL.md.
+    Skill folders (home as ~) with no SKILL.md: herdr-core's, and Claude Code's entries.
     """
     cores: list[int]
     """

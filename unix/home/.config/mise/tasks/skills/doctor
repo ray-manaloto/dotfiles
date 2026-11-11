@@ -1,0 +1,20 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Check that every [dotfiles] skill link of the dotfiles checkout is in place"
+"""skills:doctor: `mise dot status --missing` on the checkout's skill entries; herdr:doctor checks the names."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash). The skill links are [dotfiles] entries of the
+# checkout's own mise.toml, which mise reads only from inside the checkout, so this finds the checkout it is linked
+# from, as tasks/herdr/doctor does, and runs mise there on each entry whose target is a skills folder or a skill in
+# one. mise exits 1 when one is missing or differs, and 0 when all are applied (mise 2026.11.6 dot status --help).
+
+import os
+import sys
+import tomllib
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/skills/doctor.
+CHECKOUT = Path(__file__).resolve().parents[6]
+
+entries = tomllib.loads((CHECKOUT / "mise.toml").read_text())["dotfiles"]
+targets = [target for target in entries if target.endswith("/skills") or "/skills/" in target]
+os.execvp("mise", ["mise", "-C", str(CHECKOUT), "dot", "status", "--missing", "--no-truncate", *targets, *sys.argv[1:]])

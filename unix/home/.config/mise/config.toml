@@ -511,9 +511,9 @@ includes = ["{{ mise_config_dir }}/agentsview-native/tasks.toml", "{{ mise_confi
 [bootstrap.hooks.pre-packages]
 run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% endif %}'
 
-# hc's skill is a mise-run install, so it waits for the tools phase. It goes to all four harnesses,
-# whose folders herdr:doctor checks (V10): Claude (~/.claude/skills), Codex (~/.agents/skills),
-# Antigravity CLI (~/.gemini/config/skills) and OpenCode (~/.config/opencode/skills). The tag
+# hc's skill is a mise-run install, so it waits for the tools phase. It goes to Claude (~/.claude/skills)
+# and to ~/.agents/skills, which Codex and OpenCode read and Antigravity CLI reads through the
+# ~/.gemini/config/skills link in the repo's mise.toml; herdr:doctor checks each (V10). The tag
 # comes from the installed hc: `hc --version` prints `hc 0.1.19` and starts no core, and the line installs
 # herdr-core#v0.1.19, so a Herdr self-update needs no pin bump to keep V10 green. With no hc on PATH (a
 # new Mac before Herdr's first run installs it), the line says to open Herdr once and rerun bootstrap,
@@ -521,12 +521,9 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 # with a message and installs nothing. Like agent-desktop's line, it
 # is not skipped when installed: a re-run puts the tag's files back, so a stale copy is replaced and a new
 # hc's tag reaches every folder.
-# The skills CLI names the agents claude-code, codex, antigravity-cli and opencode. A global install
-# links antigravity-cli's ~/.gemini/config/skills to ~/.agents/skills (skills 1.8.1 remove.mjs:1416-1421,
-# globalReadsCanonical false), but writes ~/.agents/skills only for opencode, since its project folder
-# is .agents/skills (isUniversalAgent). The next line replaces whatever OpenCode's folder holds with a
-# link to that copy, and fails, linking nothing, when the copy is missing; with no hc on PATH it skips,
-# as the line before did.
+# Only claude-code and codex are named: before the repo's `mise dot apply` makes that link, antigravity-cli
+# would make ~/.gemini/config/skills a real folder (skills 1.8.1 remove.mjs:1416-1421), which the apply
+# then refuses to replace.
 # The removal comes first: `skills add herdrdev/herdr` installed the Herdr TUI's skill, which tells
 # agents to drive a TUI that no longer runs, and four skills for working on Herdr's own repo. The
 # name matches the folder, and the source matches every lock entry from that repo (skills 1.7.5
@@ -539,8 +536,7 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
-  "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
-  "command -v hc >/dev/null || exit 0; [ -d ~/.agents/skills/herdr-core ] || { echo 'post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link' >&2; exit 1; }; mkdir -p ~/.config/opencode/skills && rm -rf ~/.config/opencode/skills/herdr-core && ln -s ~/.agents/skills/herdr-core ~/.config/opencode/skills/herdr-core",
+  "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex -s herdr-core -y </dev/null",
   "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
 ]
 

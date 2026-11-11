@@ -29,14 +29,10 @@ OLD = ".local/run/herdr-core"
 CONFIG = ".config/herdr-core/config.toml"
 HC_PLIST = ".local/share/herdr-core/current/Contents/Info.plist"
 APP_PLIST = "Applications/Herdr.app/Contents/Info.plist"
-# The four harness folders (design G9): Claude, Codex and the skills CLI, agy (Antigravity CLI, which reads
-# ~/.gemini/config/skills since 1.5; skills 1.8.1 installs there), OpenCode.
-SKILLS = (
-    ".claude/skills/herdr-core",
-    ".agents/skills/herdr-core",
-    ".gemini/config/skills/herdr-core",
-    ".config/opencode/skills/herdr-core",
-)
+# herdr-core in each harness folder (design G9): Claude's, the shared ~/.agents/skills that Codex and OpenCode
+# read, and agy's (Antigravity CLI reads ~/.gemini/config/skills since 1.5), a link to the shared one (mise.toml).
+SHARED, CLAUDE = ".agents/skills", ".claude/skills"
+SKILLS = (f"{CLAUDE}/herdr-core", f"{SHARED}/herdr-core", ".gemini/config/skills/herdr-core")
 # hc's socket inputs (paths.rs:28-34): HC_SOCKET, the config's socket key, XDG_RUNTIME_DIR, HC_SESSION and the
 # state folder. Green is none set, or each at its default; the doctor does not copy hc's resolver (Alternative R).
 ROUTING = ("HC_SOCKET", "XDG_RUNTIME_DIR", "HC_SESSION", "XDG_STATE_HOME")
@@ -477,9 +473,28 @@ class Reader:
                 found[folder] = None
         return found
 
+    def names(self, folder: str) -> list[str]:
+        """The entries of a skills folder, dot entries (mise's and the harness's own state) left out; a missing
+        folder has none, and one that can't be listed is unknown."""
+        try:
+            return sorted(entry.name for entry in (self.home / folder).iterdir() if not entry.name.startswith("."))
+        except FileNotFoundError:
+            return []
+        except OSError:
+            self.lost("skills")
+            return []
+
+    def is_skill(self, folder: str) -> bool:
+        mode = self.mode(self.home / folder / "SKILL.md", "skills")
+        return mode is not None and stat.S_ISREG(mode)
+
     def skills_missing(self) -> list[str]:
-        """The harness skill folders with no herdr-core SKILL.md file; one that can't be read is unknown."""
-        modes = {folder: self.mode(self.home / folder / "SKILL.md", "skills") for folder in SKILLS}
+        """The skill folders with no SKILL.md file: herdr-core's in each harness folder, Claude Code's entry for
+        each skill of the shared folder, and each Claude Code entry that no longer reaches one (a link left by
+        `skills remove -a <one agent>`); one that can't be read is unknown."""
+        shared = [f"{CLAUDE}/{name}" for name in self.names(SHARED) if self.is_skill(f"{SHARED}/{name}")]
+        folders = dict.fromkeys([*SKILLS, *shared, *(f"{CLAUDE}/{name}" for name in self.names(CLAUDE))])
+        modes = {folder: self.mode(self.home / folder / "SKILL.md", "skills") for folder in folders}
         return [f"~/{folder}" for folder, mode in modes.items() if mode is not None and not stat.S_ISREG(mode)]
 
 

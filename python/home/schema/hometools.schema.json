@@ -81,7 +81,7 @@
         "hc": {"type": ["string", "null"], "description": "herdr-core's version, from the Info.plist of ~/.local/share/herdr-core/current; null when it is not installed."},
         "app": {"type": ["string", "null"], "description": "Herdr.app's version, from its Info.plist; null when it is not installed."},
         "skill_tag": {"type": ["string", "null"], "description": "The herdr-core skill's ref in the skills CLI lock; null when the lock has none."},
-        "skills_missing": {"type": "array", "items": {"type": "string"}, "description": "The harness skill folders (home as ~) with no herdr-core SKILL.md."},
+        "skills_missing": {"type": "array", "items": {"type": "string"}, "description": "Skill folders (home as ~) with no SKILL.md: herdr-core's, and Claude Code's entries."},
         "cores": {"type": "array", "items": {"type": "integer"}, "description": "Core processes: argv hc or herdr-core followed by --hc-launchd or serve (pgrep -f)."},
         "listeners": {"type": "array", "items": {"type": "integer"}, "description": "The pids holding ~/.local/state/herdr-core/default/default.sock (lsof); empty when it is not a socket."},
         "lock_path": {"type": ["string", "null"], "description": "The socket path core.lock advertises, home as ~; null when the file is missing."},

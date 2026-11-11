@@ -677,6 +677,45 @@ def test_a_missing_skill_fails_v10(scratch: Scratch) -> None:
     assert checks.model_dump() == failing("V10")
 
 
+def test_a_shared_skill_claude_code_does_not_list_fails_v10(scratch: Scratch) -> None:
+    # Codex reads ~/.agents/skills; Claude Code needs its own entry for each skill there.
+    scratch.write(".agents/skills/alpha/SKILL.md", "---\nname: alpha\n---\n")
+    scratch.write(".agents/skills/.mise-skills.json", "{}")  # A dot entry is no skill.
+    (scratch.home / ".agents/skills/no-skill").mkdir()  # Nothing to read, so nothing Claude Code must list.
+    scratch.write(".claude/skills/claude-only/SKILL.md", "---\nname: claude-only\n---\n")
+    seen, checks = scratch.observe()
+    assert seen.skills_missing == ["~/.claude/skills/alpha"]
+    assert checks.model_dump() == failing("V10")
+    (scratch.home / ".claude/skills/alpha").symlink_to("../../.agents/skills/alpha")
+    assert scratch.checks() == ALL_PASS
+
+
+def test_a_claude_code_link_to_a_removed_shared_skill_fails_v10(scratch: Scratch) -> None:
+    # What `skills remove -a <one agent>` through the Antigravity CLI folder link leaves behind.
+    (scratch.home / ".claude/skills/beta").symlink_to("../../.agents/skills/beta")
+    seen, checks = scratch.observe()
+    assert seen.skills_missing == ["~/.claude/skills/beta"]
+    assert checks.model_dump() == failing("V10")
+
+
+def test_a_missing_shared_folder_lists_no_skills(scratch: Scratch) -> None:
+    shutil.rmtree(scratch.home / ".agents/skills")
+    seen, checks = scratch.observe()
+    assert (seen.skills_missing, seen.unknown) == (["~/.agents/skills/herdr-core"], [])
+    assert checks.model_dump() == failing("V10")
+
+
+def test_a_skills_folder_that_can_t_be_listed_is_unknown(scratch: Scratch) -> None:
+    folder = scratch.home / ".claude/skills"
+    folder.chmod(0)
+    try:
+        seen, checks = scratch.observe()
+    finally:
+        folder.chmod(0o700)
+    assert seen.unknown == ["skills"]
+    assert checks.model_dump() == failing("V10", result="unknown")
+
+
 @pytest.mark.parametrize(
     "skills",
     [{"herdr-core": {"ref": "v0.1.17"}}, {"herdr-core": {}}, {"other": {"ref": f"v{HC}"}}, {"herdr-core": "v0.1.18"}],
