@@ -548,6 +548,22 @@ run = [
 # DL-595: exact versions hold these against `mise bootstrap packages upgrade` (which ignores brew pins);
 # `brew pin` holds them against brew. A fresh machine skips exact entries with a warning: apply with
 # "latest" once, then restore the exact values. Majors move together: unpin, upgrade, toolchain:verify, re-pin.
+# Mac sshd takes keys only (owner, 2026-11-11; Mac-wide settings go through chief-of-staff): the PC runs public CI
+# and reaches this Mac on port 22. sshd keeps the first value it reads, so 050 sorts before macOS's own
+# 100-macos.conf. No restart needed: launchd starts a fresh sshd per connection (ssh.plist inetdCompatibility,
+# Wait false), and each reads this file. Check: ssh -o BatchMode=yes -o PreferredAuthentications=none
+# -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost true prints Permission denied (publickey)
+# (the two host-key options only stop an unknown localhost key failing first). Undo: state = "absent".
+[bootstrap.files."/etc/ssh/sshd_config.d/050-no-password.conf"]
+os = "macos"
+owner = "root"
+group = "wheel"
+mode = "0644"
+content = """
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+"""
+
 [bootstrap.directories."~/.config/mise/conf.d"]
 phase = "pre-packages"
 
