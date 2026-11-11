@@ -1,0 +1,42 @@
+[project]
+name = "guards"
+version = "0.1.0"
+description = "Rule guards: one PreToolUse/BeforeTool hook for Claude Code, Codex and Gemini CLI that blocks owner-ruled commands"
+requires-python = ">=3.15"
+# None: the hook runs as `python3 -I hook.py` from whatever python3 the agent finds, with no venv.
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "pytest-xdist"]
+
+[tool.ruff]
+line-length = 120
+# The hook runs on whatever python3 an agent finds, down to macOS /usr/bin/python3 (3.9): lint and format its
+# source for 3.9, so ruff never writes newer syntax such as the unparenthesized `except A, B:`.
+per-file-target-version = { "src/**" = "py39" }
+
+[tool.ruff.lint]
+select = ["ALL"]
+# D: one-line module docstrings only. CPY001: no copyright headers. COM812: conflicts with ruff format.
+ignore = ["D", "CPY001", "COM812"]
+
+[tool.ruff.lint.per-file-ignores]
+# S101: pytest asserts with assert. S603: the tests run the hook file, a fixed path, as the agents do.
+# PLR2004: the tests compare against the literal exit code 2 that blocks a call.
+"tests/**" = ["S101", "S603", "PLR2004"]
+
+[tool.pytest.ini_options]
+# --cov=src, not the package name: the tests run hook.py as a script, so its module is __main__.
+addopts = "--cov=src --cov-branch --cov-report=term-missing --cov-fail-under=100"
+testpaths = ["tests"]
+
+# Measure the hook the tests run as a real process.
+[tool.coverage.run]
+patch = ["subprocess"]
+parallel = true
+# The pytest workers only start hook processes, so their own coverage is empty by design.
+disable_warnings = ["no-data-collected"]
+
+[build-system]
+requires = ["uv_build>=0.13.6"]
+build-backend = "uv_build"

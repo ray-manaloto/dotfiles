@@ -1,0 +1,44 @@
+# Rule guards for Codex's exec policy, beside default.rules (which Codex rewrites; this file it never touches).
+# A prefix rule sees only a command's first words, so the PreToolUse hook (~/.config/agents/guards/hook.py) is the
+# full check: it also reads options, wrappers and `sh -c`. Linked as a copy: Codex 0.167 skips a symlinked .rules
+# file (codex-rs/core/src/exec_policy.rs:1209-1213 keeps only entries whose own type is a file).
+# Check: codex execpolicy check --rules unix/home/.codex/rules/guards.rules -- brew install jq
+
+prefix_rule(
+    pattern = ["brew", ["install", "reinstall", "upgrade", "tap"]],
+    decision = "forbidden",
+    justification = "rule guard 1: agents never install with Homebrew; ask dotfiles-lead for a dotfiles PR that adds it with mise bootstrap packages use/apply",
+    match = [["brew", "install", "jq"], ["brew", "upgrade"]],
+    not_match = [["brew", "list"], ["brew", "info", "jq"]],
+)
+
+prefix_rule(
+    pattern = ["doppler", "secrets", ["get", "download", "run", "substitute"]],
+    decision = "forbidden",
+    justification = "rule guard 3: secrets stay inside fnox; run fnox exec --only KEY -- <command>, check with fnox check or fnox env --json --describe",
+    match = [["doppler", "secrets", "get", "API_KEY"], ["doppler", "secrets", "download"]],
+    not_match = [["doppler", "secrets", "set", "KEY"], ["doppler", "me"]],
+)
+
+prefix_rule(
+    pattern = ["doppler", "run"],
+    decision = "forbidden",
+    justification = "rule guard 3: secrets stay inside fnox; run fnox exec --only KEY -- <command>",
+    match = [["doppler", "run", "--", "env"]],
+)
+
+prefix_rule(
+    pattern = ["fnox", ["get", "export"]],
+    decision = "forbidden",
+    justification = "rule guard 3: fnox get and fnox export print secrets; run fnox exec --only KEY -- <command>, check with fnox check or fnox env --json --describe",
+    match = [["fnox", "get", "API_KEY"], ["fnox", "export"]],
+    not_match = [["fnox", "exec", "--only", "KEY", "--", "env"], ["fnox", "check"]],
+)
+
+prefix_rule(
+    pattern = ["docker", "desktop", "update"],
+    decision = "forbidden",
+    justification = "rule guard 4: Docker Desktop updates are the owner's; an agent only runs docker desktop start --timeout 300",
+    match = [["docker", "desktop", "update"]],
+    not_match = [["docker", "desktop", "start", "--timeout", "300"]],
+)

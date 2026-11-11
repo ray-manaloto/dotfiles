@@ -1,0 +1,42 @@
+# Rule guards for Gemini CLI's policy engine (User tier, ~/.gemini/policies). A command prefix sees only the start of
+# the command, so the BeforeTool hook (~/.config/agents/guards/hook.py) is the full check: it also reads options,
+# wrappers, `sh -c` and container files; the Codex rules file covers a different subset. `export DOPPLER_TOKEN=...`
+# uses commandRegex: a commandPrefix must end at a space or quote, so it never matches `DOPPLER_TOKEN=`, while a
+# commandRegex becomes `"command":"<regex>` (bundle chunk buildArgsPatterns). Linked as a copy: Gemini CLI 0.67
+# reads only directory entries that are files (readPolicyFiles: `entry.isFile() && entry.name.endsWith(".toml")`),
+# so it skips a symlink.
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["brew install", "brew reinstall", "brew upgrade", "brew tap"]
+decision = "deny"
+priority = 990
+denyMessage = "rule guard 1: agents never install with Homebrew. Ask dotfiles-lead for a dotfiles PR that adds it with `mise bootstrap packages use` and `mise bootstrap packages apply`."
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["doppler secrets get", "doppler secrets download", "doppler secrets run", "doppler secrets substitute", "doppler run", "fnox get", "fnox export"]
+decision = "deny"
+priority = 990
+denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox exec --only KEY -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
+
+[[rule]]
+toolName = "run_shell_command"
+commandRegex = "(export|declare -x|typeset -x) DOPPLER_TOKEN\\b"
+decision = "deny"
+priority = 990
+denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox exec --only KEY -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "docker desktop update"
+decision = "deny"
+priority = 990
+denyMessage = "rule guard 4: Docker Desktop updates are the owner's. An agent only runs `docker desktop start --timeout 300`."
+
+[[rule]]
+toolName = "run_shell_command"
+commandPrefix = ["pkill", "killall"]
+decision = "deny"
+priority = 990
+denyMessage = "rule guard 6: no killing by name. Kill your own child by its recorded pid or process group; or run `pgrep` with every option before the pattern, check the list, then `kill <pids>`."
