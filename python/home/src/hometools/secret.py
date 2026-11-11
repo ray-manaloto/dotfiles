@@ -5,7 +5,7 @@ default capabilities (crates/fnox-core/src/providers/mod.rs:261-263), so `fnox s
 the TOML (src/commands/set.rs:563-565). This command sends it to Doppler instead.
 
 The value goes from this process's stdin to doppler's stdin through a pipe: it is never an argument, never
-printed or logged and never written to a file. The write token is the age-encrypted DOPPLER_TOKEN of the global
+printed or logged and never written to a file. The write token is the Keychain-held DOPPLER_TOKEN of the global
 fnox config's doppler_write profile; `fnox exec` hands it to doppler as DOPPLER_TOKEN, the one variable doppler
 reads its token from (doppler 3.77.1 pkg/models/config.go:156), and --no-defaults keeps every other secret out.
 Inherited DOPPLER_* variables (an API host, a TLS switch, another token) are dropped from the child's environment,

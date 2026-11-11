@@ -35,12 +35,13 @@ DOPPLER_TOKEN= { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgy
 
 # The read/write token for dotfiles/dev_personal, for `mise run secret:set` alone: it is the profile's own
 # DOPPLER_TOKEN because that is the variable doppler reads, and only `fnox exec --profile doppler_write`
-# hands it out. The owner stores it with
-#   pbpaste | fnox set DOPPLER_TOKEN --global --profile doppler_write --provider age
-# which keeps env, if_missing and daemon_cache. Until then the profile fails instead of running without a token.
-# daemon_cache = false: the fnox daemon never holds the write token, so it is decrypted only for secret:set.
+# hands it out. It lives in the macOS Keychain (service dotfiles-fnox, account DOPPLER_WRITE_TOKEN), never in
+# this public file, not even as ciphertext. The owner stores it with
+#   pbpaste | fnox set DOPPLER_TOKEN --global --profile doppler_write --provider keychain --key-name DOPPLER_WRITE_TOKEN
+# which keeps env, if_missing and daemon_cache (it only respaces this line). Until then the profile fails instead of running without a token.
+# daemon_cache = false: the fnox daemon never holds the write token, so it is read only for secret:set.
 [profiles.doppler_write.secrets]
-DOPPLER_TOKEN = { provider = "age", env = "exec", if_missing = "error", daemon_cache = false }
+DOPPLER_TOKEN = { provider = "keychain", value = "DOPPLER_WRITE_TOKEN", env = "exec", if_missing = "error", daemon_cache = false }
 
 # Consumers. Each key is a Doppler reference read only into the command's environment; if_missing = "warn"
 # starts the consumer without it when Doppler fails.
