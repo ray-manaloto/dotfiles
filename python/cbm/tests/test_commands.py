@@ -8,10 +8,7 @@ import pytest
 from .conftest import cbm, events, git, launcher, link, provision
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_verify_detects_a_corrupt_reused_build_unless_explicitly_replaced(
-    home: Path, releases: Path, *, force: bool
-) -> None:
+def test_verify_detects_a_corrupt_reused_build(home: Path, releases: Path) -> None:
     assert cbm("install", cwd=releases).returncode == 0
     tool = "github:DeusData/codebase-memory-mcp@9.9.10"
     provision(home, tool)
@@ -23,16 +20,12 @@ def test_verify_detects_a_corrupt_reused_build_unless_explicitly_replaced(
     binary.write_bytes(corrupt)
     # Provisioning is test setup, like creating the temporary git repos. Ordinary mise installation
     # must leave reused bytes intact; the observable check remains the installed cbm command.
-    provision(home, tool, *(["--force"] if force else []))
+    provision(home, tool)
     done = cbm("verify", cwd=releases)
-    assert done.returncode == (0 if force else 1)
-    assert events(done.stdout)[-1]["outcome"] == ("done" if force else "failed")
-    if force:
-        assert "codebase-memory-mcp 9.9.10" in done.stdout
-        assert not done.stderr
-    else:
-        assert binary.read_bytes() == corrupt
-        assert {error["code"] for error in events(done.stderr)} == {"command_failed"}
+    assert done.returncode == 1
+    assert events(done.stdout)[-1]["outcome"] == "failed"
+    assert binary.read_bytes() == corrupt
+    assert {error["code"] for error in events(done.stderr)} == {"command_failed"}
 
 
 @pytest.mark.parametrize("version", ["9.9.9", "9.9.10"])

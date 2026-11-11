@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .main_guard import git
+from .git import git
 from .models import Failure, Healthy, ToolAction, ToolInstalled, ToolReceipt
 
 TOOLS = {"workflowtools": "python/workflow", "repotools": "python/repo"}

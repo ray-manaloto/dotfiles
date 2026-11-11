@@ -18,35 +18,57 @@ description = "ruff check, ruff format --check, ty check, and models.py matches 
 depends = ["sync", "codegen --check"]
 run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 
+# Run by hand, never from a hook: it writes ~/.agents/skills and ~/.claude/skills. Reads the install's jars on disk and
+# contacts no IDE. E.g. mise run //jbctl:skills -- --ide clion --skill clion-debugger (--check writes nothing).
+[tasks.skills]
+description = "Copy bundled skills out of a Toolbox install for Claude Code and Codex (jbctl skills)"
+depends = ["sync"]
+run = "uv run --locked jbctl skills"
+
+# jbctl on PATH, run by name from any folder. Like //workflow:install, it installs this checkout as it is, apart from
+# //repo:tools-install, so a python/jbctl edit never blocks the repotools and workflowtools the approvals use. The
+# installed copy does not follow later edits or pulls: run this again after jbctl changes land.
+[tasks.install]
+description = "Install this checkout's jbctl as a uv tool, so jbctl runs by name"
+dir = "{{ config_root }}/../.."
+run = "uv tool install --reinstall ./python/jbctl"
+
 # The live tests are skipped unless JBCTL_IDE is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
 skip_if = "{{ os() != 'macos' }}"
 description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_IDE set"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+# Serial: jbctl finds IDEs by the machine-wide web ports 63342-63361 and process list, so a stand-in IDE
+# from a parallel worker shows up in another test's status.
+run = "uv run --locked pytest --durations=25"
 
 # <ide> is the IDE's Toolbox shell-script name (clion, pycharm, clion1). The live tests run in the background,
 # Settings included (opened through the IDE's station socket). Only the debug route that brings the IDE forward is
 # marked out of the count ("# pragma: foreground"; //jbctl:markers refuses any other pragma). The #502 floor
-# is 97.68%, measured with Q5's lifecycle (2026-11-07) in a run that did not reach the cli.py page move below,
-# which the floor assumes a run does not reach. What stays uncovered: three guards no working IDE or jbax
+# is 97.63%: a headless run on 2026-11-07, with jbctl skills, measured 97.75% (1260 of 1285 lines, 348 of 360
+# branches), but it reached the cli.py page move below, which the floor assumes a run does not reach; without
+# that line and its branch, the same run is 97.63%. What stays uncovered: three guards no working IDE or jbax
 # trips, "Settings did not open" (ide.py), a Settings window without a search field (rea.py) and a jbax that
 # crashed without printing JSON (ide.py); the move to the page asked for when Settings opens elsewhere (cli.py),
 # which a headless run reaches only when a station open is still landing; and lifecycle states no run produces on
 # demand: two new IDEs at once, windows jbax cannot inspect, a pid that changes between the check and /exit, a
 # dialog that appears while stop waits before --force, and psutil's SystemError for a process that ends while it is
-# read (toolbox.snapshot). All are left visible as uncovered rather than marked.
+# read (toolbox.snapshot); and in skills, a renamex_np that fails, and the swap-backs for a swapped-out copy or folder
+# that changed since the check, cannot be read, or is no longer a folder, or a run stopped mid-check. All are left
+# visible as uncovered rather than marked.
 # --foreground also runs the debug route against the real IDE, which brings it forward once.
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
-description = "Every test, live ones included; line and branch coverage of at least 97.68% (#502)"
+description = "Every test, live ones included; line and branch coverage of at least 97.63% (#502)"
 depends = ["sync"]
 usage = """
 arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
 flag "--foreground" help="Also run the debug route that brings the IDE forward (menu-bar Settings)"
 """
-run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=97.68'
+run = 'JBCTL_IDE="$usage_ide" JETBRAINS_FOREGROUND="${usage_foreground:+1}" uv run --locked pytest --cov-fail-under=97.63'
 
 # start, restart and stop of a real spare IDE: it comes forward and is quit, so the owner runs this, never a hook
 # or the coverage gate. The IDE opens a throwaway worktree of ~/dev/github/jdx/mise (JBCTL_LIFECYCLE_REPO) under

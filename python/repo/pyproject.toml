@@ -6,7 +6,7 @@ requires-python = ">=3.15"
 dependencies = ["pydantic", "pydantic-settings", "tomlkit"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [tool.ruff]
 line-length = 120
@@ -51,6 +51,7 @@ output-model-type = "pydantic_v2.BaseModel"
 enable-faux-immutability = true
 target-python-version = "3.15"
 use-annotated = true
+snake-case-field = true
 use-type-alias = true
 strict-nullable = true
 use-standard-collections = true

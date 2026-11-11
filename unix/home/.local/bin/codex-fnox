@@ -5,7 +5,6 @@
 # config.toml. hc reads HC_SOCKET for its client socket, not HC_TERMINAL_SOCKET.
 if [ -n "${HC_TERMINAL_ID:-}" ] && [ -n "${HC_TERMINAL_SOCKET:-}" ]; then
   set -- \
-    -c "shell_environment_policy.set.HC_SOCKET=\"$HC_TERMINAL_SOCKET\"" \
     -c "shell_environment_policy.set.HC_TERMINAL_SOCKET=\"$HC_TERMINAL_SOCKET\"" \
     -c "shell_environment_policy.set.HC_TERMINAL_ID=\"$HC_TERMINAL_ID\"" \
     ${HC_SCOPE:+-c "shell_environment_policy.set.HC_SCOPE=\"$HC_SCOPE\""} \

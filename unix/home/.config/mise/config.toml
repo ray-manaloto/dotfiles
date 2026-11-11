@@ -96,6 +96,9 @@ HK_MISE = "1"
 #MISE_ARCH = "arm"
 CONDA_SUBDIR = "osx-arm64"
 GIT_TERMINAL_PROMPT = "0"
+# vcpkg's root is the mise vcpkg-tool install (see [tools]); no telemetry.
+VCPKG_ROOT = { value = "{{ tools['github:microsoft/vcpkg-tool'].path }}", tools = true }
+VCPKG_DISABLE_METRICS = "1"
 # NotebookLM auth: standardize paths so agents find credentials consistently
 NOTEBOOKLM_HOME = "~/.notebooklm"
 # Mossop pattern: name the brew prefix once; PATH entries below expand it (env_shell_expand).
@@ -137,86 +140,86 @@ path = [
 # update:mise keeps these minor/patch selections and retains recovery installs.
 python = [{ version = "3.15", minimum_release_age = "0s" }, { version = "3.14.8", minimum_release_age = "0s" }]
 #python = { version = "3.15.2", minimum_release_age = "0s" }
-pipx = { version = "1.18.13", minimum_release_age = "0s" }
+pipx = { version = "1.18.16", minimum_release_age = "0s" }
 npm = { version = "12.2.2", minimum_release_age = "0s" }
 bun = { version = "1.4.4", minimum_release_age = "0s" }
 node = { version = "26.13.0", minimum_release_age = "0s" }
-go = { version = "1.27.3", minimum_release_age = "0s" }
+go = { version = "1.27.4", minimum_release_age = "0s" }
 rust = { version = "1.99.1", minimum_release_age = "0s" }
-pixi = { version = "0.84.1", minimum_release_age = "0s" }
+pixi = { version = "0.84.2", minimum_release_age = "0s" }
 uv = { version = "0.13.7", minimum_release_age = "0s" }
 chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
-hk = { version = "2.11.1", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14 (claude-code-marketplace D154)
+hk = { version = "2.12.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
-fnox = { version = "1.47.0", workflow = "release.yml", minimum_release_age = "0s" }
-pitchfork = { version = "2.33.1", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
-usage = { version = "7.2.0", workflow = "publish-cli.yml", minimum_release_age = "0s" }
+fnox = { version = "1.48.0", workflow = "release.yml", minimum_release_age = "0s" }
+pitchfork = { version = "2.34.0", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
+usage = { version = "7.3.0", workflow = "publish-cli.yml", minimum_release_age = "0s" }
 #communique = { version = "1.6.0", workflow = "release.yml@refs/heads/main", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
 communique = { version = "1.8.0", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 starship = { version = "1.27.0", minimum_release_age = "0s" }
 ripgrep = { version = "15.2.0", minimum_release_age = "0s" }
-fd = { version = "10.5.1", minimum_release_age = "0s" }
+fd = { version = "10.5.2", minimum_release_age = "0s" }
 zoxide = { version = "0.10.0", minimum_release_age = "0s" }
 bat = { version = "0.26.1", minimum_release_age = "0s" }
 "vfox:jdx/vfox-eza" = { version = "0.23.5", minimum_release_age = "0s" }
-fzf = { version = "0.74.5", minimum_release_age = "0s" }
+fzf = { version = "0.75.0", minimum_release_age = "0s" }
 delta = { version = "0.20.1", minimum_release_age = "0s" }
 lsd = { version = "1.2.0", minimum_release_age = "0s" }
 hyperfine = { version = "2.0.0", minimum_release_age = "0s" }
 glow = { version = "3.0.0", minimum_release_age = "0s" }
-atuin = { version = "18.24.5", minimum_release_age = "0s" }
-"github:ast-grep/ast-grep" = { version = "0.51.1", minimum_release_age = "0s" }
+atuin = { version = "18.24.6", minimum_release_age = "0s" }
+"github:ast-grep/ast-grep" = { version = "0.51.2", minimum_release_age = "0s" }
 "aqua:FiloSottile/age" = { version = "1.3.2", minimum_release_age = "0s" }
 sops = { version = "3.13.3", minimum_release_age = "0s" }
 #github:DopplerHQ/cli" = { version = "3.77.0", exe = "doppler", asset_pattern = "*macOS_arm64.tar.gz", minimum_release_age = "0s" }
 doppler = { version = "3.77.1", minimum_release_age = "0s" }
 jq = { version = "1.8.2", minimum_release_age = "0s" }
-yq = { version = "4.54.1", minimum_release_age = "0s" }
+yq = { version = "4.54.3", minimum_release_age = "0s" }
 shellcheck = { version = "0.11.0", minimum_release_age = "0s" }
 hadolint = { version = "2.15.1", minimum_release_age = "0s" }
 pre-commit = { version = "4.7.0", minimum_release_age = "0s" }
 #"pipx:mgrep" = { version = "0.1.6", minimum_release_age = "0s" }
-typos = { version = "1.52.0", minimum_release_age = "0s" }
+typos = { version = "1.52.2", minimum_release_age = "0s" }
 #"pypi:yamllint" = { version = "1.38.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-aws-cli = { version = "2.39.4", symlink_bins = "true", minimum_release_age = "0s" }
+aws-cli = { version = "2.40.0", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
 "aqua:loft-sh/devpod" = { version = "0.6.15", minimum_release_age = "0s" }
 github-cli = { version = "2.103.3", minimum_release_age = "0s" }
 cloudflared = { version = "2026.10.7", minimum_release_age = "0s" }
 pandoc = { version = "3.13", minimum_release_age = "0s" }
-tmux = { version = "3.7c", minimum_release_age = "0s" }
+tmux = { version = "3.8", minimum_release_age = "0s" }
 lefthook = { version = "2.2.2", minimum_release_age = "0s" }
 devcontainer-cli = { version = "0.90.0", minimum_release_age = "0s" }
 docker-cli = { version = "29.9.3", minimum_release_age = "0s" }
 docker-compose = { version = "5.7.0", minimum_release_age = "0s" }
 #"github:docker/docker-agent" = { version = "1.152.0", asset_pattern = "*-arm64", minimum_release_age = "0s" }
-"github:docker/docker-agent" = { version = "1.156.2", minimum_release_age = "0s" }
+"github:docker/docker-agent" = { version = "1.159.0", minimum_release_age = "0s" }
 xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
 bats = { version = "1.14.0", minimum_release_age = "0s" }
 "github:charmbracelet/gum" = { version = "2.0.2", minimum_release_age = "0s" }
 gemini = { version = "0.67.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
 "npm:@modelcontextprotocol/inspector" = { version = "2.14.0", minimum_release_age = "0s" }
 "npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s" }
-"npm:jscpd" = { version = "5.4.2", minimum_release_age = "0s" }
-"npm:@fission-ai/openspec" = { version = "1.16.0", minimum_release_age = "0s" }
-biome = { version = "2.6.5", minimum_release_age = "0s" }
+"npm:jscpd" = { version = "5.4.3", minimum_release_age = "0s" }
+"npm:@fission-ai/openspec" = { version = "1.17.0", minimum_release_age = "0s" }
+biome = { version = "2.6.6", minimum_release_age = "0s" }
 yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = "0s" }
-rtk = { version = "1.1.0", minimum_release_age = "0s" }
+rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "pipx:notebooklm-py" = { version = "0.8.6", extras = ["all"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 #"pipx:mcp2cli" = { version = "3.8.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 "npm:@googleworkspace/cli" = { version = "0.22.5", minimum_release_age = "0s" }
-"npm:ctx7" = { version = "0.9.0", minimum_release_age = "0s" }
+"npm:ctx7" = { version = "0.11.0", minimum_release_age = "0s" }
 "npm:@augmentcode/auggie" = { version = "0.37.0", minimum_release_age = "0s" }
 "npm:@tauri-apps/cli" = { version = "2.12.4", minimum_release_age = "0s" }
-"npm:@playwright/cli" = { version = "0.1.23", minimum_release_age = "0s" }
+"npm:@playwright/cli" = { version = "0.1.24", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
-"npm:skills" = { version = "1.7.6", minimum_release_age = "0s" }
-"npm:agent-browser" = { version = "0.41.2", minimum_release_age = "0s" }
+"npm:skills" = { version = "1.8.1", minimum_release_age = "0s" }
+"npm:agent-browser" = { version = "0.42.0", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
-"npm:dev3000" = { version = "0.0.189", minimum_release_age = "0s" }
-"npm:portless" = { version = "0.16.0", minimum_release_age = "0s" }
+"npm:dev3000" = { version = "0.0.192", minimum_release_age = "0s" }
+"npm:portless" = { version = "0.17.0", minimum_release_age = "0s" }
 "npm:opensrc" = { version = "0.7.3", minimum_release_age = "0s" }
 #"pipx:langchain-cli" = { version = "0.0.37", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 #"pipx:langgraph-cli" = { version = "0.4.39", python = "3.15", with = ["typing-extensions"], minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
@@ -247,27 +250,27 @@ stern = { version = "1.35.0", minimum_release_age = "0s" }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
 #"pipx:check-jsonschema" = { version = "0.38.2", minimum_release_age = "0s" }
-"gitlab:graphviz/graphviz" = { version = "16.1.0", minimum_release_age = "0s" }
+"gitlab:graphviz/graphviz" = { version = "16.1.1", minimum_release_age = "0s" }
 "aqua:betterleaks/betterleaks" = { version = "1.10.0", minimum_release_age = "0s" }
 "npm:@ralph-orchestrator/ralph-cli" = { version = "2.10.1", minimum_release_age = "0s" }
-aube = { version = "2.9.0", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
+aube = { version = "2.10.0", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
 shfmt = { version = "3.14.1", minimum_release_age = "0s" }
 sqlite = { version = "3.54.1", minimum_release_age = "0s" }
 libsql-server = { version = "0.24.32", minimum_release_age = "0s" }
 micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
 "pipx:datamodel-code-generator" = { version = "0.89.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:defuddle" = { version = "0.19.6", minimum_release_age = "0s" }
-rumdl = { version = "0.3.2", minimum_release_age = "0s" }
+rumdl = { version = "0.3.3", minimum_release_age = "0s" }
 "github:asciimoo/hister" = { version = "0.21.0", minimum_release_age = "0s" }
 llmfit = { version = "1.1.20", minimum_release_age = "0s" }
 wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
 "github:kenn-io/agentsview" = { version = "0.46.1", minimum_release_age = "0s" }
-"npm:firecrawl-cli" = { version = "1.28.0", minimum_release_age = "0s" }
+"npm:firecrawl-cli" = { version = "1.29.0", minimum_release_age = "0s" }
 #"aqua:dalance/procs" = { version = "0.14.12", minimum_release_age = "0s" }
 #"cargo:procs" = { version = "0.14.12", minimum_release_age = "0s" }
-topgrade = { version = "17.15.0", minimum_release_age = "0s" }
+topgrade = { version = "17.16.0", minimum_release_age = "0s" }
 
-"npm:openwiki" = { version = "0.8.0", minimum_release_age = "0s" }
+"npm:openwiki" = { version = "0.9.0", minimum_release_age = "0s" }
 
 # Deliberate upgrades only: update_mise.py excludes it from `upgrade --bump`. Close sessions and
 # stop the old daemon with the old binary before changing this pin (one build per account).
@@ -278,6 +281,10 @@ topgrade = { version = "17.15.0", minimum_release_age = "0s" }
 cmake = { version = "4.4.5", minimum_release_age = "0s" }
 ninja = { version = "1.13.2", minimum_release_age = "0s" }
 sccache = { version = "0.19.0", minimum_release_age = "0s" }
+# vcpkg in manifest mode, no microsoft/vcpkg clone: the release binary with the standalone bundle laid
+# over it (scripts/, triplets/), as ray-manaloto/cpp-utilities mise.toml pins it. VCPKG_ROOT
+# in [env] names this install, so CMake presets use $env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake.
+"github:microsoft/vcpkg-tool" = { version = "2026-10-29", minimum_release_age = "0s", additional_asset_patterns = ["vcpkg-standalone-bundle.tar.gz"], rename_exe = "vcpkg", platforms = { macos-arm64 = { asset_pattern = "vcpkg-macos" }, linux-x64 = { asset_pattern = "vcpkg-glibc" }, linux-arm64 = { asset_pattern = "vcpkg-glibc-arm64" } } }
 
 # P2996 build extras (DL-756, DL-757): tools live here, never in a project; mise registry first, then
 # conda (swig, doxygen and ocaml are not in the mise registry), then brew. SWIG generates lldb's Python
@@ -290,8 +297,8 @@ lua = { version = "5.5.1", minimum_release_age = "0s" }
 "conda:doxygen" = { version = "1.18.0", minimum_release_age = "0s" }
 "conda:zstd-static" = { version = "1.5.7", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
-ruff = { version = "0.17.3", minimum_release_age = "0s" }
-ty = { version = "0.0.97", minimum_release_age = "0s" }
+ruff = { version = "0.17.4", minimum_release_age = "0s" }
+ty = { version = "0.0.101", minimum_release_age = "0s" }
 # swift/ (jbax): hk's swiftlint builtin; macOS only, like jbax. Formatting is the toolchain's own `swift format`.
 swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 
@@ -356,6 +363,9 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
 "github:vercel-labs/agent-desktop" = { version = "1.2.0", minimum_release_age = "0s" }
+"npm:@ai-sdk/openai-compatible" = { version = "3.0.90", minimum_release_age = "0s" }
+"npm:apify-cli" = { version = "1.11.0", minimum_release_age = "0s" }
+jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 
 #[tool_alias]
 #devcontainer = "npm:@devcontainers/cli"
@@ -369,8 +379,8 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # Run `update-all` (the guarded alias in [shell_alias]) on its own: it already runs brew
 # update/upgrade, mise self-update and mise upgrade, so running those first repeats the work.
 # DAG: mise tasks deps --compact; plan: mise run -n update:all
-# A wedged install that holds mise's tool-version lock blocks every later `mise run`
-# (knowledge-base #418); scripts/mise_update_guard.py detects it (see [shell_alias]).
+# An unfinished tool install that holds mise's tool-version lock wedges every later `mise run`;
+# scripts/mise_update_guard.py detects it (see [shell_alias]).
 # update:brew and update:check are file tasks in tasks/update/: hometools update-brew and update-check
 # do their work (#392).
 
@@ -465,7 +475,7 @@ run = ["mise doctor", "mise run toolchain:verify"]
 # It must NOT be wired as a mise task (`file = ...`). A mise task runs INSIDE
 # `mise run`, which resolves tools first — so the guard would block on the very
 # lock it exists to detect, and report nothing. Running it outside mise is what
-# lets it observe the lock rather than join the queue. See knowledge-base #418.
+# lets it observe the lock rather than join the queue, where an unfinished tool install wedges it.
 #
 # Bypass deliberately with `mise run update:all` if you ever need the unguarded
 # path; the guard is a seatbelt, not a cage.
@@ -484,7 +494,7 @@ gemini_yolo = "gemini --yolo"
 # (repotools toolchain-gate), which fails until the installs match: a typo or an uninstalled version stops it.
 gcc = "16.2.0"
 gcc_major = "16"
-llvm = "23.1.4"
+llvm = "23.1.5"
 llvm_major = "23"
 iwyu = "0.27"
 gdb = "18.1"
@@ -501,9 +511,22 @@ includes = ["{{ mise_config_dir }}/agentsview-native/tasks.toml", "{{ mise_confi
 [bootstrap.hooks.pre-packages]
 run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% endif %}'
 
-# hc's skill is a mise-run install, so it waits for the tools phase; what is installed is skipped:
-# Codex reads ~/.agents/skills, and Claude needs its own link in ~/.claude/skills.
-# It is only a pointer to `hc --skill`, so the tag needs no bump to follow hc.
+# hc's skill is a mise-run install, so it waits for the tools phase. It goes to all four harnesses,
+# whose folders herdr:doctor checks (V10): Claude (~/.claude/skills), Codex (~/.agents/skills),
+# Antigravity CLI (~/.gemini/config/skills) and OpenCode (~/.config/opencode/skills). The tag
+# comes from the installed hc: `hc --version` prints `hc 0.1.19` and starts no core, and the line installs
+# herdr-core#v0.1.19, so a Herdr self-update needs no pin bump to keep V10 green. With no hc on PATH (a
+# new Mac before Herdr's first run installs it), the line says to open Herdr once and rerun bootstrap,
+# and exits 0 so bootstrap goes on and V10 shows the gap. When hc prints no `hc X.Y.Z`, the line fails
+# with a message and installs nothing. Like agent-desktop's line, it
+# is not skipped when installed: a re-run puts the tag's files back, so a stale copy is replaced and a new
+# hc's tag reaches every folder.
+# The skills CLI names the agents claude-code, codex, antigravity-cli and opencode. A global install
+# links antigravity-cli's ~/.gemini/config/skills to ~/.agents/skills (skills 1.8.1 remove.mjs:1416-1421,
+# globalReadsCanonical false), but writes ~/.agents/skills only for opencode, since its project folder
+# is .agents/skills (isUniversalAgent). The next line replaces whatever OpenCode's folder holds with a
+# link to that copy, and fails, linking nothing, when the copy is missing; with no hc on PATH it skips,
+# as the line before did.
 # The removal comes first: `skills add herdrdev/herdr` installed the Herdr TUI's skill, which tells
 # agents to drive a TUI that no longer runs, and four skills for working on Herdr's own repo. The
 # name matches the folder, and the source matches every lock entry from that repo (skills 1.7.5
@@ -516,7 +539,8 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
-  "[ -e ~/.agents/skills/herdr-core ] && [ -e ~/.claude/skills/herdr-core ] || mise exec -- skills add herdrdev/herdr-core#v0.1.17 -g -a claude-code codex -s herdr-core -y </dev/null",
+  "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex antigravity-cli opencode -s herdr-core -y </dev/null",
+  "command -v hc >/dev/null || exit 0; [ -d ~/.agents/skills/herdr-core ] || { echo 'post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link' >&2; exit 1; }; mkdir -p ~/.config/opencode/skills && rm -rf ~/.config/opencode/skills/herdr-core && ln -s ~/.agents/skills/herdr-core ~/.config/opencode/skills/herdr-core",
   "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
 ]
 
@@ -527,6 +551,22 @@ run = [
 # DL-595: exact versions hold these against `mise bootstrap packages upgrade` (which ignores brew pins);
 # `brew pin` holds them against brew. A fresh machine skips exact entries with a warning: apply with
 # "latest" once, then restore the exact values. Majors move together: unpin, upgrade, toolchain:verify, re-pin.
+# Mac sshd takes keys only (owner, 2026-11-11; Mac-wide settings go through chief-of-staff): the PC runs public CI
+# and reaches this Mac on port 22. sshd keeps the first value it reads, so 050 sorts before macOS's own
+# 100-macos.conf. No restart needed: launchd starts a fresh sshd per connection (ssh.plist inetdCompatibility,
+# Wait false), and each reads this file. Check: ssh -o BatchMode=yes -o PreferredAuthentications=none
+# -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost true prints Permission denied (publickey)
+# (the two host-key options only stop an unknown localhost key failing first). Undo: state = "absent".
+[bootstrap.files."/etc/ssh/sshd_config.d/050-no-password.conf"]
+os = "macos"
+owner = "root"
+group = "wheel"
+mode = "0644"
+content = """
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+"""
+
 [bootstrap.directories."~/.config/mise/conf.d"]
 phase = "pre-packages"
 
@@ -559,6 +599,17 @@ content = '''
 "brew-cask:herdr-app" = { os = "macos", adopt = true, appdir = "~/Applications" }
 # A current git instead of the one bundled with the Xcode Command Line Tools.
 "brew:git" = { os = "macos" }
+# Remote access to the x86 desktop. Tailscale is a pkg cask: installing it needs the owner's sudo.
+# Moonlight was installed by a bare brew install before this entry: mise sees Homebrew owns the cask
+# and leaves it unchanged. adopt keeps an existing app in place on a fresh mise install.
+"brew-cask:tailscale-app" = { os = "macos", adopt = true }
+"brew-cask:moonlight" = { os = "macos", adopt = true }
+# The Omarchy (Arch) x86 desktop: Tailscale, and the Sunshine game-stream host from Omarchy's own
+# pacman repository. mise runs `pacman -S --needed` with sudo; a machine without pacman skips
+# these. Keep updates with the distribution's own full upgrade: `mise bootstrap packages upgrade`
+# is an Arch partial upgrade.
+"pacman:tailscale" = { os = "linux" }
+"pacman:sunshine" = { os = "linux" }
 
 # DL-591: gcc/g++ wrappers retired; use the Homebrew gcc-16 and g++-16 names.
 

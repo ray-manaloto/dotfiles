@@ -2,16 +2,29 @@
 
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import gates, main_guard, pane_approval, scratch_env, shell, tools_install, zero_bash
+from . import (
+    fnox_refs,
+    gates,
+    main_guard,
+    pane_approval,
+    scratch_env,
+    shell,
+    test_times,
+    tools_install,
+    trust,
+    zero_bash,
+)
 from .models import (
     Command,
     CommitText,
     Failure,
     Fingerprint,
+    FnoxRefs,
+    HerdrGate,
     MainGuard,
     MainGuardArmed,
     MainGuardInstall,
@@ -25,8 +38,10 @@ from .models import (
     ScratchEnv,
     ShellApply,
     ShellRollback,
+    TestTimes,
     ToolchainGate,
     ToolsInstall,
+    Trust,
     ZeroBash,
 )
 
@@ -48,9 +63,20 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.shell_apply: ShellApply,
     Command.shell_rollback: ShellRollback,
     Command.toolchain_gate: ToolchainGate,
+    Command.herdr_gate: HerdrGate,
     Command.tools_install: ToolsInstall,
+    Command.test_times: TestTimes,
+    Command.trust: Trust,
+    Command.fnox_refs: FnoxRefs,
 }
 APPROVED = {Command.pane_approved, Command.pr_approved}
+# The commands that take no options, by their model.
+NO_OPTIONS: dict[type[Options], Callable[[], None]] = {
+    ToolsInstall: tools_install.run,
+    TestTimes: test_times.report,
+    Trust: trust.run,
+    FnoxRefs: fnox_refs.report,
+}
 
 
 def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
@@ -78,7 +104,7 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
         zero_bash.report(options)
-    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate | HerdrGate):
         gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
@@ -88,8 +114,8 @@ def run(command: Command, options: Options) -> None:
         pane_approval.pin(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
         pane_approval.create(options)
-    elif isinstance(options, ToolsInstall):
-        tools_install.run()
+    elif isinstance(options, ToolsInstall | TestTimes | Trust | FnoxRefs):
+        NO_OPTIONS[type(options)]()
     elif command in APPROVED:
         pane_approval.check(options)
     else:

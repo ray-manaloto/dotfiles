@@ -29,7 +29,9 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
 [tasks.test]
 description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
 
 [tasks."test:focus"]
 # For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
@@ -47,6 +49,13 @@ run = "uv run --locked pytest -m integration --no-cov"
 [tasks.unit]
 description = "lint and test"
 depends = ["lint", "test"]
+
+# hk's herdr step (//repo:herdr-gate): lint, then the doctor's and hc-safe's tests without coverage, so it shares
+# no .coverage files with the home step that hk may run at the same time; the 100% gate stays on test.
+[tasks.herdr-unit]
+description = "lint and the herdr doctor and hc-safe tests (no coverage)"
+depends = ["lint"]
+run = "uv run --locked pytest --no-cov tests/test_herdr_doctor.py tests/test_herdr_contract.py"
 
 # The commit gate: owner 2026-11-05, the real-toolchain test runs on every commit that reaches the toolchain
 # tasks; hk's pre-commit step runs this through //repo:toolchain-gate, which says which commits those are.

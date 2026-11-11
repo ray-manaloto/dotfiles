@@ -22,6 +22,7 @@ session (dotfiles-c6).
 * [rea on CLion](rea.md) - the install, the three local patches, what rea sees and can do, and its limits.
 * [Tools](tools.md) - every script, probe and the `jbctl` library, with what each one does.
 * [Plan](plan.md) - map once, execute many: the zero-token automation plan.
+* [CLion MCP server](clion-mcp.md) - the user-scope `clion` entry, its default port, router mode, ECONNREFUSED after a switch, and the bundled clion-debugger skill.
 * [Terms](terms.md) - headless run, debug route, station route, Toolbox script name.
 * [Update log](log.md) - what was added, rejected and failed.
 

@@ -23,6 +23,7 @@ class Command(StrEnum):
     start = "start"
     stop = "stop"
     restart = "restart"
+    skills = "skills"
 
 
 type McpUrl = Annotated[str, Field(min_length=1)]
@@ -241,7 +242,7 @@ A project folder for the IDE to open
 
 class Start(BaseModel):
     """
-    Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).
+    Start Toolbox IDEs as Toolbox's background mode does; wait until each is ready, MCP too (a foreground action).
     """
 
     model_config = ConfigDict(
@@ -319,7 +320,7 @@ class Stop(BaseModel):
 
 class Restart(BaseModel):
     """
-    Have running IDEs restart themselves and wait until each new one is ready (a foreground action).
+    Have running IDEs restart themselves and wait until each new one is ready, MCP too (a foreground action).
     """
 
     model_config = ConfigDict(
@@ -465,6 +466,187 @@ class Answer(BaseModel):
     detail: str
 
 
+type SkillName = Annotated[str, Field(pattern="^[a-z0-9][a-z0-9._-]*$")]
+"""
+A bundled skill by its folder name in the IDE's jar (clion-debugger); also its folder name in the agents' skill folders
+"""
+
+
+type Product4 = Annotated[str, Field(min_length=1)]
+"""
+A Toolbox tool id (CLion, PyCharm-P): only when the product has a single install
+"""
+
+
+class Skills(BaseModel):
+    """
+    Copy bundled skills out of one Toolbox install for Claude Code and Codex; contacts no IDE.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ide: IdeName | None = None
+    """
+    The install, by its Toolbox script name
+    """
+    product: Product4 | None = None
+    """
+    A Toolbox tool id (CLion, PyCharm-P): only when the product has a single install
+    """
+    skill: Annotated[list[SkillName], Field(min_length=1)]
+    """
+    A bundled skill to copy; repeat --skill for several
+    """
+    check: bool = False
+    """
+    Report what a run would do (copied, updated, ...) and write nothing; exit 1 unless every copy is current
+    """
+
+
+class SkillAgent(StrEnum):
+    """
+    Whose skill copy: codex reads the folder in ~/.agents/skills, claude the symlink to it in ~/.claude/skills.
+    """
+
+    claude = "claude"
+    codex = "codex"
+
+
+class SkillState(StrEnum):
+    """
+    What skills did to one agent's skill copy (with --check: would do). modified and unmanaged are left as they are.
+    """
+
+    copied = "copied"
+    updated = "updated"
+    unchanged = "unchanged"
+    adopted = "adopted"
+    modified = "modified"
+    unmanaged = "unmanaged"
+
+
+class SkillCopy(BaseModel):
+    """
+    One agent's copy of one bundled skill, as skills reports it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    skill: str
+    agent: SkillAgent
+    state: SkillState
+    path: str
+    """
+    The folder (codex) or symlink (claude) the agent reads
+    """
+    install: str
+    """
+    The Toolbox script name of the install it came from
+    """
+    build: str
+    version: str | None = None
+    """
+    The skill's metadata.json version, when it has one
+    """
+    previous_version: str | None = None
+    """
+    The version the copy had before it was updated
+    """
+    reason: str | None = None
+    """
+    Why a copy is modified or unmanaged
+    """
+
+
+class SkillMarker(BaseModel):
+    """
+    The .jbctl-skill.json that jbctl keeps in a skill copy it wrote: where the files came from and their sha256.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    install: str
+    build: str
+    jar: str
+    version: str | None = None
+    files: dict[str, str]
+    """
+    sha256 hex digest by path inside the copy
+    """
+
+
+class OldSkillMarker(BaseModel):
+    """
+    The .dotfiles-clion-skills.json the earlier clion:skills mise task kept (only the files it hashed are read).
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    files: dict[str, str]
+    """
+    sha256 hex digest by path inside the copy
+    """
+
+
+class BundledSkill(BaseModel):
+    """
+    One bundled skill as an install ships it: its jar, its folder in the jar, and its files' sha256.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    jar: str
+    folder: str
+    """
+    bundledSkills/<name> or <name>
+    """
+    version: str | None = None
+    """
+    Its metadata.json version, when it has one
+    """
+    files: dict[str, str]
+    """
+    sha256 hex digest by path inside the folder
+    """
+
+
+class SkillFinding(BaseModel):
+    """
+    What one agent's skill copy needs, the version it had before an update, and why it is left alone.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    state: SkillState
+    previous_version: str | None = None
+    reason: str | None = None
+
+
+class Leftover(BaseModel):
+    """
+    A folder a stopped or rolled-back skills run left, kept because it may hold someone's work.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    path: str
+    reason: str
+
+
 class Map(BaseModel):
     """
     Save rea's accessibility map of one IDE window (layer-0 windows only).
@@ -551,7 +733,7 @@ class RouterDirect(BaseModel):
 
 class CheckDirect(BaseModel):
     """
-    Fail unless an MCP tools/list shows more than the router tool alone (DIRECT): the IDE's own server, or --mcp-url.
+    Fail unless MCP tools/list (every page) shows more than the router tool (DIRECT); say if it lists the router.
     """
 
     model_config = ConfigDict(
@@ -579,6 +761,7 @@ type Options = (
     | Start
     | Stop
     | Restart
+    | Skills
 )
 
 
@@ -615,12 +798,18 @@ class Event(BaseModel):
     selected: str | None = None
     tools: int | None = None
     direct: bool | None = None
+    router: bool | None = None
+    """
+    Whether tools/list names the router tool (execute_tool), which a router-only skill such as clion-debugger calls
+    """
     patch: PatchState | None = None
     map: str | None = None
     nodes: int | None = None
     coverage: Coverage | None = None
     ides: list[IdeStatus] | None = None
     lifecycle: Lifecycle | None = None
+    skill: SkillCopy | None = None
+    leftover: Leftover | None = None
 
 
 class Jbctl(BaseModel):

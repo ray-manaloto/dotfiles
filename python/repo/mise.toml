@@ -14,11 +14,14 @@ dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pane-fingerprint --message "$usage_message"'
 
 [tasks.pane-pin]
-description = "Name the reviewer's Codex session, started in this checkout, for this checkout's commits"
-usage = 'arg "<session>" help="The Codex session id"'
+description = "Name the reviewer for this checkout's commits: its Codex session, or with --subagent the fallback reviewer's transcript"
+usage = '''
+arg "[session]" help="The Codex session id, started in this checkout"
+flag "--subagent <transcript>" help="While Codex is depleted: the read-only Claude subagent's agent-<id>.jsonl"
+'''
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pane-pin --session "$usage_session"'
+run = 'uv run --project python/repo --locked repotools pane-pin ${usage_session:+--session "$usage_session"} ${usage_subagent:+--subagent "$usage_subagent"}'
 
 [tasks.pane-approved]
 description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD, index and message"
@@ -54,6 +57,13 @@ usage = 'flag "--strict" help="Exit 1 when anything is left"'
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools zero-bash ${usage_strict:+--strict}'
+
+# hk's fnox-refs step: `fnox set` on a doppler provider writes the value into the TOML in plain text.
+[tasks.fnox-refs]
+description = "Fail when a tracked fnox TOML's Doppler entry holds anything but a Doppler secret name"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = "uv run --project python/repo --locked repotools fnox-refs"
 
 # The main guard (AGENTS.md): git runs it from the shared .git/config on every ref update, so it lives in a
 # uv tool outside every checkout, and the hook's shell line skips all but a prepared update of main.
@@ -92,6 +102,14 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:check; }'
 
+# hk's pre-commit herdr step: //home:herdr-unit only when the staged change reaches the herdr doctor or hc-safe,
+# a deletion included, so a commit that touches neither never waits on it.
+[tasks.herdr-gate]
+description = "Run //home:herdr-unit when the staged change reaches the herdr doctor, hc-safe or their tests"
+depends = ["sync"]
+dir = "{{ config_root }}/../.."
+run = 'r=$(uv run --project python/repo --locked repotools herdr-gate) && { test "$r" != run || mise run //home:herdr-unit; }'
+
 [tasks.main-guard-remove]
 description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"
 depends = ["sync"]
@@ -120,7 +138,9 @@ run = ["ruff check .", "ruff format --check .", "ty check --python .venv", "ast-
 [tasks.test]
 description = "Real tests (no mocking library) at 100% line and branch coverage"
 depends = ["sync"]
-run = "uv run --locked pytest"
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
 
 [tasks."test:focus"]
 # For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports

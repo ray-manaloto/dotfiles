@@ -83,12 +83,17 @@ def toml_table(name: str, table: dict[str, object]) -> str:
 
 
 def global_config(checkout: Path, settings: dict[str, str]) -> str:
-    """settings as [vars], and the checkout's [bootstrap] directories and files and its toolchain task tables (the
-    shell tasks were tables), so no other global tool, env, package or hook loads."""
+    """settings as [vars], and the checkout's [bootstrap] directories and files under ~/ and its toolchain task tables
+    (the shell tasks were tables), so no other global tool, env, package or hook loads, and no system file such as
+    /etc/ssh is ever applied from a test."""
     data = tomllib.loads((checkout / MISE_HOME / "config.toml").read_text())
     tables = [toml_table("vars", dict(settings))]
     for kind in ("directories", "files"):
-        tables += [toml_table(f"bootstrap.{kind}.{text(p)}", t) for p, t in data["bootstrap"][kind].items()]
+        tables += [
+            toml_table(f"bootstrap.{kind}.{text(p)}", t)
+            for p, t in data["bootstrap"][kind].items()
+            if p.startswith("~/")
+        ]
     tables += [toml_table(f"tasks.{text(t)}", data["tasks"][t]) for t in TASKS if t in data.get("tasks", {})]
     return "\n".join(tables)
 

@@ -10,7 +10,7 @@ import httpx
 import psutil
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import covgate, ide, lifecycle, mcp, rea, toolbox
+from . import covgate, ide, lifecycle, mcp, rea, skills, toolbox
 from .models import (
     Action,
     CheckDirect,
@@ -19,6 +19,7 @@ from .models import (
     Event,
     Failure,
     Ide,
+    Leftover,
     Map,
     Options,
     ReaPatch,
@@ -28,6 +29,8 @@ from .models import (
     SettingsGoto,
     SettingsOpen,
     SettingsPress,
+    Skills,
+    SkillState,
     Start,
     Status,
     Stop,
@@ -47,6 +50,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.start: Start,
     Command.stop: Stop,
     Command.restart: Restart,
+    Command.skills: Skills,
 }
 ROUTER_MODE = "Enable router-only mode for:"
 DIRECT = "ACP agents only"
@@ -96,11 +100,25 @@ def press(pid: int, label: str) -> None:
 
 
 def check(url: str) -> None:
-    """Exit 1 unless the MCP server lists more than the router tool (DIRECT)."""
-    tools = mcp.tool_count(url)
-    direct = tools > 1
-    emit(Event(tools=tools, direct=direct))
+    """Exit 1 unless the MCP server lists more than the router tool (DIRECT); either way, say if it lists the router."""
+    names = mcp.tool_names(url)
+    direct = len(names) > 1
+    emit(Event(tools=len(names), direct=direct, router=mcp.ROUTER in names))
     if not direct:
+        raise SystemExit(1)
+
+
+def copy(options: Skills) -> None:
+    """One line per skill per agent; exit 1 when a copy was left alone, or with --check, when any is not current."""
+    states = set()
+    for result in skills.copies(options):
+        match result:
+            case Leftover():
+                emit(Event(leftover=result))
+            case _:
+                emit(Event(skill=result))
+                states.add(result.state)
+    if states - ({SkillState.unchanged} if options.check else skills.DONE):
         raise SystemExit(1)
 
 
@@ -128,6 +146,8 @@ def run(options: Options) -> None:
             emit(Event(ides=lifecycle.status(options)))
         case Start() | Stop() | Restart():
             cycle(options)
+        case Skills():
+            copy(options)
         case _:
             drive(options)
 

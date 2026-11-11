@@ -11,7 +11,7 @@ import os
 import socketserver
 import sys
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -21,6 +21,8 @@ INITIALIZE = {
     "serverInfo": {"name": "stand-in", "version": "0"},
 }
 DIRECT = ["execute_tool", "get_file_problems", "list_directory_tree"]
+# A cursor is the server's own opaque text: this one has a quote, a backslash, a newline and JSON punctuation.
+CURSOR = 'next"},{\\\n'
 
 
 class NotMcp(BaseHTTPRequestHandler):
@@ -31,9 +33,17 @@ class NotMcp(BaseHTTPRequestHandler):
         """Keep the test output clean."""
 
 
-def handler(tools: list[str] | None, *, sse: bool) -> type[BaseHTTPRequestHandler]:
+def handler(
+    tools: list[str] | None,
+    *,
+    sse: bool,
+    page: int | None = None,
+    cursors: Sequence[object] = (),
+) -> type[BaseHTTPRequestHandler]:
     """Answers initialize and tools/list the way the IDE's streamable-HTTP MCP server does; with tools None,
-    tools/list gets a JSON-RPC error instead."""
+    tools/list gets a JSON-RPC error instead. With page, tools/list gives that many tools at a time, and while more
+    are left a nextCursor: cursors[0] for the second page, cursors[1] for the third. Only a cursor it issued, exactly
+    as issued, gets a page; any other gets a JSON-RPC error. A cursor listed twice comes back twice."""
 
     class Handler(NotMcp):
         def do_POST(self) -> None:
@@ -47,7 +57,15 @@ def handler(tools: list[str] | None, *, sse: bool) -> type[BaseHTTPRequestHandle
             elif tools is None:
                 outcome = {"error": {"code": -32601, "message": "Method not found"}}
             else:
-                outcome = {"result": {"tools": [{"name": n} for n in tools]}}
+                params = body.get("params", {})
+                if "cursor" in params and params["cursor"] not in cursors:
+                    outcome = {"error": {"code": -32602, "message": "Invalid cursor"}}
+                else:
+                    index = list(cursors).index(params["cursor"]) + 1 if "cursor" in params else 0
+                    size = page or len(tools)
+                    start, end = index * size, (index + 1) * size
+                    listed: dict[str, object] = {"tools": [{"name": n} for n in tools[start:end]]}
+                    outcome = {"result": listed | ({"nextCursor": cursors[index]} if end < len(tools) else {})}
             # Pretty-printed, as a server may send it: the client must parse whole JSON messages, not lines.
             reply = json.dumps({"jsonrpc": "2.0", "id": body["id"], **outcome}, indent=2)
             self.send_response(200)
@@ -61,15 +79,17 @@ def handler(tools: list[str] | None, *, sse: bool) -> type[BaseHTTPRequestHandle
     return Handler
 
 
-def serve(handler_class: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler_class)
+def serve(handler_class: type[BaseHTTPRequestHandler], port: int = 0) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("127.0.0.1", port), handler_class)
     # A short poll, so shutdown() in a fixture's teardown returns at once.
     threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     return server
 
 
-def mcp_server(tools: list[str] | None, *, sse: bool) -> Iterator[str]:
-    server = serve(handler(tools, sse=sse))
+def mcp_server(
+    tools: list[str] | None, *, sse: bool, page: int | None = None, cursors: Sequence[object] = ()
+) -> Iterator[str]:
+    server = serve(handler(tools, sse=sse, page=page, cursors=cursors))
     yield f"http://127.0.0.1:{server.server_port}/stream"
     server.shutdown()
     server.server_close()  # a closed socket, so no later lsof finds it listening
@@ -155,14 +175,19 @@ def web(handler_class: type[socketserver.BaseRequestHandler]) -> socketserver.TC
 
 
 if __name__ == "__main__":
-    # argv: flags (--mcp and --http each add a loopback listener) and an IDE's own arguments (project paths, written
-    # to STANDIN_RECORD when it is set). Prints the listeners' ports as one JSON line, then serves until /exit, or
-    # with --stdin until stdin closes.
+    # argv: flags (--mcp and --http each add a loopback listener, --mcp-late=PORT a late MCP one) and an IDE's own
+    # arguments (project paths, written to STANDIN_RECORD when it is set). Prints the listeners' ports as one JSON
+    # line, then serves until /exit, or with --stdin until stdin closes.
     flags = {arg for arg in sys.argv[1:] if arg.startswith("--")}
     if record := os.environ.get("STANDIN_RECORD"):
         Path(record).write_text(json.dumps([arg for arg in sys.argv[1:] if not arg.startswith("--")]))
     kinds = [arg for arg in sys.argv[1:] if arg in {"--mcp", "--http"}]
     servers = [serve(handler(DIRECT, sse=False) if kind == "--mcp" else NotMcp) for kind in kinds]
+    if late := [int(flag.removeprefix("--mcp-late=")) for flag in flags if flag.startswith("--mcp-late=")]:
+        # An MCP server that opens on the given port 1.5 s after the web server, as a real IDE's comes up after it.
+        timer = threading.Timer(1.5, serve, (handler(DIRECT, sse=False), late[0]))
+        timer.daemon = True
+        timer.start()
     if "--no-about" not in flags:
         web(Hangup if "--not-http" in flags else about(flags))
     if "--no-station" not in flags:

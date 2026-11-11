@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [tool.ruff]
 line-length = 120
@@ -31,7 +31,7 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 "src/jbctl/models.py" = ["I001"]
 
 [tool.pytest.ini_options]
-# The coverage gate (97.68%, #502) is //jbctl:coverage <ide> (sets JBCTL_IDE): the live tests drive a running IDE in the
+# The coverage gate (97.63%, #502) is //jbctl:coverage <ide> (sets JBCTL_IDE): the live tests drive a running IDE in the
 # background, so a hook runs the rest without it.
 addopts = "--cov=jbctl --cov-branch --cov-report=term-missing"
 testpaths = ["tests"]

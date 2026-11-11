@@ -2,20 +2,24 @@
 
 # All run through `mise run scratch:env`, so every home path is inside a temporary folder. The hook
 # runs with the real `skills` CLI, and the scratch home's git config points GitHub at local
-# repositories: herdr-core at its tag (installed only when missing) and agent-desktop at its tag
-# (installed on every run). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
-# dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a closed local port and fail,
-# which skills tolerates, so nothing leaves the machine.
+# repositories: herdr-core and agent-desktop, each at its tag and installed on every run. The
+# herdr-core line runs the installed hc's `--version`, which starts no core (see REAL_HC). The CLI's other HTTP calls (api.github.com: repo privacy, the tree hash for the lock; skills 1.7.5
+# dist/cli.mjs:80-87,3955-3967,6006) go through Node's env proxy to a local server that answers
+# every request 502 and fail, which skills tolerates, so nothing leaves the machine. A closed port
+# instead made Node retry the refused connection for about 16 s on each `skills add`.
 
+import functools
 import json
 import os
 import re
+import shlex
 import shutil
-import socket
 import subprocess
 import tempfile
+import threading
 import tomllib
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -24,7 +28,37 @@ POST_TOOLS = CONFIG["bootstrap"]["hooks"]["post-tools"]["run"]
 # mise runs each hook command with its default inline shell, unix_default_inline_shell_args
 # (mise v2026.10.25 crates/mise-system/src/hooks.rs:180-247).
 SHELL = ("sh", "-o", "errexit", "-c")
-[TAG] = re.findall(r"herdrdev/herdr-core#(\S+)", " ".join(POST_TOOLS))
+[HC_LINE] = [command for command in POST_TOOLS if "herdrdev/herdr-core#" in command]
+[LINK_LINE] = [command for command in POST_TOOLS if "ln -s" in command]
+# Only the system folders: no hc, as on a new Mac before Herdr's first run.
+NO_HC_PATH = "PATH=/usr/bin:/bin"
+# What the hook lines print, each as a whole stderr line: scratch:env echoes the command itself to
+# stderr first, so a substring match would find the message in the echoed command.
+NO_HC = "post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap"
+NO_COPY = "post-tools: ~/.agents/skills/herdr-core is missing, so nothing to link"
+# The installed hc, linked first on PATH so the herdr-core line runs the real `hc --version`. Its
+# output gives the tag the line must install. It is read under macOS's `(deny process-fork)`, which
+# proves the call prints the version without starting a core: a core start forks, and the sandbox
+# refuses it. Without hc or sandbox-exec (Linux) the hook tests skip; the module still imports.
+REAL_HC = shutil.which("hc")
+SANDBOX = shutil.which("sandbox-exec")
+NO_FORK = "(version 1)(allow default)(deny process-fork)"
+
+
+@functools.cache
+def installed_tag() -> str:
+    """`v` and the X.Y.Z the installed hc prints, read where it cannot start a core."""
+    assert REAL_HC and SANDBOX
+    printed = subprocess.run(
+        [SANDBOX, "-p", NO_FORK, REAL_HC, "--version"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    [version] = re.findall(r"^hc (\d+\.\d+\.\d+)$", printed, re.MULTILINE)
+    return f"v{version}"
+
+
 [DESKTOP_TAG] = re.findall(r"vercel-labs/agent-desktop#(\S+)", " ".join(POST_TOOLS))
 DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
 DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
@@ -40,12 +74,29 @@ ENTRIES = (
 # What `skills add herdrdev/herdr` installed in September, as the skills lock records it.
 OLD = ("herdr", "herdr-pre-release-audit", "herdr-throwaway-repro", "triage")
 OLD_LOCK_ONLY = "writing-commit-messages"
-# What the hook leaves in every scratch home: herdr-core and agent-desktop's skills, for both agents.
-CORE = {
-    f"{folder}/{name}"
-    for folder in (".agents/skills", ".claude/skills")
-    for name in ("herdr-core", *DESKTOP)
+HC = "herdr-core"
+# Each harness's global skills folder, relative to the scratch root, as herdr:doctor checks them (V10).
+CLAUDE, CODEX = "home/.claude/skills", "home/.agents/skills"
+# skills links Antigravity CLI's folder to the Codex copy itself; the hook's link line makes OpenCode's.
+ANTIGRAVITY, OPENCODE = "home/.gemini/config/skills", "home/.config/opencode/skills"
+HARNESSES = (CLAUDE, CODEX, ANTIGRAVITY, OPENCODE)
+# What the hook leaves in every scratch home: herdr-core for all four harnesses, and agent-desktop's
+# skills for Claude and Codex.
+CORE = {f"{folder}/{HC}" for folder in HARNESSES} | {
+    f"{folder}/{name}" for folder in (CLAUDE, CODEX) for name in DESKTOP
 }
+
+
+class BadGateway(BaseHTTPRequestHandler):
+    """The test proxy: every method gets 502 and the connection closes."""
+
+    def refuse(self) -> None:
+        self.send_error(502)
+
+    do_CONNECT = do_GET = do_HEAD = do_POST = refuse
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Keep the test output clean."""
 
 
 class HerdrAppTest(unittest.TestCase):
@@ -56,26 +107,39 @@ class HerdrAppTest(unittest.TestCase):
         # skills keeps its lock under $XDG_STATE_HOME, which scratch:env sets.
         self.lock = self.root / "state/skills/.skill-lock.json"
         self.skills: dict[str, dict[str, str]] = {}
-        # Bound but never listening, so every connection to it is refused.
-        closed = socket.socket()
-        self.addCleanup(closed.close)
-        closed.bind(("127.0.0.1", 0))
-        proxy = f"http://127.0.0.1:{closed.getsockname()[1]}"
+        # Answers every request, CONNECT included, with 502, so each call fails at once.
+        proxy_server = ThreadingHTTPServer(("127.0.0.1", 0), BadGateway)
+        self.addCleanup(proxy_server.server_close)
+        self.addCleanup(proxy_server.shutdown)
+        threading.Thread(target=proxy_server.serve_forever, daemon=True).start()
+        proxy = f"http://127.0.0.1:{proxy_server.server_address[1]}"
         self.offline = (
             "DO_NOT_TRACK=1",  # no install telemetry
             "NODE_USE_ENV_PROXY=1",  # Node's fetch reads HTTP(S)_PROXY only with this
             f"HTTPS_PROXY={proxy}",
             f"HTTP_PROXY={proxy}",
         )
-        self.install(
-            "herdr-core", "herdrdev/herdr-core", ".agents/skills", ".claude/skills"
-        )
+        if REAL_HC is None:
+            self.skipTest("no hc on PATH: open Herdr once to install herdr-core")
+        if SANDBOX is None:
+            self.skipTest("no sandbox-exec to read hc --version without a core start")
+        self.tag = installed_tag()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        (self.bin / "hc").symlink_to(REAL_HC)
+        self.install(HC, "herdrdev/herdr-core", CODEX, CLAUDE)
+        self.github("herdrdev/herdr-core", self.tag, (HC,))
         self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
+
+    def run_hook(self, command: str) -> subprocess.CompletedProcess[str]:
+        """One hook command as mise runs it, with this test's hc first on PATH."""
+        line = f"PATH={shlex.quote(str(self.bin))}:$PATH; {command}"
+        return self.scratch("env", *self.offline, *SHELL, line)
 
     def install(self, name: str, source: str, *folders: str) -> None:
         """A skill as `skills add -g` leaves it: a folder per agent and a lock entry."""
         for folder in folders:
-            skill = self.home / folder / name
+            skill = self.root / folder / name
             skill.mkdir(parents=True)
             (skill / "SKILL.md").write_text(
                 f"---\nname: {name}\ndescription: {source}\n---\n"
@@ -133,13 +197,14 @@ class HerdrAppTest(unittest.TestCase):
 
     def post_tools(self) -> None:
         for command in POST_TOOLS:
-            done = self.scratch("env", *self.offline, *SHELL, command)
+            done = self.run_hook(command)
             self.assertEqual(done.returncode, 0, (command, done.stdout, done.stderr))
 
     def on_disk(self) -> set[str]:
         return {
-            str(path.parent.relative_to(self.home))
-            for path in self.home.glob(".*/skills/*/SKILL.md")
+            str(path.parent.relative_to(self.root))
+            for folder in ("home/.*/skills", "home/.*/*/skills")
+            for path in self.root.glob(f"{folder}/*/SKILL.md")
         }
 
     def locked(self) -> set[str]:
@@ -147,15 +212,15 @@ class HerdrAppTest(unittest.TestCase):
 
     def test_post_tools_removes_every_skill_from_herdrs_repo(self) -> None:
         for name in OLD:
-            self.install(name, "herdrdev/herdr", ".agents/skills", ".claude/skills")
+            self.install(name, "herdrdev/herdr", CODEX, CLAUDE)
         self.install(OLD_LOCK_ONLY, "herdrdev/herdr")
-        self.install("keep-me", "someone/else", ".agents/skills")
+        self.install("keep-me", "someone/else", CODEX)
         self.post_tools()
-        self.assertEqual(self.on_disk(), CORE | {".agents/skills/keep-me"})
-        self.assertEqual(self.locked(), {"herdr-core", *DESKTOP, "keep-me"})
+        self.assertEqual(self.on_disk(), CORE | {f"{CODEX}/keep-me"})
+        self.assertEqual(self.locked(), {HC, *DESKTOP, "keep-me"})
 
     def test_a_herdr_folder_with_no_lock_entry_is_removed_too(self) -> None:
-        self.install("herdr", "herdrdev/herdr", ".claude/skills")
+        self.install("herdr", "herdrdev/herdr", CLAUDE)
         del self.skills["herdr"]
         self.lock.write_text(json.dumps({"version": 3, "skills": self.skills}))
         self.post_tools()
@@ -165,30 +230,85 @@ class HerdrAppTest(unittest.TestCase):
         self.post_tools()
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
-        self.assertEqual(self.locked(), {"herdr-core", *DESKTOP})
+        self.assertEqual(self.locked(), {HC, *DESKTOP})
 
-    def test_a_codex_only_herdr_core_gets_its_claude_copy(self) -> None:
-        shutil.rmtree(self.home / ".claude/skills/herdr-core")
-        self.github("herdrdev/herdr-core", TAG, ("herdr-core",))
+    def test_herdr_core_comes_from_the_installed_hc_tag(self) -> None:
+        self.post_tools()
+        self.assertEqual(
+            json.loads(self.lock.read_text())["skills"][HC]["ref"], self.tag
+        )
+
+    def test_the_herdr_core_line_skips_without_hc(self) -> None:
+        done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, HC_LINE)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(NO_HC, done.stderr.splitlines())
+        # setUp's stale copy is left as it was, and nothing is installed.
+        self.assertNotIn("ref", json.loads(self.lock.read_text())["skills"][HC])
+
+    def test_the_link_line_skips_quietly_without_hc(self) -> None:
+        shutil.rmtree(self.root / CODEX / HC)
+        done = self.scratch("env", NO_HC_PATH, *self.offline, *SHELL, LINK_LINE)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(NO_COPY, done.stderr.splitlines())
+        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
+
+    def test_a_codex_only_herdr_core_reaches_every_harness(self) -> None:
+        shutil.rmtree(self.root / CLAUDE / HC)
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
-        self.assertIn(
-            "from the tag",
-            (self.home / ".claude/skills/herdr-core/SKILL.md").read_text(),
+        for folder in HARNESSES:
+            self.assertIn(
+                "from the tag", (self.root / folder / HC / "SKILL.md").read_text()
+            )
+
+    def test_antigravity_and_opencode_link_to_the_codex_copy(self) -> None:
+        # A stale real copy in either folder is replaced by the link too.
+        self.install(HC, "herdrdev/herdr-core", ANTIGRAVITY, OPENCODE)
+        self.post_tools()
+        for folder in (ANTIGRAVITY, OPENCODE):
+            link = self.root / folder / HC
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.resolve(), (self.root / CODEX / HC).resolve())
+
+    def test_the_link_line_fails_without_the_codex_copy(self) -> None:
+        shutil.rmtree(self.root / CODEX / HC)
+        done = self.run_hook(LINK_LINE)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn(NO_COPY, done.stderr.splitlines())
+        self.assertFalse((self.root / OPENCODE / HC).is_symlink())
+
+    def test_the_link_line_fails_when_the_folder_cannot_be_made(self) -> None:
+        # A file where OpenCode's folder goes makes its mkdir fail, and nothing is linked.
+        (self.root / OPENCODE).parent.mkdir(parents=True)
+        (self.root / OPENCODE).write_text("")
+        done = self.run_hook(LINK_LINE)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertFalse((self.root / OPENCODE).is_dir())
+
+    def test_an_installed_stale_herdr_core_is_replaced_from_the_tag(self) -> None:
+        # setUp installed a stale copy for Claude and Codex, as v0.1.17's skip-if-present hook left it.
+        self.post_tools()
+        for folder in HARNESSES:
+            self.assertNotIn(
+                "herdrdev/herdr-core",
+                (self.root / folder / HC / "SKILL.md").read_text(),
+            )
+        self.assertEqual(
+            json.loads(self.lock.read_text())["skills"][HC]["ref"], self.tag
         )
 
     def test_agent_desktop_skills_come_from_the_pinned_tag(self) -> None:
         self.assertEqual(DESKTOP_TAG, f"v{DESKTOP_PIN}")
 
     def test_an_installed_agent_desktop_skill_is_replaced_from_the_tag(self) -> None:
-        self.install("agent-desktop", "vercel-labs/agent-desktop", ".agents/skills")
+        self.install("agent-desktop", "vercel-labs/agent-desktop", CODEX)
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
-        for folder in (".agents/skills", ".claude/skills"):
+        for folder in (CODEX, CLAUDE):
             for name in DESKTOP:
                 self.assertIn(
                     "from the tag",
-                    (self.home / folder / name / "SKILL.md").read_text(),
+                    (self.root / folder / name / "SKILL.md").read_text(),
                 )
         entries = json.loads(self.lock.read_text())["skills"]
         self.assertEqual({entries[name]["ref"] for name in DESKTOP}, {DESKTOP_TAG})

@@ -203,3 +203,101 @@
   * A launch where nothing comes up, or where the IDE ends before it is ready, stays `refused`, since nothing runs.
   * Follow-up (owner's decision, 2026-11-07): `restart`'s refusal now reads "pid N is not ready yet; wait (jbctl
     status) or stop it", in the words of the term "Not ready".
+
+## 2026-11-07: the CLion MCP note, ported from feat/clion-ctl
+
+* **Added**: [CLion MCP server](clion-mcp.md), ported from 51e12ad on the unmerged `feat/clion-ctl` branch. That
+  commit's own `docs/research/index.md` and `log.md` were left out, since this bundle has its own.
+* **Measured** (headless: config files, app bundles, the MCP plugin's bytecode and `lsof`; no request to the
+  IDE): all three CLion installs are 2026.3, CL-263.7307.209, and each bundles clion-debugger 1.3.2, the version
+  installed. No CLion was running, and nothing listened on 64362.
+* **Changed** (corrections to the 2026-11-03 note):
+  * the port is CLion's default (64342 + 20), not chosen per machine;
+  * CLion 2026.3 is in DIRECT (no `mcpToolFilter.xml`), not router-only. The skill is written for
+    `execute_tool`.
+* **Found** (the MCP plugin's bytecode; an inference, not observed): DIRECT probably still lists `execute_tool`
+  for Claude Code. `withRouterTool` adds it back for every session that does not opt out. Only the ACP sessions
+  of agents CLion starts itself opt out (the AI-agents plugin's ACP module). An external HTTP client gets
+  default options, which keep it. So the skill should work in DIRECT, but do not count on it before the live
+  check. **To confirm live**: the next time CLion runs, a read-only `tools/list` should list `execute_tool`.
+  Tracked in #563.
+
+## 2026-11-07: jbctl skills, the copy task redone (#502)
+
+* **Built**: `jbctl skills --ide <script> | --product <tool id> --skill <name> [--skill ...] [--check]`, after a
+  grilling with the owner (Q1-Q21). It replaces the unmerged `clion:skills` mise task (33eec5c on
+  `feat/clion-ctl`).
+  * It reads the install's plugin jars on disk, at `bundledSkills/<name>/` or `<name>/` at a jar's root (the
+    Rider skills every air-plugin carries), and contacts no IDE. One CLion install ships 42 skill names, none in
+    two places; a name in two places fails rather than guess.
+  * One copy in `~/.agents/skills/<name>` (Codex reads it), a relative symlink to it in `~/.claude/skills`, and
+    never `~/.codex/skills`, which Codex also reads. Codex 0.167 reads both folders.
+  * One JSON line per skill per agent: copied, updated, unchanged, adopted, modified or unmanaged, with the
+    version from the skill's `metadata.json` when it has one. A run exits 1 when it left a copy alone;
+    `--check` writes nothing and exits 1 when any copy is not current.
+  * The copy is staged beside its place and exchanged with the old one in one step (macOS `renamex_np`,
+    `RENAME_SWAP`), under a filelock in jbctl's state folder. The swapped-out copy is checked again, and swapped
+    back if it changed meanwhile or cannot be read. Leftover staging folders are removed only when they hold
+    nothing anyone may have changed; the others are kept and reported.
+* **Terms**: "Bundled skill" and "Skill copy" in [[terms]].
+* **Measured** (`--check`, headless, 2026-11-07): `clion` ships clion-debugger 1.3.2; Codex has no copy
+  (`copied`), and Claude's copy from the earlier task is unchanged (`adopted`).
+
+## 2026-11-07: the coverage floor re-measured after jbctl skills (#502)
+
+* **Measured** (headless, no `--foreground`; `clion` started for the run with `jbctl start --foreground` on the
+  owner's go and left running; `jbctl check-direct --ide clion` after the run: DIRECT, 88 tools):
+  `mise run //jbctl:coverage clion` passed with 133 tests and 2 skipped (the foreground and lifecycle-live
+  tests) at 97.75%: 1285 statements with 25 missed, and 360 branches with 12 missed (in 10 partly covered
+  branch points).
+* **Changed**: the floor is 97.63%, down from 97.68%. This run reached the cli.py page move, which the floor
+  assumes a run does not reach; without that line and its branch, the same run is 97.63%. The drop is the eight
+  lines of `skills.py` not covered by this run: a `renamex_np` that fails, and the swap-backs when the
+  swapped-out copy changed since the check, cannot be read, or is no longer a folder, or the run is stopped
+  mid-check. The other uncovered lines are the ones the floor's comment already lists.
+
+## 2026-11-07: DIRECT lists execute_tool, seen live (#563)
+
+* **Measured** (headless, at 00:30 UTC on 2026-11-08): one `initialize` and `tools/list` on
+  `http://127.0.0.1:64362/stream` from a script on jbctl's MCP client, with no tool call. The server answered as
+  "CLion MCP Server" 2026.3 and listed 88 tools on one page, `execute_tool` among them. The 17 tools the
+  clion-debugger skill documents in `reference/tools/` were all listed too.
+* **Context** (from local files, not the response): `clion` (CLion 2026.3, CL-263.7307.209) held the port, started
+  earlier for the coverage run on the owner's go. Its config had no `mcpToolFilter.xml`, so DIRECT. No setting
+  was changed.
+* **Changed**: [CLion MCP server](clion-mcp.md) records the listing and no longer says to wait for it. It says
+  the tools are advertised, while dispatch through `execute_tool` in DIRECT stays untested. It also says the
+  2026.3 listing still has the CMake and toolchain tools. #563 stays open for `jbctl check-direct` to report
+  whether `execute_tool` is listed.
+
+## 2026-11-07: check-direct reports the router tool (#563)
+
+* **Changed**: `jbctl check-direct` prints `router` beside `tools` and `direct`, saying whether `tools/list`
+  names `execute_tool`. It now reads every page of the list, following `nextCursor` until there is none (an
+  empty cursor is still a cursor). A repeated cursor, or one that is not text, fails the run. After a listing
+  that succeeds, it exits 1 only when not DIRECT, as before. `router-direct` prints the same line.
+* **Measured** (headless, read-only): `jbctl check-direct --ide clion` against CLion 2026.3 in DIRECT printed
+  `{"tools":88,"direct":true,"router":true}` and exited 0.
+* **Changed**: [CLion MCP server](clion-mcp.md) says how to check it again. This closes #563.
+
+## 2026-11-07: jbctl on PATH as a uv tool (#502)
+
+* **Added**: `mise run //jbctl:install` installs this checkout's `jbctl` as a uv tool, so `jbctl` runs by name from
+  any folder, without `python/jbctl/.venv`. It works like `//workflow:install`, kept apart from `//repo:tools-install`
+  so that a `python/jbctl` edit never blocks the repotools and workflowtools the approvals use. The installed copy
+  does not follow later edits or pulls, so run it again after jbctl changes land. The live tests run the worktree's
+  code in-process and `/verify` runs its `.venv/bin/jbctl`, so both check the code being changed rather than the
+  installed copy.
+
+## 2026-11-08: start and restart wait for the MCP server (#502)
+
+* **Measured** (owner's go, foreground): after the herdr move, `jbctl start --ide clion --foreground` reported
+  `started`, and a `jbctl check-direct --ide clion` straight after it failed with "has no MCP server on port 64362":
+  `/api/about` answers before the MCP server listens. Once the port listened, check-direct printed
+  `{"tools":88,"direct":true,"router":true}`.
+* **Changed**: `start` and `restart` count an IDE ready only when its MCP server also answers initialize on its own
+  port, when the server is turned on (`-Didea.mcp.server.force.enable=true`, or `enableMcpServer` in
+  `options/mcpServer.xml`). The settings are read on each poll, since the plugin saves another port when the one it
+  wanted is busy. An IDE with the server off is ready on `/api/about` alone, as before. One whose server never
+  answers, or whose settings jbctl cannot read, is `started-not-ready` (exit 75), with a reason that names the port
+  or the error. Checked against stand-in IDEs only: a live run needs CLion stopped and started again.

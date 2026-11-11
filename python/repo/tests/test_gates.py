@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from repotools.cli import main
+from tests import clean_git_env
 
 REPO = Path(__file__).resolve().parents[3]
 USER = "gatetester"
@@ -38,11 +39,7 @@ sys.exit(int(os.environ.get("STANDIN_EXIT", "0")))
 @pytest.fixture
 def copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A git repository holding this checkout's working tree, committed and already on its remote."""
-    # A pre-commit hook exports GIT_*, which would point git at the real checkout.
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clean_git_env(monkeypatch)
     listed = subprocess.run(
         ["git", "-C", REPO, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
@@ -125,6 +122,8 @@ def test_a_pass_prints_the_verdict_and_approves_the_staged_python_files(copy: Pa
             ".",
             "-c",
             'sandbox_mode="read-only"',
+            "-c",
+            'approval_policy="never"',
             "-c",
             "features.multi_agent_v2.max_concurrent_threads_per_session=7",
             "--output-last-message=.git/review-python.md",
@@ -220,6 +219,8 @@ def test_values_that_start_with_a_dash_reach_the_reviewer(copy: Path) -> None:
         "-c",
         'sandbox_mode="read-only"',
         "-c",
+        'approval_policy="never"',
+        "-c",
         "features.multi_agent_v2.max_concurrent_threads_per_session=7",
         "--output-last-message=-report",
         "-",
@@ -237,6 +238,8 @@ def test_the_path_commit_and_out_reach_the_reviewer(copy: Path) -> None:
         ".",
         "-c",
         'sandbox_mode="read-only"',
+        "-c",
+        'approval_policy="never"',
         "-c",
         "features.multi_agent_v2.max_concurrent_threads_per_session=7",
         "--output-last-message=report.md",
@@ -510,3 +513,17 @@ def test_outgoing_scans_every_unpushed_commit_on_branches_and_tags() -> None:
         ]
     ]
     assert sorted(lines[:-1]) == sorted(expected)
+
+
+def test_pane_pin_passes_a_hostile_transcript_path_through_mise_inert(copy: Path, tmp_path: Path) -> None:
+    """The --subagent path reaches repotools as one argument: no word split, no command or variable expansion."""
+    # The file name must be agent-<id>.jsonl, so the hostile part is the folder; any folder name is valid.
+    folder = tmp_path / 'sub agents $HOME $(touch ran1) `touch ran2`; touch ran3 "q" *'
+    folder.mkdir()
+    transcript = folder / "agent-a1.jsonl"
+    transcript.write_text("")
+    done = mise("//repo:pane-pin", "--subagent", str(transcript))
+    assert done.returncode == 0, done.stderr
+    pinned = Path(git("rev-parse", "--git-path", "review-python.pane-session").strip())
+    assert pinned.read_text() == f"{transcript.resolve()}\n"
+    assert not [path for path in (copy, tmp_path) for name in ("ran1", "ran2", "ran3") if (path / name).exists()]

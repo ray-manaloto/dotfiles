@@ -21,16 +21,18 @@ load two skills that share a name, and Codex then ignores a bare mention of eith
 
 | Skill | Started by | What it does |
 |---|---|---|
-| `work` | the owner | Picks the next ready ticket and drives it to a pull request; sets a repository up first when it has no Workflow facts. |
-| `to-spec` | the owner | Turns a settled conversation into a spec issue. |
-| `to-tickets` | the owner | Splits a spec issue into ticket issues, each with one task-plan line. |
-| `implement` | the owner | Builds one ticket in its own worktree and plan. |
-| `implement-spec` | the owner | Builds every open ticket of a spec, frontier first. |
-| `retro` | the owner | Records what a finished ticket or spec taught, in the ticket plan. |
+| `work` | the owner or an agent | Picks the next ready ticket and drives it to a pull request; sets a repository up first when it has no Workflow facts. |
+| `to-spec` | the owner or an agent | Turns a settled conversation into a spec issue. |
+| `to-tickets` | the owner or an agent | Splits a spec issue into ticket issues, each with one task-plan line. |
+| `implement` | the owner or an agent | Builds one ticket in its own worktree and plan. |
+| `implement-spec` | the owner or an agent | Builds every open ticket of a spec, frontier first. |
+| `ticket-retro` | the owner or an agent | Records what a finished ticket or spec taught, in the ticket plan. |
 
-`to-spec`, `to-tickets`, `implement`, `implement-spec` and `retro` are adapted from the
-mattpocock-skills skills of the same name (MIT; the license sits beside the skills). `work` is
-this workflow's own.
+`to-spec`, `to-tickets`, `implement` and `implement-spec` are adapted from the mattpocock-skills
+skills of the same name, and `ticket-retro` from its `retro` (MIT; the license sits beside the
+skills). `work` is this workflow's own. Each of the six sets `disable-model-invocation: false` in
+its SKILL.md and `allow_implicit_invocation: true` in its `agents/openai.yaml`, so an agent may
+start it as well as the owner.
 
 ## mattpocock-skills, as installed
 

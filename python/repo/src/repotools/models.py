@@ -28,7 +28,11 @@ class Command(StrEnum):
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
     toolchain_gate = "toolchain-gate"
+    herdr_gate = "herdr-gate"
     tools_install = "tools-install"
+    test_times = "test-times"
+    trust = "trust"
+    fnox_refs = "fnox-refs"
 
 
 class ToolsInstall(BaseModel):
@@ -40,6 +44,92 @@ class ToolsInstall(BaseModel):
         extra="forbid",
         frozen=True,
     )
+
+
+class Trust(BaseModel):
+    """
+    Trust this repository's main checkout in Codex and Claude Code, backing up each file it changes
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class TrustHarness(StrEnum):
+    codex = "codex"
+    claude = "claude"
+
+
+class TrustAction(StrEnum):
+    """
+    added: the entry was written; unchanged: it was already trusted; untrusted: an explicit No is left alone.
+    """
+
+    added = "added"
+    unchanged = "unchanged"
+    untrusted = "untrusted"
+
+
+class Trusted(BaseModel):
+    """
+    One harness's trust entry for the main checkout, printed as a JSON line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    harness: TrustHarness
+    path: str
+    """
+    The main checkout, as the entry's key
+    """
+    file: str
+    """
+    The harness's config file
+    """
+    action: TrustAction
+    backup: str | None
+    """
+    The copy taken before writing, or null when nothing was written
+    """
+
+
+class TestTimes(BaseModel):
+    """
+    Each test task's run history and its last run's slowest tests, from mise's records
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class TestTime(BaseModel):
+    """
+    One test task: mise tasks history --summary, and the slowest-durations block of its last log.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    task: str
+    runs: int
+    failures: int
+    median_ms: int | None
+    """
+    Median of the runs that ran and succeeded
+    """
+    last_ms: int | None
+    last_status: str
+    slowest: list[str]
+    """
+    pytest --durations lines; empty without a log or a block
+    """
 
 
 class ToolAction(StrEnum):
@@ -198,6 +288,57 @@ class ToolchainGate(BaseModel):
     )
 
 
+class HerdrGate(BaseModel):
+    """
+    Print run when the staged change reaches the herdr doctor, hc-safe or their tests, deletions included.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class FnoxRefs(BaseModel):
+    """
+    Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class FnoxRule(StrEnum):
+    """
+    What a fnox-refs finding breaks: a Doppler entry's value that is not a secret name, or a default on one.
+    """
+
+    value_not_a_reference = "value-not-a-reference"
+    default_on_doppler = "default-on-doppler"
+
+
+class FnoxFinding(BaseModel):
+    """
+    One Doppler entry of a tracked fnox TOML that may hold a secret in plain text, printed as a JSON line without it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    path: str
+    """
+    Tracked file, relative to the repository root
+    """
+    key: str
+    """
+    The entry's dotted key, such as profiles.x.secrets.NAME
+    """
+    rule: FnoxRule
+
+
 class Rule(StrEnum):
     """
     What a zero-bash finding breaks.
@@ -264,16 +405,22 @@ class PrText(BaseModel):
 
 class PanePin(BaseModel):
     """
-    Name the Codex session whose approval this checkout accepts.
+    Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         frozen=True,
     )
-    session: Annotated[str, Field(pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
+    session: Annotated[str | None, Field(pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")] = (
+        None
+    )
     """
-    The session id, as in the rollout file's name
+    The Codex session id, as in the rollout file's name
+    """
+    subagent: Annotated[str | None, Field(pattern="(^|/)agent-[0-9a-z]+\\.jsonl$")] = None
+    """
+    The fallback reviewer's Claude subagent transcript, agent-<id>.jsonl, while the Codex quota is depleted
     """
 
 
@@ -349,7 +496,11 @@ type Options = (
     | ShellApply
     | ShellRollback
     | ToolchainGate
+    | HerdrGate
     | ToolsInstall
+    | TestTimes
+    | Trust
+    | FnoxRefs
 )
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
@@ -554,6 +705,91 @@ class TaskEvent(BaseModel):
     """
 
 
+class AgentMeta(BaseModel):
+    """
+    A Claude Code subagent's agent-<id>.meta.json; only the fields the check reads.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    agent_type: Annotated[str, Field(alias="agentType")]
+    """
+    The agent type it ran as; reported, never trusted: the transcript's tool calls decide
+    """
+    finished: bool | None = None
+    """
+    true once the run ended; absent while it runs or after it was killed
+    """
+
+
+class AgentPart(BaseModel):
+    """
+    One content part of a subagent transcript's message.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    type: str
+    """
+    text, thinking, tool_use or tool_result
+    """
+    text: str | None = None
+    """
+    The words of a text part
+    """
+    name: str | None = None
+    """
+    The tool a tool_use part calls
+    """
+    input: dict[str, Any] | None = None
+    """
+    A tool_use part's arguments
+    """
+
+
+class AgentMessage(BaseModel):
+    """
+    The message of a user or assistant line; a prompt may be a plain string.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    role: str
+    content: str | list[AgentPart]
+    """
+    The text, or its parts
+    """
+
+
+class AgentLine(BaseModel):
+    """
+    One line of a Claude Code subagent transcript, agent-<id>.jsonl; only the fields the check reads.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    type: str
+    """
+    user, assistant, attachment, api-request and others
+    """
+    agent_id: Annotated[str | None, Field(alias="agentId")] = None
+    """
+    The subagent's id, as in the file name
+    """
+    is_sidechain: Annotated[bool | None, Field(alias="isSidechain")] = None
+    """
+    true on every line of a subagent's own run
+    """
+    message: AgentMessage | None = None
+    """
+    On user and assistant lines
+    """
+
+
 class Failure(BaseModel):
     """
     Why a command stopped, printed as a JSON line on stderr.
@@ -595,16 +831,27 @@ class Repotools(BaseModel):
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
     toolchain_gate: ToolchainGate | None = None
+    herdr_gate: HerdrGate | None = None
     tools_install: ToolsInstall | None = None
+    test_times: TestTimes | None = None
+    test_time: TestTime | None = None
+    trust: Trust | None = None
+    trust_harness: TrustHarness | None = None
+    trust_action: TrustAction | None = None
+    trusted: Trusted | None = None
     tool_action: ToolAction | None = None
     healthy: Healthy | None = None
     tool_receipt: ToolReceipt | None = None
     tool_installed: ToolInstalled | None = None
     options: Options | None = None
     finding: Finding | None = None
+    fnox_refs: FnoxRefs | None = None
+    fnox_finding: FnoxFinding | None = None
     fingerprint: Fingerprint | None = None
     rollout_line: RolloutLine | None = None
     session_meta: SessionMeta | None = None
     turn_context: TurnContext | None = None
     message: Message | None = None
     task_event: TaskEvent | None = None
+    agent_meta: AgentMeta | None = None
+    agent_line: AgentLine | None = None

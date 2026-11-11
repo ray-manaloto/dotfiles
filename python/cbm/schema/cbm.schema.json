@@ -74,6 +74,13 @@
           "minItems": 1,
           "description": "The clients to install and check (CBM_CLIENTS, comma-separated; default every client)",
           "uniqueItems": true
+        },
+        "probe_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 60,
+          "default": 60,
+          "description": "Seconds a launcher run may take before it fails its check (CBM_PROBE_TIMEOUT_SECONDS, default 60)"
         }
       },
       "required": [

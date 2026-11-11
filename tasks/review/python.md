@@ -41,8 +41,8 @@ project inventory or tool catalogue.
 
 ## 2. Fan out (large changes only)
 
-Spawn one subagent per slice with `spawn_agent`, `fork_turns: "none"` and `reasoning_effort:
-"medium"`. At most 6 run at once (review:python sets the thread limit to the lead plus 6): start
+Spawn one subagent per slice with `spawn_agent` and `fork_turns: "none"`, at the default model
+and effort. At most 6 run at once (review:python sets the thread limit to the lead plus 6): start
 up to 6, and each time one finishes, start the next until every slice is done. If a spawn fails
 with the thread limit, wait for one to finish and spawn it again.
 

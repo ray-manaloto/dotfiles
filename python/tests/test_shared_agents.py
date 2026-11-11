@@ -55,10 +55,12 @@ class SharedAgentsTest(unittest.TestCase):
             [
                 "Watched agents open as herdr-app tabs",
                 "Research evidence across workspaces",
+                "Adding a Doppler secret",
                 "Plugin changes need the owner's OK",
                 "Workflow",
                 "Commit and pull-request approval",
                 "Cross-review",
+                "Large reviews fan out",
                 "context7 snapshot",
                 "Steps",  # Inside the verbatim context7 snapshot.
             ],

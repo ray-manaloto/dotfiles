@@ -19,7 +19,7 @@ def test_resolve_reports_the_running_ide(capsys: pytest.CaptureFixture[str], too
         "pid": ide.process.pid,
         "mcp_url": f"http://127.0.0.1:{ide.ports[1]}/stream",
     }}], "")  # fmt: skip
-    assert run(capsys, "check-direct", "--ide", "fake") == (0, [{"tools": 3, "direct": True}], "")
+    assert run(capsys, "check-direct", "--ide", "fake") == (0, [{"tools": 3, "direct": True, "router": True}], "")
 
 
 def test_a_forced_port_wins_over_the_saved_one(capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start) -> None:

@@ -296,7 +296,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A temporary HOME with the stand-in at the mise global link, in mode ok."""
     root = tmp_path.resolve()
     for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "OPENCODE_CONFIG", "CBM_CACHE_DIR",
-                 "CBM_RUNTIME_DIR", "CBM_INSTALL_GIT_TIMEOUT_SECONDS",
+                 "CBM_RUNTIME_DIR", "CBM_INSTALL_GIT_TIMEOUT_SECONDS", "CBM_PROBE_TIMEOUT_SECONDS",
                  "CBM_INSTALL_ALLOW_NON_MAIN", *(key for key in os.environ if key.startswith("GIT_"))):  # fmt: skip
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
@@ -309,7 +309,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (root / folder).mkdir(mode=0o700)
         monkeypatch.setenv(name, str(root / folder))
     link(root).parent.mkdir(parents=True)
-    link(root).write_text(f"#!{sys.executable} -I\n{STAND_IN}")
+    link(root).write_text(f"#!{sys.executable} -IS\n{STAND_IN}")
     link(root).chmod(0o755)
     mode(root, "ok")
     checkout = root / "checkout"
@@ -329,7 +329,10 @@ def git(folder: Path, *args: str) -> str:
     env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
     env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
     done = subprocess.run(
-        ["git", "-c", "user.name=CBM Test", "-c", "user.email=cbm@example.invalid", *args],
+        # No background maintenance or gc: a detached `git maintenance run --auto` after a commit adds and
+        # removes .git/objects/maintenance.lock while a test snapshots the tree.
+        ["git", "-c", "user.name=CBM Test", "-c", "user.email=cbm@example.invalid",
+         "-c", "maintenance.auto=false", "-c", "gc.auto=0", *args],
         cwd=folder, env=env, capture_output=True, text=True, check=True, timeout=TIMEOUT,
     )  # fmt: skip
     return done.stdout
@@ -355,7 +358,7 @@ def releases(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         folder = home / "releases" / version
         folder.mkdir(parents=True)
         binary = folder / "codebase-memory-mcp"
-        binary.write_text(f"#!{sys.executable} -I\n{STAND_IN.replace('9.9.9', version)}")
+        binary.write_text(f"#!{sys.executable} -IS\n{STAND_IN.replace('9.9.9', version)}")
         binary.chmod(0o755)
         archive = folder / "codebase-memory-mcp.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
@@ -369,7 +372,7 @@ def releases(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     bin_dir = home / "bin"
     bin_dir.mkdir()
     mise = bin_dir / "mise"
-    mise.write_text(f"#!{sys.executable} -I\n{MISE}")
+    mise.write_text(f"#!{sys.executable} -IS\n{MISE}")
     mise.chmod(0o755)
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ["PATH"])
     provision(home, "github:DeusData/codebase-memory-mcp@9.9.9")

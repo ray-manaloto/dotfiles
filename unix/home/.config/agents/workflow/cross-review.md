@@ -3,7 +3,7 @@ okf_version: "0.2"
 type: "process"
 title: "Cross-review"
 description: "Who reviews what, in which tab, and how review findings are handled."
-timestamp: "2026-11-04T00:00:00Z"
+timestamp: "2026-11-10T00:00:00Z"
 status: "current"
 tags: [workflow, review, codex]
 ---
@@ -15,21 +15,61 @@ sees the author's transcript.
 
 ## The reviewer pane
 
-One reviewer tab per worktree: `codex-hc -s read-only`, opened as a herdr-app tab in that worktree.
+One reviewer tab per worktree: `codex-hc -a never -s read-only`, opened as a herdr-app tab in that worktree.
 Pin its session once with the repository's pane-pin command. Resume it only read-only
-(`codex resume <id> -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
+(`codex resume <id> -a never -s read-only`). Its last final answer must end `PANE-APPROVE <fingerprint>`;
 that line, read from the session log by the repository's approval check, is the only approval.
 Never read an approval from the screen. No hc template is needed: the pane is an ordinary tab.
 
+## The fallback reviewer
+
+When the reviewer's harness is out of quota (Codex: until its limit resets), a fresh Claude subagent in
+the author's own session gives the approval instead. Go back to the Codex pane when the quota returns.
+The subagent shares the author's model family, so it shares more blind spots; it is a stopgap.
+
+1. Stage everything and write the commit message (or pull request body) to a file with the line
+   `Reviewed by the fallback reviewer (Codex quota depleted).` in its body, not as a trailer. Then get
+   the fingerprint from the repository's pane-fingerprint (or pr-fingerprint) command: the line is part of
+   the approved bytes, so adding it later voids the approval.
+2. Write the staged diff to a file: `git diff --staged > <scratch>/review.diff`. The reviewer has no shell.
+3. Start one subagent of a type whose only tools are Read, Grep and Glob; dotfiles has
+   `fallback-reviewer`. Explore and Plan can run shell commands, so they do not qualify. Its prompt holds
+   only a line of its own, `Worktree: <absolute path>`, the diff file (or the pull request's title and body file), the
+   message file, the fingerprint, the repository's review rules, and "your last line is exactly
+   `PANE-APPROVE <fingerprint>` if nothing at P0-P2 is left, otherwise the findings". Never the author's
+   reasoning or conclusions.
+4. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with the
+   repository's pane-pin command and `--subagent`.
+5. Findings are handled as below; then a new subagent reviews afresh, at most one more round unless the
+   change is risky. A review over about 1,000 changed lines still fans out.
+
+The approval check reads the transcript itself, not the agent type: it refuses the subagent unless it
+finished, called no tool but Read, Grep and Glob (a background subagent may end with its handback),
+has exactly one `Worktree:` line naming this checkout's whole path (not a path inside or beside
+it) and the fingerprint in its prompt, and its answer ends with that `PANE-APPROVE` line.
+
+## Waiting on the pane
+
+Send the brief with `hc send <terminal> "<text>"`, then wait with `hc wait <terminal>`, or use
+`hc send --wait`. Never sleep and grep `hc read`: while the pane works, `hc read` shows only its screen,
+so a loop can miss the answer. A wait that ends with reason `message` or `timeout` is a check-in:
+handle it and wait again. Once the pane stops, read its findings or question with
+`hc read --lines 100 <terminal>`, and reply to a question. Whether it approved is only what the
+repository's approval check reads from the session log, never the screen.
+
+A brief that limits the pane names what stays allowed: "Do not contact <service>; read-only local
+shell commands are allowed". Never write "do not call any tool": a reviewer reads that as a ban on the
+shell it needs, and it stops to ask.
+
 ## Three review kinds
 
-| Kind | When | In the tab | Effort |
-|------|------|------------|--------|
-| Uncommitted changes | Before each commit | `/review` -> Review uncommitted changes | medium |
-| Base branch | Before the pull request | `/review` -> Custom review instructions: the acceptance criteria and `git diff origin/<default>...HEAD` | high |
-| Document | Specs, ticket bodies, pull-request text | A typed brief in a read-only tab | high |
+| Kind | When | In the tab |
+|------|------|------------|
+| Uncommitted changes | Before each commit | `/review` -> Review uncommitted changes |
+| Base branch | Before the pull request | `/review` -> Custom review instructions: the acceptance criteria and `git diff origin/<default>...HEAD` |
+| Document | Specs, ticket bodies, pull-request text | A typed brief in a read-only tab |
 
-Set the effort in the tab's argv (`-c model_reasoning_effort=...`); the session default may differ.
+Every review runs at Codex's default model and effort: the tab's argv sets neither.
 
 A document review brief names the file's absolute path and that it is read-only, then asks by
 document type: a spec for gaps, untestable criteria, missing seams and contradictions with the

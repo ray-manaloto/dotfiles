@@ -1,0 +1,37 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Check herdr-core and Herdr.app wiring without ever starting a core"
+"""herdr:doctor: hometools herdr-doctor reads herdr-core's sockets, processes and files; it never runs hc."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the hometools package in
+# the checkout it is linked from and runs one command there, as tasks/toolchain/verify does. It takes no flags.
+# The doctor prints one JSON line and exits 0 when every check passes, 1 when any fails and 3 when one is unknown
+# and none failed (docs/agents/herdr-core.md). Exit 2 is a usage error, or hometools could not start here.
+
+import json
+import os
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/herdr/doctor.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+
+COULD_NOT_START = 2
+
+if sys.argv[1:]:
+    sys.stderr.write(json.dumps({"error": "herdr:doctor takes no arguments"}) + "\n")
+    raise SystemExit(COULD_NOT_START)
+# Read-only (pane reviews 1 and 2): no sync and no uv, which sets up its cache on every run. The package's own
+# environment, made by `mise run //home:sync`, runs the doctor directly: -I leaves out the environment's PYTHON*
+# variables, the user site and the current folder, and -B writes no bytecode. Without that environment the task
+# ends with one JSON error saying so.
+PYTHON = PACKAGE / ".venv/bin/python"
+if not (PACKAGE / ".venv/bin/hometools").is_file() or not PYTHON.exists():
+    error = f"herdr:doctor: {PACKAGE}/.venv has no hometools; run: mise run //home:sync"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(COULD_NOT_START)
+try:
+    os.execv(PYTHON, [str(PYTHON), "-I", "-B", "-c", "from hometools.cli import main; main()", "herdr-doctor"])
+except OSError as failed:
+    error = f"herdr:doctor: hometools could not start ({PYTHON}: {failed.strerror})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(COULD_NOT_START) from None

@@ -27,13 +27,69 @@
         "shell-rollback",
         "scratch-env",
         "toolchain-gate",
-        "tools-install"
+        "herdr-gate",
+        "tools-install",
+        "test-times",
+        "trust",
+        "fnox-refs"
       ]
     },
     "ToolsInstall": {
       "description": "Install workflowtools and repotools as uv tools from the committed trees",
       "type": "object",
       "properties": {},
+      "additionalProperties": false
+    },
+    "Trust": {
+      "description": "Trust this repository's main checkout in Codex and Claude Code, backing up each file it changes",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "TrustHarness": {
+      "type": "string",
+      "enum": ["codex", "claude"]
+    },
+    "TrustAction": {
+      "description": "added: the entry was written; unchanged: it was already trusted; untrusted: an explicit No is left alone.",
+      "type": "string",
+      "enum": ["added", "unchanged", "untrusted"]
+    },
+    "Trusted": {
+      "description": "One harness's trust entry for the main checkout, printed as a JSON line.",
+      "type": "object",
+      "properties": {
+        "harness": { "$ref": "#/$defs/TrustHarness" },
+        "path": { "type": "string", "description": "The main checkout, as the entry's key" },
+        "file": { "type": "string", "description": "The harness's config file" },
+        "action": { "$ref": "#/$defs/TrustAction" },
+        "backup": {
+          "type": ["string", "null"],
+          "description": "The copy taken before writing, or null when nothing was written"
+        }
+      },
+      "required": ["harness", "path", "file", "action", "backup"],
+      "additionalProperties": false
+    },
+    "TestTimes": {
+      "description": "Each test task's run history and its last run's slowest tests, from mise's records",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "TestTime": {
+      "description": "One test task: mise tasks history --summary, and the slowest-durations block of its last log.",
+      "type": "object",
+      "properties": {
+        "task": { "type": "string" },
+        "runs": { "type": "integer" },
+        "failures": { "type": "integer" },
+        "median_ms": { "type": ["integer", "null"], "description": "Median of the runs that ran and succeeded" },
+        "last_ms": { "type": ["integer", "null"] },
+        "last_status": { "type": "string" },
+        "slowest": { "type": "array", "items": { "type": "string" }, "description": "pytest --durations lines; empty without a log or a block" }
+      },
+      "required": ["task", "runs", "failures", "median_ms", "last_ms", "last_status", "slowest"],
       "additionalProperties": false
     },
     "ToolAction": {
@@ -133,6 +189,34 @@
       "properties": {},
       "additionalProperties": false
     },
+    "HerdrGate": {
+      "description": "Print run when the staged change reaches the herdr doctor, hc-safe or their tests, deletions included.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "FnoxRefs": {
+      "description": "Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "FnoxRule": {
+      "description": "What a fnox-refs finding breaks: a Doppler entry's value that is not a secret name, or a default on one.",
+      "type": "string",
+      "enum": ["value-not-a-reference", "default-on-doppler"]
+    },
+    "FnoxFinding": {
+      "description": "One Doppler entry of a tracked fnox TOML that may hold a secret in plain text, printed as a JSON line without it.",
+      "type": "object",
+      "properties": {
+        "path": { "type": "string", "description": "Tracked file, relative to the repository root" },
+        "key": { "type": "string", "description": "The entry's dotted key, such as profiles.x.secrets.NAME" },
+        "rule": { "$ref": "#/$defs/FnoxRule" }
+      },
+      "required": ["path", "key", "rule"],
+      "additionalProperties": false
+    },
     "Rule": {
       "description": "What a zero-bash finding breaks.",
       "type": "string",
@@ -169,16 +253,22 @@
       "additionalProperties": false
     },
     "PanePin": {
-      "description": "Name the Codex session whose approval this checkout accepts.",
+      "description": "Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.",
       "type": "object",
       "properties": {
         "session": {
-          "type": "string",
+          "type": ["string", "null"],
+          "default": null,
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-          "description": "The session id, as in the rollout file's name"
+          "description": "The Codex session id, as in the rollout file's name"
+        },
+        "subagent": {
+          "type": ["string", "null"],
+          "default": null,
+          "pattern": "(^|/)agent-[0-9a-z]+\\.jsonl$",
+          "description": "The fallback reviewer's Claude subagent transcript, agent-<id>.jsonl, while the Codex quota is depleted"
         }
       },
-      "required": ["session"],
       "additionalProperties": false
     },
     "ReviewPython": {
@@ -228,7 +318,11 @@
         { "$ref": "#/$defs/ShellApply" },
         { "$ref": "#/$defs/ShellRollback" },
         { "$ref": "#/$defs/ToolchainGate" },
-        { "$ref": "#/$defs/ToolsInstall" }
+        { "$ref": "#/$defs/HerdrGate" },
+        { "$ref": "#/$defs/ToolsInstall" },
+        { "$ref": "#/$defs/TestTimes" },
+        { "$ref": "#/$defs/Trust" },
+        { "$ref": "#/$defs/FnoxRefs" }
       ]
     },
     "Fingerprint": {
@@ -329,6 +423,52 @@
       },
       "required": ["turn_id"]
     },
+    "AgentMeta": {
+      "description": "A Claude Code subagent's agent-<id>.meta.json; only the fields the check reads.",
+      "type": "object",
+      "properties": {
+        "agentType": { "type": "string", "description": "The agent type it ran as; reported, never trusted: the transcript's tool calls decide" },
+        "finished": { "type": ["boolean", "null"], "description": "true once the run ended; absent while it runs or after it was killed" }
+      },
+      "required": ["agentType"]
+    },
+    "AgentPart": {
+      "description": "One content part of a subagent transcript's message.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "text, thinking, tool_use or tool_result" },
+        "text": { "type": ["string", "null"], "description": "The words of a text part" },
+        "name": { "type": ["string", "null"], "description": "The tool a tool_use part calls" },
+        "input": { "type": ["object", "null"], "description": "A tool_use part's arguments" }
+      },
+      "required": ["type"]
+    },
+    "AgentMessage": {
+      "description": "The message of a user or assistant line; a prompt may be a plain string.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "content": {
+          "anyOf": [{ "type": "string" }, { "type": "array", "items": { "$ref": "#/$defs/AgentPart" } }],
+          "description": "The text, or its parts"
+        }
+      },
+      "required": ["role", "content"]
+    },
+    "AgentLine": {
+      "description": "One line of a Claude Code subagent transcript, agent-<id>.jsonl; only the fields the check reads.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "user, assistant, attachment, api-request and others" },
+        "agentId": { "type": ["string", "null"], "description": "The subagent's id, as in the file name" },
+        "isSidechain": { "type": ["boolean", "null"], "description": "true on every line of a subagent's own run" },
+        "message": {
+          "anyOf": [{ "$ref": "#/$defs/AgentMessage" }, { "type": "null" }],
+          "description": "On user and assistant lines"
+        }
+      },
+      "required": ["type"]
+    },
     "Failure": {
       "description": "Why a command stopped, printed as a JSON line on stderr.",
       "type": "object",
@@ -357,18 +497,29 @@
     "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
     "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
     "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
+    "herdr_gate": { "$ref": "#/$defs/HerdrGate" },
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
+    "test_times": { "$ref": "#/$defs/TestTimes" },
+    "test_time": { "$ref": "#/$defs/TestTime" },
+    "trust": { "$ref": "#/$defs/Trust" },
+    "trust_harness": { "$ref": "#/$defs/TrustHarness" },
+    "trust_action": { "$ref": "#/$defs/TrustAction" },
+    "trusted": { "$ref": "#/$defs/Trusted" },
     "tool_action": { "$ref": "#/$defs/ToolAction" },
     "healthy": { "$ref": "#/$defs/Healthy" },
     "tool_receipt": { "$ref": "#/$defs/ToolReceipt" },
     "tool_installed": { "$ref": "#/$defs/ToolInstalled" },
     "options": { "$ref": "#/$defs/Options" },
     "finding": { "$ref": "#/$defs/Finding" },
+    "fnox_refs": { "$ref": "#/$defs/FnoxRefs" },
+    "fnox_finding": { "$ref": "#/$defs/FnoxFinding" },
     "fingerprint": { "$ref": "#/$defs/Fingerprint" },
     "rollout_line": { "$ref": "#/$defs/RolloutLine" },
     "session_meta": { "$ref": "#/$defs/SessionMeta" },
     "turn_context": { "$ref": "#/$defs/TurnContext" },
     "message": { "$ref": "#/$defs/Message" },
-    "task_event": { "$ref": "#/$defs/TaskEvent" }
+    "task_event": { "$ref": "#/$defs/TaskEvent" },
+    "agent_meta": { "$ref": "#/$defs/AgentMeta" },
+    "agent_line": { "$ref": "#/$defs/AgentLine" }
   }
 }

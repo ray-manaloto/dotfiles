@@ -12,6 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .git import git
 from .models import MainGuard, MainGuardArmed, MainGuardInstall, MainGuardRemove
 
 MAIN = "refs/heads/main"
@@ -20,10 +21,6 @@ SECTION = "hook.main-guard"
 SOURCE = "python/repo"  # The package the install task copies; its tree id says which guard is installed.
 OFF = "repotools.main-guard-off"  # Outside the hook section: main-guard-remove keeps it, so post-merge does not re-arm.
 REPAIR = "mise run //repo:main-guard-install, or mise run //repo:main-guard-remove to switch the guard off"
-
-
-def git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, check=True, text=True).stdout
 
 
 def resolve(ref: str) -> str | None:

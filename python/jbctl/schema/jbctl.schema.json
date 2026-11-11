@@ -35,7 +35,8 @@
         "status",
         "start",
         "stop",
-        "restart"
+        "restart",
+        "skills"
       ]
     },
     "Map": {
@@ -147,7 +148,7 @@
       ]
     },
     "CheckDirect": {
-      "description": "Fail unless an MCP tools/list shows more than the router tool alone (DIRECT): the IDE's own server, or --mcp-url.",
+      "description": "Fail unless MCP tools/list (every page) shows more than the router tool (DIRECT); say if it lists the router.",
       "type": "object",
       "properties": {
         "ide": {
@@ -237,6 +238,9 @@
         },
         {
           "$ref": "#/$defs/Restart"
+        },
+        {
+          "$ref": "#/$defs/Skills"
         }
       ]
     },
@@ -315,6 +319,14 @@
           ],
           "default": null
         },
+        "router": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null,
+          "description": "Whether tools/list names the router tool (execute_tool), which a router-only skill such as clion-debugger calls"
+        },
         "patch": {
           "anyOf": [
             {
@@ -365,6 +377,28 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Lifecycle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "skill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SkillCopy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "leftover": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Leftover"
             },
             {
               "type": "null"
@@ -618,7 +652,7 @@
       "additionalProperties": false
     },
     "Start": {
-      "description": "Start Toolbox IDEs the way Toolbox's background mode does, and wait until each is ready (a foreground action).",
+      "description": "Start Toolbox IDEs as Toolbox's background mode does; wait until each is ready, MCP too (a foreground action).",
       "type": "object",
       "properties": {
         "ide": {
@@ -736,7 +770,7 @@
       "additionalProperties": false
     },
     "Restart": {
-      "description": "Have running IDEs restart themselves and wait until each new one is ready (a foreground action).",
+      "description": "Have running IDEs restart themselves and wait until each new one is ready, MCP too (a foreground action).",
       "type": "object",
       "properties": {
         "ide": {
@@ -958,6 +992,269 @@
         "ready",
         "busy",
         "detail"
+      ],
+      "additionalProperties": false
+    },
+    "SkillName": {
+      "description": "A bundled skill by its folder name in the IDE's jar (clion-debugger); also its folder name in the agents' skill folders",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "Skills": {
+      "description": "Copy bundled skills out of one Toolbox install for Claude Code and Codex; contacts no IDE.",
+      "type": "object",
+      "properties": {
+        "ide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdeName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The install, by its Toolbox script name"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A Toolbox tool id (CLion, PyCharm-P): only when the product has a single install"
+        },
+        "skill": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SkillName"
+          },
+          "minItems": 1,
+          "description": "A bundled skill to copy; repeat --skill for several"
+        },
+        "check": {
+          "type": "boolean",
+          "default": false,
+          "description": "Report what a run would do (copied, updated, ...) and write nothing; exit 1 unless every copy is current"
+        }
+      },
+      "required": [
+        "skill"
+      ],
+      "additionalProperties": false
+    },
+    "SkillAgent": {
+      "description": "Whose skill copy: codex reads the folder in ~/.agents/skills, claude the symlink to it in ~/.claude/skills.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex"
+      ]
+    },
+    "SkillState": {
+      "description": "What skills did to one agent's skill copy (with --check: would do). modified and unmanaged are left as they are.",
+      "type": "string",
+      "enum": [
+        "copied",
+        "updated",
+        "unchanged",
+        "adopted",
+        "modified",
+        "unmanaged"
+      ]
+    },
+    "SkillCopy": {
+      "description": "One agent's copy of one bundled skill, as skills reports it.",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "string"
+        },
+        "agent": {
+          "$ref": "#/$defs/SkillAgent"
+        },
+        "state": {
+          "$ref": "#/$defs/SkillState"
+        },
+        "path": {
+          "type": "string",
+          "description": "The folder (codex) or symlink (claude) the agent reads"
+        },
+        "install": {
+          "type": "string",
+          "description": "The Toolbox script name of the install it came from"
+        },
+        "build": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "The skill's metadata.json version, when it has one"
+        },
+        "previous_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "The version the copy had before it was updated"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Why a copy is modified or unmanaged"
+        }
+      },
+      "required": [
+        "skill",
+        "agent",
+        "state",
+        "path",
+        "install",
+        "build"
+      ],
+      "additionalProperties": false
+    },
+    "SkillMarker": {
+      "description": "The .jbctl-skill.json that jbctl keeps in a skill copy it wrote: where the files came from and their sha256.",
+      "type": "object",
+      "properties": {
+        "install": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        },
+        "jar": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "sha256 hex digest by path inside the copy"
+        }
+      },
+      "required": [
+        "install",
+        "build",
+        "jar",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "OldSkillMarker": {
+      "description": "The .dotfiles-clion-skills.json the earlier clion:skills mise task kept (only the files it hashed are read).",
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "sha256 hex digest by path inside the copy"
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "additionalProperties": true
+    },
+    "BundledSkill": {
+      "description": "One bundled skill as an install ships it: its jar, its folder in the jar, and its files' sha256.",
+      "type": "object",
+      "properties": {
+        "jar": {
+          "type": "string"
+        },
+        "folder": {
+          "type": "string",
+          "description": "bundledSkills/<name> or <name>"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Its metadata.json version, when it has one"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "sha256 hex digest by path inside the folder"
+        }
+      },
+      "required": [
+        "jar",
+        "folder",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "SkillFinding": {
+      "description": "What one agent's skill copy needs, the version it had before an update, and why it is left alone.",
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/SkillState"
+        },
+        "previous_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "Leftover": {
+      "description": "A folder a stopped or rolled-back skills run left, kept because it may hold someone's work.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "reason"
       ],
       "additionalProperties": false
     }

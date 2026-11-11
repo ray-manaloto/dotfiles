@@ -26,11 +26,16 @@ def load(environ: Mapping[str, str] = os.environ) -> Config:
     home = Path(environ["HOME"])
     requested = environ.get("CBM_CLIENTS", ",".join(Client))
     clients = [name.strip() for name in requested.split(",") if name.strip()]
+    mise_data_dir = Path(environ.get("MISE_DATA_DIR", home / ".local/share/mise"))
+    fields: dict[str, object] = {"home": home, "mise_data_dir": mise_data_dir, "clients": clients}
+    if (seconds := environ.get("CBM_PROBE_TIMEOUT_SECONDS")) is not None:
+        fields["probe_timeout"] = seconds
     try:
-        return Config(
-            home=home, mise_data_dir=Path(environ.get("MISE_DATA_DIR", home / ".local/share/mise")), clients=clients
-        )
+        return Config.model_validate(fields)
     except ValidationError as error:
+        if any(detail["loc"][0] == "probe_timeout" for detail in error.errors()):
+            msg = f"cbm: CBM_PROBE_TIMEOUT_SECONDS must be greater than 0 and at most 60: {seconds}"
+            raise SettingError(msg) from None
         reasons = "; ".join(detail["msg"] for detail in error.errors())
         msg = f"cbm: CBM_CLIENTS must name one or more of {','.join(Client)}, each once ({reasons}): {requested}"
         raise SettingError(msg) from None

@@ -4,17 +4,26 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import config, toolchain, update
+from . import config, herdr, secret, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
-# These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes.
-UPDATES = {Command.update_brew: update.brew, Command.update_check: update.check}
+# These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
+# reports each input it could not read as unknown in its own JSON line and exits with its checks' code.
+UPDATES = {Command.update_brew: update.brew, Command.update_check: update.check, Command.herdr_doctor: herdr.doctor}
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="hometools")
     parser.add_argument("command", type=Command, choices=list(Command))
-    command = parser.parse_args(argv).command
+    # secret-set's NAME, the one command that takes an argument.
+    parser.add_argument("name", nargs="?")
+    args = parser.parse_args(argv)
+    command = args.command
+    if (command is Command.secret_set) != (args.name is not None):
+        parser.error("secret-set takes one NAME; the other commands take none")
+    if command is Command.secret_set:
+        secret.set_secret(args.name)
+        return
     if command in UPDATES:
         UPDATES[command]()
         return

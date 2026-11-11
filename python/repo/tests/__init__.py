@@ -6,6 +6,8 @@ import subprocess
 import sys
 from typing import BinaryIO
 
+import pytest
+
 STOP = """
 import signal
 def stop(signum, frame):
@@ -31,3 +33,12 @@ def run_python(code: str, *, stdin: BinaryIO | None = None) -> subprocess.Comple
                 child.communicate()
             raise
     return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
+
+
+def clean_git_env(monkeypatch: pytest.MonkeyPatch, *, config: bool = True) -> None:
+    """A hook exports GIT_*, which would point git at the real checkout; config=True also drops the owner's config."""
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+    if config:
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")

@@ -33,6 +33,7 @@ OFFSETS = {
     "WebStorm": 200,
 }
 FORCE_PORT = "idea.mcp.server.force.port"
+FORCE_ENABLE = "idea.mcp.server.force.enable"
 
 
 def entries() -> dict[str, list[tuple[dict[str, Any], dict[str, Any]]]]:
@@ -192,12 +193,28 @@ def mcp_port(found: Install) -> tuple[int, str]:
     return BASE_PORT + OFFSETS.get(prefix, 0), f"the {prefix} default"
 
 
+def mcp_enabled(found: Install) -> bool:
+    """Whether the IDE's MCP server is turned on, as the plugin decides: -Didea.mcp.server.force.enable=true (any
+    case), or enableMcpServer in options/mcpServer.xml, off until it is saved on."""
+    if found.properties.get(FORCE_ENABLE, "").lower() == "true":
+        return True
+    settings = Path(found.config) / "options/mcpServer.xml"
+    if not settings.exists():
+        return False
+    # The user's own IDE settings file.
+    saved = ET.parse(settings).find(".//component[@name='McpServerSettings']/option[@name='enableMcpServer']")  # noqa: S314
+    return saved is not None and saved.attrib.get("value") == "true"
+
+
+def mcp_answers(pid: int, port: int) -> bool:
+    """Whether pid holds the port and an MCP server answers initialize there: only its own port is asked."""
+    return port in listening(pid) and mcp.answers(f"http://127.0.0.1:{port}/stream")
+
+
 def mcp_url(found: Install, pid: int) -> str:
     """The IDE's own MCP endpoint: the port its settings give, checked to be this pid's and to answer initialize."""
     port, source = mcp_port(found)
-    url = f"http://127.0.0.1:{port}/stream"
-    # Only a port this pid holds is sent initialize, never another IDE's.
-    if port not in listening(pid) or not mcp.answers(url):
+    if not mcp_answers(pid, port):
         msg = f"pid {pid} has no MCP server on port {port} ({source})"
         raise IdeError(msg)
-    return url
+    return f"http://127.0.0.1:{port}/stream"

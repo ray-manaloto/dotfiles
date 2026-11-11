@@ -11,6 +11,14 @@ Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as 
 Each agent step starts in its own herdr-app tab session; subagents and subagent teams inside that session
 are allowed.
 
+When you mention a herdr terminal to the owner, write its tab name first and the id in brackets, e.g.
+`test-speed-pr1 (t26q)`. The name is the tab part of the `where` label from `hc ls` / `hc get <t> --json`.
+Never a bare id.
+
+A Claude tab needs a first message: pass `--task "<task>"` or put the prompt last in `--argv`, e.g.
+`--argv '["claude", "<task>"]'`. A bare `claude` opens the agents dashboard, not a session. After any
+`tab.new`, check with `hc read <t>` that the task arrived; the launch reply only proves the terminal exists.
+
 ## Research evidence across workspaces
 
 For a request to research current tools, libraries, agent workflows, or best
@@ -30,6 +38,15 @@ Last30Days plan, and the hook's output directory. A failed arm is a recorded
 blocker, not a successful five-provider audit. Respect a task's sole writer
 and do not edit another task's evidence index or native goal.
 
+## Adding a Doppler secret
+
+Never `fnox set` a secret on a doppler provider: fnox cannot write to Doppler, so it writes the value
+into the fnox TOML in plain text, and hk's `fnox-refs` step refuses that file. Add a new secret to
+Doppler `dotfiles/dev_personal` with `pbpaste | mise run secret:set NAME` (an UPPER_SNAKE name that
+Doppler does not have yet; the value is piped, never an argument). It runs under the owner's write
+token in the global fnox config's `doppler_write` profile. Changing or deleting an existing secret
+is the owner's job in the Doppler dashboard.
+
 ## Plugin changes need the owner's OK
 
 Never install, uninstall, update, enable, disable or switch the marketplace of a Claude Code plugin, and never change `~/.claude/plugins/**`, `enabledPlugins`, `extraKnownMarketplaces` or the marketplaces in any settings file, by any route (`claude plugin`, file edits, or a script, `sed`, `jq` or `cp` run through a shell), without the owner's explicit OK for that change. Reading them is fine. When a change is needed, stop, say what you would change, and wait.
@@ -47,22 +64,43 @@ committed and name its session once with `repotools pane-pin --session <session 
 worktree. Stage everything, write the message to a file, run `repotools pane-fingerprint --message <message file>`
 and commit with `git commit -F <message file>`. The reviewer's last final answer must end with the line
 `PANE-APPROVE <fingerprint>`; any later final answer withdraws it, and a new commit, a changed index or a changed
-message voids it. Resume the reviewer with `codex resume <id> -s read-only`. Open a pull request only with
+message voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`. Open a pull request only with
 `repotools pr-create --title <title> --body-file <body file>`, after the reviewer approved the output of
 `repotools pr-fingerprint --title <title> --body-file <body file>` the same way. `repotools` and
 `workflowtools` are uv tools that `mise run //repo:tools-install` installs from dotfiles. The pin and the
 session log are plain files, so this catches mistakes, not a forger.
 
+While the reviewer's harness is out of quota, a fallback reviewer approves instead: a fresh Claude subagent in
+the author's own session, of an agent type whose only tools are Read, Grep and Glob (dotfiles has
+`fallback-reviewer`). Explore and Plan can run shell commands, so they do not qualify. Write the staged diff to a
+file first (`git diff --staged > <scratch>/review.diff`). The prompt holds only a line `Worktree: <absolute path>`, the
+diff file (or the pull request's title and body file), the message file, the fingerprint and the review rules; never the
+author's reasoning. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with
+`repotools pane-pin --subagent <transcript>`. The check refuses any tool call other than Read, Grep or Glob. Its
+last line must be `PANE-APPROVE <fingerprint>`, and the commit message or pull request body carries, from before the
+fingerprint, the line `Reviewed by the fallback reviewer (Codex quota depleted).` Fix its findings and run a fresh
+subagent, at most one more round unless the change is risky. Go back to the Codex pane when its quota returns.
+
 ## Cross-review
 
 Claude writes the change; Codex reviews it, so the reviewer is a different model family and never sees the author's transcript.
 Reviews run in the worktree's pinned reviewer pane, named with `repotools pane-pin`, never in the author's
-own session; a commit is approved only for the fingerprint `repotools pane-fingerprint` prints. Details:
+own session; a commit is approved only for the fingerprint `repotools pane-fingerprint` prints. While the
+reviewer's harness is out of quota, the fallback reviewer above takes its place until the quota returns. Details:
 `~/.config/agents/workflow/cross-review.md`.
 
 <!-- codebase-memory-mcp:start -->
 For structural codebase exploration, use the installed `codebase-memory` skill.
 <!-- codebase-memory-mcp:end -->
+
+## Large reviews fan out
+
+A review or sweep bigger than about 1,000 changed lines fans out: split it into slices by file group
+and give each slice to one of your own subagents, at most 6 at once, starting the rest in later
+batches. Each subagent works the full (file, rule) checklist past the first finding and returns
+finding lines plus one checklist line per file. You then check each finding at its path:line, drop
+with a one-line reason the ones that don't hold, merge duplicates, and report every confirmed
+finding in one pass.
 
 ## context7 snapshot
 

@@ -43,16 +43,24 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `mise run //repo:pane-fingerprint <message file>` and commit with `git commit -F <message file>`.
   The reviewer's last final answer must end with the line `PANE-APPROVE <fingerprint>`. Any later
   final answer withdraws it, so ask for nothing after it. A new commit, a changed index or a changed
-  message voids it. Resume the reviewer with `codex resume <id> -s read-only`: a plain resume runs
-  under the global config, full access here, and only a read-only last turn approves. This is a
-  local record: the pin and Codex's session log are plain files that anyone running as this user
-  can edit, so it catches mistakes, not a forger.
+  message voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`: a plain
+  resume runs under the global config, full access here, and only a last turn under policy `never`
+  and read-only approves. This is a local record: the pin and Codex's session log are plain files
+  that anyone running as this user can edit, so it catches mistakes, not a forger.
+- While Codex is out of quota, the fallback reviewer approves instead
+  (`~/.config/agents/workflow/cross-review.md`): write the staged diff to a file, run a fresh
+  `fallback-reviewer` subagent (Read, Grep and Glob only; `.claude/agents/fallback-reviewer.md`) and pin
+  its transcript with `mise run //repo:pane-pin --subagent <agent-*.jsonl>`. The commit message or PR
+  body carries, from before the fingerprint, the line
+  `Reviewed by the fallback reviewer (Codex quota depleted).` Go back to the Codex pane when quota returns.
 - Open a pull request only with `mise run //repo:pr-create <title> <body file>`, after the reviewer
   approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
   bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
   text. This is a rule, not a lock: `.claude/settings.json` makes Claude ask the owner before
   `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
-  publish anything.
+  publish anything. `gh pr merge` is not on that list: the owner's sentence "merge #N" is the OK.
+  Merge once with `gh pr merge N --merge --match-head-commit <sha>`, only when the head is the
+  reviewer-approved commit and the checks pass; otherwise stop and tell the owner.
 - This repo is public and the approval is its leak check. Before approving, the reviewer reads the
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
@@ -92,3 +100,20 @@ The five default roles, each label named as its role (`needs-triage`, `needs-inf
 ### Domain docs
 
 Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Workflow facts
+
+- Check: `hk check --all && mise run test` runs the hk checks and every root's tests; it passes before each
+  commit. A change under `python/<package>/` or `swift/` also runs that root's `check` task (lint, types,
+  codegen), e.g. `mise run //visualplan:check`.
+- Shipping: a branch and a pull request into `main`, opened with `mise run //repo:pr-create`
+  (it wraps `repotools pr-create`); the owner merges on GitHub, and local `main` only fast-forwards
+  to `origin/main`.
+- Research: notes go in `docs/research/`.
+- Review approval: the pinned reviewer pane approves each commit (`repotools pane-pin`,
+  `repotools pane-fingerprint`, through `mise run //repo:pane-pin` and `//repo:pane-fingerprint`;
+  see `~/.config/agents/workflow/cross-review.md`). The hk `commit-msg` step `pane-approval` runs
+  `mise run //repo:pane-approved` and refuses a commit the pane has not approved.
+- Content guard: the reviewer's leak check on the exact bytes, bound to the approval fingerprint. The
+  reviewer approves only bytes it has read and found free of private content. Any change to those bytes
+  changes the fingerprint and voids the approval. The home-path scan is not the content guard.

@@ -162,6 +162,27 @@ ships, where research goes and how a review is approved. Each repository states 
 AGENTS.md, after it has been set up for the workflow skills.
 _Avoid_: Repo config, project settings
 
+### Dependency maps
+
+**Dependency map**:
+The code graph (cbm, plus SCIP for Rust) of one dependency at one pinned version, kept outside the
+repo.
+_Avoid_: Index, snapshot
+
+**Blast radius**:
+The functions of a dependency that changed between two pinned versions and that our usage surface can
+reach through callers.
+_Avoid_: Impact, diff
+
+**Host build**:
+The code one machine actually compiles, meaning its target OS, family, arch and env.
+_Avoid_: Platform build
+
+**Inactive-code edge**:
+An edge whose site is inside `#[cfg]` code that is off for the host build; kept in the blast radius
+and flagged.
+_Avoid_: Dead edge
+
 ### Agent sessions
 
 **Reviewer**:
