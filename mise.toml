@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "python/depmaps", "cpp", "swift"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -14,6 +14,7 @@ home = "python/home"
 visualplan = "python/visualplan"
 jbctl = "python/jbctl"
 depmaps = "python/depmaps"
+guards = "python/guards"
 
 [settings]
 lockfile = true
@@ -26,7 +27,7 @@ task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//cpp:test", "//swift:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 [tasks."test:times"]
@@ -176,5 +177,11 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 	event = pre-push
 ''' }
 "~/.config/mise/agentsview-native/fnox.toml" = { source = "unix/home/.config/mise/agentsview-native/fnox.toml", mode = "symlink" }
+# Rule guards: the hook every agent runs as `python3 -I ~/.config/agents/guards/hook.py` (registration is the
+# owner's, one settings file at a time), and each agent's own policy file. The policy files are copies: Codex
+# 0.167 and Gemini CLI 0.67 both skip a .rules or .toml entry that is a symlink.
+"~/.config/agents/guards" = { source = "python/guards/src/guards", mode = "symlink" }
+"~/.codex/rules/guards.rules" = { source = "unix/home/.codex/rules/guards.rules", mode = "copy" }
+"~/.gemini/policies/guards.toml" = { source = "unix/home/.gemini/policies/guards.toml", mode = "copy" }
 
 # No [tools]: every tool is in the global config (DL-757).

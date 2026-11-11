@@ -1,0 +1,31 @@
+# The rule-guard hook (one file, src/guards/hook.py, stdlib only). The mise link table puts src/guards at
+# ~/.config/agents/guards; each agent runs `python3 -I ~/.config/agents/guards/hook.py`. No [tools]: ruff, ty and
+# uv are global (DL-757). From the repository root: //guards:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.lint]
+description = "ruff check, ruff format --check and ty check"
+depends = ["sync"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "The real hook on hook JSON at 100% line and branch coverage; extra args go to pytest"
+depends = ["sync"]
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
+
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

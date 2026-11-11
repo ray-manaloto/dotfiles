@@ -42,6 +42,7 @@
 /python/home/.venv/
 /python/visualplan/.venv/
 /python/jbctl/.venv/
+/python/guards/.venv/
 /typescript/node_modules/
 __pycache__/
 .coverage

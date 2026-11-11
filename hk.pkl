@@ -54,6 +54,12 @@ local linters = new Mapping<String, Step> {
         glob = List("python/cbm/**")
         check = "mise run //cbm:check"
     }
+    // The rule-guard hook and the Codex rules file its tests check with the real `codex execpolicy check`. The
+    // Gemini policy file reruns the same check but no test loads it in Gemini yet.
+    ["guards"] {
+        glob = List("python/guards/**", "unix/home/.codex/rules/**", "unix/home/.gemini/policies/**")
+        check = "mise run //guards:check"
+    }
     // python/jbctl (#502): lint and the non-live tests; the live 100% gate (//jbctl:coverage) brings the IDE forward.
     ["jbctl"] {
         glob = List("python/jbctl/**")
