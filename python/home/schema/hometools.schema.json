@@ -8,10 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": [
-        "toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set",
-        "pf-load", "pf-confirm", "pf-unload", "pf-status"
-      ]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -38,17 +35,6 @@
         "gdb": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_GDB, [vars] gdb."},
         "make": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_MAKE, [vars] make."},
         "pkgconf": {"type": "string", "minLength": 1, "description": "TOOLCHAIN_PKGCONF, [vars] pkgconf."}
-      }
-    },
-    "PfStatus": {
-      "description": "What pf-status prints: whether the Tailscale-only rules guard this Mac now and after a restart.",
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled", "rules", "boot"],
-      "properties": {
-        "enabled": {"type": "boolean", "description": "pf is on (pfctl -s info says Status: Enabled)."},
-        "rules": {"type": "integer", "minimum": 0, "description": "Rules loaded in the dotfiles-tailnet anchor; 0 when none."},
-        "boot": {"type": "boolean", "description": "The boot LaunchDaemon is loaded, so a restart loads the rules again."}
       }
     },
     "Failure": {
