@@ -19,6 +19,14 @@ A Claude tab needs a first message: pass `--task "<task>"` or put the prompt las
 `--argv '["claude", "<task>"]'`. A bare `claude` opens the agents dashboard, not a session. After any
 `tab.new`, check with `hc read <t>` that the task arrived; the launch reply only proves the terminal exists.
 
+## Messages between agents
+
+A Claude session messages another Claude session with native `SendMessage` to its `ListAgents` name, and replies
+to the `from=` address of the message it got. To hear when a peer finishes, pass `notify_when_idle: true` once
+instead of polling. `hc` stays for what `SendMessage` cannot do: launching tabs, `hc read`, answering a tab's
+dialogs, and messaging Codex and OpenCode tabs. A Claude lead relays a change to this rule to its own Claude
+workers.
+
 ## Research evidence across workspaces
 
 For a request to research current tools, libraries, agent workflows, or best
