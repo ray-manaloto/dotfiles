@@ -55,6 +55,7 @@ class SharedAgentsTest(unittest.TestCase):
             re.findall(r"^## (.+)$", self.text, re.MULTILINE),
             [
                 "Watched agents open as herdr-app tabs",
+                "Messages between agents",
                 "Research evidence across workspaces",
                 "Adding a Doppler secret",
                 "Plugin changes need the owner's OK",
