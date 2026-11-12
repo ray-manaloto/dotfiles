@@ -27,10 +27,6 @@ class Command(StrEnum):
     update_check = "update-check"
     herdr_doctor = "herdr-doctor"
     secret_set = "secret-set"
-    pf_load = "pf-load"
-    pf_confirm = "pf-confirm"
-    pf_unload = "pf-unload"
-    pf_status = "pf-status"
 
 
 class Bootstrap(BaseModel):
@@ -96,29 +92,6 @@ class Verify(BaseModel):
     pkgconf: Annotated[str, Field(min_length=1)]
     """
     TOOLCHAIN_PKGCONF, [vars] pkgconf.
-    """
-
-
-class PfStatus(BaseModel):
-    """
-    What pf-status prints: whether the Tailscale-only rules guard this Mac now and after a restart.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    enabled: bool
-    """
-    pf is on (pfctl -s info says Status: Enabled).
-    """
-    rules: Annotated[int, Field(ge=0)]
-    """
-    Rules loaded in the dotfiles-tailnet anchor; 0 when none.
-    """
-    boot: bool
-    """
-    The boot LaunchDaemon is loaded, so a restart loads the rules again.
     """
 
 

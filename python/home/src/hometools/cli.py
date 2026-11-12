@@ -4,18 +4,12 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import config, herdr, pf, secret, toolchain, update
+from . import config, herdr, secret, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
 # These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
 # reports each input it could not read as unknown in its own JSON line and exits with its checks' code.
 UPDATES = {Command.update_brew: update.brew, Command.update_check: update.check, Command.herdr_doctor: herdr.doctor}
-PF = {
-    Command.pf_load: pf.load,
-    Command.pf_confirm: pf.confirm,
-    Command.pf_unload: pf.unload,
-    Command.pf_status: pf.status,
-}
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -34,9 +28,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         UPDATES[command]()
         return
     try:
-        if command in PF:
-            PF[command]()
-        elif command is Command.toolchain_verify:
+        if command is Command.toolchain_verify:
             toolchain.verify(config.load(Verify))
         else:
             toolchain.bootstrap(config.load(Bootstrap))
