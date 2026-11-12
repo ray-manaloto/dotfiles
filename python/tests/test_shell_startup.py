@@ -106,6 +106,7 @@ class ShellStartupTest(unittest.TestCase):
         stale_opencode_shim: bool = False,
         installer_block: bool = False,
         nested: bool = False,
+        term: str = "xterm-256color",
     ) -> tuple[int, str, str, list[str]]:
         """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
         with tempfile.TemporaryDirectory() as temp:
@@ -159,7 +160,7 @@ class ShellStartupTest(unittest.TestCase):
                         else {}
                     ),
                     "PATH": path.replace("~", str(home)),
-                    "TERM": "xterm-256color",
+                    "TERM": term,
                     # A zsh started inside another inherits the ZDOTDIR the outer one exported.
                     **({"ZDOTDIR": str(home / ".config/zsh")} if nested else {}),
                 },
@@ -339,6 +340,16 @@ class ShellStartupTest(unittest.TestCase):
                     mode, "print -r -- $STARSHIP_SHELL", starship=True
                 )
                 self.assertEqual((code, out, err), (0, "zsh\n", ""))
+
+    def test_a_dumb_terminal_starts_silently_with_no_starship_prompt(self) -> None:
+        # shell:apply probes the new files with TERM=dumb, where starship can't draw a prompt and says so on stderr.
+        self.assertIsNotNone(STARSHIP, "starship must be on PATH")
+        for mode in INTERACTIVE:
+            with self.subTest(mode=mode):
+                code, out, err, _ = self.zsh(
+                    mode, "print -r -- ${STARSHIP_SHELL-unset}", starship=True, term="dumb"
+                )
+                self.assertEqual((code, out, err), (0, "unset\n", ""))
 
     def test_drop_ins_load_and_no_claude_mem_alias(self) -> None:
         for mode in INTERACTIVE:

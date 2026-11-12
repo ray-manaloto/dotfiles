@@ -19,6 +19,7 @@ zle -N down-line-or-beginning-search
 bindkey -e
 bindkey '^[[A' up-line-or-beginning-search '^[OA' up-line-or-beginning-search
 bindkey '^[[B' down-line-or-beginning-search '^[OB' down-line-or-beginning-search
-if command -v starship >/dev/null; then
+# A dumb terminal can't draw starship's prompt, and starship says so on stderr at every prompt (1.27.0).
+if [[ $TERM != dumb ]] && command -v starship >/dev/null; then
   eval "$(starship init zsh)"
 fi
