@@ -108,8 +108,6 @@ run = "mkdir -p ~/.agents/skills"
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
 "~/.config/mise/tasks" = { source = "unix/home/.config/mise/tasks", mode = "symlink" }
 "~/.config/fnox/config.toml" = { source = "unix/home/.config/fnox/config.toml", mode = "symlink" }
-"~/.config/fnox/proxy-codex.toml" = { source = "unix/home/.config/fnox/proxy-codex.toml", mode = "symlink" }
-"~/.config/fnox/proxy-opencode.toml" = { source = "unix/home/.config/fnox/proxy-opencode.toml", mode = "symlink" }
 "~/.config/starship.toml" = { source = "unix/home/.config/starship.toml", mode = "symlink" }
 # The OpenCode service binds loopback only (tailnet-only ruling, 2026-11-11): service.json also holds the
 # service password, so this owns only its hostname key and leaves the rest to opencode. Unset, opencode 2.2.7
@@ -126,10 +124,10 @@ run = "mkdir -p ~/.agents/skills"
 "~/.config/opencode/opencode.json/mcp-keys" = { source = "unix/home/.config/opencode/mcp-keys.json", merge = true }
 # Claude's apify MCP server gets its key from `fnox get` at each connect (headersHelper,
 # https://code.claude.com/docs/en/mcp; 10 s limit), with an explicit PATH as 1natsu172/dotfiles
-# bin/claude-utils/mcp-auth-header.sh:22,35 and fapont/dotfiles modules/agents/claude/mcp.json:6 do. A failed get exits
-# non-zero instead of sending an empty header. Claude Code rewrites ~/.claude.json, so this owns only these keys; a
-# static `headers` entry left from before stays (delete it once by hand) and the helper's Authorization overrides it.
-# Apply with every Claude tab closed, or re-apply if `mise dot status` shows drift.
+# bin/claude-utils/mcp-auth-header.sh:22,35 and fapont/dotfiles modules/agents/claude/mcp.json:6 do. A missing key
+# (if_missing = "warn" makes `fnox get` print nothing and exit 0) or a failed get exits non-zero instead of sending an
+# empty header. Claude Code rewrites ~/.claude.json while it runs, so write this entry with Claude's own CLI
+# (`claude mcp add-json apify '<this JSON>' -s user`) rather than a whole-root apply.
 "~/.claude.json/mcp-apify" = { source = "unix/home/.claude.mcp-apify.json", merge = true, permissions = "0600" }
 # The apify plugin stays enabled for its skills and agent, but its own MCP server (plugin:apify:apify, OAuth) is
 # denied: the user-scope `apify` server above is the one with the key. deniedMcpServers merges from every settings

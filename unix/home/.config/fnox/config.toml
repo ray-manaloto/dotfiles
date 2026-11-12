@@ -1,12 +1,10 @@
 #:schema https://fnox.jdx.dev/schema.json
-# Global fnox config: the read-only Doppler service token for dotfiles/dev_personal, in the
-# doppler_write profile the owner's read/write one that only `mise run secret:set` uses, and one
-# profile per consumer (agent-<harness>, mcp-<server>, cli-<tool>) that the mise [wrappers], codex-hc
-# and the apify headersHelper run with `fnox -c ~/.config/fnox/config.toml exec -P <profile>`.
-# Other projects keep their Doppler references in their own fnox.toml.
-# Replace the read token with `fnox set DOPPLER_TOKEN --global --provider age`, then keep env = false.
-# Never `fnox set` a secret on the doppler provider: fnox writes its value here in plain text.
-# Add a Doppler secret with `pbpaste | mise run secret:set NAME`.
+# The one fnox file, with no profiles. Codex and OpenCode start as `fnox proxy run -- <harness>` (the mise
+# [wrappers] and codex-hc): the harness holds placeholders only, and the proxy puts the real key into requests to
+# the host in its rule (fnox docs/guide/proxy.md). Claude has no wrapper; its apify headersHelper runs
+# `fnox get APIFY_TOKEN`. env = false keeps every key out of `fnox exec` here and in any project that layers this
+# file. Add a key to Doppler with `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider
+# (it writes the value here in plain text).
 
 # Keep resolved secrets in memory, so a harness started again reads them without a Doppler call.
 # A first start while Doppler is unreachable waits on doppler's own retries (owner accepted).
@@ -28,42 +26,33 @@ project = "dotfiles"
 config = "dev_personal"
 token = { secret = "DOPPLER_TOKEN" }
 
-# Every profile also gets these top-level secrets. Keep this table to the token with env = false, so no
-# consumer receives it: a secret added here would reach every harness.
+# The read-only Doppler service token, age ciphertext. Replace it with
+# `fnox set DOPPLER_TOKEN --global --provider age`, then keep env = false.
 [secrets]
 DOPPLER_TOKEN= { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBvenQvY0o3bGFPTVJkS2xqYmczYXVtZGpYbUNmNHNudVl1Tk1waVJ0bTM0CndHL29BWWpza3Y0S2MzYmFRWFlYYk9tbHVJVTlXSjFMTWIyK0c3UW1EbTAKLT4gV2guXC1ncmVhc2UgfVZ0WGIgfgpscTJNSEFSUVdBbFU4ZDN3MlVlYS90OHZadHBPdjc4Ci0tLSBsT2JNZUw3TUM5Nm02L3VtUjZyMm8vSHJVQklYWGRrcjZzdzlRak44OTJRCppGClEbYWrtucIUZUnMN7za4O2J0ESzPbktwzADDK2g1ezltbrRde+6xEBCuYVoctmaSW9jnVgCPaUyoahVJbD4glH0+0x9wcbHGMGwy7yXiZPJrgqH07IRV/ZAEX0=", env = false }
+CONTEXT7_API_KEY     = { provider = "doppler_dotfiles_dev_personal", value = "CONTEXT7_API_KEY", env = false, if_missing = "warn" }
+EXA_API_KEY          = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = false, if_missing = "warn" }
+APIFY_TOKEN          = { provider = "doppler_dotfiles_dev_personal", value = "APIFY_TOKEN", env = false, if_missing = "warn" }
+OPENROUTER_API_KEY   = { provider = "doppler_dotfiles_dev_personal", value = "OPENROUTER_API_KEY", env = false, if_missing = "warn" }
+APINEX_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "APINEX_API_KEY", env = false, if_missing = "warn" }
+EXPERIENTIAL_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXPERIENTIAL_API_KEY", env = false, if_missing = "warn" }
+RESPAN_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "RESPAN_API_KEY", env = false, if_missing = "warn" }
 
-# The read/write token for dotfiles/dev_personal, for `mise run secret:set` alone: it is the profile's own
-# DOPPLER_TOKEN because that is the variable doppler reads, and only `fnox exec --profile doppler_write`
-# hands it out. The owner stores it with
-#   pbpaste | fnox set DOPPLER_TOKEN --global --profile doppler_write --provider age
-# which keeps env, if_missing and daemon_cache. Until then the profile fails instead of running without a token.
-# daemon_cache = false: the fnox daemon never holds the write token, so it is decrypted only for secret:set.
-[profiles.doppler_write.secrets]
-DOPPLER_TOKEN = { provider = "age", env = "exec", if_missing = "error", daemon_cache = false }
+# The read/write token for dotfiles/dev_personal, read only by `mise run secret:set` (`fnox get`). It lives in the
+# macOS Keychain (service dotfiles-fnox), never in this public file, not even as ciphertext. The owner stores it
+# with `pbpaste | fnox set DOPPLER_WRITE_TOKEN --global --provider keychain`, which keeps this line's fields.
+# No proxy rule names it, so `proxy run` never resolves it; daemon_cache = false keeps it out of the daemon.
+DOPPLER_WRITE_TOKEN = { provider = "keychain", value = "DOPPLER_WRITE_TOKEN", env = false, if_missing = "error", daemon_cache = false }
 
-# Consumers. Each key is a Doppler reference read only into the command's environment; if_missing = "warn"
-# starts the consumer without it when Doppler fails.
-[profiles.agent-codex.secrets]
-CONTEXT7_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "CONTEXT7_API_KEY", env = "exec", if_missing = "warn" }
-EXA_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = "exec", if_missing = "warn" }
-
-# The model-provider keys are for the providers in ~/.config/opencode/opencode.json ({env:VAR} there); its
-# proxy rules are in proxy-opencode.toml, and every rule's secret must be in this profile.
-[profiles.agent-opencode.secrets]
-CONTEXT7_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "CONTEXT7_API_KEY", env = "exec", if_missing = "warn" }
-EXA_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = "exec", if_missing = "warn" }
-OPENROUTER_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "OPENROUTER_API_KEY", env = "exec", if_missing = "warn" }
-APINEX_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "APINEX_API_KEY", env = "exec", if_missing = "warn" }
-EXPERIENTIAL_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXPERIENTIAL_API_KEY", env = "exec", if_missing = "warn" }
-RESPAN_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "RESPAN_API_KEY", env = "exec", if_missing = "warn" }
-
-# For the apify server's headersHelper in ~/.claude.json, so Claude itself needs no wrapper.
-[profiles.mcp-apify.secrets]
-APIFY_TOKEN = { provider = "doppler_dotfiles_dev_personal", value = "APIFY_TOKEN", env = "exec", if_missing = "warn" }
-
-[profiles.cli-hyperresearch.secrets]
-EXA_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = "exec", if_missing = "warn" }
-CORE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "CORE_API_KEY", env = "exec", if_missing = "warn" }
-FRED_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "FRED_API_KEY", env = "exec", if_missing = "warn" }
-HYPERRESEARCH_CONTACT_EMAIL = { provider = "doppler_dotfiles_dev_personal", value = "HYPERRESEARCH_CONTACT_EMAIL", env = "exec", if_missing = "warn" }
+# One rule per host, for every method. Permissive egress lets every other host (model APIs, git, gh) through
+# untouched. `proxy run` resolves only the secrets its rules name (src/commands/proxy.rs:308-324 at 1.48.0).
+[proxy]
+egress = "permissive"
+rules = [
+  { secret = "CONTEXT7_API_KEY",     domain = "mcp.context7.com",        header = "authorization" },
+  { secret = "EXA_API_KEY",          domain = "mcp.exa.ai",              header = "authorization" },
+  { secret = "OPENROUTER_API_KEY",   domain = "openrouter.ai",           header = "authorization" },
+  { secret = "APINEX_API_KEY",       domain = "api.apinex.bond",         header = "authorization" },
+  { secret = "EXPERIENTIAL_API_KEY", domain = "api.experientiallabs.ai", header = "authorization" },
+  { secret = "RESPAN_API_KEY",       domain = "gateway.respan.ai",       header = "authorization" },
+]
