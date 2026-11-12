@@ -599,6 +599,56 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 """
 
+# pf anchor (docs/research/pf-tailnet.md): ssh, Screen Sharing, file sharing, Kerberos and Remote Apple Events
+# answer only Tailscale peers and this Mac itself; anyone else on the network gets a refusal (block return).
+# Writing these two files changes nothing: pf:load loads the rules with a 120 s revert, pf:confirm keeps them and
+# turns the boot daemon on, pf:unload removes both, pf:status checks (python/home/src/hometools/pf.py). Tailscale's
+# addresses, not its interface: the utun number changes across restarts. A spoofed 100.x source on the LAN
+# cannot finish a TCP handshake, since the replies go out over Tailscale.
+[bootstrap.files."/etc/pf.anchors/dotfiles-tailnet"]
+os = "macos"
+owner = "root"
+group = "wheel"
+mode = "0644"
+content = """
+table <tailnet> const { 100.64.0.0/10, fd7a:115c:a1e0::/48 }
+ports = "{ 22, 88, 445, 3031, 3283, 5900 }"
+pass in quick on lo0 all
+pass in quick proto { tcp, udp } from <tailnet> to any port $ports
+block return in quick proto { tcp, udp } to any port $ports
+"""
+
+# Loads the anchor at boot once pf:confirm has run `launchctl enable` on it; Disabled until then. -E turns pf on
+# and keeps it on after pfctl exits (xnu bsd/net/pf_ioctl.c DIOCSTARTREF).
+[bootstrap.files."/Library/LaunchDaemons/dev.dotfiles.pf-tailnet.plist"]
+os = "macos"
+owner = "root"
+group = "wheel"
+mode = "0644"
+content = """
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>dev.dotfiles.pf-tailnet</string>
+	<key>Disabled</key>
+	<true/>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/sbin/pfctl</string>
+		<string>-E</string>
+		<string>-a</string>
+		<string>com.apple/100.dotfiles-tailnet</string>
+		<string>-f</string>
+		<string>/etc/pf.anchors/dotfiles-tailnet</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+</dict>
+</plist>
+"""
+
 [bootstrap.directories."~/.config/mise/conf.d"]
 phase = "pre-packages"
 
