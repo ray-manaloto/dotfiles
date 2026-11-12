@@ -64,6 +64,17 @@ def assert_passed(result: subprocess.CompletedProcess[str]) -> None:
         ("fnox get API_KEY", 3),
         ("fnox --profile p export", 3),
         ("fnox exec --only KEY -- fnox get OTHER", 3),
+        ("fnox exec --only KEY -- env", 3),
+        ("fnox --config c.toml --profile p --no-defaults exec -- mise run test", 3),
+        ("fnox exec --only KEY", 3),
+        ("fnox exec --replace -- agentsview serve", 3),
+        ("fnox proxy run -- fnox get KEY", 3),
+        ("fnox list --values", 3),
+        ("fnox -- exec env", 3),
+        ("fnox edit", 3),
+        ("fnox tui", 3),
+        ("fnox mcp", 3),
+        ("fnox push --all", 3),
         ("docker desktop update", 4),
         ("docker --context x desktop update --quiet", 4),
         ("herdr-app do tab.close", 5),
@@ -88,9 +99,11 @@ def test_claude_bash_blocks(command: str, rule: int) -> None:
         "brew --prefix",
         "doppler secrets set KEY",
         "doppler me",
-        "fnox exec --only KEY -- env",
-        "fnox --config c.toml --profile p --no-defaults exec -- mise run test",
-        "fnox exec --only KEY",
+        "fnox proxy run -- codex",
+        "fnox --non-interactive proxy run -- python3 scripts/run.py",
+        "fnox proxy run -- docker exec box env",
+        "fnox list",
+        "fnox proxy rules",
         "fnox check",
         "fnox env --json --describe",
         "export PATH=/bin",
@@ -146,7 +159,7 @@ def test_gemini_run_shell_command() -> None:
         "tool_input": {"command": "fnox get X"},
     }
     assert_blocked(run(gemini), 3)
-    gemini["tool_input"] = {"command": "fnox exec --only X -- printenv X"}
+    gemini["tool_input"] = {"command": "fnox proxy run -- printenv X"}
     assert_passed(run(gemini))
 
 

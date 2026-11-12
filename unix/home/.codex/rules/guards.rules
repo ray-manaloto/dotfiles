@@ -15,7 +15,7 @@ prefix_rule(
 prefix_rule(
     pattern = ["doppler", "secrets", ["get", "download", "run", "substitute"]],
     decision = "forbidden",
-    justification = "rule guard 3: secrets stay inside fnox; run fnox exec --only KEY -- <command>, check with fnox check or fnox env --json --describe",
+    justification = "rule guard 3: secrets stay inside fnox; run fnox proxy run -- <command>, check with fnox check or fnox env --json --describe",
     match = [["doppler", "secrets", "get", "API_KEY"], ["doppler", "secrets", "download"]],
     not_match = [["doppler", "secrets", "set", "KEY"], ["doppler", "me"]],
 )
@@ -23,16 +23,25 @@ prefix_rule(
 prefix_rule(
     pattern = ["doppler", "run"],
     decision = "forbidden",
-    justification = "rule guard 3: secrets stay inside fnox; run fnox exec --only KEY -- <command>",
+    justification = "rule guard 3: secrets stay inside fnox; run fnox proxy run -- <command>",
     match = [["doppler", "run", "--", "env"]],
 )
 
 prefix_rule(
-    pattern = ["fnox", ["get", "export"]],
+    pattern = ["fnox", ["get", "export", "exec", "edit", "tui", "mcp", "push"]],
     decision = "forbidden",
-    justification = "rule guard 3: fnox get and fnox export print secrets; run fnox exec --only KEY -- <command>, check with fnox check or fnox env --json --describe",
-    match = [["fnox", "get", "API_KEY"], ["fnox", "export"]],
-    not_match = [["fnox", "exec", "--only", "KEY", "--", "env"], ["fnox", "check"]],
+    justification = "rule guard 3: these fnox commands print, show or hand out secrets; run fnox proxy run -- <command>, check with fnox check or fnox env --json --describe",
+    match = [["fnox", "get", "API_KEY"], ["fnox", "export"], ["fnox", "exec", "--only", "KEY", "--", "env"]],
+    not_match = [["fnox", "proxy", "run", "--", "env"], ["fnox", "check"]],
+)
+
+# A prefix rule can't see that `fnox env --describe` lists keys only, so `fnox env` is left to the hook.
+prefix_rule(
+    pattern = ["fnox", "list", "--values"],
+    decision = "forbidden",
+    justification = "rule guard 3: fnox list --values prints secrets; check with fnox check or fnox list",
+    match = [["fnox", "list", "--values"]],
+    not_match = [["fnox", "list"]],
 )
 
 prefix_rule(

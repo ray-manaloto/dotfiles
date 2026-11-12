@@ -13,19 +13,20 @@ decision = "deny"
 priority = 990
 denyMessage = "rule guard 1: agents never install with Homebrew. Ask dotfiles-lead for a dotfiles PR that adds it with `mise bootstrap packages use` and `mise bootstrap packages apply`."
 
+# A prefix can't see that `fnox env --describe` lists keys only, so `fnox env` is left to the hook.
 [[rule]]
 toolName = "run_shell_command"
-commandPrefix = ["doppler secrets get", "doppler secrets download", "doppler secrets run", "doppler secrets substitute", "doppler run", "fnox get", "fnox export"]
+commandPrefix = ["doppler secrets get", "doppler secrets download", "doppler secrets run", "doppler secrets substitute", "doppler run", "fnox get", "fnox export", "fnox exec", "fnox edit", "fnox tui", "fnox mcp", "fnox push", "fnox list --values"]
 decision = "deny"
 priority = 990
-denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox exec --only KEY -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
+denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox proxy run -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
 
 [[rule]]
 toolName = "run_shell_command"
 commandRegex = "(export|declare -x|typeset -x) DOPPLER_TOKEN\\b"
 decision = "deny"
 priority = 990
-denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox exec --only KEY -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
+denyMessage = "rule guard 3: secrets stay inside fnox. Run `fnox proxy run -- <command>`; check what is set with `fnox check` or `fnox env --json --describe`."
 
 [[rule]]
 toolName = "run_shell_command"

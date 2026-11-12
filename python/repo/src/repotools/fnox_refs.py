@@ -21,8 +21,11 @@ from .models import FnoxFinding, FnoxRule
 # each also hidden and under .config/, plus the global config folder's files. Every other tracked TOML is checked
 # too, since `import` can name any file (config.rs:1299-1311); only these must parse.
 FNOX_NAME = re.compile(r"(?:.*/)?\.?fnox(?:\.[^/]+)?\.toml|(?:.*/)?\.config/fnox/[^/]+\.toml")
-# An entry whose Doppler secret has another name than its key: {(path, dotted key): Doppler name}. None today.
-RENAMES: Mapping[tuple[str, str], str] = {}
+# An entry whose Doppler secret has another name than its key: {(path, dotted key): Doppler name}. free-models
+# reads Kilo's key as OPENAI_COMPATIBLE_API_KEY too.
+RENAMES: Mapping[tuple[str, str], str] = {
+    ("unix/home/.config/fnox/config.toml", "secrets.OPENAI_COMPATIBLE_API_KEY"): "KILO_API_KEY",
+}
 
 # A parsed TOML table; tomllib returns plain dicts, so there is no schema model to generate for it.
 type Table = Mapping[str, object]
