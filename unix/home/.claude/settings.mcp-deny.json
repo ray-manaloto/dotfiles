@@ -1,0 +1,5 @@
+{
+  "deniedMcpServers": [
+    { "serverName": "plugin:apify:apify" }
+  ]
+}
