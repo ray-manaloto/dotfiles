@@ -444,8 +444,11 @@ run = "{{ mise_config_dir }}/scripts/update_claude.py"
 description = "update the NATIVE codex install (never a mise pin)"
 # claude, codex and agy are native-installer-only on this Mac (Ray, 2026-10-01):
 # every mise name for them is in `disable_tools` above. Absolute path on purpose —
-# a stale mise shim can sit ahead of ~/.local/bin on PATH.
-run = "$HOME/.local/bin/codex update && $HOME/.local/bin/codex --version"
+# a stale mise shim can sit ahead of ~/.local/bin on PATH. The PATH leaves out mise's wrappers too, as the
+# codex-update alias does: the installer greps a found codex for "#!/usr/bin/env node", which the mise wrapper
+# binary contains, calls it a second npm install and appends a PATH block to ~/.zprofile
+# (openai/codex scripts/install/install.sh:600-631,972-1000 at rust-v0.167.2).
+run = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.local/bin/codex update && $HOME/.local/bin/codex --version"
 
 [tasks."update:agy"]
 description = "update the NATIVE agy (Antigravity) install (never a mise pin)"
