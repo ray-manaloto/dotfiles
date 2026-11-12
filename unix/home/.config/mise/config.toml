@@ -265,7 +265,7 @@ rumdl = { version = "0.3.3", minimum_release_age = "0s" }
 "github:asciimoo/hister" = { version = "0.21.0", minimum_release_age = "0s" }
 llmfit = { version = "1.1.20", minimum_release_age = "0s" }
 # Research pilot (owner, 2026-11-11). hyperresearch needs Python <3.15 (pyproject requires-python) and pulls
-# Crawl4AI; run `crawl4ai-setup` once for its browsers. Keys: fnox profile cli-hyperresearch.
+# Crawl4AI; run `crawl4ai-setup` once for its browsers. Its keys are not wired yet (a later change).
 "pipx:hyperresearch" = { version = "0.13.1", extras = ["exa"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
 "github:kenn-io/agentsview" = { version = "0.46.1", minimum_release_age = "0s" }
@@ -489,11 +489,17 @@ update-check = "$HOME/.config/mise/scripts/mise_update_guard.py update:check"
 claude_dangerous = "claude --dangerously-skip-permissions --brief"
 codex_yolo = "codex --yolo"
 gemini_yolo = "gemini --yolo"
+# The opencode wrapper adds --standalone, which `opencode upgrade` rejects (v2.2.7 commands.ts:14-28): update the
+# real binary directly.
+opencode-update = "$HOME/.opencode/bin/opencode upgrade"
+# Codex's installer appends a PATH block to ~/.zprofile (a tracked file) whenever it finds a second codex on PATH,
+# and the mise wrapper is one (openai/codex scripts/install/install.sh:600-631 at rust-v0.165.0). Update with a PATH
+# that leaves out mise's wrappers, so it sees one codex and leaves the profile alone.
+codex-update = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.local/bin/codex update"
 
-# Codex and OpenCode start under `fnox proxy run` with their own profile (agent-codex, agent-opencode in
-# ~/.config/fnox/config.toml): the harness gets placeholders and the proxy adds the real key to the hosts in
-# ~/.config/fnox/proxy-<harness>.toml (context7 and exa; OpenCode's model providers too), loaded with -c over the
-# global config. mise puts the command-wrappers dir first on PATH (v2026.11.6
+# Codex and OpenCode start under `fnox proxy run` with the keys and proxy rules of the one fnox file
+# (~/.config/fnox/config.toml): the harness gets placeholders and the proxy adds the real key for each rule's host
+# (context7 and exa; OpenCode's model providers too). mise puts the command-wrappers dir first on PATH (v2026.11.6
 # src/toolset/toolset_paths.rs:183-195) and, while a wrapper runs, sends its command and everything it starts to the
 # real tool (src/cli/shim.rs:241-249), so fnox finds the real codex. Claude needs no wrapper: its apify key comes
 # from a headersHelper. A Doppler error starts the harness with placeholders that the proxy refuses until Doppler is
@@ -504,11 +510,11 @@ gemini_yolo = "gemini --yolo"
 # `mise exec -- codex` still goes through the wrapper. Run `mise reshim` after changing this table.
 [wrappers.codex]
 command = "fnox"
-args = ["-c", "{{ env.HOME }}/.config/fnox/proxy-codex.toml", "--non-interactive", "proxy", "run", "-P", "agent-codex", "--", "codex"]
+args = ["--non-interactive", "proxy", "run", "--", "codex"]
 
 [wrappers.opencode]
 command = "fnox"
-args = ["-c", "{{ env.HOME }}/.config/fnox/proxy-opencode.toml", "--non-interactive", "proxy", "run", "-P", "agent-opencode", "--", "opencode", "--standalone"]
+args = ["--non-interactive", "proxy", "run", "--", "opencode", "--standalone"]
 
 [vars]
 # DL-764, DL-770: the one home for compiler and brew versions; conf.d/toolchain.toml renders

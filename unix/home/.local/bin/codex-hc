@@ -1,6 +1,6 @@
 #!/bin/sh
 # Codex for herdr tabs and `hc run`, which start programs without a shell and so skip the mise [wrappers].
-# fnox proxy run gives it the agent-codex placeholders and adds the real keys to its MCP requests.
+# fnox proxy run gives it placeholders and adds the real keys to its requests, as for every harness.
 # hc needs --no-daemon to keep Codex's commands in hc.
 # Inside an hc terminal, also passes hc's variables through shell_environment_policy.set, because
 # inherit = "core" in ~/.codex/config.toml drops them from the commands Codex runs, and hc send then looks
@@ -15,4 +15,4 @@ if [ -n "${HC_TERMINAL_ID:-}" ] && [ -n "${HC_TERMINAL_SOCKET:-}" ]; then
     ${HC_SESSION:+-c "shell_environment_policy.set.HC_SESSION=\"$HC_SESSION\""} \
     "$@"
 fi
-exec fnox -c "$HOME/.config/fnox/proxy-codex.toml" --non-interactive proxy run -P agent-codex -- codex --no-daemon "$@"
+exec fnox --non-interactive proxy run -- codex --no-daemon "$@"

@@ -16,7 +16,7 @@ from hometools import cli, secret
 # doppler is the only program that reaches the network (CODING_STANDARDS 2): this stand-in, linked as `doppler`
 # ahead of the real one, logs its argv, the token and the other secret fnox exec gave it, and its stdin, one JSON
 # line per call in $STAND_IN_FOLDER/calls.jsonl. `secrets --only-names --json` answers names.txt, exiting
-# names.code; `secrets set` exits set.code; a file named unlink-fnox makes the first call remove the fnox link.
+# names.code; `secrets set` exits set.code; a file named unlink-doppler makes the first call remove itself.
 STAND_IN = """
 import json, os, sys
 from pathlib import Path
@@ -26,24 +26,23 @@ call["host"] = os.environ.get("DOPPLER_API_HOST")
 call["stdin"] = sys.stdin.read() if sys.argv[2] == "set" else None
 with (folder / "calls.jsonl").open("a") as log:
     log.write(json.dumps(call) + "\\n")
-if (folder / "unlink-fnox").exists():
-    (folder / "bin/fnox").unlink()
+if (folder / "unlink-doppler").exists():
+    (folder / "bin/doppler").unlink()
 if sys.argv[1:3] == ["secrets", "--only-names"]:
     sys.stdout.write((folder / "names.txt").read_text())
     raise SystemExit(int((folder / "names.code").read_text()))
 raise SystemExit(int((folder / "set.code").read_text()))
 """
 
-# A plain provider stands in for age: the profile's token is a test string, and OTHER shows --no-defaults working.
+# A plain provider stands in for the Keychain: the write token is a test string, and OTHER, a second secret, shows
+# that only the token reaches doppler.
 CONFIG = """
 [providers.plain]
 type = "plain"
 
 [secrets]
-OTHER = { provider = "plain", value = "default-profile-secret" }
-
-[profiles.doppler_write.secrets]
-DOPPLER_TOKEN = { provider = "plain", value = "write-token-for-tests" }
+OTHER = { provider = "plain", value = "another-secret" }
+DOPPLER_WRITE_TOKEN = { provider = "plain", value = "write-token-for-tests" }
 """
 
 PEM = "-----BEGIN RSA PRIVATE KEY-----\nAAAA\nBBBB\n-----END RSA PRIVATE KEY-----\n"
@@ -132,8 +131,9 @@ def test_stores_a_multiline_value(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # Only what fnox injects reaches doppler: an inherited DOPPLER_* variable does not.
+    # Only the write token reaches doppler: an inherited DOPPLER_* variable does not.
     monkeypatch.setenv("DOPPLER_API_HOST", "https://inherited.invalid")
+    monkeypatch.setenv("DOPPLER_TOKEN", "inherited-token")
     pipe_in(PEM)
     secret.set_secret("NEW_KEY")
     listed, stored = doppler.calls()
@@ -220,18 +220,45 @@ def test_stops_when_fnox_cannot_start_to_list(
     assert refused(capsys, "NEW_KEY") == "secret:set: fnox: No such file or directory"
 
 
-def test_stops_when_fnox_cannot_start_to_set(
+def test_stops_when_doppler_cannot_start_to_list(
     doppler: Doppler,
     pipe_in: Callable[[str], None],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # The listing call removes the only fnox on PATH, so the set call's fnox cannot start.
-    (doppler.folder / "unlink-fnox").touch()
+    (doppler.folder / "bin/doppler").unlink()
+    monkeypatch.setenv("PATH", str(doppler.folder / "bin"))
+    pipe_in(PEM)
+    assert refused(capsys, "NEW_KEY") == "secret:set: doppler: No such file or directory"
+    assert doppler.calls() == []
+
+
+def test_stops_when_doppler_cannot_start_to_set(
+    doppler: Doppler,
+    pipe_in: Callable[[str], None],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The listing call removes the only doppler on PATH, so the set call's doppler cannot start.
+    (doppler.folder / "unlink-doppler").touch()
     monkeypatch.setenv("PATH", f"{doppler.folder / 'bin'}{os.pathsep}/usr/bin")
     pipe_in(PEM)
-    assert refused(capsys, "NEW_KEY") == "secret:set: fnox: No such file or directory"
+    assert refused(capsys, "NEW_KEY") == "secret:set: doppler: No such file or directory"
     assert [call["argv"] for call in doppler.calls()] == [LIST]
+
+
+def test_stops_when_fnox_has_no_write_token(
+    doppler: Doppler, pipe_in: Callable[[str], None], capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = doppler.folder / "home/.config/fnox/config.toml"
+    config.write_text(
+        CONFIG.replace('DOPPLER_WRITE_TOKEN = { provider = "plain", value = "write-token-for-tests" }', "")
+    )
+    pipe_in(PEM)
+    assert refused(capsys, "NEW_KEY").startswith(
+        "secret:set: fnox could not read DOPPLER_WRITE_TOKEN from the Keychain"
+    )
+    assert doppler.calls() == []
 
 
 @pytest.mark.usefixtures("doppler")

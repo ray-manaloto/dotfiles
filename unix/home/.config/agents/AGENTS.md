@@ -44,7 +44,7 @@ Never `fnox set` a secret on a doppler provider: fnox cannot write to Doppler, s
 into the fnox TOML in plain text, and hk's `fnox-refs` step refuses that file. Add a new secret to
 Doppler `dotfiles/dev_personal` with `pbpaste | mise run secret:set NAME` (an UPPER_SNAKE name that
 Doppler does not have yet; the value is piped, never an argument). It runs under the owner's write
-token in the global fnox config's `doppler_write` profile. Changing or deleting an existing secret
+token, which the global fnox config reads from the macOS Keychain (`DOPPLER_WRITE_TOKEN`). Changing or deleting an existing secret
 is the owner's job in the Doppler dashboard.
 
 ## Plugin changes need the owner's OK
