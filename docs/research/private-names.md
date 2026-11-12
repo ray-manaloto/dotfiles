@@ -87,6 +87,44 @@ No mise or fnox issue, PR or discussion covers hostnames or Tailscale names in d
 - Scripts can take the tailnet name from `tailscale status --json` (`DNSName`) and connect with
   `ProxyCommand tailscale nc %h %p` (divaltor).
 
+## Editing the tailnet policy
+
+Agents read and change the tailnet policy through the Tailscale API, never the admin console. `TAILSCALE_API_KEY`
+is an access token in Doppler; the global fnox file sends it only to `api.tailscale.com`, in the `Authorization`
+header, so the command holds a placeholder. The token has full admin power over the tailnet and expires 90 days
+after it was made (owner's choice, 2026-11-12); the owner makes a new one in the admin console (Settings, Keys)
+and stores it with `pbpaste | mise run secret:set TAILSCALE_API_KEY`.
+
+Every request runs under the proxy and names the key as a placeholder, quoted so the shell inside expands it:
+
+```
+fnox --non-interactive proxy run -- zsh -c 'curl -sS -H "Authorization: Bearer $TAILSCALE_API_KEY" \
+  -H "Accept: application/hujson" https://api.tailscale.com/api/v2/tailnet/-/acl'
+```
+
+Each step below swaps in its own method, headers and path.
+
+1. Start from the source of truth. The policy file is kept in the PC lane's repository, not here; ask its lead for
+   the current file. Its header comments are newer than the live policy's, so an edit takes the header from that
+   file, never from the live text.
+2. Read the live policy as HuJSON and keep the response's `ETag`: `GET /api/v2/tailnet/-/acl` with
+   `Accept: application/hujson` (`-D` saves the headers). Keep this text unchanged as the rollback copy. Compare it
+   with the source file: they should differ only in the header.
+3. Make the edit, and add or change a case in the policy's `tests` block so a later save checks it.
+4. Validate: `POST /api/v2/tailnet/-/acl/validate` with `Content-Type: application/hujson` and the edited file.
+   An answer of `{}` means valid; anything else is the error, and nothing was applied.
+5. Apply with the ETag guard: `POST /api/v2/tailnet/-/acl` with `If-Match: <etag>`. If someone changed the policy
+   after step 2, Tailscale refuses it with 412 `precondition failed, invalid old hash` (checked 2026-11-12) and
+   changes nothing; start again at step 2.
+6. Read it back and compare byte for byte with what was sent. Then check the result from a device: the tailnet
+   filter a node received is in `tailscale debug netmap` (`PacketFilter`), and a TCP connect from the peer shows
+   whether the port answers. If something that worked before stops working, roll back at once: read the new ETag
+   and post the rollback copy from step 2 with it, then read back again.
+7. Send the PC lane's lead the change, so its source file and its access check match the live policy.
+
+Keep the fetched policy out of the repo and out of public text: it names machines, tags, addresses and the account.
+Save it under a scratch folder with mode 0600.
+
 ## Gaps and failures
 
 - `/last30days` (engine 3.36.0) on "Doppler secrets dotfiles hostnames non-secret config" returned only two
