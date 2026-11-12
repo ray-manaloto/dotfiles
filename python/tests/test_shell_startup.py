@@ -11,10 +11,10 @@ from pathlib import Path
 UNIX_HOME = Path(__file__).resolve().parents[2] / "unix/home"
 STARTUP_FILES = (
     ".zshenv",
-    ".zprofile",
-    ".zshrc",
-    ".zshrc.d/10-zsh.zsh",
-    ".zshrc.d/90-mise.zsh",
+    ".config/zsh/.zprofile",
+    ".config/zsh/.zshrc",
+    ".config/zsh/.zshrc.d/10-zsh.zsh",
+    ".config/zsh/.zshrc.d/90-mise.zsh",
     ".config/zsh/path.zsh",
 )
 
@@ -87,6 +87,8 @@ MISE = """\
 printf '%s %s\\n' "${MISE_ENV_CACHE:-unset}" "$*" >> "$HOME/mise-calls"
 """
 # MISE_SHELL is exported by the activate output, so an unevaluated one is caught.
+# openai/codex scripts/install/install.sh appends a PATH block to "$HOME/.zprofile" (darwin + zsh).
+INSTALLER_BLOCK = '\n# Added by the Codex installer\nexport PATH="$HOME/.installer-only:$PATH"\nexport INSTALLER_RAN=1\n'
 MISE_STATE = "print -r -- ${MISE_ENV_CACHE-unset} ${MISE_SHELL-unset}"
 
 
@@ -102,6 +104,8 @@ class ShellStartupTest(unittest.TestCase):
         starship: bool = False,
         opencode: bool = False,
         stale_opencode_shim: bool = False,
+        installer_block: bool = False,
+        nested: bool = False,
     ) -> tuple[int, str, str, list[str]]:
         """Run zsh in a fresh HOME; code, out, err, mise calls. `~` stands for that HOME."""
         with tempfile.TemporaryDirectory() as temp:
@@ -110,7 +114,9 @@ class ShellStartupTest(unittest.TestCase):
                 self.assertTrue((UNIX_HOME / name).is_file(), f"missing {name}")
                 (home / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(UNIX_HOME / name, home / name)
-            (home / ".zshrc.d/50-drop-in.zsh").write_text("export DROP_IN=1\n")
+            # mise links ~/.config/zsh/.zshenv to the same file as ~/.zshenv.
+            (home / ".config/zsh/.zshenv").symlink_to(home / ".zshenv")
+            (home / ".config/zsh/.zshrc.d/50-drop-in.zsh").write_text("export DROP_IN=1\n")
             (home / ".local/share/mise/shims").mkdir(parents=True)
             (home / ".local/bin").mkdir()
             if mise:
@@ -133,6 +139,11 @@ class ShellStartupTest(unittest.TestCase):
                 # What a mise install pinned by another project leaves behind: a shim, which is
                 # a link to mise, ahead of the native install on an interactive PATH.
                 (home / ".local/share/mise/shims/opencode").symlink_to(REAL_MISE)
+            if installer_block:
+                # What Codex's installer appends to the profile it picks for darwin and zsh.
+                for name in (".zprofile", ".zshrc"):
+                    with (home / name).open("a") as profile:
+                        profile.write(INSTALLER_BLOCK)
             done = subprocess.run(
                 [ZSH, *mode, command],
                 env={
@@ -149,6 +160,8 @@ class ShellStartupTest(unittest.TestCase):
                     ),
                     "PATH": path.replace("~", str(home)),
                     "TERM": "xterm-256color",
+                    # A zsh started inside another inherits the ZDOTDIR the outer one exported.
+                    **({"ZDOTDIR": str(home / ".config/zsh")} if nested else {}),
                 },
                 cwd=home,
                 stdin=subprocess.DEVNULL,
@@ -172,6 +185,34 @@ class ShellStartupTest(unittest.TestCase):
             out.splitlines(),
             ["~/.config", "~/.cache", "~/.local/share", "~/.local/state"],
         )
+
+    def test_zsh_reads_its_startup_files_from_zdotdir(self) -> None:
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                out = self.zsh(mode, 'print -r -- "$ZDOTDIR"')[1]
+                self.assertEqual(out, "~/.config/zsh\n")
+
+    def test_a_nested_zsh_still_reads_the_zshenv(self) -> None:
+        # With ZDOTDIR inherited, zsh reads $ZDOTDIR/.zshenv and never ~/.zshenv.
+        names = "$XDG_CONFIG_HOME $XDG_CACHE_HOME $XDG_DATA_HOME $XDG_STATE_HOME"
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                out = self.zsh(mode, f"print -rl -- {names}", xdg=False, nested=True)[1]
+                self.assertEqual(
+                    out.splitlines(),
+                    ["~/.config", "~/.cache", "~/.local/share", "~/.local/state"],
+                )
+
+    def test_an_installer_block_in_the_home_profile_is_never_read(self) -> None:
+        # ZDOTDIR points zsh at ~/.config/zsh, so ~/.zprofile and ~/.zshrc are dead files.
+        command = 'print -r -- "$PATH|${INSTALLER_RAN-unset}"'
+        for mode in MODES:
+            with self.subTest(mode=mode):
+                plain = self.zsh(mode, command)
+                touched = self.zsh(mode, command, installer_block=True)
+                self.assertEqual(plain[:3], touched[:3])
+                self.assertNotIn(".installer-only", touched[1])
+                self.assertTrue(touched[1].endswith("|unset\n"), touched[1])
 
     def test_path_order(self) -> None:
         for mode in MODES:

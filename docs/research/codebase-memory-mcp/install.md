@@ -63,7 +63,8 @@ workaround and break a working setup:
   that binary's `install` (install.sh:20, :345). The configs then name that copy, which the mise pin and upgrades
   do not track, and a build that differs from the mise one is refused by the daemon. Because that copy is not
   externally managed, its `install` also appends an `export PATH=…` line to `~/.zshrc` when `~/.local/bin` is not
-  on `PATH` (cli.c:11206-11209, `cbm_ensure_path` at :6637); `~/.zshrc` is linked from the dotfiles main checkout.
+  on `PATH` (cli.c:11206-11209, `cbm_ensure_path` at :6637); `~/.zshrc` is no longer read
+  (ZDOTDIR is `~/.config/zsh`), so that line has no effect.
 - `install --force-binary` overrides the manager detection and behaves like the `install.sh` case.
 
 ## The macOS `--skip-binary` workaround

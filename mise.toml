@@ -40,6 +40,7 @@ run = "uv run --project python/repo --locked repotools test-times"
 private_home = "{{ env.HOME }}"
 private_user = "{{ env.USER }}"
 # What shell:apply backs up and shell:rollback restores, relative to $HOME.
+# The old .zprofile, .zshrc and .zshrc.d stay listed: a rollback puts the pre-ZDOTDIR layout back.
 shell_backup_paths = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d .config/zsh"
 
 [tasks."privacy:scan"]
@@ -139,13 +140,17 @@ run = "mkdir -p ~/.agents/skills"
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
-"~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
-# Separate entries, so ~/.zshrc.d stays a real folder. Applied by shell:apply, which backs up first.
+# zsh reads everything but ~/.zshenv from $ZDOTDIR=~/.config/zsh (set in ~/.zshenv), so ~/.zprofile and ~/.zshrc are
+# unused: an installer that appends to them edits nothing tracked. Separate entries, so ~/.config/zsh/.zshrc.d stays
+# a real folder. Applied by shell:apply, which backs up first.
+"~/.config/zsh/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.config/zsh/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
 "~/.zshenv" = { source = "unix/home/.zshenv", mode = "symlink" }
-"~/.zprofile" = { source = "unix/home/.zprofile", mode = "symlink" }
-"~/.zshrc" = { source = "unix/home/.zshrc", mode = "symlink" }
-"~/.zshrc.d/10-zsh.zsh" = { source = "unix/home/.zshrc.d/10-zsh.zsh", mode = "symlink" }
-"~/.zshrc.d/90-mise.zsh" = { source = "unix/home/.zshrc.d/90-mise.zsh", mode = "symlink" }
+# The same file again: ZDOTDIR is exported, so a zsh started inside another one reads $ZDOTDIR/.zshenv, not ~/.zshenv.
+"~/.config/zsh/.zshenv" = { source = "unix/home/.zshenv", mode = "symlink" }
+"~/.config/zsh/.zprofile" = { source = "unix/home/.config/zsh/.zprofile", mode = "symlink" }
+"~/.config/zsh/.zshrc" = { source = "unix/home/.config/zsh/.zshrc", mode = "symlink" }
+"~/.config/zsh/.zshrc.d/10-zsh.zsh" = { source = "unix/home/.config/zsh/.zshrc.d/10-zsh.zsh", mode = "symlink" }
+"~/.config/zsh/.zshrc.d/90-mise.zsh" = { source = "unix/home/.config/zsh/.zshrc.d/90-mise.zsh", mode = "symlink" }
 "~/.config/zsh/path.zsh" = { source = "unix/home/.config/zsh/path.zsh", mode = "symlink" }
 "~/.config/herdr-app/programs.json" = { source = "unix/home/.config/herdr-app/programs.json", mode = "symlink" }
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }

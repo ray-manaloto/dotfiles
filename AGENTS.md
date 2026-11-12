@@ -79,9 +79,13 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 - Run anything against a scratch home through `mise run scratch:env <empty folder> <command>`, from
   this checkout. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
   climbs to the real `~/.config/mise/config.toml` as a project config and installs every tool in it.
-- `mise run shell:apply` links the six zsh files; run it before a bare `mise dot apply` and after each
-  `shell:rollback`. A bare apply stops on `~/.zprofile` and `~/.zshrc`, and with `--force` replaces them
-  with no backup.
+- zsh reads its startup files from `$ZDOTDIR=~/.config/zsh` (set in `~/.zshenv`, the one file zsh reads from `$HOME`),
+  so `~/.zprofile` and `~/.zshrc` are unused and untracked: an installer that appends to them (Codex's does)
+  edits nothing in the repo. The tracked files are `unix/home/.zshenv` and `unix/home/.config/zsh/`.
+- `mise run shell:apply` links the seven zsh files and removes the old links into this checkout at `~/.zprofile`,
+  `~/.zshrc` and `~/.zshrc.d` (never a real file); run it before a bare `mise dot apply` and after each
+  `shell:rollback`. A bare apply stops on `~/.zshenv` and the files under `~/.config/zsh`, and with `--force`
+  replaces them with no backup.
 - `.gitignore` is an allowlist. A new top-level path must be added there on purpose; never
   add keys, `age.txt` or any secret file.
 

@@ -95,8 +95,9 @@ def test_zsh_startup_files_are_allowed_only_where_listed(repo: Path, capsys: pyt
         repo,
         {
             "unix/home/.zshenv": "#!/bin/zsh\n",
-            "unix/home/.zshrc": "#!/bin/zsh\n",
-            "unix/home/.zshrc.d/10-a.zsh": "#!/bin/zsh\n",
+            "unix/home/.config/zsh/.zprofile": "#!/bin/zsh\n",
+            "unix/home/.config/zsh/.zshrc": "#!/bin/zsh\n",
+            "unix/home/.config/zsh/.zshrc.d/10-a.zsh": "#!/bin/zsh\n",
             "unix/home/.config/zsh/path.zsh": "#!/bin/zsh\n",
             "tasks/x.zsh": "print hi\n",
         },
