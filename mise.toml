@@ -223,7 +223,9 @@ run = "mkdir -p ~/.agents/skills"
 	command = test "${HK:-1}" = "0" || sh -c '~/.local/share/mise/shims/mise doctor project'
 	event = pre-push
 ''' }
-"~/.config/mise/agentsview-native/fnox.toml" = { source = "unix/home/.config/mise/agentsview-native/fnox.toml", mode = "symlink" }
+# agentsview's server reads its two keys from the global fnox file now (`fnox exec --only ... --replace`), so its
+# own file goes; absent removes the old link on the next apply.
+"~/.config/mise/agentsview-native/fnox.toml" = { mode = "absent" }
 # Rule guards: the hook every agent runs as `python3 -I ~/.config/agents/guards/hook.py` (registration is the
 # owner's, one settings file at a time), and each agent's own policy file. The policy files are copies: Codex
 # 0.167 and Gemini CLI 0.67 both skip a .rules or .toml entry that is a symlink.
