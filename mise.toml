@@ -133,6 +133,10 @@ run = "mkdir -p ~/.agents/skills"
 # denied: the user-scope `apify` server above is the one with the key. deniedMcpServers merges from every settings
 # source, so a user can deny servers for themselves (Claude Code 2.1.322 settings schema, allowManagedMcpServersOnly).
 "~/.claude/settings.json/mcp-deny" = { source = "unix/home/.claude/settings.mcp-deny.json", merge = true }
+# No grayed-out prompt suggestions in the input box: a suggestion looks like a typed draft, so an agent sending to a
+# tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
+# from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
+"~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
