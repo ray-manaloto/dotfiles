@@ -50,6 +50,14 @@ local linters = new Mapping<String, Step> {
         profiles = List("!ci")
         check = "mise run //home:herdr-unit"
     }
+    // python/tests reads the shared agent rules (a hash pin of the research section) and starts real zsh from the
+    // startup files, so a change to either runs them, as //repo:check does for python/repo. Off in CI, where the
+    // test task runs them anyway (#472).
+    ["python-tests"] {
+        glob = List("unix/home/.config/agents/**", "unix/home/.config/zsh/**", "unix/home/.zshenv")
+        profiles = List("!ci")
+        check = "mise run //python:test"
+    }
     ["cbm"] {
         glob = List("python/cbm/**")
         check = "mise run //cbm:check"
