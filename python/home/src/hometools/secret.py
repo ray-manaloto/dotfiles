@@ -1,8 +1,8 @@
 """secret-set: store one new Doppler secret in dotfiles/dev_personal from stdin, under the owner's write token.
 
-`fnox set NAME --provider doppler_...` never reaches Doppler: fnox 1.47.0's Doppler provider keeps the read-only
-default capabilities (crates/fnox-core/src/providers/mod.rs:261-263), so `fnox set` writes the value itself into
-the TOML (src/commands/set.rs:563-565). This command sends it to Doppler instead.
+`fnox set NAME --provider doppler_...` never reaches Doppler: fnox 1.48.0's Doppler provider keeps the read-only
+default capabilities (crates/fnox-core/src/providers/mod.rs:272-275), so `fnox set` writes the value itself into
+the TOML (src/commands/set.rs:603-605). This command sends it to Doppler instead.
 
 The value goes from this process's stdin to doppler's stdin through a pipe: it is never an argument, never
 printed or logged and never written to a file. The write token is the global fnox config's DOPPLER_WRITE_TOKEN, a

@@ -45,7 +45,7 @@ RESPAN_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "RE
 DOPPLER_WRITE_TOKEN = { provider = "keychain", value = "DOPPLER_WRITE_TOKEN", env = false, if_missing = "error", daemon_cache = false }
 
 # One rule per host, for every method. Permissive egress lets every other host (model APIs, git, gh) through
-# untouched. `proxy run` resolves only the secrets its rules name (src/commands/proxy.rs:303-320 at 1.47.0).
+# untouched. `proxy run` resolves only the secrets its rules name (src/commands/proxy.rs:308-324 at 1.48.0).
 [proxy]
 egress = "permissive"
 rules = [
