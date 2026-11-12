@@ -85,7 +85,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 - `mise run shell:apply` links the seven zsh files and removes the old links into this checkout at `~/.zprofile`,
   `~/.zshrc` and `~/.zshrc.d` (never a real file); run it before a bare `mise dot apply` and after each
   `shell:rollback`. A bare apply stops on `~/.zshenv` and the files under `~/.config/zsh`, and with `--force`
-  replaces them with no backup.
+  replaces them with no backup. The live files link into the main checkout, so a change to them goes live at the
+  fast-forward of `main`: run `git merge --ff-only origin/main && mise run shell:apply` as one command.
 - `.gitignore` is an allowlist. A new top-level path must be added there on purpose; never
   add keys, `age.txt` or any secret file.
 
