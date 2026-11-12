@@ -642,6 +642,15 @@ content = '''
 # is an Arch partial upgrade.
 "pacman:tailscale" = { os = "linux" }
 "pacman:sunshine" = { os = "linux" }
+# A one-job KVM virtual machine per CI job on the Omarchy desktop, for repositories a container can't serve
+# (Docker, huge pages, perf). Command-line tools only: no virt-manager window. libvirt starts dnsmasq for
+# the VM network, swtpm gives the VM a TPM and edk2-ovmf its UEFI firmware.
+"pacman:libvirt" = { os = "linux" }
+"pacman:qemu-base" = { os = "linux" }
+"pacman:edk2-ovmf" = { os = "linux" }
+"pacman:dnsmasq" = { os = "linux" }
+"pacman:swtpm" = { os = "linux" }
+"pacman:virt-install" = { os = "linux" }
 
 # DL-591: gcc/g++ wrappers retired; use the Homebrew gcc-16 and g++-16 names.
 
