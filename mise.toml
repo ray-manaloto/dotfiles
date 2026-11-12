@@ -131,6 +131,10 @@ run = "mkdir -p ~/.agents/skills"
 # static `headers` entry left from before stays (delete it once by hand) and the helper's Authorization overrides it.
 # Apply with every Claude tab closed, or re-apply if `mise dot status` shows drift.
 "~/.claude.json/mcp-apify" = { source = "unix/home/.claude.mcp-apify.json", merge = true, permissions = "0600" }
+# The apify plugin stays enabled for its skills and agent, but its own MCP server (plugin:apify:apify, OAuth) is
+# denied: the user-scope `apify` server above is the one with the key. deniedMcpServers merges from every settings
+# source, so a user can deny servers for themselves (Claude Code 2.1.322 settings schema, allowManagedMcpServersOnly).
+"~/.claude/settings.json/mcp-deny" = { source = "unix/home/.claude/settings.mcp-deny.json", merge = true }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 "~/.zshrc.d/60-agent-tools.zsh" = { source = "unix/home/.zshrc.d/60-agent-tools.zsh", mode = "symlink" }
