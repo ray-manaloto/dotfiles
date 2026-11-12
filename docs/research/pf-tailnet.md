@@ -50,7 +50,10 @@ From Apple's kernel source (`apple-oss-distributions/xnu`, `bsd/net/pf_ioctl.c`,
 
 ## Owner steps after merge
 
-1. `mise bootstrap` writes the two files (sudo).
+1. From the home folder, `mise bootstrap files apply --dry-run`, then `mise bootstrap files apply` (sudo): it
+   should list only the two files. Not a bare `mise bootstrap`: that applies every part, and run from the dotfiles
+   checkout it first renders the repo's ssh template, which stops without the Doppler names
+   (`src/cli/bootstrap.rs:2096-2099` at mise v2026.11.7, before any part runs).
 2. At the Mac: `mise run pf:load`.
 3. Within 120 s, from the iPhone over Tailscale: ssh, Screen Sharing and file sharing all connect; from the home
    network they are refused.
