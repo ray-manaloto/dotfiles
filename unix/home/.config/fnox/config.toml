@@ -54,6 +54,10 @@ ZAI_API_KEY               = { provider = "doppler_dotfiles_dev_personal", value 
 KILO_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
 OPENAI_COMPATIBLE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
 
+# Tailscale API access token (admin console, Settings, Keys), sent only through the proxy rule below: agents edit
+# the tailnet policy with `fnox proxy run -- curl ... https://api.tailscale.com/api/v2/tailnet/-/acl`.
+TAILSCALE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "TAILSCALE_API_KEY", env = false, if_missing = "warn" }
+
 # The agentsview server's LaunchAgent starts it with `fnox exec --replace`, so its keys are env = "exec": it gets
 # OPENROUTER_API_KEY above and this one. No agent can run `fnox exec` (rule guard 3).
 AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", value = "AGENTSVIEW_RECALL_PROXY_KEY", env = "exec", if_missing = "warn" }
@@ -96,4 +100,5 @@ rules = [
   { secret = "ZAI_API_KEY",            domain = "api.z.ai",                          header = "authorization" },
   { secret = "KILO_API_KEY",           domain = "ai-gateway.kilo.ai",                header = "authorization" },
   { secret = "OPENAI_COMPATIBLE_API_KEY", domain = "ai-gateway.kilo.ai",             header = "authorization" },
+  { secret = "TAILSCALE_API_KEY",      domain = "api.tailscale.com",                 header = "authorization" },
 ]
