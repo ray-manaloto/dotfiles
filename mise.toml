@@ -96,6 +96,12 @@ run = 'uv run --project python/repo --locked repotools review-python --path="$us
 description = "Refuse unless review:python passed on exactly the staged python/ files"
 run = "uv run --project python/repo --locked repotools review-python-approved"
 
+# Names that must not be public (machine names, addresses) live in Doppler, never in this repo
+# (docs/research/private-names.md). The global fnox file reads each one with env = "exec", so
+# `fnox exec -- mise dot apply ...` puts it in the environment for the templates that call secret().
+[bootstrap.secrets]
+pc_host = "PC_HOST"
+
 # The ~/.gemini/config/skills entry's source is ~/.agents/skills, outside the repo, and one missing source stops
 # the whole apply (mise 2026.11.6 crates/mise-system/src/files.rs:5722-5806). This hook runs before every
 # `mise dot apply` and bootstrap's dotfiles step (src/cli/dotfiles/apply.rs:27), so a new Mac has the folder.
@@ -138,6 +144,13 @@ run = "mkdir -p ~/.agents/skills"
 # tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
 # from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
+# ssh: the PC over the tailnet. The line goes first in ~/.ssh/config, so the folder's hosts win over older
+# entries below it; the rest of ~/.ssh/config stays the owner's. tailnet.conf is a template: the PC's private
+# name comes from Doppler (PC_HOST, see [bootstrap.secrets]), so apply it with the real value in the
+# environment: fnox exec -- mise dot apply "~/.ssh/config/include" "~/.ssh/config.d/tailnet.conf".
+# Check: ssh -G pc | grep -i "^hostname" prints the PC's name.
+"~/.ssh/config/include" = { line = "Include ~/.ssh/config.d/*", position = "prepend" }
+"~/.ssh/config.d/tailnet.conf" = { source = "unix/home/.ssh/config.d/tailnet.conf.tera", mode = "template" }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 # zsh reads everything but ~/.zshenv from $ZDOTDIR=~/.config/zsh (set in ~/.zshenv), so ~/.zprofile and ~/.zshrc are

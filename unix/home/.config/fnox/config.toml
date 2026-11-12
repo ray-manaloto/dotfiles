@@ -58,6 +58,11 @@ OPENAI_COMPATIBLE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value 
 # OPENROUTER_API_KEY above and this one. No agent can run `fnox exec` (rule guard 3).
 AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", value = "AGENTSVIEW_RECALL_PROXY_KEY", env = "exec", if_missing = "warn" }
 
+# Private names (machine names, addresses) that must not be public: each lives in Doppler and is read here with
+# env = "exec", so the owner's `fnox exec -- mise dot apply ...` hands it to the mise templates that call
+# secret() (mise.toml [bootstrap.secrets]). Names only, never a key. Add one with `pbpaste | mise run secret:set NAME`.
+PC_HOST = { provider = "doppler_dotfiles_dev_personal", value = "PC_HOST", env = "exec", if_missing = "warn" }
+
 # The read/write token for dotfiles/dev_personal, read only by `mise run secret:set` (`fnox get`). It lives in the
 # macOS Keychain (service dotfiles-fnox), never in this public file, not even as ciphertext. The owner stores it
 # with `pbpaste | fnox set DOPPLER_WRITE_TOKEN --global --provider keychain`, which keeps this line's fields.
