@@ -101,6 +101,7 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 # `fnox exec -- mise dot apply ...` puts it in the environment for the templates that call secret().
 [bootstrap.secrets]
 pc_host = "PC_HOST"
+pc_lan_host = "PC_LAN_HOST"
 
 # The ~/.gemini/config/skills entry's source is ~/.agents/skills, outside the repo, and one missing source stops
 # the whole apply (mise 2026.11.6 crates/mise-system/src/files.rs:5722-5806). This hook runs before every
@@ -146,7 +147,8 @@ run = "mkdir -p ~/.agents/skills"
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
 # ssh: the PC over the tailnet. The line goes first in ~/.ssh/config, so the folder's hosts win over older
 # entries below it; the rest of ~/.ssh/config stays the owner's. tailnet.conf is a template: the PC's private
-# name comes from Doppler (PC_HOST, see [bootstrap.secrets]), so apply it with the real value in the
+# name and its break-glass LAN address (`ssh pc-lan`) come from Doppler (PC_HOST and PC_LAN_HOST, see
+# [bootstrap.secrets]), so apply it with the real values in the
 # environment: fnox exec -- mise dot apply "~/.ssh/config/include" "~/.ssh/config.d/tailnet.conf".
 # Check: ssh -G pc | grep -i "^hostname" prints the PC's name.
 "~/.ssh/config/include" = { line = "Include ~/.ssh/config.d/*", position = "prepend" }

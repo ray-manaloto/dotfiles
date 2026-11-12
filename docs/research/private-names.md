@@ -22,7 +22,8 @@ repeating the research.
   `fnox exec -- mise dot apply <targets>`. Agents cannot: the rule guard blocks `fnox exec`, and
   `fnox proxy run` gives a command placeholders only (fnox `docs/cli/proxy.md:13` at v1.48.0), so a template
   rendered under the proxy would hold the placeholder text.
-- First user: `~/.ssh/config.d/tailnet.conf` (the PC over Tailscale), from `PC_HOST`.
+- First user: `~/.ssh/config.d/tailnet.conf`: the PC over Tailscale from `PC_HOST`, and the break-glass
+  `pc-lan` host over the home LAN from `PC_LAN_HOST`.
 
 Left for later (owner: MVP first): a separate names-only Doppler config with its own read-only service token, a
 fnox profile for it, and a mise task that applies under that profile so an agent can run it without a token that
