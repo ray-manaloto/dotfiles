@@ -62,6 +62,7 @@ AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", valu
 # env = "exec", so the owner's `fnox exec -- mise dot apply ...` hands it to the mise templates that call
 # secret() (mise.toml [bootstrap.secrets]). Names only, never a key. Add one with `pbpaste | mise run secret:set NAME`.
 PC_HOST = { provider = "doppler_dotfiles_dev_personal", value = "PC_HOST", env = "exec", if_missing = "warn" }
+PC_LAN_HOST = { provider = "doppler_dotfiles_dev_personal", value = "PC_LAN_HOST", env = "exec", if_missing = "warn" }
 
 # The read/write token for dotfiles/dev_personal, read only by `mise run secret:set` (`fnox get`). It lives in the
 # macOS Keychain (service dotfiles-fnox), never in this public file, not even as ciphertext. The owner stores it
