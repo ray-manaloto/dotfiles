@@ -30,6 +30,13 @@
 /.claude/skills/*
 !/.claude/skills/verify/
 
+# The PC runner's smoke workflow; no other workflow is tracked.
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/pc-smoke.yml
+
 # Build and environment outputs inside the allowed roots.
 /cpp/build/
 /swift/.build/

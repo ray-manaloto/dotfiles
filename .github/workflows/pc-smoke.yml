@@ -1,0 +1,41 @@
+# Smoke test for the PC's self-hosted runner, label pc-x86: one job in a fresh container, then gone.
+# Push to this file and workflow_dispatch only, never pull_request, so fork code never reaches the PC.
+# It builds nothing from this repo.
+name: pc smoke
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/pc-smoke.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pc-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, pc-x86, container, dotfiles]
+    timeout-minutes: 15
+    steps:
+      - name: Who and where
+        run: |
+          echo "user: $(id -un) uid $(id -u)"
+          echo "slot: ${GHA_SLOT:-unset}  build jobs: ${GHA_SLOT_JOBS:-unset}  nproc: $(nproc)"
+          uname -m
+          grep -E '^PRETTY_NAME' /etc/os-release
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Compiler from the runner image (cmake and ninja are not in the image)
+        run: |
+          c++ --version | head -1
+      - name: Build a throwaway program
+        run: |
+          d=$(mktemp -d)
+          printf '#include <cstdio>\nint main() { std::puts("built on the PC runner"); }\n' > "$d/main.cpp"
+          c++ -std=c++20 -O2 -o "$d/smoke" "$d/main.cpp"
+          "$d/smoke"
