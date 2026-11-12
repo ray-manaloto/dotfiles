@@ -446,7 +446,8 @@ description = "update the NATIVE codex install (never a mise pin)"
 # every mise name for them is in `disable_tools` above. Absolute path on purpose —
 # a stale mise shim can sit ahead of ~/.local/bin on PATH. The PATH leaves out mise's wrappers too, as the
 # codex-update alias does: the installer greps a found codex for "#!/usr/bin/env node", which the mise wrapper
-# binary contains, calls it a second npm install and appends a PATH block to ~/.zprofile
+# binary contains, calls it a second npm install and appends a PATH block to ~/.zprofile (which zsh no longer reads:
+# ZDOTDIR is ~/.config/zsh)
 # (openai/codex scripts/install/install.sh:600-631,972-1000 at rust-v0.167.2).
 run = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.local/bin/codex update && $HOME/.local/bin/codex --version"
 
@@ -496,9 +497,10 @@ gemini_yolo = "gemini --yolo"
 # The opencode wrapper adds --standalone, which `opencode upgrade` rejects (v2.2.7 commands.ts:14-28): update the
 # real binary directly.
 opencode-update = "$HOME/.opencode/bin/opencode upgrade"
-# Codex's installer appends a PATH block to ~/.zprofile (a tracked file) whenever it finds a second codex on PATH,
-# and the mise wrapper is one (openai/codex scripts/install/install.sh:600-631 at rust-v0.165.0). Update with a PATH
-# that leaves out mise's wrappers, so it sees one codex and leaves the profile alone.
+# Codex's installer appends a PATH block to ~/.zprofile (unread since ZDOTDIR is ~/.config/zsh) whenever it finds a
+# second codex on PATH, and the mise wrapper is one (openai/codex scripts/install/install.sh:600-631 at
+# rust-v0.165.0). Update with a PATH that leaves out mise's wrappers, so it sees one codex and leaves the profile
+# alone.
 codex-update = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.local/bin/codex update"
 
 # Codex and OpenCode start under `fnox proxy run` with the keys and proxy rules of the one fnox file

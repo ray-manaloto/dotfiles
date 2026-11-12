@@ -3,6 +3,7 @@
 # python/tests/test_shell_apply.py runs the same commands through `mise run` in a copy of this checkout.
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -12,7 +13,14 @@ import pytest
 from repotools.cli import main
 from tests import clean_git_env
 
-DEPLOYED = (".zshenv", ".zprofile", ".zshrc", ".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh", ".config/zsh/path.zsh")
+DEPLOYED = (
+    ".zshenv",
+    ".config/zsh/.zprofile",
+    ".config/zsh/.zshrc",
+    ".config/zsh/.zshrc.d/10-zsh.zsh",
+    ".config/zsh/.zshrc.d/90-mise.zsh",
+    ".config/zsh/path.zsh",
+)
 PATHS = ".zshenv .zprofile .zshrc .zprofile.d .zshrc.d .config/zsh"
 ENTRY = '"~/{0}" = {{ source = "unix/home/{0}", mode = "symlink" }}\n'
 DOTFILES = "[dotfiles]\n" + "".join(ENTRY.format(name) for name in DEPLOYED)
@@ -25,6 +33,9 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in DEPLOYED:
         (tmp_path / "repo/unix/home" / name).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / "repo/unix/home" / name).write_text(f"# new {name}\n")
+    (tmp_path / "repo/unix/home/.zshenv").write_text(
+        'export ZDOTDIR="$HOME/.config/zsh"\n'
+    )  # zsh reads the rest from there
     (tmp_path / "repo/mise.toml").write_text(DOTFILES)
     (tmp_path / "home/.zshrc.d").mkdir(parents=True)
     (tmp_path / "home/.zshrc").write_text("# live .zshrc\n")
@@ -105,12 +116,12 @@ def test_apply_links_backs_up_and_rollback_restores(root: Path) -> None:
 def test_a_later_apply_keeps_the_changed_live_files_aside(root: Path) -> None:
     assert succeeds("shell-apply")
     first = snapshot(backups(root) / "pre-apply")
-    (root / "home/.zshrc").unlink()
-    (root / "home/.zshrc").write_text("# installer\n")
+    (root / "home/.config/zsh/.zshrc").unlink()
+    (root / "home/.config/zsh/.zshrc").write_text("# installer\n")
     assert succeeds("shell-apply")
     assert snapshot(backups(root) / "pre-apply") == first
     [replaced] = backups(root).glob("replaced-*")
-    assert (replaced / ".zshrc").read_text() == "# installer\n"
+    assert (replaced / ".config/zsh/.zshrc").read_text() == "# installer\n"
     assert not (root / "state/zsh/history").exists()  # there was no history to keep
 
 
@@ -134,15 +145,75 @@ def test_rollback_without_a_backup_refuses(root: Path) -> None:
 
 
 def test_a_shell_that_prints_at_startup_refuses(root: Path) -> None:
-    (root / "repo/unix/home/.zshrc").write_text("print noisy\n")
+    (root / "repo/unix/home/.config/zsh/.zshrc").write_text("print noisy\n")
     refused(root)
 
 
 def test_a_live_file_that_changes_during_the_run_refuses(root: Path) -> None:
     # The checked shell's startup writes to the live .zshrc, between the two copies of it.
-    (root / "repo/unix/home/.zshrc").write_text(f"print -n '# more' >> {root / 'home/.zshrc'}\n")
+    (root / "repo/unix/home/.config/zsh/.zshrc").write_text(f"print -n '# more' >> {root / 'home/.zshrc'}\n")
     before = (root / "home/.zshrc").read_bytes()
     assert not succeeds("shell-apply")
     assert (root / "home/.zshrc").read_bytes().startswith(before)
     assert not (root / "home/.zshenv").exists()
     assert not list(backups(root).iterdir())
+
+
+def test_apply_drops_the_old_links_into_this_checkout_and_keeps_everything_else(root: Path) -> None:
+    home, repo = root / "home", root / "repo"
+    for name in (".zprofile", ".zshrc.d/10-zsh.zsh", ".zshrc.d/90-mise.zsh", ".zshrc.d/60-agent-tools.zsh"):
+        (repo / "unix/home" / name).parent.mkdir(parents=True, exist_ok=True)
+        (repo / "unix/home" / name).write_text(f"# old {name}\n")
+    (home / ".zshrc").unlink()
+    (home / ".zshrc").symlink_to(repo / "unix/home/.config/zsh/.zshrc")
+    (home / ".zprofile").symlink_to(repo / "unix/home/.zprofile")
+    (home / ".zshrc.d/60-agent-tools.zsh").unlink()
+    for name in ("10-zsh.zsh", "90-mise.zsh", "60-agent-tools.zsh"):
+        (home / ".zshrc.d" / name).symlink_to(repo / "unix/home/.zshrc.d" / name)
+    elsewhere = root / "elsewhere.zsh"
+    elsewhere.write_text("# not ours\n")
+    (home / ".zshrc.d/80-elsewhere.zsh").symlink_to(elsewhere)
+    assert succeeds("shell-apply")
+    assert not os.path.lexists(home / ".zprofile")
+    assert not os.path.lexists(home / ".zshrc")
+    assert sorted(path.name for path in (home / ".zshrc.d").iterdir()) == ["70-mine.zsh", "80-elsewhere.zsh"]
+    assert (home / ".zshrc.d/70-mine.zsh").read_text() == "# live drop-in\n"
+    assert (home / ".zshrc.d/80-elsewhere.zsh").readlink() == elsewhere
+    # The new layout is linked, and a rollback puts the old links back.
+    assert (home / ".config/zsh/.zshrc").resolve() == repo / "unix/home/.config/zsh/.zshrc"
+    assert succeeds("shell-rollback")
+    assert (home / ".zprofile").readlink() == repo / "unix/home/.zprofile"
+    assert (home / ".zshrc.d/10-zsh.zsh").is_symlink()
+
+
+def test_apply_removes_the_old_folder_once_only_our_links_were_in_it(root: Path) -> None:
+    home, repo = root / "home", root / "repo"
+    (home / ".zshrc.d/70-mine.zsh").unlink()
+    (home / ".zshrc.d/60-agent-tools.zsh").unlink()
+    (home / ".zshrc.d/10-zsh.zsh").symlink_to(repo / "unix/home/.zshrc.d/10-zsh.zsh")
+    (home / ".zshrc").unlink()  # a real file stays; see the next test
+    assert succeeds("shell-apply")
+    assert not (home / ".zshrc.d").exists()
+
+
+def test_apply_never_deletes_a_real_file_or_a_link_elsewhere(root: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    home = root / "home"
+    (home / ".zprofile").write_text("# real profile\n")
+    (home / ".zshrc").unlink()
+    (home / ".zshrc").symlink_to(root / "other-checkout/unix/home/.zshrc")
+    assert succeeds("shell-apply")
+    assert (home / ".zprofile").read_text() == "# real profile\n"
+    assert (home / ".zshrc").readlink() == root / "other-checkout/unix/home/.zshrc"
+    # The real drop-in is named, since zsh no longer loads it.
+    assert "70-mine.zsh" in capsys.readouterr().err
+    assert (home / ".zshrc.d/70-mine.zsh").read_text() == "# live drop-in\n"
+
+
+def test_apply_removes_an_old_folder_link_into_this_checkout(root: Path) -> None:
+    home, repo = root / "home", root / "repo"
+    shutil.rmtree(home / ".zshrc.d")
+    (repo / "unix/home/.zshrc.d").mkdir(parents=True)
+    (home / ".zshrc.d").symlink_to(repo / "unix/home/.zshrc.d")
+    assert succeeds("shell-apply")
+    assert not (home / ".zshrc.d").is_symlink()
+    assert (repo / "unix/home/.zshrc.d").is_dir()

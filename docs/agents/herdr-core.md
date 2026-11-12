@@ -108,7 +108,8 @@ The set is read as plain text, with no shell:
 - every regular file at any depth under `~/.zshrc.d`, `~/.zprofile.d` and `~/.config/zsh`. A link to
   a file is read. A linked folder is entered only when it resolves inside HOME.
 
-`$ZDOTDIR` isn't consulted: the probe starts zsh with a clean environment, so zsh reads from HOME.
+`$ZDOTDIR` isn't consulted: the probe starts zsh with a clean environment, so zsh reads `~/.zshenv`, which sets
+`ZDOTDIR=~/.config/zsh` and so makes zsh read `~/.config/zsh/.zprofile` and `.zshrc` (inside the scanned set).
 
 V2 is unknown when any of these holds:
 - A line names a herdr program. With quotes and backslashes removed, a line counts when any word is

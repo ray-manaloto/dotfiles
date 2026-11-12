@@ -30,9 +30,9 @@ CONTINUATION = re.compile(r"(?<!\\)(?:\\\\)*\\[ \t]*\r?\n")
 # The zsh startup files: zsh reads them itself, so no other language can hold them.
 ALLOWED = (
     "unix/home/.zshenv",
-    "unix/home/.zprofile",
-    "unix/home/.zshrc",
-    "unix/home/.zshrc.d/*.zsh",
+    "unix/home/.config/zsh/.zprofile",
+    "unix/home/.config/zsh/.zshrc",
+    "unix/home/.config/zsh/.zshrc.d/*.zsh",
     "unix/home/.config/zsh/*.zsh",
 )
 FILE_MODES = ("100644", "100755")  # Links (120000) and submodules (160000) have no content to read.

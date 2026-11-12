@@ -8,6 +8,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime
@@ -15,16 +16,20 @@ from pathlib import Path
 
 from .models import ShellApply, ShellRollback
 
-# Named, because a whole-config apply would also repoint ~/.zshrc.d/60-agent-tools.zsh at this checkout. The
-# tilde stays literal: mise matches the raw keys of [dotfiles].
+# Named, because a whole-config apply would also repoint ~/.config/zsh/.zshrc.d/60-agent-tools.zsh at this checkout.
+# The tilde stays literal: mise matches the raw keys of [dotfiles]. ~/.zshenv sets ZDOTDIR=~/.config/zsh, so zsh
+# reads the rest from there and never ~/.zprofile or ~/.zshrc.
 TARGETS = (
     "~/.zshenv",
-    "~/.zprofile",
-    "~/.zshrc",
-    "~/.zshrc.d/10-zsh.zsh",
-    "~/.zshrc.d/90-mise.zsh",
+    "~/.config/zsh/.zshenv",
+    "~/.config/zsh/.zprofile",
+    "~/.config/zsh/.zshrc",
+    "~/.config/zsh/.zshrc.d/10-zsh.zsh",
+    "~/.config/zsh/.zshrc.d/90-mise.zsh",
     "~/.config/zsh/path.zsh",
 )
+# Where the same files were linked before ZDOTDIR; see drop_legacy_links.
+LEGACY = ("~/.zprofile", "~/.zshrc", "~/.zshrc.d")
 PRIVATE = 0o700
 PARTIAL = os.O_WRONLY | os.O_CREAT | os.O_EXCL
 
@@ -123,6 +128,36 @@ def started(scratch: Path) -> str:
     return done.stdout.rstrip("\n")
 
 
+def into_repo(path: Path) -> bool:
+    """Whether path is a link whose target lies inside this checkout (a link, however broken, never a file)."""
+    if not path.is_symlink():
+        return False
+    target = Path(os.path.normpath(path.parent / path.readlink()))
+    return target.is_relative_to(Path.cwd().resolve())
+
+
+def drop_legacy_links() -> None:
+    """Remove the pre-ZDOTDIR links into this checkout, which zsh no longer reads and would only dangle.
+
+    Only a link that points into this checkout goes; a real file, or a link elsewhere, stays. ~/.zshrc.d goes
+    too once nothing is left in it, and a real drop-in there is named: zsh no longer loads it.
+    """
+    home = Path.home()
+    for name in LEGACY:
+        legacy = home / name.removeprefix("~/")
+        if into_repo(legacy):
+            legacy.unlink()
+        elif legacy.is_dir() and not legacy.is_symlink():
+            for entry in legacy.iterdir():
+                if into_repo(entry):
+                    entry.unlink()
+            if left := sorted(entry.name for entry in legacy.iterdir()):
+                note = f"shell:apply: zsh no longer reads ~/{legacy.name}; move to ~/.config/zsh/.zshrc.d: {left}\n"
+                sys.stderr.write(note)
+            else:
+                legacy.rmdir()
+
+
 def back_up(paths: list[str]) -> None:
     """Keep the live files in a private folder, after checking a shell from the new ones and that no file moved."""
     folder = backups()
@@ -173,6 +208,7 @@ def apply() -> None:
         back_up(paths)
         keep_history()
         link()
+    drop_legacy_links()
     completions = xdg("XDG_CACHE_HOME", ".cache") / "zsh/completions"
     completions.mkdir(parents=True, exist_ok=True)
     with (completions / "_mise").open("w") as out:
