@@ -58,6 +58,7 @@ BREW_BUNDLE_READS = frozenset({"check", "list", "dump"})
 DOPPLER_PRINTS = frozenset({"get", "download", "run", "substitute"})
 DOPPLER_QUIET = frozenset({"set", "delete", "upload", "notes"})
 FNOX_VALUE_OPTIONS = frozenset({"-c", "--config", "-P", "--profile", "--if-missing", "--write-profile"})
+FNOX_REVEALING = frozenset({"get", "export", "exec", "edit", "tui", "mcp", "push"})
 
 APT_PROGRAMS = frozenset({"apt", "apt-get"})
 APT_ALLOWED_PACKAGES = frozenset({"ca-certificates", "curl", "git", "xz-utils"})
@@ -81,8 +82,8 @@ DOCKERFILE = (
 )
 SECRETS = (
     "Blocked by rule guard 3 (secrets stay inside fnox): `{command}` would print, export or hand out a secret. "
-    "Instead run `fnox exec --only KEY -- <command>`, and check what is set with `fnox check` or "
-    "`fnox env --json --describe`."
+    "Instead run `fnox proxy run -- <command>`: the command gets placeholders and the proxy puts the real key "
+    "into requests to the hosts in its rules. Check what is set with `fnox check` or `fnox env --json --describe`."
 )
 DOCKER_UPDATE = (
     "Blocked by rule guard 4 (Docker Desktop updates are the owner's): `docker desktop update`. Ask the owner to "
@@ -356,7 +357,7 @@ def shell_script(args: list[str]) -> str | None:
 
 
 def check_text(text: str) -> str | None:
-    # Recursion (sh -c, eval, fnox exec, `$(...)`) always works on a strict part of the text, so it ends.
+    # Recursion (sh -c, eval, `$(...)`) always works on a strict part of the text, so it ends.
     for pipeline in pipelines(text):
         for words in pipeline:
             message = check_words(words)
@@ -405,22 +406,25 @@ def command_option(args: list[str]) -> str | None:
 
 
 def rule_fnox(prog: str, args: list[str]) -> str | None:
-    """`fnox get` and `fnox export` print secrets; `fnox exec` is never blocked, though its command is checked."""
+    """The fnox commands that hand an agent a real value: they print it (`get`, `export`, `list --values`, `env`
+    without `--describe`), show it (`edit`, `tui`), give it to a command (`exec`), serve it (`mcp` outside the proxy)
+    or copy it to another store (`push`). `proxy run` gives placeholders only, so it stays allowed."""
     if prog != "fnox":
         return None
     for index, arg in enumerate(args):
         if index and args[index - 1] in FNOX_VALUE_OPTIONS:
             # A value such as `--profile env` is not a subcommand.
             continue
-        if arg in {"get", "export"}:
+        if arg == "--" and "proxy" in args[:index]:
+            # The command `fnox proxy run --` starts: checked on its own, so `docker exec` there is not `fnox exec`.
+            return check_words(args[index + 1 :])
+        if arg in FNOX_REVEALING:
             return SECRETS.format(command=f"fnox {arg}")
+        if arg == "list" and "--values" in args:
+            return SECRETS.format(command="fnox list --values")
         if arg == "env" and "--describe" not in args:
             # `fnox env --json` prints every value; `--describe` lists keys only.
             return SECRETS.format(command="fnox env")
-        if arg == "exec":
-            rest = args[index + 1 :]
-            inner = rest[rest.index("--") + 1 :] if "--" in rest else []
-            return check_words(inner) if inner else None
     return None
 
 

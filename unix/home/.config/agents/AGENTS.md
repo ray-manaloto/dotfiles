@@ -26,17 +26,12 @@ practices, use Exa, Firecrawl, Last30Days, Context7, and GitHub repository
 searches. Verify final claims against primary docs or source and report which
 apps, plugins, skills, and CLIs actually ran, including failed routes. A key
 absent from an inherited noninteractive environment is not proof that the user
-lacks it. Use native `fnox --config ~/.config/fnox/config.toml --profile
-codex_research --no-defaults --no-daemon --non-interactive exec -- <command>`
-for the research process; never print or persist its secrets. This profile
-injects Exa and Firecrawl while keeping the Doppler dependency internal.
-
-When a strict research receipt is requested by the global Codex hook, use
-`mise -C <dotfiles-checkout> run research-fanout` under `fnox exec` with
-`--strict-five`, `--request-id` set to the hook turn ID, an explicit
-Last30Days plan, and the hook's output directory. A failed arm is a recorded
-blocker, not a successful five-provider audit. Respect a task's sole writer
-and do not edit another task's evidence index or native goal.
+lacks it. Run a research process as `fnox --non-interactive proxy run --
+<command>`: it holds placeholders only, and the proxy puts the real key into
+requests to each research host in the global fnox file's rules. `fnox exec`,
+`fnox get` and `fnox export` are blocked for agents; never print or persist a
+secret. Respect a task's sole writer and do not edit another task's evidence
+index or native goal.
 
 ## Adding a Doppler secret
 

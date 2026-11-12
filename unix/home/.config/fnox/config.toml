@@ -2,9 +2,11 @@
 # The one fnox file, with no profiles. Codex and OpenCode start as `fnox proxy run -- <harness>` (the mise
 # [wrappers] and codex-hc): the harness holds placeholders only, and the proxy puts the real key into requests to
 # the host in its rule (fnox docs/guide/proxy.md). Claude has no wrapper; its apify headersHelper runs
-# `fnox get APIFY_TOKEN`. env = false keeps every key out of `fnox exec` here and in any project that layers this
-# file. Add a key to Doppler with `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider
-# (it writes the value here in plain text).
+# `fnox get APIFY_TOKEN`. env = false keeps a key out of `fnox exec` here and in any project that layers this
+# file; only the agentsview server's keys are env = "exec". The agent guards block `fnox exec`, `get` and the other
+# commands that show a value (~/.config/agents/guards/hook.py). Add a key to Doppler with
+# `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider (it writes the value here in
+# plain text).
 
 # Keep resolved secrets in memory, so a harness started again reads them without a Doppler call.
 # A first start while Doppler is unreachable waits on doppler's own retries (owner accepted).
@@ -33,10 +35,28 @@ DOPPLER_TOKEN= { provider = "age", value = "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgy
 CONTEXT7_API_KEY     = { provider = "doppler_dotfiles_dev_personal", value = "CONTEXT7_API_KEY", env = false, if_missing = "warn" }
 EXA_API_KEY          = { provider = "doppler_dotfiles_dev_personal", value = "EXA_API_KEY", env = false, if_missing = "warn" }
 APIFY_TOKEN          = { provider = "doppler_dotfiles_dev_personal", value = "APIFY_TOKEN", env = false, if_missing = "warn" }
-OPENROUTER_API_KEY   = { provider = "doppler_dotfiles_dev_personal", value = "OPENROUTER_API_KEY", env = false, if_missing = "warn" }
+OPENROUTER_API_KEY   = { provider = "doppler_dotfiles_dev_personal", value = "OPENROUTER_API_KEY", env = "exec", if_missing = "warn" }
 APINEX_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "APINEX_API_KEY", env = false, if_missing = "warn" }
 EXPERIENTIAL_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "EXPERIENTIAL_API_KEY", env = false, if_missing = "warn" }
 RESPAN_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "RESPAN_API_KEY", env = false, if_missing = "warn" }
+
+# Research keys, sent only through the proxy rules below.
+FIRECRAWL_API_KEY      = { provider = "doppler_dotfiles_dev_personal", value = "FIRECRAWL_API_KEY", env = false, if_missing = "warn" }
+SERPER_API_KEY         = { provider = "doppler_dotfiles_dev_personal", value = "SERPER_API_KEY", env = false, if_missing = "warn" }
+SERP_API_KEY           = { provider = "doppler_dotfiles_dev_personal", value = "SERP_API_KEY", env = false, if_missing = "warn" }
+SCRAPECREATORS_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "SCRAPECREATORS_API_KEY", env = false, if_missing = "warn" }
+OPENCODE_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "OPENCODE_API_KEY", env = false, if_missing = "warn" }
+
+# Model keys for the free-models project, sent only through the proxy rules below. OPENAI_COMPATIBLE is Kilo's key.
+NVIDIA_API_KEY            = { provider = "doppler_dotfiles_dev_personal", value = "NVIDIA_API_KEY", env = false, if_missing = "warn" }
+GEMINI_API_KEY            = { provider = "doppler_dotfiles_dev_personal", value = "GEMINI_API_KEY", env = false, if_missing = "warn" }
+ZAI_API_KEY               = { provider = "doppler_dotfiles_dev_personal", value = "ZAI_API_KEY", env = false, if_missing = "warn" }
+KILO_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
+OPENAI_COMPATIBLE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
+
+# The agentsview server's LaunchAgent starts it with `fnox exec --replace`, so its keys are env = "exec": it gets
+# OPENROUTER_API_KEY above and this one. No agent can run `fnox exec` (rule guard 3).
+AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", value = "AGENTSVIEW_RECALL_PROXY_KEY", env = "exec", if_missing = "warn" }
 
 # The read/write token for dotfiles/dev_personal, read only by `mise run secret:set` (`fnox get`). It lives in the
 # macOS Keychain (service dotfiles-fnox), never in this public file, not even as ciphertext. The owner stores it
@@ -44,7 +64,8 @@ RESPAN_API_KEY       = { provider = "doppler_dotfiles_dev_personal", value = "RE
 # No proxy rule names it, so `proxy run` never resolves it; daemon_cache = false keeps it out of the daemon.
 DOPPLER_WRITE_TOKEN = { provider = "keychain", value = "DOPPLER_WRITE_TOKEN", env = false, if_missing = "error", daemon_cache = false }
 
-# One rule per host, for every method. Permissive egress lets every other host (model APIs, git, gh) through
+# One rule per host and header, for every method. Each header or query parameter is the one the provider's own API
+# docs show; Gemini and Exa take two, so they have a rule for each. Permissive egress lets every other host (model APIs, git, gh) through
 # untouched. `proxy run` resolves only the secrets its rules name (src/commands/proxy.rs:308-324 at 1.48.0).
 [proxy]
 egress = "permissive"
@@ -55,4 +76,18 @@ rules = [
   { secret = "APINEX_API_KEY",       domain = "api.apinex.bond",         header = "authorization" },
   { secret = "EXPERIENTIAL_API_KEY", domain = "api.experientiallabs.ai", header = "authorization" },
   { secret = "RESPAN_API_KEY",       domain = "gateway.respan.ai",       header = "authorization" },
+  { secret = "CONTEXT7_API_KEY",       domain = "context7.com",                      header = "authorization" },
+  { secret = "EXA_API_KEY",            domain = "api.exa.ai",                        header = "x-api-key" },
+  { secret = "EXA_API_KEY",            domain = "api.exa.ai",                        header = "authorization" },
+  { secret = "FIRECRAWL_API_KEY",      domain = "api.firecrawl.dev",                 header = "authorization" },
+  { secret = "SERPER_API_KEY",         domain = "google.serper.dev",                 header = "x-api-key" },
+  { secret = "SERP_API_KEY",           domain = "serpapi.com",                       query = "api_key" },
+  { secret = "SCRAPECREATORS_API_KEY", domain = "api.scrapecreators.com",            header = "x-api-key" },
+  { secret = "OPENCODE_API_KEY",       domain = "opencode.ai",                       header = "authorization" },
+  { secret = "NVIDIA_API_KEY",         domain = "integrate.api.nvidia.com",          header = "authorization" },
+  { secret = "GEMINI_API_KEY",         domain = "generativelanguage.googleapis.com", header = "x-goog-api-key" },
+  { secret = "GEMINI_API_KEY",         domain = "generativelanguage.googleapis.com", header = "authorization" },
+  { secret = "ZAI_API_KEY",            domain = "api.z.ai",                          header = "authorization" },
+  { secret = "KILO_API_KEY",           domain = "ai-gateway.kilo.ai",                header = "authorization" },
+  { secret = "OPENAI_COMPATIBLE_API_KEY", domain = "ai-gateway.kilo.ai",             header = "authorization" },
 ]
