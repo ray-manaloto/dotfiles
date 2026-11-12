@@ -66,6 +66,9 @@ def copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("STANDIN_LOG", str(tmp_path / "codex.json"))
     monkeypatch.setenv("STANDIN_REPORT", REPORT)
     monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(root))
+    # mise puts its command-wrappers first on a task's PATH, so the global [wrappers.codex] (fnox proxy run) would
+    # run instead of the stand-in. The copy's own codex wrapper, closer than the global one, runs the stand-in.
+    (root / "mise.local.toml").write_text(f'[wrappers.codex]\ncommand = "{bin_dir / "codex"}"\n')
     monkeypatch.setenv("UV_OFFLINE", "1")
     # The private_user var: the scan then looks for this user under /Users and /home.
     monkeypatch.setenv("USER", USER)
