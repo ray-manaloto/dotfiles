@@ -57,8 +57,11 @@ def installed_tag() -> str:
     return f"v{version}"
 
 
-[DESKTOP_TAG] = re.findall(r"vercel-labs/agent-desktop#(\S+)", " ".join(POST_TOOLS))
+[DESKTOP_LINE] = [command for command in POST_TOOLS if "vercel-labs/agent-desktop#" in command]
 DESKTOP_PIN = CONFIG["tools"]["github:vercel-labs/agent-desktop"]["version"]
+# The tag the agent-desktop line must install: `v` and the pin, which it reads with `mise current`.
+DESKTOP_TAG = f"v{DESKTOP_PIN}"
+NO_PIN = "post-tools: mise current printed no agent-desktop pin, so its skills are not installed"
 DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
 # A skill written in this repo, linked for both agents by [dotfiles] in mise.toml.
 PERMISSIONS = "macos-agent-permissions"
@@ -129,8 +132,14 @@ class HerdrAppTest(unittest.TestCase):
         self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
 
     def run_hook(self, command: str) -> subprocess.CompletedProcess[str]:
-        """One hook command as mise runs it, with this test's hc first on PATH."""
-        line = f"PATH={shlex.quote(str(self.bin))}:$PATH; {command}"
+        """One hook command as mise runs it: this test's hc first on PATH, and a global config with
+        only the agent-desktop pin, so `mise current` reads it as it reads the real config."""
+        pins = self.root / "pins.toml"
+        pins.write_text(f'[tools]\n"github:vercel-labs/agent-desktop" = "{DESKTOP_PIN}"\n')
+        line = (
+            f"PATH={shlex.quote(str(self.bin))}:$PATH; "
+            f"export MISE_GLOBAL_CONFIG_FILE={shlex.quote(str(pins))}; {command}"
+        )
         return self.scratch("env", *self.offline, *SHELL, line)
 
     def install(self, name: str, source: str, *folders: str) -> None:
@@ -271,8 +280,12 @@ class HerdrAppTest(unittest.TestCase):
             json.loads(self.lock.read_text())["skills"][HC]["ref"], self.tag
         )
 
-    def test_agent_desktop_skills_come_from_the_pinned_tag(self) -> None:
-        self.assertEqual(DESKTOP_TAG, f"v{DESKTOP_PIN}")
+    def test_the_agent_desktop_line_stops_without_a_pin(self) -> None:
+        # scratch:env's own mise config pins nothing, so `mise current` prints no version.
+        done = self.scratch("env", *self.offline, *SHELL, DESKTOP_LINE)
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn(NO_PIN, done.stderr.splitlines())
+        self.assertFalse(set(DESKTOP) & self.locked())
 
     def test_an_installed_agent_desktop_skill_is_replaced_from_the_tag(self) -> None:
         self.install("agent-desktop", "vercel-labs/agent-desktop", CODEX)
