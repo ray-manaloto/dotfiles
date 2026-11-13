@@ -421,7 +421,7 @@ wait_for = ["update:brew"]
 # as incomplete even when every child command exits 0. See docs/python-upgrade-policy.md.
 # AgentsView may perform a one-time archive resync before opening its listener.
 # The owner returns STARTUP_PENDING (75) until it is ready; wait for the verified
-# service and release-check job rather than treating that state as a failed update.
+# service rather than treating that state as a failed update.
 # The Python runner preserves these exact sequential commands, records each
 # phase/return code, and passes one existing GitHub credential only to this
 # task's mise children (including vfox plugins that read GITHUB_TOKEN).

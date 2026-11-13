@@ -690,6 +690,19 @@ def test_a_shared_skill_claude_code_does_not_list_fails_v10(scratch: Scratch) ->
     assert scratch.checks() == ALL_PASS
 
 
+def test_claude_codes_synced_skills_folder_is_not_a_skill(scratch: Scratch) -> None:
+    # Claude Code keeps the skills it syncs from claude.ai in one bucket folder per account.
+    bucket = ".claude/skills/synced/account_org"
+    scratch.write(f"{bucket}/manifest.json", "{}")
+    scratch.write(f"{bucket}/docx/SKILL.md", "---\nname: docx\n---\n")
+    assert scratch.checks() == ALL_PASS
+    # Another folder with no SKILL.md still fails.
+    (scratch.home / ".claude/skills/not-synced").mkdir()
+    seen, checks = scratch.observe()
+    assert seen.skills_missing == ["~/.claude/skills/not-synced"]
+    assert checks.model_dump() == failing("V10")
+
+
 def test_a_claude_code_link_to_a_removed_shared_skill_fails_v10(scratch: Scratch) -> None:
     # What `skills remove -a <one agent>` through the Antigravity CLI folder link leaves behind.
     (scratch.home / ".claude/skills/beta").symlink_to("../../.agents/skills/beta")

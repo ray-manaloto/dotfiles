@@ -134,7 +134,7 @@ def main():
                 time.sleep(2)
     if a.apply:
         # herdr has opened a new space's first tab in another space's folder (2026-11-10: dotfiles-lead
-        # came back in claude-code-marketplace). Check each resumed agent's real cwd against the graph.
+        # came back in another project's folder). Check each resumed agent's real cwd against the graph.
         time.sleep(5)
         wrong = []
         for s in g["spaces"]:
