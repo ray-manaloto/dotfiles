@@ -26,7 +26,6 @@ class Command(StrEnum):
     update_brew = "update-brew"
     update_check = "update-check"
     herdr_doctor = "herdr-doctor"
-    secret_set = "secret-set"
     opencode_jouet = "opencode-jouet"
     disk_snapshot = "disk-snapshot"
     disk_guard = "disk-guard"

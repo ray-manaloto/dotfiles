@@ -8,6 +8,7 @@
 !/GLOSSARY.md
 !/cmake/
 !/docs/
+!/doctor/
 !/hk.pkl
 # agnix's config for the hk agnix step (docs/research/agent-config-linters.md).
 !/.agnix.toml

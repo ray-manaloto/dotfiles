@@ -5,9 +5,8 @@
 # `fnox get APIFY_TOKEN`. env = false keeps a key out of `fnox exec` here and in any project that layers this
 # file; env = "exec" is only for what an `fnox exec` launch needs (agentsview, the PC names, CF_ACCOUNT_ID).
 # The agent guards block `fnox exec`, `get` and the other commands that show a value
-# (~/.config/agents/guards/hook.py). Add a key to Doppler with
-# `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider (it writes the value here in
-# plain text).
+# (~/.config/agents/guards/hook.py). Add, change or remove a Doppler key with `mise run secret:set|secret:delete`
+# (the doppler CLI); never `fnox set` on the doppler provider (it writes the value here in plain text).
 
 # Keep resolved secrets in memory, so a harness started again reads them without a Doppler call.
 # A first start while Doppler is unreachable waits on doppler's own retries (owner accepted).
@@ -75,15 +74,13 @@ AGENTSVIEW_RECALL_PROXY_KEY = { provider = "doppler_dotfiles_dev_personal", valu
 
 # Private names (machine names, addresses) that must not be public: each lives in Doppler and is read here with
 # env = "exec", so the owner's `fnox exec -- mise dot apply ...` hands it to the mise templates that call
-# secret() (mise.toml [bootstrap.secrets]). Names only, never a key. Add one with `pbpaste | mise run secret:set NAME`.
+# secret() (mise.toml [bootstrap.secrets]). Names only, never a key. Add one with `mise run secret:set NAME`.
 PC_HOST = { provider = "doppler_dotfiles_dev_personal", value = "PC_HOST", env = "exec", if_missing = "warn" }
 PC_LAN_HOST = { provider = "doppler_dotfiles_dev_personal", value = "PC_LAN_HOST", env = "exec", if_missing = "warn" }
 
-# The read/write token for dotfiles/dev_personal, read only by `mise run secret:set` (`fnox get`). It lives in the
-# macOS Keychain (service dotfiles-fnox), never in this public file, not even as ciphertext. The owner stores it
-# with `pbpaste | fnox set DOPPLER_WRITE_TOKEN --global --provider keychain`, which keeps this line's fields.
-# No proxy rule names it, so `proxy run` never resolves it; daemon_cache = false keeps it out of the daemon.
-DOPPLER_WRITE_TOKEN = { provider = "keychain", value = "DOPPLER_WRITE_TOKEN", env = false, if_missing = "error", daemon_cache = false }
+# The read/write token for dotfiles/dev_personal is not in fnox: fnox's Doppler provider is read-only, so writes go
+# through the doppler CLI, which keeps that token in its own keyring slot (`pbpaste | doppler configure set token
+# --scope /`, once). The provider above keeps its own read-only token, so the CLI login never widens fnox's reads.
 
 # One rule per host and header, for every method. Each header or query parameter is the one the provider's own API
 # docs show; Gemini and Exa take two, so they have a rule for each. Permissive egress lets every other host (model APIs, git, gh) through
