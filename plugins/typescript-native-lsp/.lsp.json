@@ -1,0 +1,20 @@
+{
+  "typescript": {
+    "command": "sh",
+    "args": [
+      "-c",
+      "[ -x \"${TS_LSP_TSC:-}\" ] || { echo 'typescript-native-lsp: TS_LSP_TSC is unset or not executable; it comes from the global mise config, so start Claude Code from a shell where mise is active' >&2; exit 1; }; exec \"$TS_LSP_TSC\" --lsp --stdio"
+    ],
+    "extensionToLanguage": {
+      ".ts": "typescript",
+      ".tsx": "typescriptreact",
+      ".js": "javascript",
+      ".jsx": "javascriptreact",
+      ".mts": "typescript",
+      ".cts": "typescript",
+      ".mjs": "javascript",
+      ".cjs": "javascript"
+    },
+    "transport": "stdio"
+  }
+}

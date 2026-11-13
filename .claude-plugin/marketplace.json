@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dotfiles",
+  "description": "Claude Code plugins kept in dotfiles, so every machine gets the same ones.",
+  "owner": {
+    "name": "ray-manaloto"
+  },
+  "plugins": [
+    {
+      "name": "typescript-native-lsp",
+      "description": "TypeScript and JavaScript code intelligence from TypeScript 7's own language server (tsc --lsp).",
+      "version": "0.1.0",
+      "source": "./plugins/typescript-native-lsp",
+      "category": "development"
+    }
+  ]
+}

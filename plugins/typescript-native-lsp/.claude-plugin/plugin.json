@@ -1,0 +1,8 @@
+{
+  "name": "typescript-native-lsp",
+  "description": "TypeScript and JavaScript code intelligence from TypeScript 7's own language server (tsc --lsp). Replaces typescript-lsp@claude-plugins-official, whose typescript-language-server needs the tsserver that TypeScript 7 no longer ships.",
+  "version": "0.1.0",
+  "author": {
+    "name": "ray-manaloto"
+  }
+}

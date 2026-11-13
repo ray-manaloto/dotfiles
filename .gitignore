@@ -20,6 +20,9 @@
 !/tests/
 !/typescript/
 !/unix/
+# The dotfiles Claude Code marketplace and its plugins (typescript-native-lsp).
+!/.claude-plugin/
+!/plugins/
 # The project's settings, the fallback reviewer agent and /verify skill; settings.local.json and anything else
 # under .claude stay out.
 !/.claude/
