@@ -3,7 +3,7 @@
 # [wrappers] and codex-hc): the harness holds placeholders only, and the proxy puts the real key into requests to
 # the host in its rule (fnox docs/guide/proxy.md). Claude has no wrapper; its apify headersHelper runs
 # `fnox get APIFY_TOKEN`. env = false keeps a key out of `fnox exec` here and in any project that layers this
-# file; env = "exec" is only for what an `fnox exec` launch needs (agentsview, the PC names, CLOUDFLARE_ACCOUNT_ID).
+# file; env = "exec" is only for what an `fnox exec` launch needs (agentsview, the PC names, CF_ACCOUNT_ID).
 # The agent guards block `fnox exec`, `get` and the other commands that show a value
 # (~/.config/agents/guards/hook.py). Add a key to Doppler with
 # `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider (it writes the value here in
@@ -56,11 +56,14 @@ KILO_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value 
 OPENAI_COMPATIBLE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
 GROQ_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value = "GROQ_API_KEY", env = false, if_missing = "warn" }
 AIHUBMIX_API_KEY          = { provider = "doppler_dotfiles_dev_personal", value = "AIHUBMIX_API_KEY", env = false, if_missing = "warn" }
-CLOUDFLARE_API_TOKEN      = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_API_TOKEN", env = false, if_missing = "warn" }
+# OpenCode's cloudflare-workers-ai provider reads CLOUDFLARE_API_KEY (models.dev), so the key has that name.
+CLOUDFLARE_API_KEY        = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_API_KEY", env = false, if_missing = "warn" }
 # Workers AI takes the account ID in the URL path (/client/v4/accounts/<id>/ai/...), and the proxy rewrites only one
-# header or query parameter, never the path (fnox 1.48.0 docs/guide/proxy.md:169). So it is no proxy secret: like
-# PC_HOST it is env = "exec", for an `fnox exec` launch, and its value stays in Doppler, out of this file.
-CLOUDFLARE_ACCOUNT_ID     = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_ACCOUNT_ID", env = "exec", if_missing = "warn" }
+# header or query parameter, never the path (fnox 1.48.0 docs/guide/proxy.md:169). `proxy run` also removes every
+# name this file defines from its child (src/commands/proxy.rs:156,521-541), so the key is CF_ACCOUNT_ID, not the
+# CLOUDFLARE_ACCOUNT_ID OpenCode reads: the owner's `fnox exec -- mise dot apply` renders it into
+# ~/.config/mise/conf.d/cloudflare.toml as CLOUDFLARE_ACCOUNT_ID (the cloudflare_account_id input in mise.toml).
+CF_ACCOUNT_ID             = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_ACCOUNT_ID", env = "exec", if_missing = "warn" }
 
 # Tailscale API access token (admin console, Settings, Keys), sent only through the proxy rule below: agents edit
 # the tailnet policy with `fnox proxy run -- curl ... https://api.tailscale.com/api/v2/tailnet/-/acl`.
@@ -110,6 +113,6 @@ rules = [
   { secret = "OPENAI_COMPATIBLE_API_KEY", domain = "ai-gateway.kilo.ai",             header = "authorization" },
   { secret = "GROQ_API_KEY",           domain = "api.groq.com",                      header = "authorization" },
   { secret = "AIHUBMIX_API_KEY",       domain = "aihubmix.com",                      header = "authorization" },
-  { secret = "CLOUDFLARE_API_TOKEN",   domain = "api.cloudflare.com",                header = "authorization" },
+  { secret = "CLOUDFLARE_API_KEY",     domain = "api.cloudflare.com",                header = "authorization" },
   { secret = "TAILSCALE_API_KEY",      domain = "api.tailscale.com",                 header = "authorization" },
 ]

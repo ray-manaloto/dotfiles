@@ -1,0 +1,4 @@
+# Rendered by `fnox exec -- mise dot apply` from the cloudflare_account_id input (dotfiles mise.toml). The account ID
+# is private, so it lives in Doppler, never in the repo. OpenCode's cloudflare-workers-ai provider reads it.
+[env]
+CLOUDFLARE_ACCOUNT_ID = "{{ secret(name="cloudflare_account_id") }}"
