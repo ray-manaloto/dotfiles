@@ -25,6 +25,13 @@ from .standin import CURSOR, DIRECT, mcp_server
 STANDIN = Path(__file__).with_name("standin.py")
 
 
+@pytest.fixture(autouse=True)
+def no_hook_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-commit hook exports GIT_DIR and friends; a test's git under them acts on the real repository."""
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+
+
 def run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, list[dict[str, Any]], str]:
     """Exit code, stdout JSON lines, and the stderr failure (empty when none)."""
     try:

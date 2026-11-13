@@ -19,6 +19,15 @@ from typing import Any
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def no_hook_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pre-commit hook exports GIT_DIR and friends; a test's `git init` under them writes core.worktree into the
+    real repository's shared config, and every checkout of it then works on the wrong folder."""
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+
+
 # The installed command, as `uv run depmaps` and the mise tasks start it.
 DEPMAPS = Path(sys.executable).parent / "depmaps"
 PACKAGE = Path(__file__).parents[1]
