@@ -15,4 +15,6 @@ if [ -n "${HC_TERMINAL_ID:-}" ] && [ -n "${HC_TERMINAL_SOCKET:-}" ]; then
     ${HC_SESSION:+-c "shell_environment_policy.set.HC_SESSION=\"$HC_SESSION\""} \
     "$@"
 fi
-exec fnox --non-interactive proxy run -- codex --no-daemon "$@"
+# RUST_LOG for fnox alone keeps its per-request audit lines out of Codex's screen; env -u starts Codex without it
+# (the [wrappers.codex] comment in ~/.config/mise/config.toml says why).
+RUST_LOG='info,fnox::proxy=warn' exec fnox --non-interactive proxy run -- env -u RUST_LOG codex --no-daemon "$@"
