@@ -139,6 +139,14 @@ run = "mkdir -p ~/.agents/skills"
 # empty header. Claude Code rewrites ~/.claude.json while it runs, so write this entry with Claude's own CLI
 # (`claude mcp add-json apify '<this JSON>' -s user`) rather than a whole-root apply.
 "~/.claude.json/mcp-apify" = { source = "unix/home/.claude.mcp-apify.json", merge = true, permissions = "0600" }
+# jdx MCP servers (owner, 2026-11-13) for Claude and Codex: mise (tools, tasks, env, config; run_task needs a
+# trusted project), hk (plan, checks, safe fixes), pitchfork --local (this project's daemons only), and usage
+# serving mise's own CLI spec (list_commands, describe_command), inline because `usage mcp` keeps stdin for MCP.
+# No fnox server: its exec tool would bypass the guard on `fnox exec`; agents use `fnox proxy run` for keys.
+# Each launches through ~/.local/bin/mise, as risu729/dotfiles unix/claude/mcp.json and unix/codex/mcp.toml do.
+# Claude's entry is written as apify's is (`claude mcp add-json <name> '<its JSON>' -s user`).
+"~/.claude.json/mcp-jdx" = { source = "unix/home/.claude.mcp-jdx.json", merge = true, permissions = "0600" }
+"~/.codex/config.toml/mcp-jdx" = { source = "unix/home/.codex/mcp-jdx.toml", merge = true, permissions = "0600" }
 # The apify plugin stays enabled for its skills and agent, but its own MCP server (plugin:apify:apify, OAuth) is
 # denied: the user-scope `apify` server above is the one with the key. deniedMcpServers merges from every settings
 # source, so a user can deny servers for themselves (Claude Code 2.1.322 settings schema, allowManagedMcpServersOnly).

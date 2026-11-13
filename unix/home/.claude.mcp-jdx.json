@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "mise": {
+      "type": "stdio",
+      "command": "/bin/sh",
+      "args": ["-c", "exec \"$HOME/.local/bin/mise\" --cd \"${CLAUDE_PROJECT_DIR:-$PWD}\" mcp"]
+    },
+    "hk": {
+      "type": "stdio",
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "exec \"$HOME/.local/bin/mise\" --cd \"${CLAUDE_PROJECT_DIR:-$PWD}\" exec -- hk mcp --root \"${CLAUDE_PROJECT_DIR:-$PWD}\""
+      ]
+    },
+    "pitchfork": {
+      "type": "stdio",
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "cd \"${CLAUDE_PROJECT_DIR:-$PWD}\" && exec \"$HOME/.local/bin/mise\" exec -- pitchfork mcp --local"
+      ]
+    },
+    "usage-mise": {
+      "type": "stdio",
+      "command": "/bin/sh",
+      "args": ["-c", "exec \"$HOME/.local/bin/mise\" exec -- usage mcp -s \"$(\"$HOME/.local/bin/mise\" usage)\""]
+    }
+  }
+}
