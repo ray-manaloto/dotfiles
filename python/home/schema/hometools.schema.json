@@ -47,13 +47,13 @@
       }
     },
     "DiskSnapshot": {
-      "description": "What disk-snapshot wrote: its folder (none while another run held the lock) and the roots du did not finish.",
+      "description": "What disk-snapshot wrote: its folder (none while another run held the lock) and the roots dust did not finish.",
       "type": "object",
       "additionalProperties": false,
       "required": ["folder", "timed_out"],
       "properties": {
         "folder": {"type": ["string", "null"], "description": "The new folder under disk-alerts; null when another snapshot held the lock."},
-        "timed_out": {"type": "array", "items": {"type": "string"}, "description": "Roots whose du was stopped at its time limit; their lines are partial."}
+        "timed_out": {"type": "array", "items": {"type": "string"}, "description": "Roots whose dust run was stopped at its time limit; they have no totals."}
       }
     },
     "DiskGuard": {

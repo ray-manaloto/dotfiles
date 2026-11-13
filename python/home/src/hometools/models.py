@@ -115,7 +115,7 @@ class Failure(BaseModel):
 
 class DiskSnapshot(BaseModel):
     """
-    What disk-snapshot wrote: its folder (none while another run held the lock) and the roots du did not finish.
+    What disk-snapshot wrote: its folder (none while another run held the lock) and the roots dust did not finish.
     """
 
     model_config = ConfigDict(
@@ -128,7 +128,7 @@ class DiskSnapshot(BaseModel):
     """
     timed_out: list[str]
     """
-    Roots whose du was stopped at its time limit; their lines are partial.
+    Roots whose dust run was stopped at its time limit; they have no totals.
     """
 
 

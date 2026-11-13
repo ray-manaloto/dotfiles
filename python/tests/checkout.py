@@ -5,6 +5,7 @@ compilation cache (CompilationCache.noindex/.../data.v1); nine copies at once un
 from 279 GiB to 32 GiB. The tracked files and the untracked ones git does not ignore are a few hundred MB.
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -18,10 +19,10 @@ def copy_checkout(dest: Path, source: Path = REPO) -> Path:
         ["git", "-C", source, "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         check=True,
-        text=True,
     ).stdout
     dest.mkdir(parents=True)
-    for name in sorted(set(listed.split("\0")[:-1])):
+    # Bytes, not text: text mode would turn a carriage return in a file name into a newline.
+    for name in sorted({os.fsdecode(raw) for raw in listed.split(b"\0")[:-1]}):
         path = source / name
         if path.is_symlink() or path.exists():  # a file deleted but not yet staged is gone
             (dest / name).parent.mkdir(parents=True, exist_ok=True)

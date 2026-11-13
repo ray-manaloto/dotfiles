@@ -34,11 +34,12 @@ from pathlib import Path
 from .models import DiskGuard, DiskSnapshot, Failure
 
 DATA = "/System/Volumes/Data"
-# monit's alert threshold (100 GB in monitrc, and monit's GB is 1024^3).
+# monit's alert threshold (100 GB in monitrc, and monit's GB is 1024^3). DISK_FLOOR_GIB overrides it for one run.
 FLOOR_GIB = 100
 GIB = 1 << 30
 # Each command's time limit: dust per root, ps and each lsof. The roots run one after another, beside ps and lsof,
 # so a run is bounded by len(roots()) * SECONDS: 9 minutes for the nine roots; 111 s measured on 2026-11-13.
+# DISK_SNAPSHOT_SECONDS overrides it for one run.
 SECONDS = 60
 FOLDER_LINES = 40
 PS_LINES = 80
@@ -52,8 +53,13 @@ def free_gib(path: str = DATA) -> int:
     return found.f_bavail * found.f_frsize // GIB
 
 
+def setting(name: str, default: int) -> int:
+    """An integer from the environment, or default when it is unset or empty."""
+    return int(os.environ.get(name) or default)
+
+
 def guard(floor: int | None = None, path: str = DATA) -> DiskGuard:
-    floor = FLOOR_GIB if floor is None else floor
+    floor = setting("DISK_FLOOR_GIB", FLOOR_GIB) if floor is None else floor
     free = free_gib(path)
     if free < floor:
         msg = (
@@ -99,6 +105,18 @@ def flatten(node: dict[str, object]) -> Iterator[tuple[int, str]]:
         yield from flatten(child)
 
 
+def inert(name: str) -> str:
+    """name as one line of the report: a name with a newline or other control character is JSON-quoted."""
+    return name if name.isprintable() else json.dumps(name, ensure_ascii=False)
+
+
+def ranked(out: str) -> list[str]:
+    """dust's JSON tree as report lines, largest first; ValueError, KeyError or TypeError when it isn't one."""
+    # Largest first; on a tie the enclosing folder, the shorter path, comes first.
+    sizes = sorted(flatten(json.loads(out)), key=lambda item: (-item[0], item[1]))
+    return [f"{size / GIB:8.1f} GiB  {inert(name)}" for size, name in sizes[:FOLDER_LINES]]
+
+
 def biggest(root: Path, seconds: float) -> tuple[str, bool]:
     """root's biggest folders, two levels down, largest first, in GiB with one decimal."""
     if not root.is_dir():
@@ -110,13 +128,9 @@ def biggest(root: Path, seconds: float) -> tuple[str, bool]:
         out, stopped = bounded(argv, seconds)
         if stopped:
             return f"== {root} (stopped at its time limit: no totals)\n", True
-        tree = json.loads(out)
-        found = list(flatten(tree))
+        lines = ranked(out)
     except (OSError, ValueError, KeyError, TypeError) as failed:
         return f"== {root}: dust failed ({type(failed).__name__})\n", False
-    # Largest first; on a tie the enclosing folder, the shorter path, comes first.
-    sizes = sorted(found, key=lambda item: (-item[0], item[1]))
-    lines = [f"{size / GIB:8.1f} GiB  {name}" for size, name in sizes[:FOLDER_LINES]]
     return f"== {root}\n" + "".join(f"{line}\n" for line in lines), False
 
 
@@ -172,7 +186,7 @@ def fresh(parent: Path, stamp: str | None = None) -> Path:
 
 
 def snapshot(parent: Path, where: Sequence[Path], seconds: float | None = None, data: str = DATA) -> DiskSnapshot:
-    limit = SECONDS if seconds is None else seconds
+    limit = setting("DISK_SNAPSHOT_SECONDS", SECONDS) if seconds is None else seconds
     # ps.txt holds whole command lines: the folders are the user's alone.
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with locked(parent) as mine:

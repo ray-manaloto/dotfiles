@@ -19,13 +19,14 @@ def test_the_copy_leaves_ignored_files_behind(tmp_path: Path) -> None:
     (source / "swift/.build/out/data.v1").write_bytes(b"cache")
     (source / "new.txt").write_text("untracked, not ignored\n")
     (source / "link").symlink_to("new.txt")
+    (source / "cr\rname").write_text("a carriage return in the name\n")
     git(source, "add", ".gitignore", "swift/Package.swift")
     (source / "gone.txt").write_text("staged, then deleted\n")
     git(source, "add", "gone.txt")
     (source / "gone.txt").unlink()
     copy = copy_checkout(tmp_path / "copy", source)
     found = sorted(str(p.relative_to(copy)) for p in copy.rglob("*") if not p.is_dir())
-    assert found == [".gitignore", "link", "new.txt", "swift/Package.swift"]
+    assert found == [".gitignore", "cr\rname", "link", "new.txt", "swift/Package.swift"]
     assert (copy / "link").is_symlink()
 
 

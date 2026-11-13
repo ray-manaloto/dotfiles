@@ -1,9 +1,8 @@
-"""disk-snapshot and disk-guard against real folders, the real du, ps and lsof, and the real data volume."""
+"""disk-snapshot and disk-guard against real folders, the real dust, ps and lsof, and the real data volume."""
 
 import fcntl
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -43,12 +42,17 @@ def test_the_guard_refuses_under_the_floor_and_says_why() -> None:
     assert "disk:snapshot" in str(low.value)
 
 
-def test_the_floor_is_monits_threshold() -> None:
-    assert disk.FLOOR_GIB == 100
+def test_the_floor_is_monits_threshold_unless_the_environment_sets_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISK_FLOOR_GIB", "")
+    if disk.free_gib() >= 100:
+        assert disk.guard().floor_gib == 100
+    else:
+        with pytest.raises(ValueError, match="under the 100 GiB floor"):
+            disk.guard()
 
 
 def test_the_command_passes_over_the_floor(capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(disk, "FLOOR_GIB", 1)
+    monkeypatch.setenv("DISK_FLOOR_GIB", "1")
     code, out, err = hometools(capfd, "disk-guard")
     assert (code, err) == (0, "")
     assert json.loads(out)["floor_gib"] == 1
@@ -57,7 +61,7 @@ def test_the_command_passes_over_the_floor(capfd: pytest.CaptureFixture[str], mo
 def test_the_command_fails_with_one_error_under_the_floor(
     capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(disk, "FLOOR_GIB", 1_000_000)
+    monkeypatch.setenv("DISK_FLOOR_GIB", "1000000")
     code, out, err = hometools(capfd, "disk-guard")
     assert (code, out) == (1, "")
     assert json.loads(err)["error"].startswith(f"disk-guard: {disk.DATA} has ")
@@ -80,12 +84,14 @@ def test_a_root_stopped_at_its_limit_has_no_totals(tmp_path: Path) -> None:
     assert disk.biggest(root, 1e-6) == (f"== {root} (stopped at its time limit: no totals)\n", True)
 
 
-def test_a_folder_name_with_a_newline_is_one_entry(tmp_path: Path) -> None:
-    """dust's JSON keeps a newline inside a name, where du's lines would split it."""
+def test_a_folder_name_that_looks_like_a_report_line_stays_inert(tmp_path: Path) -> None:
+    """A newline in a name could forge a size line; the name is JSON-quoted on its own line instead."""
     root = tmp_path / "r"
-    (root / "two\nlines").mkdir(parents=True)
+    (root / "two\n999.0 GiB  /fake").mkdir(parents=True)
     text, _ = disk.biggest(root, 30)
-    assert text.count("two\nlines") == 1
+    lines = text.splitlines()
+    assert not any(line.startswith("999.0 GiB") for line in lines)
+    assert lines[-1].endswith(json.dumps(f"{root}/two\n999.0 GiB  /fake"))
 
 
 def test_a_root_dust_cannot_measure_is_named_and_the_snapshot_goes_on(
@@ -96,15 +102,10 @@ def test_a_root_dust_cannot_measure_is_named_and_the_snapshot_goes_on(
     assert disk.biggest(root, 30) == (f"== {root}: dust failed (FileNotFoundError)\n", False)
 
 
-def test_output_that_is_not_dusts_tree_is_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A stand-in dust on PATH, a Python script, that prints something other than its JSON tree."""
-    root = tree(tmp_path / "r", 1)
-    fake = tmp_path / "bin/dust"
-    fake.parent.mkdir()
-    fake.write_text(f"#!{sys.executable} -I\nprint('not json')\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
-    assert disk.biggest(root, 30) == (f"== {root}: dust failed (JSONDecodeError)\n", False)
+@pytest.mark.parametrize(("out", "error"), [("not json", ValueError), ("[]", TypeError), ("{}", KeyError)])
+def test_output_that_is_not_dusts_tree_is_refused(out: str, error: type[Exception]) -> None:
+    with pytest.raises(error):
+        disk.ranked(out)
 
 
 def test_a_missing_root_says_so(tmp_path: Path) -> None:
@@ -202,7 +203,7 @@ def test_the_command_writes_under_the_state_folder(
     """The real command, with the real roots and data volume; the limit keeps it short."""
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    monkeypatch.setattr(disk, "SECONDS", 5)
+    monkeypatch.setenv("DISK_SNAPSHOT_SECONDS", "5")
     code, out, err = hometools(capfd, "disk-snapshot")
     assert (code, err) == (0, "")
     folder = Path(json.loads(out)["folder"])
