@@ -2,6 +2,8 @@
 
 import json
 import os
+import resource
+import signal
 from pathlib import Path
 
 import pytest
@@ -111,6 +113,26 @@ def test_a_failed_replace_keeps_the_old_record_and_leaves_no_temporary_file(tmp_
     assert why.startswith(f"{target}: ")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["alert.json"]
     assert (target / "keep").read_text() == "old"
+
+
+def test_a_failed_write_keeps_the_old_record_and_leaves_no_temporary_file(tmp_path: Path) -> None:
+    # A real full-disk failure: a file-size limit below the record's size makes the flush fail with EFBIG.
+    # SIGXFSZ is ignored so the process gets the error instead of the signal; the limit is put back after.
+    target = tmp_path / "alert.json"
+    target.write_text("old\n")
+    record = MonitAlert(at="2026-11-13T00:00:00Z", service="data", event="", description="low")
+    soft, hard = resource.getrlimit(resource.RLIMIT_FSIZE)
+    previous = signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+    resource.setrlimit(resource.RLIMIT_FSIZE, (8, hard))
+    try:
+        why = monit.write(record, target)
+    finally:
+        resource.setrlimit(resource.RLIMIT_FSIZE, (soft, hard))
+        signal.signal(signal.SIGXFSZ, previous)
+    assert why is not None
+    assert why.startswith(f"{target}: ")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["alert.json"]
+    assert target.read_text() == "old\n"
 
 
 def test_the_record_lives_under_home(home: Path) -> None:

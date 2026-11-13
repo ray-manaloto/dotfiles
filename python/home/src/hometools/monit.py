@@ -55,16 +55,18 @@ def notify(service: str, description: str, osascript: str = OSASCRIPT) -> str | 
 
 def write(record: MonitAlert, path: Path) -> str | None:
     """None once path holds record, else why it doesn't; a failed write leaves the old record and no temporary file."""
+    # The temporary file is removed on any failure after it exists: a full disk fails the write or the close, as
+    # well as the rename, and that is when monit alerts.
+    temporary: Path | None = None
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile("w", dir=path.parent, prefix=".alert-", delete=False) as out:
+            temporary = Path(out.name)
             out.write(record.model_dump_json() + "\n")
-        try:
-            Path(out.name).replace(path)
-        except OSError:
-            Path(out.name).unlink()
-            raise
+        temporary.replace(path)
     except OSError as failed:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
         return f"{path}: {failed.strerror or type(failed).__name__}"
     return None
 
