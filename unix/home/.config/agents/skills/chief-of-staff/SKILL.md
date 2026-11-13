@@ -56,5 +56,5 @@ Suggest, with the owner's OK: a morning digest of the queue, lane status and sta
 ## Do not
 
 - Do not poll, implement, debug or measure. Do not answer a lead's implementation question by asking the owner.
-- Do not touch repos, plugins or settings files yourself; hand them to the lane's lead, and queue plugin or config changes for the owner.
+- Do not touch repos, plugins or settings files yourself; hand them to the lane's lead.
 - Do not run a `herdr-app do` verb to learn its usage; read `herdr-app --skill`.

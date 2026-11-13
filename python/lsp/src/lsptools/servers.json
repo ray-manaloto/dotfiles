@@ -1,0 +1,20 @@
+{
+  "servers": [
+    {
+      "name": "typescript",
+      "source": "tool",
+      "package": "npm:typescript",
+      "plugin": "typescript-native-lsp@dotfiles",
+      "fixture": "typescript",
+      "probe": {"defined_in": "a.ts", "line": 0, "character": 16, "used_in": "b.ts", "symbol": "greet"}
+    },
+    {
+      "name": "clangd",
+      "source": "bootstrap",
+      "package": "brew:llvm",
+      "plugin": "clangd-lsp@claude-plugins-official",
+      "fixture": "cpp",
+      "probe": {"defined_in": "greet.hpp", "line": 1, "character": 11, "used_in": "main.cpp", "symbol": "greet"}
+    }
+  ]
+}

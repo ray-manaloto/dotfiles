@@ -787,3 +787,7 @@ description = "SSH to GitHub authenticates"
 run = "ssh -T -o BatchMode=yes -o ConnectTimeout=8 git@github.com 2>&1 | grep -q 'successfully authenticated'"
 hint = "Check your SSH key in the agent and on GitHub."
 timeout = "15s"
+
+# No [doctor.checks] for the language servers: the global pre-push hook runs `mise doctor project` in every repo, a
+# failed check has no warn-only level (mise 2026.11.8 doctor checks: run, description, hint, timeout, dir, shell),
+# and a broken LSP plugin must not stop a push. `mise run lsp doctor` checks them on demand.

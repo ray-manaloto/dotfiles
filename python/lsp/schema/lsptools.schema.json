@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lsptools",
+  "description": "The models of mise run lsp: the server registry, and each action's JSON result.",
+  "$defs": {
+    "Action": {
+      "description": "What mise run lsp does: change (add, update, remove), report, probe (health, smoke) or check it all.",
+      "type": "string",
+      "enum": ["add", "update", "remove", "status", "which", "has-update", "health", "smoke", "verify", "doctor", "conflicts"]
+    },
+    "Source": {
+      "description": "How mise installs the server: a global [tools] entry, or a [bootstrap.packages] formula.",
+      "type": "string",
+      "enum": ["tool", "bootstrap"]
+    },
+    "Server": {
+      "description": "One language server Claude Code runs through a plugin, and the mise install that provides it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "source", "package", "plugin", "fixture", "probe"],
+      "properties": {
+        "name": {"type": "string", "description": "The server's key in the plugin's lspServers or .lsp.json."},
+        "source": {"$ref": "#/$defs/Source"},
+        "package": {"type": "string", "description": "The mise tool (npm:typescript), or the bootstrap package as manager:name (brew:llvm)."},
+        "plugin": {"type": "string", "description": "The Claude Code plugin that starts the server, as name@marketplace."},
+        "fixture": {"type": "string", "description": "The folder under lsptools/fixtures that smoke opens."},
+        "probe": {"$ref": "#/$defs/Probe"}
+      }
+    },
+    "Probe": {
+      "description": "Where smoke asks: the symbol's file, its 0-based line and character, and a file that uses it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defined_in", "line", "character", "used_in", "symbol"],
+      "properties": {
+        "defined_in": {"type": "string"},
+        "line": {"type": "integer", "minimum": 0},
+        "character": {"type": "integer", "minimum": 0},
+        "used_in": {"type": "string"},
+        "symbol": {"type": "string", "description": "The symbol's name, which documentSymbol must list."}
+      }
+    },
+    "PluginServer": {
+      "description": "A server as a plugin declares it (.lsp.json or lspServers); the other keys are Claude Code's.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["command"],
+      "properties": {
+        "command": {"type": "string"},
+        "args": {"type": "array", "items": {"type": "string"}, "default": []},
+        "extensionToLanguage": {"type": "object", "additionalProperties": {"type": "string"}, "default": {}}
+      }
+    },
+    "Registry": {
+      "description": "Every server mise run lsp manages (lsptools/servers.json).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["servers"],
+      "properties": {
+        "servers": {"type": "array", "items": {"$ref": "#/$defs/Server"}}
+      }
+    },
+    "Check": {
+      "description": "One named check of a server and what it found.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ok", "detail"],
+      "properties": {
+        "name": {"type": "string"},
+        "ok": {"type": "boolean"},
+        "detail": {"type": "string"}
+      }
+    },
+    "Report": {
+      "description": "An action's result for one server: ok when every check passed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "server", "ok", "checks"],
+      "properties": {
+        "action": {"$ref": "#/$defs/Action"},
+        "server": {"type": "string"},
+        "ok": {"type": "boolean"},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/Check"}}
+      }
+    },
+    "Reports": {
+      "description": "doctor and conflicts: one report per server, ok when all are.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "ok", "reports"],
+      "properties": {
+        "action": {"$ref": "#/$defs/Action"},
+        "ok": {"type": "boolean"},
+        "reports": {"type": "array", "items": {"$ref": "#/$defs/Report"}}
+      }
+    },
+    "Failure": {
+      "description": "One error event: mise run lsp could not run the action.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {"error": {"type": "string"}}
+    }
+  }
+}

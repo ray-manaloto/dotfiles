@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
+config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/lsp", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -11,6 +11,7 @@ repo = "python/repo"
 workflow = "python/workflow"
 cbm = "python/cbm"
 home = "python/home"
+lsp = "python/lsp"
 visualplan = "python/visualplan"
 jbctl = "python/jbctl"
 depmaps = "python/depmaps"
@@ -27,7 +28,7 @@ task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
+depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//lsp:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 [tasks."test:times"]
@@ -216,6 +217,9 @@ run = "mkdir -p ~/.agents/skills"
 # chief-of-staff: the coordinator's role contract; user scope only, like ticket-retro.
 "~/.claude/skills/chief-of-staff" = { source = "unix/home/.config/agents/skills/chief-of-staff", mode = "symlink" }
 "~/.agents/skills/chief-of-staff" = { source = "unix/home/.config/agents/skills/chief-of-staff", mode = "symlink" }
+# lsp-server: runs `mise run lsp` with its arguments (python/lsp); user scope only, like ticket-retro.
+"~/.claude/skills/lsp-server" = { source = "unix/home/.config/agents/skills/lsp-server", mode = "symlink" }
+"~/.agents/skills/lsp-server" = { source = "unix/home/.config/agents/skills/lsp-server", mode = "symlink" }
 # herdr-startup and herdr-shutdown: reopen and close the herdr sessions around a reboot. Their scripts are tracked
 # as they run, outside python/ (CODING_STANDARDS.md, "Exceptions"); packaging them is a later ticket.
 "~/.claude/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
