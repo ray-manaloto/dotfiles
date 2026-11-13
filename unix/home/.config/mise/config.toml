@@ -567,13 +567,13 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 # agent-desktop's core, macOS, FFI and jev skills come from the tag of the pinned binary, which compiles
 # the same files in (v1.2.0 crates/core/src/commands/skills.rs:4-16,44-54), so they match
 # `agent-desktop skills get`. Windows and Linux are left out. jev needs an agent-desktop clone. The tag
-# must equal the agent-desktop pin above (python/tests/test_herdr_app.py checks it). It is not skipped
-# when installed: a re-run puts the tag's files back, so a bumped tag replaces the old ones.
+# is `v` and the pin above, read with `mise current`, so a bump moves both. It is not skipped when
+# installed: a re-run puts the tag's files back, so a bumped tag replaces the old ones.
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex -s herdr-core -y </dev/null",
-  "mise exec -- skills add vercel-labs/agent-desktop#v1.3.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
+  "v=$(mise current github:vercel-labs/agent-desktop </dev/null) && [ -n \"$v\" ] || { echo 'post-tools: mise current printed no agent-desktop pin, so its skills are not installed' >&2; exit 1; }; mise exec -- skills add \"vercel-labs/agent-desktop#v$v\" -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
 ]
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
