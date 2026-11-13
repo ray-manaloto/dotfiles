@@ -135,6 +135,13 @@ local linters = new Mapping<String, Step> {
     ["fnox-refs"] {
         check = "mise run //repo:fnox-refs"
     }
+    // The fnox and Doppler checks (doctor/mise.toml), only when the fnox files or doctor/ change, so an
+    // ordinary commit makes no Keychain or Doppler call. Off in CI: it has neither.
+    ["secret-doctor"] {
+        glob = List("unix/home/.config/fnox/**", "doctor/**")
+        profiles = List("!ci")
+        check = "mise -C doctor doctor project"
+    }
     // A git command run with a hook's GIT_DIR (a test's `git init`, say) can write core.worktree into the shared
     // .git/config, and every checkout of the repo then reads and writes another worktree's files. Nothing here sets it
     // on purpose, so any value stops the commit. No glob: it runs on every commit.

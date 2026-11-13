@@ -225,6 +225,9 @@ run = "mkdir -p ~/.agents/skills"
 # lsp-server: runs `mise run lsp` with its arguments (python/lsp); user scope only, like ticket-retro.
 "~/.claude/skills/lsp-server" = { source = "unix/home/.config/agents/skills/lsp-server", mode = "symlink" }
 "~/.agents/skills/lsp-server" = { source = "unix/home/.config/agents/skills/lsp-server", mode = "symlink" }
+# secrets: the global secret:* tasks (the doppler CLI); user scope only, like lsp-server.
+"~/.claude/skills/secrets" = { source = "unix/home/.config/agents/skills/secrets", mode = "symlink" }
+"~/.agents/skills/secrets" = { source = "unix/home/.config/agents/skills/secrets", mode = "symlink" }
 # herdr-startup and herdr-shutdown: reopen and close the herdr sessions around a reboot. Their scripts are tracked
 # as they run, outside python/ (CODING_STANDARDS.md, "Exceptions"); packaging them is a later ticket.
 "~/.claude/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }

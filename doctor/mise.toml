@@ -1,0 +1,33 @@
+# dotfiles health checks. They live here, not in the global config, so they run only from this folder
+# (`mise run secret:doctor`, or `mise doctor project` here) and never in another repo's pre-push, as
+# risu729/dotfiles keeps its checks in mise/doctor/mise.toml. No check prints a value.
+
+# Providers first: a broken Keychain or Doppler shows as one failure, and the checks that need it as blocked.
+[doctor.checks.fnox-providers]
+description = "fnox reaches the Keychain, age and Doppler providers"
+run = "fnox --non-interactive provider test --all"
+hint = "fnox provider test --all names the provider that fails"
+timeout = "30s"
+
+[doctor.checks.fnox-secrets]
+description = "Every key in the global fnox file resolves (no values printed)"
+run = "fnox --non-interactive check --all"
+hint = "fnox check --all names the missing key"
+timeout = "30s"
+depends = ["fnox-providers"]
+
+# The doppler CLI's own login (the write token, in its keyring slot) reaches dotfiles/dev_personal.
+[doctor.checks.doppler-write]
+description = "The doppler CLI token reaches dotfiles/dev_personal (names only)"
+run = "doppler secrets --only-names --project dotfiles --config dev_personal --no-check-version > /dev/null"
+hint = "store the read/write service token once: pbpaste | doppler configure set token --scope /"
+timeout = "30s"
+
+# doppler keeps the token in the macOS Keychain and writes only a reference to its yaml, but a failed keyring write
+# leaves the token itself in the yaml with only a debug log (doppler 3.77.1 pkg/configuration/config.go:328-331).
+# Counts only: grep -c never prints the line.
+[doctor.checks.doppler-token-in-keychain]
+description = "The doppler CLI token is in the Keychain, not plain text in ~/.doppler/.doppler.yaml"
+run = "test \"$(grep -cE 'dp\\.(st|sa|pt|ct|scim)\\.' ~/.doppler/.doppler.yaml 2>/dev/null)\" = 0 || test ! -e ~/.doppler/.doppler.yaml"
+hint = "remove the token line from ~/.doppler/.doppler.yaml, then store it again: pbpaste | doppler configure set token --scope /"
+timeout = "10s"
