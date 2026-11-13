@@ -518,13 +518,22 @@ codex-update = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.l
 # outside the proxy (owner ruling 2026-11-11; packages/cli/src/services/server-connection.ts at v2.2.7).
 # Bypass, no keys: run the real binary by path (`~/.local/bin/codex`, `~/.opencode/bin/opencode`);
 # `mise exec -- codex` still goes through the wrapper. Run `mise reshim` after changing this table.
+# fnox writes a `proxied request` audit line per request to the stderr it shares with the harness, at INFO
+# (src/proxy/server.rs:450 at 1.48.0), and those lines draw over a TUI's prompt box. fnox logs only to stderr, and
+# RUST_LOG is its only filter (src/main.rs:193-200), so the wrapper sets RUST_LOG for fnox alone: its own INFO
+# lines stay, the proxy's audit lines drop to WARN, and the one-time "not sandboxing" WARN still shows. fnox passes
+# its environment to the harness (src/commands/proxy.rs:513-548), and Codex reads RUST_LOG for its own log filter
+# (tui/src/startup_orchestration.rs:923 at rust-v0.167.2), so `env -u RUST_LOG` starts the harness without it.
+# To see the audit lines while checking a client, run fnox by hand without RUST_LOG.
 [wrappers.codex]
 command = "fnox"
-args = ["--non-interactive", "proxy", "run", "--", "codex"]
+args = ["--non-interactive", "proxy", "run", "--", "env", "-u", "RUST_LOG", "codex"]
+env = { RUST_LOG = "info,fnox::proxy=warn" }
 
 [wrappers.opencode]
 command = "fnox"
-args = ["--non-interactive", "proxy", "run", "--", "opencode", "--standalone"]
+args = ["--non-interactive", "proxy", "run", "--", "env", "-u", "RUST_LOG", "opencode", "--standalone"]
+env = { RUST_LOG = "info,fnox::proxy=warn" }
 
 [vars]
 # DL-764, DL-770: the one home for compiler and brew versions; conf.d/toolchain.toml renders
