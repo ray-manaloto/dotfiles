@@ -388,6 +388,11 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 "npm:@ai-sdk/openai-compatible" = { version = "3.0.91", minimum_release_age = "0s" }
 "npm:apify-cli" = { version = "1.12.0", minimum_release_age = "0s" }
 jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
+# Agent-config linters (owner, 2026-11-13, docs/research/agent-config-linters.md). agnix gates the agent files from
+# hk; its release assets carry sha256 files and a build-provenance attestation (release.yml:167). cclint covers
+# Claude files only and reports without failing; it ships no release binaries, so mise builds it with the Go above.
+"github:agent-sh/agnix" = { version = "0.61.0", minimum_release_age = "0s" }
+"go:github.com/dotcommander/cclint" = { version = "0.63.0", minimum_release_age = "0s" }
 
 #[tool_alias]
 #devcontainer = "npm:@devcontainers/cli"
@@ -397,6 +402,17 @@ jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_r
 # linux-x64 entries lost). Wiring it to postinstall fired that on EVERY
 # `mise install`. Only a scoped re-lock is safe:
 #     mise lock "<backend>:<name>"      (dotfiles: mise run lock -- "<tool>")
+
+# The live agent configs, beside the repo's hk steps: cclint reports on the Claude files and never fails the task;
+# agnix decides the exit code. Third-party skills and plugin files under ~/.claude are linted too.
+[tasks."lint:agents"]
+description = "Lint the live agent configs: cclint reports on Claude files, then agnix (exits 1 on an error)"
+dir = "~/"
+run = [
+  "cclint --root ~/.claude lint ~/.claude/agents ~/.claude/skills ~/.claude/CLAUDE.md || true",
+  "agnix ~/.claude/CLAUDE.md ~/.claude/settings.json ~/.claude/agents ~/.claude/skills ~/.codex/config.toml ~/.codex/hooks.json ~/.config/opencode/AGENTS.md ~/.config/opencode/opencode.json",
+]
+
 # --- update tasks ------------------------------------------------------------
 # Run `update-all` (the guarded alias in [shell_alias]) on its own: it already runs brew
 # update/upgrade, mise self-update and mise upgrade, so running those first repeats the work.

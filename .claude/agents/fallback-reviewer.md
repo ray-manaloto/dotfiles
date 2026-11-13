@@ -1,6 +1,6 @@
 ---
 name: fallback-reviewer
-description: Fallback commit and pull-request reviewer while the Codex reviewer's quota is depleted. Reads a diff file the author wrote and ends with PANE-APPROVE <fingerprint> or findings. Read, Grep and Glob only.
+description: Fallback commit and pull-request reviewer while the Codex reviewer's quota is depleted. Reads a diff file the author wrote and ends with PANE-APPROVE and the fingerprint, or with findings. Read, Grep and Glob only.
 tools: Read, Grep, Glob
 ---
 

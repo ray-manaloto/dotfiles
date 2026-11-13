@@ -1,0 +1,19 @@
+# agnix (agent-sh/agnix 0.61.0, pinned in the global mise config): the hk gate on the agent files.
+# Only the harnesses dotfiles configures.
+tools = ["claude-code", "codex", "opencode"]
+# The workflow docs live under an `agents/` folder, so agnix reads them as Claude subagent files (CC-AG-*).
+exclude = ["unix/home/.config/agents/workflow/**"]
+
+[rules]
+# `disable-model-invocation` is the Claude Code field our skills set on purpose.
+disabled_rules = ["XP-SK-001"]
+
+# CC-SK-021 reads the repo path unix/home/.zshenv on line 31 as a user's home folder.
+[[overrides]]
+paths = [".claude/skills/verify/SKILL.md"]
+disabled_rules = ["CC-SK-021"]
+
+# CDX-AG-002 reads the Doppler instructions on line 48 (a secret's name, never a value) as a secret.
+[[overrides]]
+paths = ["unix/home/.config/agents/AGENTS.md"]
+disabled_rules = ["CDX-AG-002"]
