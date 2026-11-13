@@ -27,6 +27,7 @@ class Command(StrEnum):
     update_check = "update-check"
     herdr_doctor = "herdr-doctor"
     secret_set = "secret-set"
+    opencode_jouet = "opencode-jouet"
 
 
 class Bootstrap(BaseModel):
