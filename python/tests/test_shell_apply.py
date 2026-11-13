@@ -11,9 +11,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from checkout import copy_checkout
+
 REPO = Path(__file__).resolve().parents[2]
 UNIX_HOME = REPO / "unix/home"
-IGNORE = shutil.ignore_patterns(".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*")
 MISE = Path(shutil.which("mise") or "mise").resolve()
 UV = Path(shutil.which("uv") or "uv").resolve()
 # The tasks run repotools through uv run; the scratch HOME has no uv cache or Python of its own, so the
@@ -95,7 +96,7 @@ class ShellApplyTest(unittest.TestCase):
         self.backups = self.state / "dotfiles/shell-backup"
         self.pre_apply = self.backups / "pre-apply"
         # From the checkout mise climbs to the real ~/.config/mise as a project config.
-        shutil.copytree(REPO, self.repo, ignore=IGNORE)
+        copy_checkout(self.repo)
         self.env = {
             "HOME": str(self.home),
             "USER": os.environ["USER"],  # the root mise.toml renders env.USER

@@ -23,11 +23,10 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from checkout import copy_checkout
+
 REPO = Path(__file__).resolve().parents[2]
 MISE_HOME = Path("unix/home/.config/mise")
-IGNORE = shutil.ignore_patterns(
-    ".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*"
-)
 REAL: dict[str, object] = {"real": True}
 PINNED, VERIFY = "brew list --pinned", "mise run toolchain:verify"
 BREW_STEPS = [PINNED, "brew update", "brew upgrade --yes", VERIFY]
@@ -108,7 +107,7 @@ class UpdateTasksTest(unittest.TestCase):
         root = Path(tempfile.mkdtemp()).resolve()
         cls.addClassCleanup(shutil.rmtree, root)
         cls.candidate = root / "candidate"
-        shutil.copytree(REPO, cls.candidate, ignore=IGNORE)
+        copy_checkout(cls.candidate)
         (root / "session").mkdir()
         cls.session = scratch_toolchain.Session(root / "session")
         config = tomllib.loads((cls.candidate / MISE_HOME / "config.toml").read_text())
