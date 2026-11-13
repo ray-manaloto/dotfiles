@@ -1,0 +1,33 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="add, update, remove, report and probe a language server Claude Code runs (python/lsp)"
+#USAGE arg "<action>" help="add update remove status which has-update health smoke verify doctor conflicts"
+#USAGE arg "[server]" help="a server in python/lsp/src/lsptools/servers.json; doctor and conflicts take none"
+#USAGE flag "--json" help="print the Reports JSON"
+"""lsp: lsptools <action> [server] [--json] (python/lsp/src/lsptools/cli.py); the /lsp-server skill runs this too."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the lsptools package in the
+# checkout it is linked from and runs it with the task's arguments, as tasks/disk/snapshot runs hometools.
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/lsp.
+PACKAGE = Path(__file__).resolve().parents[5] / "python/lsp"
+
+# Synced as its own step, so a uv that fails or can't start ends the task with one JSON error naming it.
+try:
+    synced = subprocess.run(
+        ["uv", "sync", "--quiet", "--project", str(PACKAGE), "--locked", "--inexact"], check=False
+    ).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    sys.stderr.write(json.dumps({"error": f"lsp: lsptools could not start ({why})"}) + "\n")
+    raise SystemExit(synced)
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--no-sync", "lsptools", *sys.argv[1:]])

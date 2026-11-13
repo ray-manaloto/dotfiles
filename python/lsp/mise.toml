@@ -1,0 +1,45 @@
+# mise run lsp (the global file task tasks/lsp) runs this package: add, update, remove, report and probe the
+# language servers Claude Code runs. This file holds only the development tasks; from the repository root they are
+# //lsp:<task>.
+
+[env]
+# This package's uv venv for every task, whatever VIRTUAL_ENV the caller has (mise python venv).
+_.python.venv = { path = ".venv" }
+
+# Development: uv runs only through these tasks; ruff, ty and datamodel-codegen are global tools.
+[tasks.sync]
+description = "Install the locked dependencies into .venv"
+run = "uv sync --locked"
+
+[tasks.lock]
+description = "Re-resolve every dependency to its latest release"
+run = "uv lock --upgrade"
+
+[tasks.codegen]
+description = "Generate src/lsptools/models.py from schema/lsptools.schema.json ([tool.datamodel-codegen])"
+usage = 'flag "--check" help="Only fail when models.py differs from what the schema generates"'
+run = "datamodel-codegen ${usage_check:+--check}"
+
+[tasks.lint]
+description = "ruff check, ruff format --check, ty check, and models.py matches the schema"
+depends = ["sync", "codegen --check"]
+run = ["ruff check .", "ruff format --check .", "ty check --python .venv"]
+
+[tasks.test]
+description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
+depends = ["sync"]
+# prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
+output = "prefix"
+run = "uv run --locked pytest -n auto --durations=25"
+
+[tasks."test:focus"]
+# For a subset (-- -k <expr>, -- tests/test_x.py): the 100% gate stays on test and check; this reports
+# coverage without failing on it. The command-line --cov-fail-under overrides the one in addopts.
+description = "Focused tests: coverage reported, not gated; extra args go to pytest"
+depends = ["sync"]
+run = "uv run --locked pytest --cov-fail-under=0"
+
+# hk check's step "lsp".
+[tasks.check]
+description = "lint and test"
+depends = ["lint", "test"]

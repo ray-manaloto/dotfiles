@@ -21,6 +21,11 @@ local linters = new Mapping<String, Step> {
         glob = List("python/repo/**")
         check = "mise run //repo:check"
     }
+    // The lsptools package (mise run lsp): ruff, ty, codegen drift and 100% coverage, with the file task it runs from.
+    ["lsp"] {
+        glob = List("python/lsp/**", "unix/home/.config/mise/tasks/lsp")
+        check = "mise run //lsp:check"
+    }
     ["workflow"] {
         glob = List("python/workflow/**")
         check = "mise run //workflow:check"
