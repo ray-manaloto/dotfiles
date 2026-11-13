@@ -3,8 +3,9 @@
 # [wrappers] and codex-hc): the harness holds placeholders only, and the proxy puts the real key into requests to
 # the host in its rule (fnox docs/guide/proxy.md). Claude has no wrapper; its apify headersHelper runs
 # `fnox get APIFY_TOKEN`. env = false keeps a key out of `fnox exec` here and in any project that layers this
-# file; only the agentsview server's keys are env = "exec". The agent guards block `fnox exec`, `get` and the other
-# commands that show a value (~/.config/agents/guards/hook.py). Add a key to Doppler with
+# file; env = "exec" is only for what an `fnox exec` launch needs (agentsview, the PC names, CLOUDFLARE_ACCOUNT_ID).
+# The agent guards block `fnox exec`, `get` and the other commands that show a value
+# (~/.config/agents/guards/hook.py). Add a key to Doppler with
 # `pbpaste | mise run secret:set NAME`; never `fnox set` on the doppler provider (it writes the value here in
 # plain text).
 
@@ -53,6 +54,13 @@ GEMINI_API_KEY            = { provider = "doppler_dotfiles_dev_personal", value 
 ZAI_API_KEY               = { provider = "doppler_dotfiles_dev_personal", value = "ZAI_API_KEY", env = false, if_missing = "warn" }
 KILO_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
 OPENAI_COMPATIBLE_API_KEY = { provider = "doppler_dotfiles_dev_personal", value = "KILO_API_KEY", env = false, if_missing = "warn" }
+GROQ_API_KEY              = { provider = "doppler_dotfiles_dev_personal", value = "GROQ_API_KEY", env = false, if_missing = "warn" }
+AIHUBMIX_API_KEY          = { provider = "doppler_dotfiles_dev_personal", value = "AIHUBMIX_API_KEY", env = false, if_missing = "warn" }
+CLOUDFLARE_API_TOKEN      = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_API_TOKEN", env = false, if_missing = "warn" }
+# Workers AI takes the account ID in the URL path (/client/v4/accounts/<id>/ai/...), and the proxy rewrites only one
+# header or query parameter, never the path (fnox 1.48.0 docs/guide/proxy.md:169). So it is no proxy secret: like
+# PC_HOST it is env = "exec", for an `fnox exec` launch, and its value stays in Doppler, out of this file.
+CLOUDFLARE_ACCOUNT_ID     = { provider = "doppler_dotfiles_dev_personal", value = "CLOUDFLARE_ACCOUNT_ID", env = "exec", if_missing = "warn" }
 
 # Tailscale API access token (admin console, Settings, Keys), sent only through the proxy rule below: agents edit
 # the tailnet policy with `fnox proxy run -- curl ... https://api.tailscale.com/api/v2/tailnet/-/acl`.
@@ -100,5 +108,8 @@ rules = [
   { secret = "ZAI_API_KEY",            domain = "api.z.ai",                          header = "authorization" },
   { secret = "KILO_API_KEY",           domain = "ai-gateway.kilo.ai",                header = "authorization" },
   { secret = "OPENAI_COMPATIBLE_API_KEY", domain = "ai-gateway.kilo.ai",             header = "authorization" },
+  { secret = "GROQ_API_KEY",           domain = "api.groq.com",                      header = "authorization" },
+  { secret = "AIHUBMIX_API_KEY",       domain = "aihubmix.com",                      header = "authorization" },
+  { secret = "CLOUDFLARE_API_TOKEN",   domain = "api.cloudflare.com",                header = "authorization" },
   { secret = "TAILSCALE_API_KEY",      domain = "api.tailscale.com",                 header = "authorization" },
 ]
