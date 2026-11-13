@@ -17,10 +17,9 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
+from checkout import copy_checkout
+
 REPO = Path(__file__).resolve().parents[2]
-IGNORE = shutil.ignore_patterns(
-    ".git", ".venv", "node_modules", "build", "__pycache__", ".coverage*"
-)
 FIX = "run: mise run bootstrap:toolchain"
 # The builder is a test helper of python/home, not a package: load it by path.
 _spec = importlib.util.spec_from_file_location(
@@ -72,7 +71,7 @@ class ToolchainTasksTest(unittest.TestCase):
         root = Path(tempfile.mkdtemp()).resolve()
         cls.addClassCleanup(shutil.rmtree, root)
         cls.candidate = root / "candidate"
-        shutil.copytree(REPO, cls.candidate, ignore=IGNORE)
+        copy_checkout(cls.candidate)
         (root / "session").mkdir()
         cls.session = scratch_toolchain.Session(root / "session")
 

@@ -4,7 +4,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import config, herdr, opencode, secret, toolchain, update
+from . import config, disk, herdr, opencode, secret, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
 # These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
@@ -14,6 +14,8 @@ UPDATES = {
     Command.update_check: update.check,
     Command.herdr_doctor: herdr.doctor,
     Command.opencode_jouet: opencode.sync,
+    Command.disk_snapshot: disk.run_snapshot,
+    Command.disk_guard: disk.run_guard,
 }
 
 

@@ -2,7 +2,8 @@
 run = "uv sync --locked"
 
 [tasks.test]
-depends = ["sync"]
+# Heavy (scratch homes, repo copies, -n auto): refused under 100 GiB free.
+depends = ["sync", "//home:disk-guard"]
 # prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
 output = "prefix"
 run = "uv run --locked pytest -n auto --durations=25"

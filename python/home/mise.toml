@@ -45,6 +45,13 @@ description = "The real toolchain:verify on this Mac through this checkout's fil
 depends = ["sync"]
 run = "uv run --locked pytest -m integration --no-cov"
 
+# The floor under the heavy test tasks (//python:test and //p2996:test, and so hk check --all): exits 1,
+# naming the free space and the floor, when the data volume has under 100 GiB free (hometools.disk).
+[tasks.disk-guard]
+description = "Refuse to start heavy tests when the data volume has under 100 GiB free"
+depends = ["sync"]
+run = "uv run --locked hometools disk-guard"
+
 # hk check's step "home": no real-toolchain test, so this Mac's Homebrew or Xcode never fails it.
 [tasks.unit]
 description = "lint and test"

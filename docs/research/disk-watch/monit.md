@@ -46,13 +46,32 @@ Read at tag `release-6.0.0` of MMonit/monit, then confirmed with a scratch monit
 - An exec string is split on spaces into arguments: `exec "/usr/bin/touch a b"` touched two files in the run. So
   the notification text can't go through `osascript -e '...'`. The AppleScript file reads monit's
   `MONIT_DESCRIPTION` with `system attribute`.
-- `repeat every 16 cycles` with `set daemon 900` repeats the exec every 4 hours while the volume stays low.
+- `repeat every N cycles` repeats an exec every N daemon cycles while the volume stays low: every 4 hours was
+  16 cycles at `set daemon 900`, and is 240 cycles at `set daemon 60` since 2026-11-13 (below).
   `else if succeeded then exec` fired once on recovery in a run with a toggled probe; the config doesn't need it,
   since nothing is left to clear.
 - `monit status` reaches the daemon through `set httpd`. The httpd won't start without an allow rule
   (`src/http.c:101-106`). `allow localhost` on a unix socket with permission 0600 lets the owner's
   `monit -c ~/.config/monit/monitrc status` work with no password in the file. A socket path of 104 bytes or more
   fails (`Could not change unix socket permission`), so the socket stays under `~/.local/state/monit/`.
+
+## Snapshot and floor (2026-11-13)
+
+On 2026-11-13 the data volume fell from about 315 GiB to 42 GiB free at 05:27 and was back within minutes. A rerun of
+the same `hk check --all` under a 5-second watcher never used more than 1 GiB, so the writer is still unknown. Two
+changes, on the owner's OK:
+
+- monit checks every minute (`set daemon 60`); the notification still repeats every 4 hours (`repeat every 240
+  cycles`). A second rule on the same check runs `mise run disk:snapshot` every 30 cycles while the volume is low.
+  monit 6.0.0 accepted both rules (`monit -t`), and a scratch monit run with launchd's minimal environment
+  (`env -i HOME=... PATH=/usr/bin:/bin`) fired the task, which wrote its folder.
+- `hometools disk-snapshot` writes `~/.local/state/dotfiles/disk-alerts/<UTC time>/`: `folders.txt` (the 40
+  biggest folders two levels down under each root, measured by dust, one root after another, each stopped after 60 s;
+  dust took 17 s on `~/.cache` where du took 59 s, and prints nothing for a stopped root), `ps.txt` (highest CPU
+  first), `lsof.txt` (open regular files of 1 GiB or more, and `lsof +L1`) and `free.txt`. It never deletes and
+  never reuses a folder; a lock skips a run while one is going.
+- `hometools disk-guard` (`//home:disk-guard`) exits 1 under 100 GiB free, naming the free space and the floor.
+  `//python:test` and `//p2996:test` depend on it, so `hk check --all` stops at those steps.
 
 ## Gaps
 
