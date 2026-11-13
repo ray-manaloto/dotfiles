@@ -28,6 +28,6 @@ timeout = "30s"
 # Counts only: grep -c never prints the line.
 [doctor.checks.doppler-token-in-keychain]
 description = "The doppler CLI token is in the Keychain, not plain text in ~/.doppler/.doppler.yaml"
-run = "test \"$(grep -cE 'dp\\.(st|sa|pt|ct|scim)\\.' ~/.doppler/.doppler.yaml 2>/dev/null)\" = 0 || test ! -e ~/.doppler/.doppler.yaml"
+run = "test \"$(grep -cE 'dp\\.[a-z_]+\\.' ~/.doppler/.doppler.yaml 2>/dev/null)\" = 0 || test ! -e ~/.doppler/.doppler.yaml"
 hint = "remove the token line from ~/.doppler/.doppler.yaml, then store it again: pbpaste | doppler configure set token --scope /"
 timeout = "10s"
