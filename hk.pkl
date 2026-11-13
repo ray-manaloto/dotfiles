@@ -135,6 +135,12 @@ local linters = new Mapping<String, Step> {
     ["fnox-refs"] {
         check = "mise run //repo:fnox-refs"
     }
+    // A git command run with a hook's GIT_DIR (a test's `git init`, say) can write core.worktree into the shared
+    // .git/config, and every checkout of the repo then reads and writes another worktree's files. Nothing here sets it
+    // on purpose, so any value stops the commit. No glob: it runs on every commit.
+    ["no-core-worktree"] {
+        check = "test -z \"$(git config --file \"$(git rev-parse --git-common-dir)/config\" --get-all core.worktree)\" || { echo 'core.worktree is set in the shared .git/config: remove it with git config --file <common dir>/config --unset-all core.worktree' >&2; exit 1; }"
+    }
 }
 
 hooks {
