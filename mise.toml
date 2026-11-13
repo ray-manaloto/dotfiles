@@ -103,6 +103,7 @@ run = "uv run --project python/repo --locked repotools review-python-approved"
 [bootstrap.secrets]
 pc_host = "PC_HOST"
 pc_lan_host = "PC_LAN_HOST"
+cloudflare_account_id = "CF_ACCOUNT_ID"
 
 # The ~/.gemini/config/skills entry's source is ~/.agents/skills, outside the repo, and one missing source stops
 # the whole apply (mise 2026.11.6 crates/mise-system/src/files.rs:5722-5806). This hook runs before every
@@ -154,6 +155,10 @@ run = "mkdir -p ~/.agents/skills"
 # Check: ssh -G pc | grep -i "^hostname" prints the PC's name.
 "~/.ssh/config/include" = { line = "Include ~/.ssh/config.d/*", position = "prepend" }
 "~/.ssh/config.d/tailnet.conf" = { source = "unix/home/.ssh/config.d/tailnet.conf.tera", mode = "template" }
+# OpenCode's Workers AI base URL has the account ID in its path, which the fnox proxy can't add, so the ID is a
+# plain mise env var (unix/home/.config/fnox/config.toml, CF_ACCOUNT_ID). Apply with the real value in the
+# environment: fnox exec -- mise dot apply "~/.config/mise/conf.d/cloudflare.toml".
+"~/.config/mise/conf.d/cloudflare.toml" = { source = "unix/home/.config/mise/conf.d/cloudflare.toml.tera", mode = "template" }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 # zsh reads everything but ~/.zshenv from $ZDOTDIR=~/.config/zsh (set in ~/.zshenv), so ~/.zprofile and ~/.zshrc are

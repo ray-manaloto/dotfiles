@@ -25,6 +25,8 @@ FNOX_NAME = re.compile(r"(?:.*/)?\.?fnox(?:\.[^/]+)?\.toml|(?:.*/)?\.config/fnox
 # reads Kilo's key as OPENAI_COMPATIBLE_API_KEY too.
 RENAMES: Mapping[tuple[str, str], str] = {
     ("unix/home/.config/fnox/config.toml", "secrets.OPENAI_COMPATIBLE_API_KEY"): "KILO_API_KEY",
+    # proxy run strips every name fnox defines, so the account ID is read under another name (the file says why).
+    ("unix/home/.config/fnox/config.toml", "secrets.CF_ACCOUNT_ID"): "CLOUDFLARE_ACCOUNT_ID",
 }
 
 # A parsed TOML table; tomllib returns plain dicts, so there is no schema model to generate for it.
