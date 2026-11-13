@@ -10,10 +10,10 @@
 # Plan: ray-manaloto/dotfiles/docs/specs/mise-native-dotfiles-plan.md
 # Add the include below by array merge; never replace the actual global config.
 # Built-in {{ mise_config_dir }} (2026.10.19) and system_brew_prefix need 2026.10.19 or newer;
-# task.history needs 2026.11.3. A hard minimum, not a soft one: an older mise that meets a setting it
-# doesn't know warns and drops this file's whole [settings] table (src/config/settings.rs:1635-1646 at
-# v2026.10.19), paranoid and the disable lists included, where this stops it with an upgrade hint.
-min_version = "2026.11.3"
+# task.history needs 2026.11.3; from 2026.11.8 `mise lock <tool>` fails on an unknown tool instead of
+# writing nothing. A hard minimum, not a soft one: an older mise that meets a setting it doesn't know
+# warns and drops this file's whole [settings] table (src/config/settings.rs:1635-1646 at v2026.10.19), paranoid and the disable lists included, where this stops it with an upgrade hint.
+min_version = "2026.11.8"
 
 [settings]
 github.credential_command = "gh auth token"
@@ -110,6 +110,10 @@ GIT_TERMINAL_PROMPT = "0"
 # vcpkg's root is the mise vcpkg-tool install (see [tools]); no telemetry.
 VCPKG_ROOT = { value = "{{ tools['github:microsoft/vcpkg-tool'].path }}", tools = true }
 VCPKG_DISABLE_METRICS = "1"
+# TypeScript 7's own language server (`tsc --lsp --stdio`), started by the dotfiles typescript-native-lsp plugin.
+# Claude Code expands no environment variables in an LSP command, so the plugin's sh reads this one, and an npm
+# tool that bundles an older tsc can't shadow it on PATH.
+TS_LSP_TSC = { value = "{{ tools['npm:typescript'].path }}/bin/tsc", tools = true }
 # NotebookLM auth: standardize paths so agents find credentials consistently
 NOTEBOOKLM_HOME = "~/.notebooklm"
 # Mossop pattern: name the brew prefix once; PATH entries below expand it (env_shell_expand).
@@ -184,7 +188,6 @@ dust = { version = "1.2.7", minimum_release_age = "0s" }
 "vfox:jdx/vfox-eza" = { version = "0.23.5", minimum_release_age = "0s" }
 fzf = { version = "0.75.0", minimum_release_age = "0s" }
 delta = { version = "0.20.1", minimum_release_age = "0s" }
-lsd = { version = "1.2.0", minimum_release_age = "0s" }
 hyperfine = { version = "2.0.0", minimum_release_age = "0s" }
 glow = { version = "3.0.0", minimum_release_age = "0s" }
 atuin = { version = "18.24.6", minimum_release_age = "0s" }
@@ -204,7 +207,6 @@ typos = { version = "1.52.2", minimum_release_age = "0s" }
 aws-cli = { version = "2.40.2", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
-"aqua:loft-sh/devpod" = { version = "0.6.15", minimum_release_age = "0s" }
 github-cli = { version = "2.104.0", minimum_release_age = "0s" }
 cloudflared = { version = "2026.11.0", minimum_release_age = "0s" }
 pandoc = { version = "3.14", minimum_release_age = "0s" }
@@ -228,30 +230,14 @@ yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = 
 rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "pipx:notebooklm-py" = { version = "0.8.6", extras = ["all"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 #"pipx:mcp2cli" = { version = "3.8.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-"npm:@googleworkspace/cli" = { version = "0.22.5", minimum_release_age = "0s" }
 "npm:ctx7" = { version = "0.11.1", minimum_release_age = "0s" }
-"npm:@augmentcode/auggie" = { version = "0.37.0", minimum_release_age = "0s" }
 "npm:@tauri-apps/cli" = { version = "2.12.4", minimum_release_age = "0s" }
 "npm:@playwright/cli" = { version = "0.1.24", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.8.1", minimum_release_age = "0s" }
 "npm:agent-browser" = { version = "0.43.0", minimum_release_age = "0s" }
-"npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
 "npm:dev3000" = { version = "0.0.192", minimum_release_age = "0s" }
 "npm:portless" = { version = "0.17.0", minimum_release_age = "0s" }
-"npm:opensrc" = { version = "0.7.3", minimum_release_age = "0s" }
-#"pipx:langchain-cli" = { version = "0.0.37", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-#"pipx:langgraph-cli" = { version = "0.4.39", python = "3.15", with = ["typing-extensions"], minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
-#"pipx:langchain-model-profiles" = { version = "0.0.6", minimum_release_age = "0s" }
-#"pipx:langgraph-gen" = { version = "0.0.6", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-#"pipx:langsmith-fetch" = { version = "0.3.1", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-"npm:create-agent-chat-app" = { version = "0.1.6", minimum_release_age = "0s" }
-"npm:create-langchain-integration" = { version = "0.0.12", minimum_release_age = "0s" }
-"npm:create-langgraph" = { version = "1.1.5", minimum_release_age = "0s" }
-"npm:@langchain/langgraph-checkpoint-validation" = { version = "1.2.1", minimum_release_age = "0s" }
-#"npm:@langchain/langgraph-cli" = { version = "2.0.0", minimum_release_age = "0s" }
-"npm:@langchain/langgraph-ui" = { version = "2.0.0", minimum_release_age = "0s" }
-"npm:openwork" = { version = "0.2.0", minimum_release_age = "0s" }
 "npm:@teng-lin/agent-fetch" = { version = "0.1.6", minimum_release_age = "0s" }
 #"pypi:skypilot" = { version = "0.14.1", python = "3.14.8", extras = "aws", minimum_release_age = "0s", uvx = "false" }
 #"pipx:skillport" = { version = "1.1.2", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
@@ -260,11 +246,6 @@ rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "npm:typescript" = { version = "7.0.2", minimum_release_age = "0s" }
 "npm:typescript-language-server" = { version = "6.1.0", minimum_release_age = "0s" }
 kubectl = { version = "1.37.2", minimum_release_age = "0s" }
-helm = { version = "4.3.1", minimum_release_age = "0s" }
-eksctl = { version = "0.231.0", minimum_release_age = "0s" }
-k9s = { version = "0.51.0", minimum_release_age = "0s" }
-kubectx = { version = "0.11.0", minimum_release_age = "0s" }
-stern = { version = "1.35.0", minimum_release_age = "0s" }
 "pipx:graphifyy" = { version = "0.9.108", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
@@ -275,7 +256,6 @@ stern = { version = "1.35.0", minimum_release_age = "0s" }
 aube = { version = "2.10.0", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
 shfmt = { version = "3.14.1", minimum_release_age = "0s" }
 sqlite = { version = "3.54.1", minimum_release_age = "0s" }
-libsql-server = { version = "0.24.32", minimum_release_age = "0s" }
 micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
 "pipx:datamodel-code-generator" = { version = "0.89.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:defuddle" = { version = "0.19.6", minimum_release_age = "0s" }
@@ -381,6 +361,9 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 "cargo:0xMassi/webclaw" = { version = "tag:v0.7.0", crate = "webclaw-cli", features = ["browser"], locked = true, minimum_release_age = "0s" }
 
 "pypi:pyrefly" = { version = "1.4.0", minimum_release_age = "0s" }
+# gcovr: C++ coverage reports. Was a bare `uv tool install`, whose venv broke when mise pruned the Python it was
+# built on; as a mise tool it is pinned, locked with its dependency graph, and reinstalled on a Python bump.
+"pypi:gcovr" = { version = "8.8", python = "3.14.8", minimum_release_age = "0s" }
 # agent-desktop drives macOS apps through the Accessibility tree (vercel-labs/agent-desktop, Apache-2.0). On trial:
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
