@@ -39,7 +39,7 @@ TABS_SHA256 = "01ac699d9ef173bcb243c4ca126fb3b4ea41e4f317907a18a354503a0b1cc5b9"
 # The research rule as #614 rewrote it for fnox proxy run.
 RESEARCH_SHA256 = "6b7fe6dd7a6754c24da04a0b5e0236270d9875dc83030e52ef2c37942e1615aa"
 # The plugin rule as the owner relaxed it on 2026-11-13: plugin changes need no separate OK.
-PLUGIN_SHA256 = "7093b214dec210f01d7ef7b82f68936290725594f64f8c23cde70d2269933bb9"
+PLUGIN_SHA256 = "5fc871304c0e1acf28db40d6f16823ebda6bc790d03bdd74edc7e12968728fa2"
 CBM_SHA256 = "b91b037c7a0f857cb633c32abd7ab288b5ff3d18431b86e902d635c0e4683485"
 CONTEXT7_SHA256 = "9fc34f2cc057e3175d8b49c622d4732745102f0b9ffdefe2ca739d994396f37b"
 

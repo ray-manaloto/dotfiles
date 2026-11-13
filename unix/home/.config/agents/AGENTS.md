@@ -52,10 +52,12 @@ is the owner's job in the Doppler dashboard.
 
 ## Plugin changes
 
-An agent may install, uninstall, update, enable or disable a Claude Code plugin, or add a marketplace, when its task
-calls for it; it needs no separate OK. Make the change with `claude plugin`, never by editing `~/.claude/plugins/**`,
-`enabledPlugins` or `extraKnownMarketplaces` by hand or by script. Check the result with `claude plugin list --json`,
-and report each change with the command that undoes it.
+An agent may install, update, enable or disable a Claude Code plugin, or add a marketplace, when its task calls for
+it; it needs no separate OK. It uninstalls a plugin only with `claude plugin uninstall --keep-data`: a plain uninstall
+deletes the plugin's data, which a reinstall does not bring back, so that needs the owner's OK. Make the change with
+`claude plugin`, never by editing `~/.claude/plugins/**`, `enabledPlugins` or `extraKnownMarketplaces` by hand or by
+script. Check a plugin change with `claude plugin list --json` and a marketplace change with
+`claude plugin marketplace list --json`, and report each change with the command that undoes it.
 
 ## Workflow
 
