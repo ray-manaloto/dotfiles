@@ -133,7 +133,7 @@ path = [
 
 [tools]
 #"github:docker/buildx" = { version = "0.38.1", asset_pattern = "buildx-v0.38.0.darwin-arm64", bin = "docker-buildx" }
-"aqua:docker/buildx" = { version = "0.38.2", bin = "docker-buildx", minimum_release_age = "0s" }
+"aqua:docker/buildx" = { version = "0.39.0", bin = "docker-buildx", minimum_release_age = "0s" }
 # Python 3.15 is the default; retain 3.14.8 for incompatible CLI environments.
 # Affected tools select their interpreter with native per-tool options.
 # Runtime selectors are native mise options; see docs/python-upgrade-policy.md.
@@ -143,12 +143,12 @@ python = [{ version = "3.15", minimum_release_age = "0s" }, { version = "3.14.8"
 pipx = { version = "1.18.16", minimum_release_age = "0s" }
 npm = { version = "12.2.2", minimum_release_age = "0s" }
 bun = { version = "1.4.4", minimum_release_age = "0s" }
-node = { version = "26.13.0", minimum_release_age = "0s" }
+node = { version = "26.13.1", minimum_release_age = "0s" }
 go = { version = "1.27.4", minimum_release_age = "0s" }
-rust = { version = "1.99.1", minimum_release_age = "0s" }
+rust = { version = "1.100.0", minimum_release_age = "0s" }
 pixi = { version = "0.84.2", minimum_release_age = "0s" }
-uv = { version = "0.13.7", minimum_release_age = "0s" }
-chezmoi = { version = "2.74.0", minimum_release_age = "0s" }
+uv = { version = "0.13.8", minimum_release_age = "0s" }
+chezmoi = { version = "2.74.1", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
 hk = { version = "2.12.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
@@ -184,41 +184,41 @@ pre-commit = { version = "4.7.0", minimum_release_age = "0s" }
 #"pipx:mgrep" = { version = "0.1.6", minimum_release_age = "0s" }
 typos = { version = "1.52.2", minimum_release_age = "0s" }
 #"pypi:yamllint" = { version = "1.38.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
-aws-cli = { version = "2.40.0", symlink_bins = "true", minimum_release_age = "0s" }
+aws-cli = { version = "2.40.2", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
 "aqua:loft-sh/devpod" = { version = "0.6.15", minimum_release_age = "0s" }
-github-cli = { version = "2.103.3", minimum_release_age = "0s" }
-cloudflared = { version = "2026.10.7", minimum_release_age = "0s" }
-pandoc = { version = "3.13", minimum_release_age = "0s" }
+github-cli = { version = "2.104.0", minimum_release_age = "0s" }
+cloudflared = { version = "2026.11.0", minimum_release_age = "0s" }
+pandoc = { version = "3.14", minimum_release_age = "0s" }
 tmux = { version = "3.8", minimum_release_age = "0s" }
 lefthook = { version = "2.2.2", minimum_release_age = "0s" }
 devcontainer-cli = { version = "0.90.0", minimum_release_age = "0s" }
 docker-cli = { version = "29.9.3", minimum_release_age = "0s" }
-docker-compose = { version = "5.7.0", minimum_release_age = "0s" }
+docker-compose = { version = "5.7.1", minimum_release_age = "0s" }
 #"github:docker/docker-agent" = { version = "1.152.0", asset_pattern = "*-arm64", minimum_release_age = "0s" }
 "github:docker/docker-agent" = { version = "1.159.0", minimum_release_age = "0s" }
 xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
 bats = { version = "1.14.0", minimum_release_age = "0s" }
 "github:charmbracelet/gum" = { version = "2.0.2", minimum_release_age = "0s" }
-gemini = { version = "0.67.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
-"npm:@modelcontextprotocol/inspector" = { version = "2.14.0", minimum_release_age = "0s" }
+gemini = { version = "0.68.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
+"npm:@modelcontextprotocol/inspector" = { version = "2.15.0", minimum_release_age = "0s" }
 "npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s" }
 "npm:jscpd" = { version = "5.4.3", minimum_release_age = "0s" }
 "npm:@fission-ai/openspec" = { version = "1.17.0", minimum_release_age = "0s" }
-biome = { version = "2.6.6", minimum_release_age = "0s" }
+biome = { version = "2.6.7", minimum_release_age = "0s" }
 yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = "0s" }
 rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "pipx:notebooklm-py" = { version = "0.8.6", extras = ["all"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 #"pipx:mcp2cli" = { version = "3.8.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 "npm:@googleworkspace/cli" = { version = "0.22.5", minimum_release_age = "0s" }
-"npm:ctx7" = { version = "0.11.0", minimum_release_age = "0s" }
+"npm:ctx7" = { version = "0.11.1", minimum_release_age = "0s" }
 "npm:@augmentcode/auggie" = { version = "0.37.0", minimum_release_age = "0s" }
 "npm:@tauri-apps/cli" = { version = "2.12.4", minimum_release_age = "0s" }
 "npm:@playwright/cli" = { version = "0.1.24", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.8.1", minimum_release_age = "0s" }
-"npm:agent-browser" = { version = "0.42.0", minimum_release_age = "0s" }
+"npm:agent-browser" = { version = "0.43.0", minimum_release_age = "0s" }
 "npm:just-bash" = { version = "3.6.0", minimum_release_age = "0s" }
 "npm:dev3000" = { version = "0.0.192", minimum_release_age = "0s" }
 "npm:portless" = { version = "0.17.0", minimum_release_age = "0s" }
@@ -231,7 +231,7 @@ rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "npm:create-agent-chat-app" = { version = "0.1.6", minimum_release_age = "0s" }
 "npm:create-langchain-integration" = { version = "0.0.12", minimum_release_age = "0s" }
 "npm:create-langgraph" = { version = "1.1.5", minimum_release_age = "0s" }
-"npm:@langchain/langgraph-checkpoint-validation" = { version = "1.2.0", minimum_release_age = "0s" }
+"npm:@langchain/langgraph-checkpoint-validation" = { version = "1.2.1", minimum_release_age = "0s" }
 #"npm:@langchain/langgraph-cli" = { version = "2.0.0", minimum_release_age = "0s" }
 "npm:@langchain/langgraph-ui" = { version = "2.0.0", minimum_release_age = "0s" }
 "npm:openwork" = { version = "0.2.0", minimum_release_age = "0s" }
@@ -241,14 +241,14 @@ rtk = { version = "1.2.0", minimum_release_age = "0s" }
 #"pipx:specify-cli" = { version = "1.2.3", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:pyright" = { version = "1.1.414", minimum_release_age = "0s" }
 "npm:typescript" = { version = "7.0.2", minimum_release_age = "0s" }
-"npm:typescript-language-server" = { version = "6.0.3", minimum_release_age = "0s" }
+"npm:typescript-language-server" = { version = "6.1.0", minimum_release_age = "0s" }
 kubectl = { version = "1.37.2", minimum_release_age = "0s" }
 helm = { version = "4.3.1", minimum_release_age = "0s" }
 eksctl = { version = "0.231.0", minimum_release_age = "0s" }
 k9s = { version = "0.51.0", minimum_release_age = "0s" }
 kubectx = { version = "0.11.0", minimum_release_age = "0s" }
 stern = { version = "1.35.0", minimum_release_age = "0s" }
-"pipx:graphifyy" = { version = "0.9.103", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
+"pipx:graphifyy" = { version = "0.9.108", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
 #"pipx:check-jsonschema" = { version = "0.38.2", minimum_release_age = "0s" }
@@ -267,9 +267,9 @@ rumdl = { version = "0.3.3", minimum_release_age = "0s" }
 llmfit = { version = "1.1.20", minimum_release_age = "0s" }
 # Research pilot (owner, 2026-11-11). hyperresearch needs Python <3.15 (pyproject requires-python) and pulls
 # Crawl4AI; run `crawl4ai-setup` once for its browsers. Its keys are not wired yet (a later change).
-"pipx:hyperresearch" = { version = "0.13.1", extras = ["exa"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
+"pipx:hyperresearch" = { version = "0.13.2", extras = ["exa"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
-"github:kenn-io/agentsview" = { version = "0.46.1", minimum_release_age = "0s" }
+"github:kenn-io/agentsview" = { version = "0.47.0", minimum_release_age = "0s" }
 "npm:firecrawl-cli" = { version = "1.29.0", minimum_release_age = "0s" }
 #"aqua:dalance/procs" = { version = "0.14.12", minimum_release_age = "0s" }
 #"cargo:procs" = { version = "0.14.12", minimum_release_age = "0s" }
@@ -283,7 +283,7 @@ topgrade = { version = "17.16.0", minimum_release_age = "0s" }
 
 # Build prerequisites for the webclaw browser build below. aws-lc-sys (pulled in
 # by rustls) needs cmake; ninja and sccache are optional build speedups.
-cmake = { version = "4.4.5", minimum_release_age = "0s" }
+cmake = { version = "4.5.0", minimum_release_age = "0s" }
 ninja = { version = "1.13.2", minimum_release_age = "0s" }
 sccache = { version = "0.19.0", minimum_release_age = "0s" }
 # vcpkg in manifest mode, no microsoft/vcpkg clone: the release binary with the standalone bundle laid
@@ -302,8 +302,8 @@ lua = { version = "5.5.1", minimum_release_age = "0s" }
 "conda:doxygen" = { version = "1.18.0", minimum_release_age = "0s" }
 "conda:zstd-static" = { version = "1.5.7", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
-ruff = { version = "0.17.4", minimum_release_age = "0s" }
-ty = { version = "0.0.101", minimum_release_age = "0s" }
+ruff = { version = "0.17.5", minimum_release_age = "0s" }
+ty = { version = "0.0.102", minimum_release_age = "0s" }
 # swift/ (jbax): hk's swiftlint builtin; macOS only, like jbax. Formatting is the toolchain's own `swift format`.
 swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 
@@ -367,9 +367,9 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # agent-desktop drives macOS apps through the Accessibility tree (vercel-labs/agent-desktop, Apache-2.0). On trial:
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
-"github:vercel-labs/agent-desktop" = { version = "1.2.0", minimum_release_age = "0s" }
-"npm:@ai-sdk/openai-compatible" = { version = "3.0.90", minimum_release_age = "0s" }
-"npm:apify-cli" = { version = "1.11.0", minimum_release_age = "0s" }
+"github:vercel-labs/agent-desktop" = { version = "1.3.0", minimum_release_age = "0s" }
+"npm:@ai-sdk/openai-compatible" = { version = "3.0.91", minimum_release_age = "0s" }
+"npm:apify-cli" = { version = "1.12.0", minimum_release_age = "0s" }
 jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 
 #[tool_alias]
@@ -573,7 +573,7 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex -s herdr-core -y </dev/null",
-  "mise exec -- skills add vercel-labs/agent-desktop#v1.2.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
+  "mise exec -- skills add vercel-labs/agent-desktop#v1.3.0 -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
 ]
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
