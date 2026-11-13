@@ -595,11 +595,16 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 # `agent-desktop skills get`. Windows and Linux are left out. jev needs an agent-desktop clone. The tag
 # is `v` and the pin above, read with `mise current`, so a bump moves both. It is not skipped when
 # installed: a re-run puts the tag's files back, so a bumped tag replaces the old ones.
+# jouet (owner, 2026-11-13) hooks every Claude session. `jouet setup claude --global` merges 6 hook groups
+# into ~/.claude/settings.json, keeps every other key, and writes ~/.claude/skills/jouet-init (0.0.4
+# src/setup.rs:128-141, src/cmd/setup.rs:295-298). A re-run finds its own entries by command and prints
+# `unchanged` (src/setup.rs:365); with stdin from /dev/null it asks nothing. Both checked in a scratch home.
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex -s herdr-core -y </dev/null",
   "v=$(mise current github:vercel-labs/agent-desktop </dev/null) && [ -n \"$v\" ] || { echo 'post-tools: mise current printed no agent-desktop pin, so its skills are not installed' >&2; exit 1; }; mise exec -- skills add \"vercel-labs/agent-desktop#v$v\" -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
+  "mise exec -- jouet setup claude --global </dev/null",
 ]
 
 # Disk-watch (owner, 2026-11-12): monit, not our own code (docs/research/disk-watch/monit.md). brew's monit 6.0.0

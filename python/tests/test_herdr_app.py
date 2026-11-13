@@ -83,8 +83,9 @@ HC = "herdr-core"
 CLAUDE, CODEX = "home/.claude/skills", "home/.agents/skills"
 ANTIGRAVITY = "home/.gemini/config/skills"
 HARNESSES = (CLAUDE, CODEX)
-# What the hook leaves in every scratch home: herdr-core and agent-desktop's skills, for Claude and Codex.
-CORE = {f"{folder}/{name}" for folder in HARNESSES for name in (HC, *DESKTOP)}
+# What the hook leaves in every scratch home: herdr-core and agent-desktop's skills, for Claude and Codex,
+# and the jouet-init skill that `jouet setup claude --global` writes for Claude only.
+CORE = {f"{folder}/{name}" for folder in HARNESSES for name in (HC, *DESKTOP)} | {f"{CLAUDE}/jouet-init"}
 
 
 class BadGateway(BaseHTTPRequestHandler):
@@ -237,6 +238,15 @@ class HerdrAppTest(unittest.TestCase):
         self.post_tools()
         self.assertEqual(self.on_disk(), CORE)
         self.assertEqual(self.locked(), {HC, *DESKTOP})
+        settings = json.loads((self.home / ".claude/settings.json").read_text())
+        jouet = [
+            hook["command"]
+            for groups in settings["hooks"].values()
+            for group in groups
+            for hook in group["hooks"]
+            if "jouet hook claude" in hook["command"]
+        ]
+        self.assertEqual(len(jouet), 6, jouet)
 
     def test_herdr_core_comes_from_the_installed_hc_tag(self) -> None:
         self.post_tools()

@@ -26,7 +26,7 @@ Check these in order. If one fails, stop: tell the owner which one and show the 
 3. Run typechecking regularly, single test files regularly, and the repository's check command (`## Workflow
    facts` in `AGENTS.md`) once at the end.
 4. Call the Skill tool with "code-review" to review the work. Fix what it finds that the diff confirms.
-5. Stage everything with `git add`. Write the proposed commit message to a file outside the repository.
+5. Stage the changed files by name with `git add <path>...`; jouet denies `git add -A` and `git add .`. Write the proposed commit message to a file outside the repository.
 6. Stop and report: the staged files, the message file, the check result and anything left open. You do not
    commit, push or write to GitHub; the commit goes through the reviewer pane
    (`~/.config/agents/workflow/ship.md`).
