@@ -158,7 +158,7 @@ run = "mkdir -p ~/.agents/skills"
 # OpenCode's Workers AI base URL has the account ID in its path, which the fnox proxy can't add, so the ID is a
 # plain mise env var (unix/home/.config/fnox/config.toml, CF_ACCOUNT_ID). Apply with the real value in the
 # environment: fnox exec -- mise dot apply "~/.config/mise/conf.d/cloudflare.toml".
-"~/.config/mise/conf.d/cloudflare.toml" = { source = "unix/home/.config/mise/conf.d/cloudflare.toml.tera", mode = "template" }
+"~/.config/mise/conf.d/cloudflare.toml" = { source = "unix/home/.config/mise/conf.d/cloudflare.toml.tera", mode = "template", permissions = "0600" }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
 # zsh reads everything but ~/.zshenv from $ZDOTDIR=~/.config/zsh (set in ~/.zshenv), so ~/.zprofile and ~/.zshrc are
