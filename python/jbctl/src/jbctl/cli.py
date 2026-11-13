@@ -133,8 +133,9 @@ def rea_step(options: ReaPatch | ReaInstall | ReaDoctor, want: ReaPin, tools: Ma
     mismatch."""
     if isinstance(options, ReaInstall):
         done = reainstall.run(options.package, options.url, want, tools)
-        rea.patch(Path(done.helper))
-        reainstall.record(Path(done.folder), want, tools["node"], keep=done.reused)
+        with reainstall.settled(Path(done.folder)):
+            rea.patch(Path(done.helper))
+            reainstall.record(Path(done.folder), want, tools["node"], keep=done.reused)
         emit(Event(rea=done))
     elif isinstance(options, ReaDoctor):
         health = rea.health(reainstall.folder(), want)
@@ -150,7 +151,8 @@ def run(options: Options) -> None:
     """Print one JSON line per completed step; exit 1 when the IDE did not end up as asked."""
     match options:
         case ReaPatch() | ReaInstall() | ReaDoctor():
-            rea_step(options, reainstall.pin(), reainstall.task_tools())
+            # Only rea-install reads the task's mise.toml, which an installed jbctl does not have.
+            rea_step(options, reainstall.pin(), reainstall.task_tools() if isinstance(options, ReaInstall) else {})
         case CoverageGate():
             result = covgate.check(Path(options.report), Path(options.sources), options.skip, options.minimum)
             emit(Event(coverage=result))

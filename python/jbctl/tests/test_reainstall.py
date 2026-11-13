@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tomllib
 from collections.abc import Iterator, Mapping
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -188,7 +189,10 @@ def test_install_replaces_the_old_folder(tmp_path: Path, data_home: Path) -> Non
     archive = package(tmp_path / "package.tgz")
     reainstall.install(archive, data_home, pin_for(archive), HERE)
     (data_home / "stale").touch()
-    reainstall.install(archive, data_home, pin_for(archive), HERE)
+    with reainstall.settled(data_home):
+        reainstall.install(archive, data_home, pin_for(archive), HERE)
+        # The old folder waits beside the new one until the steps after the swap succeed.
+        assert (data_home.with_name(reainstall.PREVIOUS) / "stale").exists()
     assert not (data_home / "stale").exists()
     assert [p.name for p in data_home.parent.iterdir()] == ["rea"]  # no previous folder left
 
@@ -516,3 +520,63 @@ def test_the_doctor_fails_on_another_version_or_a_rea_that_does_not_run(
     with pytest.raises(SystemExit):
         cli.rea_step(ReaDoctor(), want, HERE)
     assert "version" not in json.loads(capsys.readouterr().out)["doctor"]
+
+
+def test_a_patch_that_does_not_fit_puts_the_old_install_back(tmp_path: Path, data_home: Path, patchable: Path) -> None:
+    """The old folder waits beside the new one until the new one is patched and recorded, so an upstream helper the
+    patch no longer fits leaves the working install in place, not an unpatched one."""
+    cli.rea_step(install_step(patchable), pin_for(patchable), HERE)
+    before = {name: (data_home / name).read_bytes() for name in (reainstall.IDENTITY, reainstall.HELPER)}
+    changed = package(tmp_path / "changed.tgz", helper=SWIFT)
+    with pytest.raises(rea.IdeError, match="changed upstream"):
+        cli.rea_step(install_step(changed), pin_for(changed), HERE)
+    assert {name: (data_home / name).read_bytes() for name in before} == before
+    assert reainstall.sha256(data_home / reainstall.ARCHIVE) == reainstall.sha256(patchable)
+    assert [p.name for p in data_home.parent.iterdir()] == ["rea"]  # no previous folder left
+
+
+def test_a_first_install_whose_patch_does_not_fit_is_left_unpatched(tmp_path: Path, data_home: Path) -> None:
+    """With no old folder to put back, the new one stays, unpatched and with no identity, for rea-doctor to fail."""
+    changed = package(tmp_path / "changed.tgz", helper=SWIFT)
+    with pytest.raises(rea.IdeError):
+        cli.rea_step(install_step(changed), pin_for(changed), HERE)
+    assert (data_home / reainstall.HELPER).read_text() == SWIFT
+    assert not (data_home / reainstall.IDENTITY).exists()
+    assert [p.name for p in data_home.parent.iterdir()] == ["rea"]
+
+
+@pytest.mark.parametrize("broken", ["node_modules/.bin/rea", "node_modules/rea-agents/package.json"])
+def test_a_folder_missing_its_rea_or_with_an_unreadable_package_json_is_installed_again(
+    tmp_path: Path, data_home: Path, broken: str
+) -> None:
+    archive = package(tmp_path / "package.tgz")
+    want = pin_for(archive)
+    reainstall.install(archive, data_home, want, HERE)
+    if broken.endswith(".json"):
+        (data_home / broken).write_text("{not json")
+    else:
+        (data_home / broken).unlink()
+    assert not reainstall.run(str(archive), None, want, HERE).reused
+    assert (data_home / "node_modules/.bin/rea").is_file()
+
+
+def test_only_rea_install_reads_the_task_tools(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path, pristine: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An installed jbctl has no mise.toml beside it: rea-patch and rea-doctor still run, and rea-install says how to
+    run it."""
+    monkeypatch.setattr(reainstall, "TASKS", tmp_path / "absent/mise.toml")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    assert run(capsys, "rea-patch", "--helper", str(pristine)) == (0, [{"patch": "applied"}], "")
+    code, _, error = run(capsys, "rea-doctor")
+    assert (code, error) == (1, "")
+    code, events, error = run(capsys, "rea-install")
+    assert (code, events) == (1, [])
+    assert "mise run //jbctl:rea-install" in error
+
+
+def test_the_test_tasks_install_rea_first() -> None:
+    """The offline tests copy the installed helper, so every task that runs them installs it first."""
+    tasks = tomllib.loads((Path(__file__).parents[1] / "mise.toml").read_text())["tasks"]
+    for name in ("test", "coverage"):
+        assert "rea-install" in tasks[name]["depends"], name

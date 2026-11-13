@@ -15,7 +15,7 @@ import subprocess
 import tarfile
 import tempfile
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -27,11 +27,15 @@ from .models import NpmLock, NpmLockPackage, ReaFolder, ReaIdentity, ReaPin
 ARCHIVE = "package.tgz"
 PACKAGE = "node_modules/rea-agents"
 HELPER = f"{PACKAGE}/bridge/native/ReaNativeUI.swift"
+REA = "node_modules/.bin/rea"
 IDENTITY = "identity.json"
 SHRINKWRAP = "package/npm-shrinkwrap.json"
 NPM_INSTALL = ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"]
-# Where the old folder waits during a swap, beside the rea folder.
+# Where the old folder waits during a swap, beside the rea folder, until the new one is patched and recorded.
 PREVIOUS = ".rea-previous"
+# The rea-install task's mise.toml. Only a source checkout has it: rea-install runs as that task, never as an installed
+# jbctl, so no other command reads it.
+TASKS = Path(__file__).resolve().parents[2] / "mise.toml"
 
 
 def pin() -> ReaPin:
@@ -154,7 +158,10 @@ def npm_env(tmp: Path) -> dict[str, str]:
 def task_tools() -> dict[str, str]:
     """The Node and npm the rea-install task names (mise.toml, the one place they are written): its Node tool,
     and in JBCTL_REA_NPM the version of the npm that Node bundles."""
-    task = tomllib.loads((Path(__file__).resolve().parents[2] / "mise.toml").read_text())["tasks"]["rea-install"]
+    if not TASKS.is_file():
+        msg = f"no {TASKS}: run rea-install as `mise run //jbctl:rea-install` from a dotfiles checkout"
+        raise ValueError(msg)
+    task = tomllib.loads(TASKS.read_text())["tasks"]["rea-install"]
     return {"node": task["tools"]["node"], "npm": task["env"]["JBCTL_REA_NPM"]}
 
 
@@ -170,11 +177,14 @@ def check_tools(tools: Mapping[str, str], env: Mapping[str, str]) -> None:
 
 
 def intact(root: Path, want: ReaPin) -> bool:
-    """root's rea-agents is the pinned version and has its helper; one with either missing is installed again."""
+    """root's rea-agents is the pinned version and has its helper and rea; one with any of them missing, or a
+    package.json that does not read, is installed again."""
     meta = root / PACKAGE / "package.json"
-    return (
-        meta.is_file() and (root / HELPER).is_file() and json.loads(meta.read_text())["version"] == want.package_version
-    )
+    if not ((root / HELPER).is_file() and (root / REA).is_file()):
+        return False
+    with contextlib.suppress(OSError, ValueError, KeyError, TypeError):
+        return json.loads(meta.read_text())["version"] == want.package_version
+    return False
 
 
 def verified(root: Path, want: ReaPin, *, reused: bool) -> ReaFolder:
@@ -210,7 +220,7 @@ def replaceable(target: Path) -> None:
 
 def install(archive: Path, target: Path, want: ReaPin, tools: Mapping[str, str]) -> ReaFolder:
     """npm-install the checked archive into a candidate folder beside target, verify it, then swap it in. The old
-    folder waits beside target until the new one is in place, so a failed swap leaves it there, not deleted."""
+    folder waits beside target (PREVIOUS) for settled() to remove it or put it back."""
     replaceable(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=target.parent, prefix=".rea-") as work:
@@ -235,9 +245,23 @@ def install(archive: Path, target: Path, want: ReaPin, tools: Mapping[str, str])
         if target.exists():
             target.rename(previous)
         candidate.rename(target)
+    return verified(target, want, reused=False)
+
+
+@contextlib.contextmanager
+def settled(target: Path) -> Generator[None]:
+    """Around the steps after a swap (patch, identity): on success remove the old folder; on any failure put it
+    back in target's place. With no old folder, a failed step leaves target as it is, for rea-doctor to report."""
+    previous = target.with_name(PREVIOUS)
+    try:
+        yield
+    except BaseException:
+        if previous.exists():
+            shutil.rmtree(target)
+            previous.rename(target)
+        raise
     if previous.exists():
         shutil.rmtree(previous)
-    return verified(target, want, reused=False)
 
 
 def run(package: str | None, url: str | None, want: ReaPin, tools: Mapping[str, str]) -> ReaFolder:

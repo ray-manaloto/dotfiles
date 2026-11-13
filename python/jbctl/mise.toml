@@ -64,7 +64,8 @@ run = "uv run --locked jbctl rea-doctor"
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
 skip_if = "{{ os() != 'macos' }}"
 description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_IDE set"
-depends = ["sync"]
+# The offline tests copy the installed rea helper, so rea is installed first (kept when already in place).
+depends = ["sync", "rea-install"]
 # prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
 output = "prefix"
 # Serial: jbctl finds IDEs by the machine-wide web ports 63342-63361 and process list, so a stand-in IDE
@@ -89,7 +90,8 @@ run = "uv run --locked pytest --durations=25"
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
 description = "Every test, live ones included; line and branch coverage of at least 97.63% (#502)"
-depends = ["sync"]
+# The offline tests copy the installed rea helper, so rea is installed first (kept when already in place).
+depends = ["sync", "rea-install"]
 usage = """
 arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
 flag "--foreground" help="Also run the debug route that brings the IDE forward (menu-bar Settings)"
