@@ -155,6 +155,11 @@ def test_a_process_name_reaches_the_alert_text_without_shell_characters() -> Non
     assert "_rm -rf ___x___y_ pid 7 1 GB" in disk.message(0, LOW, [held])
 
 
+def test_a_holder_under_1_gb_shows_its_size_in_mb() -> None:
+    held = disk.holders("p1\nclinkd\ns240921560\np2\nctiny\ns999\np3\ncedge\ns1000000000\n")
+    assert "edge pid 3 1 GB, linkd pid 1 240 MB, tiny pid 2 0 MB" in disk.message(0, LOW, held)
+
+
 def test_holders_keeps_only_the_top_five() -> None:
     listing = "".join(f"p{pid}\ncp{pid}\ns{pid}\n" for pid in range(1, 9))
     assert [h.pid for h in disk.holders(listing)] == [8, 7, 6, 5, 4]

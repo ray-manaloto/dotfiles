@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .models import DiskAlert, DiskCheck, DiskHolder, DiskState
 
+MB = 1_000_000
 GB = 1_000_000_000
 MIN_FREE = 100 * GB
 EVERY = 15 * 60
@@ -60,9 +61,14 @@ def plain(name: str) -> str:
     return "".join(c if c.isascii() and (c.isalnum() or c in " ._+-") else "_" for c in name)
 
 
+def size(n: int) -> str:
+    """Whole GB, or whole MB below 1 GB: most holders keep well under a GB open."""
+    return f"{n // GB} GB" if n >= GB else f"{n // MB} MB"
+
+
 def message(free: int, min_free: int, held: list[DiskHolder]) -> str:
     """The alert's text: plain words only."""
-    names = ", ".join(f"{plain(h.command)} pid {h.pid} {h.bytes // GB} GB" for h in held) or "none found"
+    names = ", ".join(f"{plain(h.command)} pid {h.pid} {size(h.bytes)}" for h in held) or "none found"
     low = f"disk-watch: {free // GB} GB free on the home volume, below {min_free // GB} GB."
     return f"{low} Deleted files held open: {names}"
 
