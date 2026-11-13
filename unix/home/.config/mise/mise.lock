@@ -692,6 +692,29 @@ url = "https://github.com/DopplerHQ/cli/releases/download/3.77.1/doppler_3.77.1_
 url_api = "https://api.github.com/repos/DopplerHQ/cli/releases/assets/666340971"
 provenance = "github-attestations"
 
+[[tools.dust]]
+version = "1.2.7"
+backend = "aqua:bootandy/dust"
+specifiers = ["1.2.7"]
+
+[tools.dust."platforms.linux-arm64"]
+checksum = "sha256:64496fe9e56dabb379308b3a079816818f6022d0b93638d06206a9144ca795d9"
+checksum_source = "mise-versions"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/699455926"
+
+[tools.dust."platforms.linux-x64"]
+checksum = "sha256:ec3bf712c660dcaa5578b996741f5cca36b30c021c1e4b49352b11137a95a96e"
+checksum_source = "mise-versions"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/699456259"
+
+[tools.dust."platforms.macos-arm64"]
+checksum = "sha256:38e1b3b4e5e6a5cdb044b5fdb32ea45f18dc78276711796214806f20f7705a99"
+checksum_source = "mise-versions"
+url = "https://github.com/bootandy/dust/releases/download/v1.2.7/dust-v1.2.7-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/bootandy/dust/releases/assets/699455834"
+
 [[tools.eksctl]]
 version = "0.231.0"
 backend = "aqua:eksctl-io/eksctl"
