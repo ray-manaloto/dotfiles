@@ -77,6 +77,17 @@ compile = false
 # creates that .venv as a side effect. An activated zsh puts the install dirs first, so it does not.
 uv_venv_auto = "create|source"
 
+# Agent skills that tools ship (fnox, hk, pitchfork, usage, aube, communique): after every install, `mise use`
+# and upgrade, mise re-links them into ~/.agents/skills and removes the links of skills no longer active
+# (src/packslip.rs:1262-1302 at v2026.11.7). A project only gets its own config's tools (SkillsScope::Project),
+# and with prune an empty project pass removes the links mise made there, so the dotfiles checkout keeps none.
+# ~/.claude/skills is a real folder mise doesn't write to; its entries are relative links into ~/.agents/skills
+# (../../.agents/skills/<name>, the skills CLI's pattern), so they follow. A tool that ships a new skill needs one
+# such link there.
+[settings.skills]
+auto_sync = true
+prune = true
+
 [settings.status]
 show_tools = true
 missing_tools = "always"
