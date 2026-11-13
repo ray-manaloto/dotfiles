@@ -33,6 +33,9 @@ APP_PLIST = "Applications/Herdr.app/Contents/Info.plist"
 # read, and agy's (Antigravity CLI reads ~/.gemini/config/skills since 1.5), a link to the shared one (mise.toml).
 SHARED, CLAUDE = ".agents/skills", ".claude/skills"
 SKILLS = (f"{CLAUDE}/herdr-core", f"{SHARED}/herdr-core", ".gemini/config/skills/herdr-core")
+# Claude Code's own folder for the skills it syncs from claude.ai: one bucket folder per account, each skill a
+# folder inside it with its SKILL.md and the bucket's manifest.json. It is no skill, so V10 does not ask it for one.
+CLAUDE_SYNCED = "synced"
 # hc's socket inputs (paths.rs:28-34): HC_SOCKET, the config's socket key, XDG_RUNTIME_DIR, HC_SESSION and the
 # state folder. Green is none set, or each at its default; the doctor does not copy hc's resolver (Alternative R).
 ROUTING = ("HC_SOCKET", "XDG_RUNTIME_DIR", "HC_SESSION", "XDG_STATE_HOME")
@@ -493,7 +496,8 @@ class Reader:
         each skill of the shared folder, and each Claude Code entry that no longer reaches one (a link left by
         `skills remove -a <one agent>`); one that can't be read is unknown."""
         shared = [f"{CLAUDE}/{name}" for name in self.names(SHARED) if self.is_skill(f"{SHARED}/{name}")]
-        folders = dict.fromkeys([*SKILLS, *shared, *(f"{CLAUDE}/{name}" for name in self.names(CLAUDE))])
+        own = (f"{CLAUDE}/{name}" for name in self.names(CLAUDE) if name != CLAUDE_SYNCED)
+        folders = dict.fromkeys([*SKILLS, *shared, *own])
         modes = {folder: self.mode(self.home / folder / "SKILL.md", "skills") for folder in folders}
         return [f"~/{folder}" for folder, mode in modes.items() if mode is not None and not stat.S_ISREG(mode)]
 
