@@ -31,6 +31,8 @@
         "router-direct",
         "check-direct",
         "rea-patch",
+        "rea-install",
+        "rea-doctor",
         "coverage-gate",
         "status",
         "start",
@@ -193,7 +195,40 @@
             }
           ],
           "default": null,
-          "description": "ReaNativeUI.swift to patch; default the one in the global rea-agents install"
+          "description": "ReaNativeUI.swift to patch; default the one in jbctl's rea folder (mise run //jbctl:rea-install)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReaInstall": {
+      "description": "Install the pinned rea package (data/rea-pin.json) in ${XDG_DATA_HOME:-~/.local/share}/jbctl/rea.",
+      "type": "object",
+      "properties": {
+        "package": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A local package.tgz in place of the download; its sha256 must still be the pin's"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^https?://"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Download from this URL in place of the pin's asset_url; its sha256 must still be the pin's"
         }
       },
       "additionalProperties": false
@@ -225,6 +260,12 @@
           "$ref": "#/$defs/ReaPatch"
         },
         {
+          "$ref": "#/$defs/ReaInstall"
+        },
+        {
+          "$ref": "#/$defs/ReaDoctor"
+        },
+        {
           "$ref": "#/$defs/CoverageGate"
         },
         {
@@ -251,6 +292,127 @@
         "applied",
         "already"
       ]
+    },
+    "ReaPin": {
+      "description": "The one rea package jbctl installs: a build of one rea commit, published as a dotfiles release asset.",
+      "type": "object",
+      "properties": {
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "The rea commit the package was built from"
+        },
+        "upstream_run_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The rea CI run (ci.yml) that built and verified the package"
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "That run's artifact zip, for provenance"
+        },
+        "package_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "package.tgz, the release asset: checked before every use"
+        },
+        "package_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "rea-agents' version in package.tgz"
+        },
+        "release_tag": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The dotfiles release that holds the asset"
+        },
+        "asset_url": {
+          "type": "string",
+          "pattern": "^https://",
+          "description": "package.tgz in that release"
+        }
+      },
+      "required": [
+        "source_sha",
+        "upstream_run_id",
+        "artifact_sha256",
+        "package_sha256",
+        "package_version",
+        "release_tag",
+        "asset_url"
+      ],
+      "additionalProperties": false
+    },
+    "ReaFolder": {
+      "description": "What rea-install left in jbctl's rea folder.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "node_modules/rea-agents/package.json's version"
+        },
+        "helper": {
+          "type": "string",
+          "description": "The native UI helper rea-patch patches"
+        },
+        "reused": {
+          "type": "boolean",
+          "description": "The folder already held the pinned package.tgz, so nothing was installed"
+        }
+      },
+      "required": [
+        "folder",
+        "version",
+        "helper",
+        "reused"
+      ],
+      "additionalProperties": false
+    },
+    "NpmLockPackage": {
+      "description": "One entry of an npm lockfile's packages map: the fields rea-install reads; npm's others pass through.",
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "optionalDependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "dev": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "NpmLock": {
+      "description": "An npm-shrinkwrap.json, as far as rea-install reads it: its packages map, keyed by install path ('' is the root).",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "packages"
+      ],
+      "properties": {
+        "packages": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/NpmLockPackage"
+          }
+        }
+      }
     },
     "Event": {
       "description": "One JSON line on stdout.",
@@ -399,6 +561,28 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Leftover"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rea": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReaFolder"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "doctor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReaHealth"
             },
             {
               "type": "null"
@@ -1255,6 +1439,102 @@
       "required": [
         "path",
         "reason"
+      ],
+      "additionalProperties": false
+    },
+    "ReaDoctor": {
+      "description": "Check the rea install against the pin (data/rea-pin.json); exit 1 on any mismatch.",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ReaIdentity": {
+      "description": "identity.json in jbctl's rea folder: what rea-install installed, written after the install was verified and patched.",
+      "type": "object",
+      "properties": {
+        "source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "The pin's rea commit"
+        },
+        "package_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The installed package.tgz"
+        },
+        "patch_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The rea-native-ui.patch applied to the helper"
+        },
+        "node_version": {
+          "type": "string",
+          "description": "The Node that npm installed the package with"
+        },
+        "installed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "source_sha",
+        "package_sha256",
+        "patch_sha256",
+        "node_version",
+        "installed_at"
+      ],
+      "additionalProperties": false
+    },
+    "ReaHealth": {
+      "description": "What rea-doctor found; ok is false (exit 1) on any mismatch with the pin. stray_global is only a warning.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "pinned_source_sha": {
+          "type": "string"
+        },
+        "installed_source_sha": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "identity.json's; null when it is missing"
+        },
+        "package_sha_match": {
+          "type": "boolean",
+          "description": "The folder's package.tgz is the pin's"
+        },
+        "patch_marker": {
+          "type": "boolean",
+          "description": "The installed helper carries jbctl's patch marker"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "rea --version from the folder's bin, run with the global node; null when it did not run"
+        },
+        "version_match": {
+          "type": "boolean",
+          "description": "That version is the pin's package_version"
+        },
+        "stray_global": {
+          "type": "boolean",
+          "description": "npm prefix -g still holds a rea-agents (a warning, not a failure)"
+        }
+      },
+      "required": [
+        "ok",
+        "pinned_source_sha",
+        "package_sha_match",
+        "patch_marker",
+        "version_match",
+        "stray_global"
       ],
       "additionalProperties": false
     }

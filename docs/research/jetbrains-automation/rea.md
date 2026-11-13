@@ -17,6 +17,10 @@ tags: [rea, accessibility, macos, clion, reverse-engineering]
 
 - `npm i -g rea-agents@6.8.0` into the mise Node prefix. Frida's install script was blocked by npm
   `allow-scripts` and left blocked.
+- jbctl reads a separate, pinned install: `mise run //jbctl:rea-install` puts the package in
+  `${XDG_DATA_HOME:-~/.local/share}/jbctl/rea`, patches its helper and writes `identity.json`;
+  `mise run //jbctl:rea-doctor` checks it against `rea-pin.json`. The hand `npm i -g` install above is
+  no longer read.
 - `rea setup --client claude_code` was **not** applied: the agent's permission check blocked it as
   self-modification. Its plan: add `mcpServers.rea = {command: <prefix>/bin/rea, args: ["mcp"]}` to
   `~/.claude.json`, and the skill `~/.claude/skills/reverse-engineer-anything`. The owner can run

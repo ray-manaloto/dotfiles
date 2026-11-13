@@ -7,8 +7,9 @@ from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
 
+from . import reainstall
 from .ide import IdeError, tool
-from .models import PatchState
+from .models import PatchState, ReaHealth, ReaIdentity, ReaPin
 
 MARKER = "jbctl patch (dotfiles#502)"
 
@@ -61,8 +62,8 @@ def goto(app: str, ide: int, window: int, page: str) -> list[str]:
 
 
 def installed_helper() -> Path:
-    root = subprocess.run(["npm", "prefix", "-g"], capture_output=True, text=True, check=True).stdout.strip()
-    return Path(root) / "lib/node_modules/rea-agents/bridge/native/ReaNativeUI.swift"
+    """The helper in jbctl's rea folder (mise run //jbctl:rea-install), not the global rea-agents install."""
+    return reainstall.folder() / reainstall.HELPER
 
 
 def patch(helper: Path) -> PatchState:
@@ -78,3 +79,40 @@ def patch(helper: Path) -> PatchState:
                 msg = f"the rea helper changed upstream; refresh rea-native-ui.patch ({done.stdout.strip()})"
                 raise IdeError(msg)
     return PatchState.applied
+
+
+def installed_version(root: Path) -> str | None:
+    """rea --version from the folder's bin, run with the node on PATH (the global one); None when it does not run."""
+    rea = root / "node_modules/.bin/rea"
+    if not rea.is_file():
+        return None
+    done = subprocess.run([str(rea), "--version"], capture_output=True, text=True, check=False)
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def stray_global() -> bool:
+    """npm's global prefix still holds a rea-agents: the hand install this folder replaces."""
+    prefix = subprocess.run(["npm", "prefix", "-g"], capture_output=True, text=True, check=True).stdout.strip()
+    return (Path(prefix) / "lib/node_modules/rea-agents").exists()
+
+
+def health(root: Path, want: ReaPin) -> ReaHealth:
+    """The folder against the pin: source commit, package sha256, patch marker and rea's own version."""
+    written = root / reainstall.IDENTITY
+    recorded = ReaIdentity.model_validate_json(written.read_text()) if written.is_file() else None
+    archive = root / reainstall.ARCHIVE
+    helper = root / reainstall.HELPER
+    version = installed_version(root)
+    source = recorded.source_sha if recorded else None
+    package = archive.is_file() and reainstall.sha256(archive) == want.package_sha256
+    marker = helper.is_file() and MARKER in helper.read_text()
+    return ReaHealth(
+        ok=source == want.source_sha and package and marker and version == want.package_version,
+        pinned_source_sha=want.source_sha,
+        installed_source_sha=source,
+        package_sha_match=package,
+        patch_marker=marker,
+        version=version,
+        version_match=version == want.package_version,
+        stray_global=stray_global(),
+    )

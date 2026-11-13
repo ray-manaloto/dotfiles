@@ -1,8 +1,5 @@
 """What runs without an IDE: argument parsing, the MCP check, and the rea helper patch."""
 
-import shutil
-import subprocess
-from importlib.resources import as_file, files
 from pathlib import Path
 
 import pytest
@@ -73,17 +70,6 @@ def test_a_tools_list_without_a_tool_list_is_a_failure(capsys: pytest.CaptureFix
 def test_an_unreachable_mcp_server_is_a_failure(capsys: pytest.CaptureFixture[str]) -> None:
     code, events, error = run(capsys, "check-direct", "--mcp-url", "http://127.0.0.1:9/stream")
     assert (code, events, bool(error)) == (1, [], True)
-
-
-@pytest.fixture
-def pristine(tmp_path: Path) -> Path:
-    """The installed rea helper with jbctl's patch taken back out: what a fresh rea install holds."""
-    helper = tmp_path / "ReaNativeUI.swift"
-    shutil.copy(rea.installed_helper(), helper)
-    if rea.MARKER in helper.read_text():
-        with as_file(files("jbctl").joinpath("rea-native-ui.patch")) as diff:
-            subprocess.run(["patch", "--reverse", "--silent", "-i", diff, helper], check=True)
-    return helper
 
 
 def test_rea_patch_applies_once(capsys: pytest.CaptureFixture[str], pristine: Path) -> None:

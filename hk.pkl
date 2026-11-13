@@ -181,6 +181,13 @@ hooks {
             ["main-guard"] {
                 check = "mise run //repo:main-guard-arm"
             }
+            // A merge that moved the rea pin installs the new package (//jbctl:rea-install). hk 2.9.0 selects a
+            // post-merge step's files from the working tree, not the merge, so the step asks git itself: `git diff
+            // --quiet` exits 1 only when ORIG_HEAD..HEAD differ at the pin (128 when ORIG_HEAD is missing, so no run).
+            ["rea-install"] {
+                step_condition = "exec_ok('git diff --quiet ORIG_HEAD HEAD -- python/jbctl/src/jbctl/data/rea-pin.json; test $? -eq 1')"
+                check = "mise run //jbctl:rea-install"
+            }
         }
     }
     ["check"] {
