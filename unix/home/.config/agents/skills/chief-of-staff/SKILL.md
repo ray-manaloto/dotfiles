@@ -24,7 +24,7 @@ Adapted from mattpocock's in-progress `chief-of-staff` skill (mattpocock-skills 
 
 - Leads decide implementation questions themselves and report in one line.
 - Leads escalate only owner-level gates to the decision queue: merges, home or config changes outside the repo, public text (issues, PRs), scope changes, spending, and two failed attempts. Each item: lane, question, options, recommendation, evidence link.
-- Commits and PRs need reviewer-pane approval per `~/.config/agents/AGENTS.md`. Plugin changes need the owner's OK for each change.
+- Commits and PRs need reviewer-pane approval per `~/.config/agents/AGENTS.md`. Plugin changes follow its "Plugin changes" rule: no separate OK.
 - You batch queue items to the owner interactively (AskUserQuestion), recommended option first labelled "(Recommended)", pros and cons on every option. Never end a message with a prose question. Relay the answers to leads.
 - Free review bots (CodeRabbit, Repowise) never block a merge.
 

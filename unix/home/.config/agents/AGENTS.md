@@ -50,9 +50,14 @@ Doppler does not have yet; the value is piped, never an argument). It runs under
 token, which the global fnox config reads from the macOS Keychain (`DOPPLER_WRITE_TOKEN`). Changing or deleting an existing secret
 is the owner's job in the Doppler dashboard.
 
-## Plugin changes need the owner's OK
+## Plugin changes
 
-Never install, uninstall, update, enable, disable or switch the marketplace of a Claude Code plugin, and never change `~/.claude/plugins/**`, `enabledPlugins`, `extraKnownMarketplaces` or the marketplaces in any settings file, by any route (`claude plugin`, file edits, or a script, `sed`, `jq` or `cp` run through a shell), without the owner's explicit OK for that change. Reading them is fine. When a change is needed, stop, say what you would change, and wait.
+An agent may install, update, enable or disable a Claude Code plugin, or add a marketplace, when its task calls for
+it; it needs no separate OK. It uninstalls a plugin only with `claude plugin uninstall --keep-data`: a plain uninstall
+deletes the plugin's data, which a reinstall does not bring back, so that needs the owner's OK. Make the change with
+`claude plugin`, never by editing `~/.claude/plugins/**`, `enabledPlugins` or `extraKnownMarketplaces` by hand or by
+script. Check a plugin change with `claude plugin list --json` and a marketplace change with
+`claude plugin marketplace list --json`, and report each change with the command that undoes it.
 
 ## Workflow
 
