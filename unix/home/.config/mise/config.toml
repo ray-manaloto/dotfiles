@@ -376,6 +376,11 @@ jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_r
 # Claude files only and reports without failing; it ships no release binaries, so mise builds it with the Go above.
 "github:agent-sh/agnix" = { version = "0.61.0", minimum_release_age = "0s" }
 "go:github.com/dotcommander/cclint" = { version = "0.63.0", minimum_release_age = "0s" }
+# GitHub Actions linters (owner rule, 2026-11-13): jactionlint, jdx's maintained actionlint fork, never actionlint;
+# zizmor beside it as the security checker. hk runs both as builtins on .github/workflows (hk.pkl). From aqua, which
+# verifies their release attestations.
+"aqua:jdx/jactionlint" = { version = "2.6.0", minimum_release_age = "0s" }
+"aqua:zizmorcore/zizmor" = { version = "1.32.0", minimum_release_age = "0s" }
 
 #[tool_alias]
 #devcontainer = "npm:@devcontainers/cli"
