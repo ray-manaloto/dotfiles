@@ -29,6 +29,7 @@ class Command(StrEnum):
     opencode_jouet = "opencode-jouet"
     disk_snapshot = "disk-snapshot"
     disk_guard = "disk-guard"
+    monit_alert = "monit-alert"
 
 
 class Bootstrap(BaseModel):
@@ -147,6 +148,33 @@ class DiskGuard(BaseModel):
     floor_gib: int
     """
     The floor: heavy test tasks refuse to start below it.
+    """
+
+
+class MonitAlert(BaseModel):
+    """
+    The last monit alert, as monit-alert writes it to ~/.local/state/dotfiles/monit/alert.json and prints it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    at: str
+    """
+    When monit-alert ran, ISO 8601 in UTC.
+    """
+    service: str
+    """
+    MONIT_SERVICE: the check that fired, such as data or the host name.
+    """
+    event: str
+    """
+    MONIT_EVENT: the kind of event, such as Resource limit matched.
+    """
+    description: str
+    """
+    MONIT_DESCRIPTION: monit's own sentence about the alert.
     """
 
 

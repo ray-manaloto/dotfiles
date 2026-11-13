@@ -628,17 +628,22 @@ run = [
 ]
 
 # Disk-watch (owner, 2026-11-12): monit, not our own code (docs/research/disk-watch/monit.md). brew's monit 6.0.0
-# ([bootstrap.packages]) checks the data volume every minute. Below 100 GiB it runs the AppleScript below,
-# which posts a macOS notification, then repeats every 240 cycles (4 hours) while the volume stays low.
-# It also runs the global task disk:snapshot (hometools disk-snapshot), which records the biggest folders, ps and
-# open files in ~/.local/state/dotfiles/disk-alerts/<time>/, again every 30 cycles while low (owner, 2026-11-13:
-# the volume fell to 42 GiB free and was back within minutes, so a 15-minute check missed it and nothing recorded
-# the writer). monit runs an exec without waiting for it; the task holds a lock, so two never overlap.
+# ([bootstrap.packages]) checks the data volume and the system every minute. Each rule that fires runs the global
+# task monit:alert (hometools monit-alert, owner 2026-11-13), and again every 240 cycles (4 hours) while it holds:
+# a macOS notification, and the alert written to ~/.local/state/dotfiles/monit/alert.json for agents to read. It
+# sends nothing to any agent's terminal. monit splits an exec string on spaces and hands the alert over in
+# MONIT_SERVICE, MONIT_EVENT and MONIT_DESCRIPTION, so the text is read from those inside the task, never put on
+# the command line. Rules: under 150 GiB free (the early warning) and under 100 GiB free; 5-minute load per core
+# over 1.5, CPU over 95% or memory over 90% for some minutes; swap over 10% (this Mac has no swap, 0 MB total, so
+# that rule is valid but can't fire until swap exists).
+# Under 100 GiB it also runs the global task disk:snapshot (hometools disk-snapshot), which records the biggest
+# folders, ps and open files in ~/.local/state/dotfiles/disk-alerts/<time>/, again every 30 cycles while low
+# (owner, 2026-11-13: the volume fell to 42 GiB free and was back within minutes, so a 15-minute check missed it
+# and nothing recorded the writer). monit runs an exec without waiting for it; the task holds a lock, so two never overlap.
 # /System/Volumes/Data, not /: on macOS / is the sealed system volume. monit counts space free as space available
 # to a normal user (f_bavail, src/device/sysdep_DARWIN.c:84), and its GB is 1024^3 (src/monit.h:356).
 # monit refuses a control file that is a symlink, owned by another user or wider than 0700 (src/p.y:3615), so
-# monitrc is a managed file with mode 0600, not a linked dotfile. It splits an exec string on spaces, so the
-# notification text comes from MONIT_DESCRIPTION inside the AppleScript file, not from osascript -e.
+# monitrc is a managed file with mode 0600, not a linked dotfile.
 # Check: monit -c ~/.config/monit/monitrc status (over the 0600 unix socket; no password, `allow localhost`;
 # the socket path must stay under 104 bytes). chief-of-staff reads that and runs `lsof +L1` itself.
 [bootstrap.directories."~/.config/monit"]
@@ -648,13 +653,6 @@ mode = "0700"
 [bootstrap.directories."~/.local/state/monit"]
 os = "macos"
 mode = "0700"
-
-[bootstrap.files."~/.config/monit/disk-low.applescript"]
-os = "macos"
-mode = "0600"
-content = """
-display notification (system attribute "MONIT_DESCRIPTION") with title "Disk low"
-"""
 
 [bootstrap.files."~/.config/monit/monitrc"]
 os = "macos"
@@ -671,10 +669,22 @@ set httpd unixsocket {{ env.HOME }}/.local/state/monit/monit.sock permission 060
     allow localhost
 
 check filesystem data with path /System/Volumes/Data
-    if space free < 100 GB then exec "/usr/bin/osascript {{ env.HOME }}/.config/monit/disk-low.applescript"
+    if space free < 150 GB then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+    if space free < 100 GB then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles
     if space free < 100 GB then exec "{{ env.HOME }}/.local/bin/mise run disk:snapshot"
         repeat every 30 cycles
+
+check system $HOST
+    if loadavg (5min) per core > 1.5 for 5 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+    if cpu usage > 95% for 5 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+    if memory usage > 90% for 3 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+    if swap usage > 10% for 3 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
 """
 
 # Runs monit in the foreground (-I), as brew's own service does (Formula/m/monit.rb: monit -I -c etc/monitrc).
