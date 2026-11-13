@@ -8,7 +8,51 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set", "disk-watch"]
+    },
+    "DiskHolder": {
+      "description": "A process that holds deleted files open: their space stays in use until it closes them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "command", "bytes"],
+      "properties": {
+        "pid": {"type": "integer", "description": "The process id."},
+        "command": {"type": "string", "description": "Its command name, as lsof prints it."},
+        "bytes": {"type": "integer", "description": "The total size of the deleted files it holds open."}
+      }
+    },
+    "DiskCheck": {
+      "description": "One disk-watch check of the home volume, printed as one JSON line on stdout.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["free_bytes", "min_free_bytes", "alert", "holders", "told"],
+      "properties": {
+        "free_bytes": {"type": "integer", "description": "Free bytes on the volume that holds the home folder."},
+        "min_free_bytes": {"type": "integer", "description": "Below this, the volume is low."},
+        "alert": {"type": "boolean", "description": "This check sent an alert."},
+        "holders": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/DiskHolder"},
+          "description": "When low: the processes holding deleted files, biggest first."
+        },
+        "told": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Who the alert reached: notification, chief-of-staff."
+        }
+      }
+    },
+    "DiskState": {
+      "description": "What disk-watch keeps between checks, in its state file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alerted_at"],
+      "properties": {
+        "alerted_at": {
+          "type": ["number", "null"],
+          "description": "When the last alert went out (epoch seconds); null while the volume is not low."
+        }
+      }
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",

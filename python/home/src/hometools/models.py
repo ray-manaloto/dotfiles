@@ -27,6 +27,76 @@ class Command(StrEnum):
     update_check = "update-check"
     herdr_doctor = "herdr-doctor"
     secret_set = "secret-set"
+    disk_watch = "disk-watch"
+
+
+class DiskHolder(BaseModel):
+    """
+    A process that holds deleted files open: their space stays in use until it closes them.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    pid: int
+    """
+    The process id.
+    """
+    command: str
+    """
+    Its command name, as lsof prints it.
+    """
+    bytes: int
+    """
+    The total size of the deleted files it holds open.
+    """
+
+
+class DiskCheck(BaseModel):
+    """
+    One disk-watch check of the home volume, printed as one JSON line on stdout.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    free_bytes: int
+    """
+    Free bytes on the volume that holds the home folder.
+    """
+    min_free_bytes: int
+    """
+    Below this, the volume is low.
+    """
+    alert: bool
+    """
+    This check sent an alert.
+    """
+    holders: list[DiskHolder]
+    """
+    When low: the processes holding deleted files, biggest first.
+    """
+    told: list[str]
+    """
+    Who the alert reached: notification, chief-of-staff.
+    """
+
+
+class DiskState(BaseModel):
+    """
+    What disk-watch keeps between checks, in its state file.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    alerted_at: float | None
+    """
+    When the last alert went out (epoch seconds); null while the volume is not low.
+    """
 
 
 class Bootstrap(BaseModel):

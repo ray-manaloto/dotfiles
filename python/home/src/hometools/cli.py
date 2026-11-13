@@ -4,12 +4,17 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import config, herdr, secret, toolchain, update
+from . import config, disk, herdr, secret, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
 # These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
 # reports each input it could not read as unknown in its own JSON line and exits with its checks' code.
-UPDATES = {Command.update_brew: update.brew, Command.update_check: update.check, Command.herdr_doctor: herdr.doctor}
+UPDATES = {
+    Command.update_brew: update.brew,
+    Command.update_check: update.check,
+    Command.herdr_doctor: herdr.doctor,
+    Command.disk_watch: disk.main,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> None:

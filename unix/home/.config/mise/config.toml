@@ -580,6 +580,18 @@ run = [
   "v=$(mise current github:vercel-labs/agent-desktop </dev/null) && [ -n \"$v\" ] || { echo 'post-tools: mise current printed no agent-desktop pin, so its skills are not installed' >&2; exit 1; }; mise exec -- skills add \"vercel-labs/agent-desktop#v$v\" -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
 ]
 
+# Disk-watch (owner, 2026-11-12): a user service in the pattern of mise's built-in tool-update, a long-running
+# program that checks, then sleeps. Every 15 minutes it checks the home volume; below 100 GB it posts a macOS
+# notification and tells the chief-of-staff Claude session, naming the processes that hold deleted files open,
+# and repeats every 4 hours while the volume stays low. The command runs without a shell, under launchd's PATH
+# (/usr/bin:/bin:/usr/sbin:/sbin: python3, lsof, osascript); the watch finds hc in ~/.local/bin itself.
+# Apply: mise bootstrap services apply. Check: mise bootstrap services status.
+[bootstrap.services.disk-watch]
+scope = "user"
+command = "~/.config/mise/tasks/disk/watch"
+description = "Alert when the home volume has less than 100 GB free"
+restart = "always"
+
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
 # renders them from [vars] before the packages step. mise reads its config before this file is written:
 # after a [vars] change run `mise run bootstrap:toolchain` (two bootstrap runs, then toolchain:verify).
