@@ -599,12 +599,19 @@ run = '{% if os() == "macos" %}mise bootstrap packages apply brew:ruby --yes{% e
 # into ~/.claude/settings.json, keeps every other key, and writes ~/.claude/skills/jouet-init (0.0.4
 # src/setup.rs:128-141, src/cmd/setup.rs:295-298). A re-run finds its own entries by command and prints
 # `unchanged` (src/setup.rs:365); with stdin from /dev/null it asks nothing. Both checked in a scratch home.
+# OpenCode is not a `jouet setup` target: it reads ~/.config/opencode/AGENTS.md as global instructions
+# (OpenCode v2.2.7 packages/core/src/config/plugin/instruction.ts: `join(global.config, "AGENTS.md")`,
+# where `global.config` is `roots("opencode").config`, XDG_CONFIG_HOME or ~/.config joined with
+# "opencode", packages/util/src/global-roots.ts:6,15-16), so agents:opencode-jouet (python/home,
+# hometools opencode-jouet) keeps jouet's own guidance current there between its `<!-- jouet:start/end -->`
+# markers, alongside codebase-memory-mcp's block and a hand-written herdr section in the same file.
 [bootstrap.hooks.post-tools]
 run = [
   "mise exec -- skills remove herdr herdrdev/herdr -g -y </dev/null",
   "command -v hc >/dev/null || { echo 'post-tools: herdr-core is not installed yet; open Herdr once, then rerun mise bootstrap' >&2; exit 0; }; v=$(hc --version </dev/null | sed -n 's/^hc \\([0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)$/\\1/p') && [ -n \"$v\" ] || { echo 'post-tools: hc --version printed no hc X.Y.Z, so the herdr-core skill is not installed' >&2; exit 1; }; mise exec -- skills add \"herdrdev/herdr-core#v$v\" -g -a claude-code codex -s herdr-core -y </dev/null",
   "v=$(mise current github:vercel-labs/agent-desktop </dev/null) && [ -n \"$v\" ] || { echo 'post-tools: mise current printed no agent-desktop pin, so its skills are not installed' >&2; exit 1; }; mise exec -- skills add \"vercel-labs/agent-desktop#v$v\" -g -a claude-code codex -s agent-desktop agent-desktop-macos agent-desktop-ffi jev-desktop -y </dev/null",
   "mise exec -- jouet setup claude --global </dev/null",
+  "mise run agents:opencode-jouet",
 ]
 
 # Disk-watch (owner, 2026-11-12): monit, not our own code (docs/research/disk-watch/monit.md). brew's monit 6.0.0

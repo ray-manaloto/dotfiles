@@ -128,6 +128,13 @@ class HerdrAppTest(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         (self.bin / "hc").symlink_to(REAL_HC)
+        # The agents:opencode-jouet line is `mise run agents:opencode-jouet`, a global task: mise reads those
+        # from $XDG_CONFIG_HOME/mise/tasks (confirmed empirically — not $HOME/.config/mise/tasks, which
+        # scratch:env sets to a different scratch folder), so the real tasks folder is linked there too, as
+        # mise.toml links it onto a real HOME.
+        tasks = self.root / "config/mise"
+        tasks.mkdir(parents=True)
+        (tasks / "tasks").symlink_to(REPO / "unix/home/.config/mise/tasks")
         self.install(HC, "herdrdev/herdr-core", CODEX, CLAUDE)
         self.github("herdrdev/herdr-core", self.tag, (HC,))
         self.github("vercel-labs/agent-desktop", DESKTOP_TAG, DESKTOP)
@@ -247,6 +254,28 @@ class HerdrAppTest(unittest.TestCase):
             if "jouet hook claude" in hook["command"]
         ]
         self.assertEqual(len(jouet), 6, jouet)
+
+    def test_opencode_jouet_block_is_upserted_and_stays_idempotent(self) -> None:
+        # codebase-memory-mcp's own block and a hand-written herdr section, as the real file holds them.
+        # scratch:env sets XDG_CONFIG_HOME to <root>/config, where OpenCode would read it too.
+        target = self.root / "config/opencode/AGENTS.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        foreign = (
+            "<!-- codebase-memory-mcp:start -->\nfrom codebase-memory-mcp\n<!-- codebase-memory-mcp:end -->\n"
+            "\n## herdr\n\nhand-written herdr guidance.\n"
+        )
+        target.write_text(foreign)
+        self.post_tools()
+        once = target.read_text()
+        self.assertIn("<!-- jouet:start -->", once)
+        self.assertIn("<!-- jouet:end -->", once)
+        self.assertIn("<!-- codebase-memory-mcp:start -->\nfrom codebase-memory-mcp\n<!-- codebase-memory-mcp:end -->", once)
+        self.assertIn("## herdr\n\nhand-written herdr guidance.", once)
+        self.post_tools()
+        twice = target.read_text()
+        self.assertEqual(once, twice)
+        self.assertEqual(twice.count("<!-- jouet:start -->"), 1)
+        self.assertEqual(twice.count("<!-- jouet:end -->"), 1)
 
     def test_herdr_core_comes_from_the_installed_hc_tag(self) -> None:
         self.post_tools()
