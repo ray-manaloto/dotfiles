@@ -122,6 +122,10 @@ local linters = new Mapping<String, Step> {
         check = "mise x go:github.com/dotcommander/cclint -- cclint lint {{files}}"
         allow_failure = true
     }
+    // GitHub Actions (owner rule, 2026-11-13): jactionlint for correctness, never actionlint, and zizmor beside it for
+    // security. Both are hk builtins on the workflow files; the tools are global mise pins.
+    ["jactionlint"] = Builtins.jactionlint
+    ["zizmor"] = Builtins.zizmor
     // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
     ["zero-bash"] {
         check = "mise run //repo:zero-bash"
