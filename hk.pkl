@@ -1,7 +1,8 @@
 amends "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Config.pkl"
 import "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Builtins.pkl"
 
-local linters = new Mapping<String, Step> {
+// Commit-time checks: file-level linters that take seconds. pre-commit runs these only (owner, 2026-11-13).
+local fast = new Mapping<String, Step> {
     // A blank context line in a patch is a single space; stripping it would break the patch.
     ["trailing-whitespace"] = (Builtins.trailing_whitespace) { exclude = "**/*.patch" }
     ["newlines"] = Builtins.newlines
@@ -12,6 +13,66 @@ local linters = new Mapping<String, Step> {
     ["private-paths"] {
         check = "mise run privacy:scan -- {{files}}"
     }
+    // swift/ (jbax, #502): SwiftLint as hk's builtin; swift format, build and the non-live tests through the root's
+    // mise task. The live-IDE coverage gate (//swift:coverage) brings the IDE forward, so it is never a hook.
+    ["swiftlint"] = (Builtins.swiftlint) {
+        glob = List("swift/**/*.swift")
+        // macOS only, like jbax and its swiftlint pin (os = ["macos"] in the global mise config).
+        condition = "exec_ok('test \"$(uname -s)\" = Darwin')"
+    }
+    // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
+    ["frontmatter"] {
+        glob = List("**/*.md", "**/*.yml", "**/*.yaml")
+        check = "mise run //workflow:frontmatter"
+    }
+    // Agent-config linters (docs/research/agent-config-linters.md). agnix gates: a path given on the command line is
+    // checked even when .agnix.toml excludes it, so the workflow docs are left out here too. Both steps run their tool
+    // through `mise x <backend>`, which takes the global pin, so a stale shim of the same name can't answer instead.
+    ["agnix"] {
+        glob = List(
+            "**/AGENTS.md",
+            "**/CLAUDE.md",
+            "**/SKILL.md",
+            ".claude/**",
+            ".agnix.toml",
+            "unix/home/.codex/**",
+            "unix/home/.config/opencode/**"
+        )
+        exclude = "unix/home/.config/agents/workflow/**"
+        check = "mise x github:agent-sh/agnix -- agnix {{files}}"
+    }
+    // cclint covers Claude files only and reports without failing the hook (hk 2.9.0 Config.pkl:798-812).
+    ["cclint"] {
+        // It validates .md and .json files only.
+        glob = List("**/CLAUDE.md", ".claude/**/*.md", ".claude/**/*.json", "unix/home/.config/agents/skills/**/*.md")
+        check = "mise x go:github.com/dotcommander/cclint -- cclint lint {{files}}"
+        allow_failure = true
+    }
+    // GitHub Actions (owner rule, 2026-11-13): jactionlint for correctness, never actionlint, and zizmor beside it for
+    // security. Both are hk builtins on the workflow files; the tools are global mise pins.
+    ["jactionlint"] = Builtins.jactionlint
+    ["zizmor"] = Builtins.zizmor
+    // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
+    ["zero-bash"] {
+        check = "mise run //repo:zero-bash"
+    }
+    // `fnox set` on a doppler provider writes the value into the TOML in plain text: a tracked fnox file's Doppler
+    // entries must hold Doppler secret names (repotools fnox-refs). It reads the index, so it runs on every commit.
+    ["fnox-refs"] {
+        check = "mise run //repo:fnox-refs"
+    }
+    // A git command run with a hook's GIT_DIR (a test's `git init`, say) can write core.worktree into the shared
+    // .git/config, and every checkout of the repo then reads and writes another worktree's files. Nothing here sets it
+    // on purpose, so any value stops the commit. No glob: it runs on every commit.
+    ["no-core-worktree"] {
+        check = "test -z \"$(git config --file \"$(git rev-parse --git-common-dir)/config\" --get-all core.worktree)\" || { echo 'core.worktree is set in the shared .git/config: remove it with git config --file <common dir>/config --unset-all core.worktree' >&2; exit 1; }"
+    }
+}
+
+// Package checks (lint, types, codegen and 100%-coverage tests through each root's mise task): pre-push runs the
+// ones whose files the push changes, as hk selects a pre-push step's files from the pushed range (owner, 2026-11-13: a
+// commit took minutes, and every suite at once on 12 xdist workers drove the load past 200 on 12 cores).
+local suites = new Mapping<String, Step> {
     // DL-758: the p2996 package's ruff, ty, codegen drift and 100% coverage gate, through its mise task.
     ["p2996"] {
         glob = List("python/toolchains/p2996/**")
@@ -83,57 +144,9 @@ local linters = new Mapping<String, Step> {
         glob = List("python/depmaps/**")
         check = "mise run //depmaps:check"
     }
-    // swift/ (jbax, #502): SwiftLint as hk's builtin; swift format, build and the non-live tests through the root's
-    // mise task. The live-IDE coverage gate (//swift:coverage) brings the IDE forward, so it is never a hook.
-    ["swiftlint"] = (Builtins.swiftlint) {
-        glob = List("swift/**/*.swift")
-        // macOS only, like jbax and its swiftlint pin (os = ["macos"] in the global mise config).
-        condition = "exec_ok('test \"$(uname -s)\" = Darwin')"
-    }
     ["swift"] {
         glob = List("swift/**")
         check = "mise run //swift:check"
-    }
-    // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
-    ["frontmatter"] {
-        glob = List("**/*.md", "**/*.yml", "**/*.yaml")
-        check = "mise run //workflow:frontmatter"
-    }
-    // Agent-config linters (docs/research/agent-config-linters.md). agnix gates: a path given on the command line is
-    // checked even when .agnix.toml excludes it, so the workflow docs are left out here too. Both steps run their tool
-    // through `mise x <backend>`, which takes the global pin, so a stale shim of the same name can't answer instead.
-    ["agnix"] {
-        glob = List(
-            "**/AGENTS.md",
-            "**/CLAUDE.md",
-            "**/SKILL.md",
-            ".claude/**",
-            ".agnix.toml",
-            "unix/home/.codex/**",
-            "unix/home/.config/opencode/**"
-        )
-        exclude = "unix/home/.config/agents/workflow/**"
-        check = "mise x github:agent-sh/agnix -- agnix {{files}}"
-    }
-    // cclint covers Claude files only and reports without failing the hook (hk 2.9.0 Config.pkl:798-812).
-    ["cclint"] {
-        // It validates .md and .json files only.
-        glob = List("**/CLAUDE.md", ".claude/**/*.md", ".claude/**/*.json", "unix/home/.config/agents/skills/**/*.md")
-        check = "mise x go:github.com/dotcommander/cclint -- cclint lint {{files}}"
-        allow_failure = true
-    }
-    // GitHub Actions (owner rule, 2026-11-13): jactionlint for correctness, never actionlint, and zizmor beside it for
-    // security. Both are hk builtins on the workflow files; the tools are global mise pins.
-    ["jactionlint"] = Builtins.jactionlint
-    ["zizmor"] = Builtins.zizmor
-    // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
-    ["zero-bash"] {
-        check = "mise run //repo:zero-bash"
-    }
-    // `fnox set` on a doppler provider writes the value into the TOML in plain text: a tracked fnox file's Doppler
-    // entries must hold Doppler secret names (repotools fnox-refs). It reads the index, so it runs on every commit.
-    ["fnox-refs"] {
-        check = "mise run //repo:fnox-refs"
     }
     // The fnox and Doppler checks (doctor/mise.toml), only when the fnox files or doctor/ change, so an
     // ordinary commit makes no Keychain or Doppler call. Off in CI: it has neither.
@@ -142,33 +155,26 @@ local linters = new Mapping<String, Step> {
         profiles = List("!ci")
         check = "mise -C doctor doctor project"
     }
-    // A git command run with a hook's GIT_DIR (a test's `git init`, say) can write core.worktree into the shared
-    // .git/config, and every checkout of the repo then reads and writes another worktree's files. Nothing here sets it
-    // on purpose, so any value stops the commit. No glob: it runs on every commit.
-    ["no-core-worktree"] {
-        check = "test -z \"$(git config --file \"$(git rev-parse --git-common-dir)/config\" --get-all core.worktree)\" || { echo 'core.worktree is set in the shared .git/config: remove it with git config --file <common dir>/config --unset-all core.worktree' >&2; exit 1; }"
-    }
 }
+
+local linters: Mapping<String, Step> = (fast.toMap() + suites.toMap()).toMapping()
+
+// At most two steps at a time; root mise.toml caps pytest -n auto at 4 workers (PYTEST_XDIST_AUTO_NUM_WORKERS).
+jobs = 2
 
 hooks {
     ["pre-commit"] {
         fix = true
         stash = "git"
-        steps = (linters) {
+        steps = (fast) {
             // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
             // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
             ["no-commit-to-main"] = Builtins.no_commit_to_branch
-            // #391: //home:check, the real-toolchain test included, for a commit that reaches the toolchain tasks.
-            // No glob: hk drops a filtered step whose files were all deleted; toolchain-gate picks the paths.
-            ["home"] {
-                glob = null
+            // #391: the real-toolchain test (//home:check with //home:integration), only for a commit that reaches the
+            // toolchain tasks or a [vars] version; it reads the staged index, so it stays at commit. Otherwise it
+            // prints why it skipped and takes a second. No glob: hk drops a filtered step whose files were all deleted.
+            ["toolchain-gate"] {
                 check = "mise run //repo:toolchain-gate"
-            }
-            // As home: no glob, so a commit that only deletes a herdr file still runs it; herdr-gate picks the paths.
-            ["herdr"] {
-                glob = null
-                profiles = List("!ci")
-                check = "mise run //repo:herdr-gate"
             }
             // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
             ["python-review"] {
@@ -188,10 +194,11 @@ hooks {
             }
         }
     }
-    // Every commit a push would publish, branches and tags alike, never only the pushed range.
+    // The package checks for the files the push changes. The private-paths scan covers every commit a push would
+    // publish, branches and tags alike, never only the pushed range.
     ["pre-push"] {
-        steps {
-            ["private-paths"] {
+        steps = (suites) {
+            ["private-paths-outgoing"] {
                 exclusive = true
                 check = "mise run privacy:scan --outgoing"
             }

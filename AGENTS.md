@@ -108,9 +108,9 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents
 
 ## Workflow facts
 
-- Check: `hk check --all && mise run test` runs the hk checks and every root's tests; it passes before each
-  commit. A change under `python/<package>/` or `swift/` also runs that root's `check` task (lint, types,
-  codegen), e.g. `mise run //visualplan:check`.
+- Check: hk runs the file linters at commit and, at push, the `check` task (lint, types, codegen, tests) of each
+  root the pushed files reach, e.g. `mise run //visualplan:check`. Run that root's `check` before committing a
+  change under `python/<package>/` or `swift/`; `hk check --all && mise run test` runs everything.
 - Shipping: a branch and a pull request into `main`, opened with `mise run //repo:pr-create`
   (it wraps `repotools pr-create`); the owner merges on GitHub, and local `main` only fast-forwards
   to `origin/main`.

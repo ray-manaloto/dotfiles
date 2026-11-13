@@ -17,6 +17,11 @@ jbctl = "python/jbctl"
 depmaps = "python/depmaps"
 guards = "python/guards"
 
+# `pytest -n auto` starts one worker per core in every package's test task; hk runs two steps at a time (hk.pkl
+# jobs), so at most 8 workers, not 12 per suite (owner, 2026-11-13: the load passed 200 on 12 cores).
+[env]
+PYTEST_XDIST_AUTO_NUM_WORKERS = "4"
+
 [settings]
 lockfile = true
 # `mise use` and `mise upgrade --bump` write the resolved version, not the request
