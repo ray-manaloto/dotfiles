@@ -1400,9 +1400,9 @@ checksum = "sha256:07fecbf753e2c3bc10ebeb3e9ed8738f6a0cc1292998b79e2e9f1dd2a5525
 url = "https://registry.npmjs.org/npm/-/npm-12.2.2.tgz"
 
 [[tools."npm:@ai-sdk/openai-compatible"]]
-version = "3.0.91"
+version = "3.0.92"
 backend = "npm:@ai-sdk/openai-compatible"
-specifiers = ["3.0.91"]
+specifiers = ["3.0.92"]
 
 [[tools."npm:@fission-ai/openspec"]]
 version = "1.17.0"

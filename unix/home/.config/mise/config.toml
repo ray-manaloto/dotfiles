@@ -368,7 +368,7 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
 "github:vercel-labs/agent-desktop" = { version = "1.3.0", minimum_release_age = "0s" }
-"npm:@ai-sdk/openai-compatible" = { version = "3.0.91", minimum_release_age = "0s" }
+"npm:@ai-sdk/openai-compatible" = { version = "3.0.92", minimum_release_age = "0s" }
 "npm:apify-cli" = { version = "1.12.0", minimum_release_age = "0s" }
 jouet = { version = "0.0.4", workflow = "release.yml@refs/heads/main", minimum_release_age = "0s" }
 # Agent-config linters (owner, 2026-11-13, docs/research/agent-config-linters.md). agnix gates the agent files from
