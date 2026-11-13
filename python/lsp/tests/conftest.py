@@ -82,8 +82,20 @@ class World:
         monkeypatch.setenv("MISE_CONFIG_DIR", str(root / "mise/dir"))
         monkeypatch.setenv("MISE_GLOBAL_CONFIG_FILE", str(self.config))
         # mise records each config it reads in its state folder (tracked-configs); a scratch one keeps the test's
-        # configs out of ~/.local/state/mise. MISE_DATA_DIR stays live: the installed tsc is there.
+        # configs out of ~/.local/state/mise.
         monkeypatch.setenv("MISE_STATE_DIR", str(root / "mise/state"))
+        # A scratch data folder too, holding only a link to the installed typescript version. mise rewrites each
+        # tool's installs/<tool>/global link to match the global config it reads (src/runtime_symlinks.rs at
+        # v2026.11.8), so with the live data folder a test's scratch config deleted the real links of every other
+        # tool, depmaps' codebase-memory-mcp among them. The link is to the version folder, so mise's own links stay
+        # in the scratch installs/npm-typescript folder.
+        installs = root / "mise/data/installs/npm-typescript"
+        installs.mkdir(parents=True)
+        (installs / typescript.version).symlink_to(typescript.tsc.parents[1])
+        monkeypatch.setenv("MISE_DATA_DIR", str(root / "mise/data"))
+        # The global git config's hooks (hook.hk-pre-commit.command) run even with core.hooksPath=/dev/null, and
+        # they start hk through mise, which the scratch data folder doesn't hold. Each hook command skips on HK=0.
+        monkeypatch.setenv("HK", "0")
         monkeypatch.setenv("MISE_OFFLINE", "1")
         monkeypatch.setenv("TS_LSP_TSC", str(typescript.tsc))
 
