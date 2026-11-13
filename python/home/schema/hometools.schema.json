@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "monit-alert"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -64,6 +64,18 @@
       "properties": {
         "free_gib": {"type": "integer", "description": "Space a normal user can still write on the data volume (f_bavail), in GiB, as monit counts it."},
         "floor_gib": {"type": "integer", "description": "The floor: heavy test tasks refuse to start below it."}
+      }
+    },
+    "MonitAlert": {
+      "description": "The last monit alert, as monit-alert writes it to ~/.local/state/dotfiles/monit/alert.json and prints it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "service", "event", "description"],
+      "properties": {
+        "at": {"type": "string", "description": "When monit-alert ran, ISO 8601 in UTC."},
+        "service": {"type": "string", "description": "MONIT_SERVICE: the check that fired, such as data or the host name."},
+        "event": {"type": "string", "description": "MONIT_EVENT: the kind of event, such as Resource limit matched."},
+        "description": {"type": "string", "description": "MONIT_DESCRIPTION: monit's own sentence about the alert."}
       }
     },
     "Result": {
