@@ -38,8 +38,25 @@
         "told": {
           "type": "array",
           "items": {"type": "string"},
-          "description": "Who the alert reached: notification, chief-of-staff."
+          "description": "Where the alert went: notification, alert-file."
         }
+      }
+    },
+    "DiskAlert": {
+      "description": "The alert file chief-of-staff's check-in reads: replaced on each alert, removed once the volume recovers.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "free_bytes", "min_free_bytes", "holders", "text"],
+      "properties": {
+        "at": {"type": "number", "description": "When the alert went out (epoch seconds)."},
+        "free_bytes": {"type": "integer", "description": "Free bytes on the volume that holds the home folder."},
+        "min_free_bytes": {"type": "integer", "description": "Below this, the volume is low."},
+        "holders": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/DiskHolder"},
+          "description": "The processes holding deleted files, biggest first."
+        },
+        "text": {"type": "string", "description": "The alert in one line of plain words, as the notification shows it."}
       }
     },
     "DiskState": {

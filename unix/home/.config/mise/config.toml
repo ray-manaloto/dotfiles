@@ -582,9 +582,10 @@ run = [
 
 # Disk-watch (owner, 2026-11-12): a user service in the pattern of mise's built-in tool-update, a long-running
 # program that checks, then sleeps. Every 15 minutes it checks the home volume; below 100 GB it posts a macOS
-# notification and tells the chief-of-staff Claude session, naming the processes that hold deleted files open,
-# and repeats every 4 hours while the volume stays low. The command runs without a shell, under launchd's PATH
-# (/usr/bin:/bin:/usr/sbin:/sbin: python3, lsof, osascript); the watch finds hc in ~/.local/bin itself.
+# notification and writes ~/.local/state/dotfiles/disk-watch/alert.json, naming the processes that hold deleted
+# files open, and repeats every 4 hours while the volume stays low. chief-of-staff's check-in reads that file; a
+# check back above the line removes it. The command runs without a shell, under launchd's PATH
+# (/usr/bin:/bin:/usr/sbin:/sbin: python3, lsof, osascript).
 # Apply: mise bootstrap services apply. Check: mise bootstrap services status.
 [bootstrap.services.disk-watch]
 scope = "user"
