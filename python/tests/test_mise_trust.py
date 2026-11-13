@@ -24,6 +24,8 @@ THIRD_PARTY = "dev/github/jdx/mise"
 MIRROR = "dev/github/ray-manaloto/claude-code-marketplace/offline/jdx-mise"
 LEGACY = "dev/github/ray-manaloto/dotfiles-legacy"
 LEGACY_WORKTREE = ".codex/worktrees/7267/dotfiles"
+FREE_MODELS = "dev/tmp/free-models"
+FREE_MODELS_WT = "dev/tmp/free-models-wt"
 # Codex task copies of a repo, which Codex makes under ~/.codex/worktrees/<id>/<repo name>.
 CODEX_COPIES = (
     ".codex/worktrees/new1/dotfiles",
@@ -126,6 +128,19 @@ class MiseTrustTest(unittest.TestCase):
             capture_output=True,
         )
         self.assertTrue(self.loads(worktree, name))
+
+    def test_free_models_and_its_worktree_folder_load(self) -> None:
+        # Paranoid mode shares no trust between worktrees, so a worktree folder outside the
+        # owner's GitHub folder is trusted by path, including a config its branch adds.
+        for rel in (FREE_MODELS, f"{FREE_MODELS_WT}/branch"):
+            with self.subTest(rel=rel):
+                folder, name = self.project(rel)
+                self.assertTrue(self.loads(folder, name))
+
+    def test_a_sibling_of_the_free_models_folders_is_not_trusted(self) -> None:
+        # Folder prefixes, not string prefixes: ~/dev/tmp/free-models-other is a stranger.
+        folder, name = self.project(f"{FREE_MODELS}-other")
+        self.assertFalse(self.loads(folder, name))
 
     def test_a_codex_task_copy_loads_and_keeps_loading_after_an_edit(self) -> None:
         # A legacy copy is also named `dotfiles`, so the ignore list must name

@@ -31,8 +31,17 @@ activate_aggressive = true
 # shims there keep working. The global git hooks run `mise x hk`, so `git commit` in an unapproved
 # clone with a mise.toml fails until `mise trust` (or `HK=0`). Test harnesses that make configs in temporary folders set
 # MISE_TRUSTED_CONFIG_PATHS for their run. python/tests/test_mise_trust.py checks all of this.
+# Paranoid mode never shares trust between git worktrees (mise docs/paranoid.md), so an owned repo
+# whose worktrees live outside ~/dev/github/ray-manaloto names its checkout and worktree folder here
+# (owner, 2026-11-13): free-models and the ~/dev/tmp/free-models-wt/<branch> worktrees its ship.py makes.
 paranoid = ["config"]
-trusted_config_paths = ["~/.config/mise", "~/dev/github/ray-manaloto", "~/.codex/worktrees"]
+trusted_config_paths = [
+    "~/.config/mise",
+    "~/dev/github/ray-manaloto",
+    "~/.codex/worktrees",
+    "~/dev/tmp/free-models",
+    "~/dev/tmp/free-models-wt",
+]
 minimum_release_age = "0s"
 lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.
