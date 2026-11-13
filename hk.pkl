@@ -94,6 +94,29 @@ local linters = new Mapping<String, Step> {
         glob = List("**/*.md", "**/*.yml", "**/*.yaml")
         check = "mise run //workflow:frontmatter"
     }
+    // Agent-config linters (docs/research/agent-config-linters.md). agnix gates: a path given on the command line is
+    // checked even when .agnix.toml excludes it, so the workflow docs are left out here too. Both steps run their tool
+    // through `mise x <backend>`, which takes the global pin, so a stale shim of the same name can't answer instead.
+    ["agnix"] {
+        glob = List(
+            "**/AGENTS.md",
+            "**/CLAUDE.md",
+            "**/SKILL.md",
+            ".claude/**",
+            ".agnix.toml",
+            "unix/home/.codex/**",
+            "unix/home/.config/opencode/**"
+        )
+        exclude = "unix/home/.config/agents/workflow/**"
+        check = "mise x github:agent-sh/agnix -- agnix {{files}}"
+    }
+    // cclint covers Claude files only and reports without failing the hook (hk 2.9.0 Config.pkl:798-812).
+    ["cclint"] {
+        // It validates .md and .json files only.
+        glob = List("**/CLAUDE.md", ".claude/**/*.md", ".claude/**/*.json", "unix/home/.config/agents/skills/**/*.md")
+        check = "mise x go:github.com/dotcommander/cclint -- cclint lint {{files}}"
+        allow_failure = true
+    }
     // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
     ["zero-bash"] {
         check = "mise run //repo:zero-bash"
