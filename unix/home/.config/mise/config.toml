@@ -800,19 +800,20 @@ timeout = "15s"
 # token the CLI keeps in its keyring slot (`pbpaste | doppler configure set token --scope /`, once). These are
 # aliases, not wrappers. --silent: set and delete print the remaining secrets with values otherwise (doppler 3.77.1
 # pkg/cmd/secrets.go); the agent guard blocks the doppler commands that print values. Names reach the shell only as
-# mise's usage_* variables, never as template text, and must be UPPER_SNAKE.
+# mise's usage_* variables, never as template text, and must be UPPER_SNAKE (no leading, trailing or double _).
+# secret:doctor finds the checkout through the global config's link into it.
 [tasks."secret:set"]
 description = "Add a Doppler secret to dotfiles/dev_personal from stdin; --replace changes an existing one"
 usage = '''
 arg "<name>" help="UPPER_SNAKE secret name"
 flag "--replace" help="change a secret Doppler already has"
 '''
-run = "printf %s \"$usage_name\" | grep -qxE '[A-Z][A-Z0-9_]*' || { echo 'secret:set: the name is not UPPER_SNAKE' >&2; exit 1; }; test -n \"$usage_replace\" || ! doppler secrets --only-names --json -p dotfiles -c dev_personal --no-check-version | jq -e --arg n \"$usage_name\" 'has($n)' > /dev/null || { echo \"secret:set: $usage_name exists; pass --replace to change it\" >&2; exit 1; }; doppler secrets set \"$usage_name\" -p dotfiles -c dev_personal --no-check-version --no-interactive --silent > /dev/null && echo \"secret:set: stored $usage_name\""
+run = "printf %s \"$usage_name\" | grep -qxE '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*' || { echo 'secret:set: the name is not UPPER_SNAKE' >&2; exit 1; }; test -n \"$usage_replace\" || { names=$(doppler secrets --only-names --json -p dotfiles -c dev_personal --no-check-version) || { echo 'secret:set: cannot list the Doppler names' >&2; exit 1; }; ! printf %s \"$names\" | jq -e --arg n \"$usage_name\" 'has($n)' > /dev/null || { echo \"secret:set: $usage_name exists; pass --replace to change it\" >&2; exit 1; }; }; doppler secrets set \"$usage_name\" -p dotfiles -c dev_personal --no-check-version --no-interactive --silent > /dev/null && echo \"secret:set: stored $usage_name\""
 
 [tasks."secret:delete"]
 description = "Delete Doppler secrets from dotfiles/dev_personal (the owner's yes on the exact names first)"
 usage = 'arg "<names>" var=#true help="secret names"'
-run = "printf '%s\\n' $usage_names | grep -qvxE '[A-Z][A-Z0-9_]*' && { echo 'secret:delete: every name must be UPPER_SNAKE' >&2; exit 1; }; doppler secrets delete $usage_names -p dotfiles -c dev_personal --no-check-version --yes --silent > /dev/null && echo \"secret:delete: deleted $usage_names\""
+run = "printf '%s\\n' $usage_names | grep -qvxE '[A-Z][A-Z0-9]*(_[A-Z0-9]+)*' && { echo 'secret:delete: every name must be UPPER_SNAKE' >&2; exit 1; }; doppler secrets delete $usage_names -p dotfiles -c dev_personal --no-check-version --yes --silent > /dev/null && echo \"secret:delete: deleted $usage_names\""
 
 [tasks."secret:list"]
 description = "List the secret names in dotfiles/dev_personal, never values"
@@ -820,4 +821,4 @@ run = "doppler secrets --only-names -p dotfiles -c dev_personal --no-check-versi
 
 [tasks."secret:doctor"]
 description = "Run the dotfiles fnox and Doppler checks (dotfiles doctor/mise.toml)"
-run = "mise -C ~/dev/github/ray-manaloto/dotfiles/doctor doctor project"
+run = "mise -C \"$(git -C \"$(dirname \"$(realpath ~/.config/mise/config.toml)\")\" rev-parse --show-toplevel)/doctor\" doctor project"
