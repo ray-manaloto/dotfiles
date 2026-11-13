@@ -1,0 +1,9 @@
+{
+  "source_sha": "54906fdb1fc735b507961b2954f6968775cae4f6",
+  "upstream_run_id": 43372164155,
+  "artifact_sha256": "c0aa0a1b86f8b9f61cc7c4c9541cf8f58fff495fbfb738a5b90cb3c8a109b338",
+  "package_sha256": "7e37763001259ba187826b00d1d40fe681a1c572eb4a727a7f6c98770532af09",
+  "package_version": "6.9.0",
+  "release_tag": "rea-54906fdb1fc7",
+  "asset_url": "https://github.com/ray-manaloto/dotfiles/releases/download/rea-54906fdb1fc7/package.tgz"
+}

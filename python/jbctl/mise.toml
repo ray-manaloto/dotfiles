@@ -1,5 +1,6 @@
-# jbctl (issue #502): drive JetBrains IDEs from code. No [tools]: ruff, ty, uv, datamodel-codegen and rea are
-# global (DL-757); jbax comes from //swift:install. From the repository root: //jbctl:<task>.
+# jbctl (issue #502): drive JetBrains IDEs from code. No [tools]: ruff, ty, uv and datamodel-codegen are global
+# (DL-757); rea comes from //jbctl:rea-install and jbax from //swift:install. From the repository root:
+# //jbctl:<task>.
 
 [env]
 _.python.venv = { path = ".venv" }
@@ -33,12 +34,38 @@ description = "Install this checkout's jbctl as a uv tool, so jbctl runs by name
 dir = "{{ config_root }}/../.."
 run = "uv tool install --reinstall ./python/jbctl"
 
+# #472: the pinned rea package (src/jbctl/data/rea-pin.json), a dotfiles release asset checked by its sha256, installed
+# with its locked dependencies in ${XDG_DATA_HOME:-~/.local/share}/jbctl/rea, which rea.installed_helper() reads.
+# npm runs with every install script off (Frida's included) and no user or global npm config. The task's own Node,
+# the version the package was built and checked with, leaves the global one alone; npm is the one that Node bundles,
+# and JBCTL_REA_NPM is its version, which rea-install checks (reainstall.check_tools). A folder that already holds the
+# pinned archive and a verified install is kept. After the install it applies jbctl's patch to the helper and writes
+# identity.json (the pin's source commit, package and patch sha256, Node version, time), which rea-doctor reads.
+[tasks.rea-install]
+description = "Install the pinned rea package in jbctl's rea folder (the patch test reads its helper)"
+depends = ["sync"]
+# #472 (owner ruling C): the Node the pinned package was built and checked with, and the npm that Node bundles. Both
+# change with rea-pin.json: a pin built on another Node moves them to that Node and its npm.
+tools = { node = "24.22.1" }
+env = { JBCTL_REA_NPM = "11.19.1" }
+usage = 'flag "--package <tgz>" help="Install this package.tgz (its sha256 must match the pin) instead of downloading it"'
+run = 'uv run --locked jbctl rea-install ${usage_package:+--package="$usage_package"}'
+
+# #472: the folder against the pin, as one JSON line: the installed source commit and package sha256, jbctl's patch
+# marker in the helper, and rea --version run with the global Node (no task tools: it is the Node rea runs on in use).
+# Exits 1 on any mismatch. A rea-agents left in npm's global prefix is a warning (stray_global), not a failure.
+[tasks.rea-doctor]
+description = "Check jbctl's rea folder against the pin (source commit, package sha256, patch, version)"
+depends = ["sync"]
+run = "uv run --locked jbctl rea-doctor"
+
 # The live tests are skipped unless JBCTL_IDE is set (only the coverage task sets it), so this never touches an IDE.
 [tasks.test]
 # The tests drive macOS tools (agent-desktop, rea's macOS helper, jbax); skip elsewhere.
 skip_if = "{{ os() != 'macos' }}"
 description = "Real tests (no mocking library); the live-IDE ones run only with JBCTL_IDE set"
-depends = ["sync"]
+# The offline tests copy the installed rea helper, so rea is installed first (kept when already in place).
+depends = ["sync", "rea-install"]
 # prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
 output = "prefix"
 # Serial: jbctl finds IDEs by the machine-wide web ports 63342-63361 and process list, so a stand-in IDE
@@ -63,7 +90,8 @@ run = "uv run --locked pytest --durations=25"
 [tasks.coverage]
 skip_if = "{{ os() != 'macos' }}"
 description = "Every test, live ones included; line and branch coverage of at least 97.63% (#502)"
-depends = ["sync"]
+# The offline tests copy the installed rea helper, so rea is installed first (kept when already in place).
+depends = ["sync", "rea-install"]
 usage = """
 arg "<ide>" help="The IDE under test, by its Toolbox shell-script name, e.g. clion"
 flag "--foreground" help="Also run the debug route that brings the IDE forward (menu-bar Settings)"

@@ -3,14 +3,14 @@
 import json
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import httpx
 import psutil
 from pydantic_settings import CliApp, CliSettingsSource
 
-from . import covgate, ide, lifecycle, mcp, rea, skills, toolbox
+from . import covgate, ide, lifecycle, mcp, rea, reainstall, skills, toolbox
 from .models import (
     Action,
     CheckDirect,
@@ -22,7 +22,10 @@ from .models import (
     Leftover,
     Map,
     Options,
+    ReaDoctor,
+    ReaInstall,
     ReaPatch,
+    ReaPin,
     Resolve,
     Restart,
     RouterDirect,
@@ -45,6 +48,8 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.router_direct: RouterDirect,
     Command.check_direct: CheckDirect,
     Command.rea_patch: ReaPatch,
+    Command.rea_install: ReaInstall,
+    Command.rea_doctor: ReaDoctor,
     Command.coverage_gate: CoverageGate,
     Command.status: Status,
     Command.start: Start,
@@ -122,12 +127,32 @@ def copy(options: Skills) -> None:
         raise SystemExit(1)
 
 
+def rea_step(options: ReaPatch | ReaInstall | ReaDoctor, want: ReaPin, tools: Mapping[str, str]) -> None:
+    """rea-install puts the pinned package in jbctl's rea folder, patches its helper and records identity.json;
+    rea-patch patches a helper, that one's by default; rea-doctor checks the folder against the pin, exit 1 on any
+    mismatch."""
+    if isinstance(options, ReaInstall):
+        done = reainstall.run(options.package, options.url, want, tools)
+        with reainstall.settled(Path(done.folder)):
+            rea.patch(Path(done.helper))
+            reainstall.record(Path(done.folder), want, tools["node"], keep=done.reused)
+        emit(Event(rea=done))
+    elif isinstance(options, ReaDoctor):
+        health = rea.health(reainstall.folder(), want)
+        emit(Event(doctor=health))
+        if not health.ok:
+            raise SystemExit(1)
+    else:
+        helper = Path(options.helper) if options.helper else rea.installed_helper()
+        emit(Event(patch=rea.patch(helper)))
+
+
 def run(options: Options) -> None:
     """Print one JSON line per completed step; exit 1 when the IDE did not end up as asked."""
     match options:
-        case ReaPatch():
-            helper = Path(options.helper) if options.helper else rea.installed_helper()
-            emit(Event(patch=rea.patch(helper)))
+        case ReaPatch() | ReaInstall() | ReaDoctor():
+            # Only rea-install reads the task's mise.toml, which an installed jbctl does not have.
+            rea_step(options, reainstall.pin(), reainstall.task_tools() if isinstance(options, ReaInstall) else {})
         case CoverageGate():
             result = covgate.check(Path(options.report), Path(options.sources), options.skip, options.minimum)
             emit(Event(coverage=result))

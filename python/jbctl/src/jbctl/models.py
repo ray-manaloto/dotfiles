@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 from typing import Annotated
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class Command(StrEnum):
@@ -18,6 +18,8 @@ class Command(StrEnum):
     router_direct = "router-direct"
     check_direct = "check-direct"
     rea_patch = "rea-patch"
+    rea_install = "rea-install"
+    rea_doctor = "rea-doctor"
     coverage_gate = "coverage-gate"
     status = "status"
     start = "start"
@@ -34,7 +36,7 @@ An MCP streamable-HTTP endpoint to check instead of the IDE's own; only initiali
 
 type Helper = Annotated[str, Field(min_length=1)]
 """
-ReaNativeUI.swift to patch; default the one in the global rea-agents install
+ReaNativeUI.swift to patch; default the one in jbctl's rea folder (mise run //jbctl:rea-install)
 """
 
 
@@ -49,7 +51,38 @@ class ReaPatch(BaseModel):
     )
     helper: Helper | None = None
     """
-    ReaNativeUI.swift to patch; default the one in the global rea-agents install
+    ReaNativeUI.swift to patch; default the one in jbctl's rea folder (mise run //jbctl:rea-install)
+    """
+
+
+type Package = Annotated[str, Field(min_length=1)]
+"""
+A local package.tgz in place of the download; its sha256 must still be the pin's
+"""
+
+
+type Url = Annotated[str, Field(pattern="^https?://")]
+"""
+Download from this URL in place of the pin's asset_url; its sha256 must still be the pin's
+"""
+
+
+class ReaInstall(BaseModel):
+    """
+    Install the pinned rea package (data/rea-pin.json) in ${XDG_DATA_HOME:-~/.local/share}/jbctl/rea.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    package: Package | None = None
+    """
+    A local package.tgz in place of the download; its sha256 must still be the pin's
+    """
+    url: Url | None = None
+    """
+    Download from this URL in place of the pin's asset_url; its sha256 must still be the pin's
     """
 
 
@@ -60,6 +93,96 @@ class PatchState(StrEnum):
 
     applied = "applied"
     already = "already"
+
+
+class ReaPin(BaseModel):
+    """
+    The one rea package jbctl installs: a build of one rea commit, published as a dotfiles release asset.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    source_sha: Annotated[str, Field(pattern="^[0-9a-f]{40}$")]
+    """
+    The rea commit the package was built from
+    """
+    upstream_run_id: Annotated[int, Field(ge=1)]
+    """
+    The rea CI run (ci.yml) that built and verified the package
+    """
+    artifact_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+    """
+    That run's artifact zip, for provenance
+    """
+    package_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+    """
+    package.tgz, the release asset: checked before every use
+    """
+    package_version: Annotated[str, Field(pattern="^\\d+\\.\\d+\\.\\d+$")]
+    """
+    rea-agents' version in package.tgz
+    """
+    release_tag: Annotated[str, Field(min_length=1)]
+    """
+    The dotfiles release that holds the asset
+    """
+    asset_url: Annotated[str, Field(pattern="^https://")]
+    """
+    package.tgz in that release
+    """
+
+
+class ReaFolder(BaseModel):
+    """
+    What rea-install left in jbctl's rea folder.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folder: str
+    version: str
+    """
+    node_modules/rea-agents/package.json's version
+    """
+    helper: str
+    """
+    The native UI helper rea-patch patches
+    """
+    reused: bool
+    """
+    The folder already held the pinned package.tgz, so nothing was installed
+    """
+
+
+class NpmLockPackage(BaseModel):
+    """
+    One entry of an npm lockfile's packages map: the fields rea-install reads; npm's others pass through.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    version: str | None = None
+    dependencies: dict[str, str] | None = None
+    optional_dependencies: Annotated[dict[str, str] | None, Field(alias="optionalDependencies")] = None
+    dev: bool = False
+
+
+class NpmLock(BaseModel):
+    """
+    An npm-shrinkwrap.json, as far as rea-install reads it: its packages map, keyed by install path ('' is the root).
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+        frozen=True,
+    )
+    packages: dict[str, NpmLockPackage]
 
 
 class Failure(BaseModel):
@@ -647,6 +770,82 @@ class Leftover(BaseModel):
     reason: str
 
 
+class ReaDoctor(BaseModel):
+    """
+    Check the rea install against the pin (data/rea-pin.json); exit 1 on any mismatch.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+
+
+class ReaIdentity(BaseModel):
+    """
+    identity.json in jbctl's rea folder: what rea-install installed, written after the install was verified and patched.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    source_sha: Annotated[str, Field(pattern="^[0-9a-f]{40}$")]
+    """
+    The pin's rea commit
+    """
+    package_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+    """
+    The installed package.tgz
+    """
+    patch_sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+    """
+    The rea-native-ui.patch applied to the helper
+    """
+    node_version: str
+    """
+    The Node that npm installed the package with
+    """
+    installed_at: AwareDatetime
+
+
+class ReaHealth(BaseModel):
+    """
+    What rea-doctor found; ok is false (exit 1) on any mismatch with the pin. stray_global is only a warning.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    ok: bool
+    pinned_source_sha: str
+    installed_source_sha: str | None = None
+    """
+    identity.json's; null when it is missing
+    """
+    package_sha_match: bool
+    """
+    The folder's package.tgz is the pin's
+    """
+    patch_marker: bool
+    """
+    The installed helper carries jbctl's patch marker
+    """
+    version: str | None = None
+    """
+    rea --version from the folder's bin, run with the global node; null when it did not run
+    """
+    version_match: bool
+    """
+    That version is the pin's package_version
+    """
+    stray_global: bool
+    """
+    npm prefix -g still holds a rea-agents (a warning, not a failure)
+    """
+
+
 class Map(BaseModel):
     """
     Save rea's accessibility map of one IDE window (layer-0 windows only).
@@ -756,6 +955,8 @@ type Options = (
     | RouterDirect
     | CheckDirect
     | ReaPatch
+    | ReaInstall
+    | ReaDoctor
     | CoverageGate
     | Status
     | Start
@@ -810,6 +1011,8 @@ class Event(BaseModel):
     lifecycle: Lifecycle | None = None
     skill: SkillCopy | None = None
     leftover: Leftover | None = None
+    rea: ReaFolder | None = None
+    doctor: ReaHealth | None = None
 
 
 class Jbctl(BaseModel):

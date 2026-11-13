@@ -9,12 +9,14 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Iterator
+from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any, NamedTuple
 
 import psutil
 import pytest
 
+from jbctl import rea
 from jbctl.cli import main
 from jbctl.mcp import ROUTER
 
@@ -33,6 +35,27 @@ def run(capsys: pytest.CaptureFixture[str], *argv: str) -> tuple[int, list[dict[
     out, err = capsys.readouterr()
     lines = [json.loads(line) for line in out.splitlines()]
     return code, lines, json.loads(err)["error"] if err else ""
+
+
+@pytest.fixture(scope="session")
+def pristine_text(tmp_path_factory: pytest.TempPathFactory) -> str:
+    """The installed rea helper with jbctl's patch taken back out: what a fresh rea install holds.
+
+    Read once per session, before any test moves XDG_DATA_HOME.
+    """
+    helper = tmp_path_factory.mktemp("pristine") / "ReaNativeUI.swift"
+    shutil.copy(rea.installed_helper(), helper)
+    if rea.MARKER in helper.read_text():
+        with as_file(files("jbctl").joinpath("rea-native-ui.patch")) as diff:
+            subprocess.run(["patch", "--reverse", "--silent", "-i", diff, helper], check=True)
+    return helper.read_text()
+
+
+@pytest.fixture
+def pristine(tmp_path: Path, pristine_text: str) -> Path:
+    helper = tmp_path / "ReaNativeUI.swift"
+    helper.write_text(pristine_text)
+    return helper
 
 
 @pytest.fixture
