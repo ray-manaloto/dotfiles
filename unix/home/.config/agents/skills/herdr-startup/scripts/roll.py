@@ -9,10 +9,14 @@ chief-of-staff).
 Per tab:
   1. busy gate   checks.py busy: status must be done/idle and no background jobs. Otherwise SKIP it (listed
                  in the report, to retry later). Never interrupt.
-  2. handshake   hc send a stop-point request: finish nothing new, write the resume block on your lane page,
-                 then end your turn with the line READY-TO-RESTART (or BUSY-KEEP-ME <reason>).
-  3. wait        up to --wait seconds for that line and an idle status; re-run the busy gate (a job may have
-                 started meanwhile). BUSY-KEEP-ME or a timeout = SKIP.
+  2. handshake   hc send --wait a stop-point request: finish nothing new, write the resume block on your lane
+                 page, then end your turn with the line READY-TO-RESTART (or BUSY-KEEP-ME <reason>).
+  3. wait        hc waits for that turn (no polling), up to --wait seconds. The answer is read from the tab's
+                 own transcript (its session id from graph.json), never from the screen: Claude Code draws
+                 the reply behind a bullet, and later turns (side notes) push it off. Any assistant text after
+                 the handshake that ends with READY-TO-RESTART or starts with BUSY-KEEP-ME counts; the last
+                 one wins. Then re-run the busy gate (a job may have started meanwhile). BUSY-KEEP-ME, a
+                 permission or blocked status, or no answer = SKIP.
   4. exit        hc send /exit; wait for the terminal to drop back to its shell.
   5. resume      restore.py --apply --only <terminal> --rolling: types the claude --resume command into the
                  same terminal (same tab, same id), with the rolling resume prompt.
@@ -21,8 +25,11 @@ Per tab:
 Dry run by default (prints the order and each tab's busy state). --apply does it.
 Usage: python3 -I roll.py --spaces free-models,dotfiles [--tabs t2c8,t2c9] [--apply] [--wait 900]
 """
-import argparse, json, os, re, subprocess, sys, time
+import argparse, datetime, glob, json, os, subprocess, sys, time
 
+HOME = os.path.expanduser("~")
+GRAPH = os.path.join(HOME, "dev/tmp/fix-herdr/wiki/sessions/graph.json")
+PROJECTS = os.path.join(HOME, ".claude", "projects")
 RAW_ENV = {k: v for k, v in os.environ.items() if k not in ("HC_TERMINAL_ID", "HC_SCOPE")}
 HERE = os.path.dirname(os.path.abspath(__file__))
 HANDSHAKE = ("From chief-of-staff, rolling restart to load the new Claude Code plugins. Start nothing new. "
@@ -58,6 +65,57 @@ def busy(term):
 def state(term):
     d = j(["hc", "get", term, "--json"])
     return (d.get("status") or {}).get("state"), (d.get("foreground") or {}).get("argv") or []
+
+
+def status_kind(term):
+    """hc get's status.kind: permission or blocked means the tab waits on a dialog."""
+    return ((j(["hc", "get", term, "--json"]).get("status")) or {}).get("kind")
+
+
+def session_of(term, graph=GRAPH):
+    """The Claude session id graph.json records for this terminal (snapshot.py refreshes it first)."""
+    with open(graph) as f:
+        g = json.load(f)
+    for s in g["spaces"]:
+        for t in s["tabs"]:
+            for x in t["terminals"]:
+                if x["address"] == term and x.get("kind") == "claude":
+                    return x.get("session")
+    return None
+
+
+def transcript(session, projects=PROJECTS):
+    """The session's transcript, ~/.claude/projects/<project>/<session>.jsonl."""
+    found = glob.glob(os.path.join(glob.escape(projects), "*", f"{session}.jsonl"))
+    return found[0] if len(found) == 1 else None
+
+
+def when(stamp):
+    return datetime.datetime.fromisoformat(stamp)
+
+
+def reply(path, since):
+    """ready or busy from the last marker in assistant text written after `since`, else None."""
+    answer = None
+    with open(path) as f:
+        for line in f:
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue  # a line still being written
+            if d.get("type") != "assistant" or d.get("isSidechain") or not d.get("timestamp"):
+                continue
+            if when(d["timestamp"]) <= since:
+                continue
+            for block in (d.get("message") or {}).get("content") or []:
+                if not isinstance(block, dict) or block.get("type") != "text":
+                    continue
+                text = block.get("text", "").strip()
+                if text.endswith("READY-TO-RESTART"):
+                    answer = "ready"
+                elif text.startswith("BUSY-KEEP-ME"):
+                    answer = "busy"
+    return answer
 
 
 def tail(term, n=40):
@@ -106,22 +164,21 @@ def roll_one(t, a):
     st, argv = state(term)
     if "claude" not in " ".join(argv):
         return {"where": where, "terminal": term, "result": "skipped-foreground-not-claude", "argv": argv}
-    subprocess.run(["hc", "send", term, HANDSHAKE], capture_output=True)
-    time.sleep(15)
-
-    def answered():
-        # Match only a line that is exactly the marker; the request text itself mentions both markers.
-        lines = [l.strip() for l in tail(term, 60)]
-        s, _ = state(term)
-        if s not in ("done", "idle"):
-            return None
-        for l in reversed(lines):
-            if l == "READY-TO-RESTART":
-                return "ready"
-            if l.startswith("BUSY-KEEP-ME"):
-                return "busy"
-        return None
-    ans = wait_for(answered, a.wait)
+    sid = session_of(term)
+    path = transcript(sid) if sid else None
+    if not path:
+        return {"where": where, "terminal": term, "result": "skipped-no-transcript", "session": sid}
+    since = datetime.datetime.now(datetime.UTC)
+    end = time.time() + a.wait
+    subprocess.run(["hc", "send", "--wait", "--timeout", str(a.wait), term, HANDSHAKE], capture_output=True, check=False)
+    # A wait can return early (a message to this terminal, or a check-in): wait again while the tab works.
+    ans = reply(path, since)
+    while ans is None and time.time() < end and state(term)[0] not in ("done", "idle"):
+        subprocess.run(["hc", "wait", "--timeout", str(max(1, int(end - time.time()))), term],
+                       capture_output=True, check=False)
+        ans = reply(path, since)
+    if status_kind(term) in ("permission", "blocked"):
+        return {"where": where, "terminal": term, "result": "skipped-blocked", "answer": ans}
     if ans != "ready":
         return {"where": where, "terminal": term, "result": "skipped-" + (ans or "no-answer")}
     b = busy(term)
