@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .models import DiskCheck, DiskHolder, DiskState
+from .models import DiskAlert, DiskCheck, DiskHolder, DiskState
 
 GB = 1_000_000_000
 MIN_FREE = 100 * GB
@@ -17,11 +17,14 @@ EVERY = 15 * 60
 # While the volume stays low, the alert repeats this often; a check back above the line clears it.
 REPEAT = 4 * 60 * 60
 TOP = 5
-# hc send waits while a person has an unsent draft in the box; the watch gives up rather than stall.
+# lsof and osascript get this long; the watch goes on without them rather than stall.
 TIMEOUT = 60
-CHIEF = "chief-of-staff"
-# Under HOME, read at each check: the last alert time, so a restart does not repeat it early.
-STATE = ".local/state/dotfiles/disk-watch.json"
+# Under HOME. The state keeps the last alert time, so a restart does not repeat it early. The alert file is how
+# chief-of-staff hears of it: a background session with no terminal, reached by Claude only through SendMessage,
+# which this service cannot call, so its check-in reads the file instead (chief-of-staff's identity ruling).
+FOLDER = ".local/state/dotfiles/disk-watch"
+STATE = f"{FOLDER}/state.json"
+ALERT = f"{FOLDER}/alert.json"
 
 
 def read(*argv: str) -> str | None:
@@ -53,12 +56,12 @@ def holders(listing: str | None) -> list[DiskHolder]:
 
 def plain(name: str) -> str:
     """A process name with only letters, digits, space and ._+- kept: any program can name itself, and the
-    alert is typed into a terminal (no backticks or angle brackets, owner ruling 2026-11-07)."""
+    alert's text is shown by osascript and read by an agent."""
     return "".join(c if c.isascii() and (c.isalnum() or c in " ._+-") else "_" for c in name)
 
 
 def message(free: int, min_free: int, held: list[DiskHolder]) -> str:
-    """The alert's text: plain words only, since it is typed into a terminal and shown by osascript."""
+    """The alert's text: plain words only."""
     names = ", ".join(f"{plain(h.command)} pid {h.pid} {h.bytes // GB} GB" for h in held) or "none found"
     low = f"disk-watch: {free // GB} GB free on the home volume, below {min_free // GB} GB."
     return f"{low} Deleted files held open: {names}"
@@ -72,34 +75,18 @@ def notify(text: str) -> bool:
     return read("osascript", "-e", script) is not None
 
 
-def hc() -> str:
-    """hc from PATH, else ~/.local/bin where Herdr installs it: the service gets launchd's PATH, which lacks it."""
-    return shutil.which("hc", path=f"{os.environ.get('PATH', '')}{os.pathsep}{Path.home() / '.local/bin'}") or "hc"
-
-
-def answer(*argv: str) -> dict:
-    """An hc --json call's object; {} when hc fails or prints something else (the watch must outlive a bad hc)."""
+def publish(alert: Path, data: DiskAlert) -> bool:
+    """The alert file, written to a temporary file and renamed so a reader never sees half of it. False when it
+    can't be written: on a full disk the watch still posts the notification and keeps running."""
+    partial = alert.with_name(f".{alert.name}.{os.getpid()}")
     try:
-        got = json.loads(read(hc(), *argv) or "{}")
-    except ValueError:  # not JSON
-        return {}
-    return got if isinstance(got, dict) else {}
-
-
-def chief() -> str | None:
-    """The chief-of-staff terminal, only while Claude runs in it: text sent to a shell would run as a command."""
-    for terminal in answer("ls", "--json").get("terminals", []):
-        if terminal.get("state") == "live" and terminal.get("where") == f"{CHIEF} / {CHIEF}":
-            argv = (answer("get", terminal["address"], "--json").get("foreground") or {}).get("argv") or []
-            if argv and Path(argv[0]).name == "claude":
-                return terminal["address"]
-    return None
-
-
-def tell(text: str) -> bool:
-    """The alert sent to chief-of-staff's Claude session; False when it isn't running or the send fails."""
-    terminal = chief()
-    return terminal is not None and read(hc(), "send", terminal, text) is not None
+        alert.parent.mkdir(parents=True, exist_ok=True)
+        partial.write_text(data.model_dump_json())
+        partial.replace(alert)
+    except OSError:  # no space, or the folder is not writable
+        partial.unlink(missing_ok=True)
+        return False
+    return True
 
 
 def load(state: Path) -> DiskState:
@@ -112,22 +99,26 @@ def load(state: Path) -> DiskState:
 
 def check(min_free: int = MIN_FREE, now: Callable[[], float] = time.time) -> DiskCheck:
     """One check: below min_free, alert unless one went out in the last REPEAT seconds."""
-    state = Path.home() / STATE
+    state, alert = Path.home() / STATE, Path.home() / ALERT
     free = shutil.disk_usage(Path.home()).free
     last = load(state).alerted_at
     if free >= min_free:
         alerted_at, held, told = None, [], []
+        alert.unlink(missing_ok=True)
     else:
         held = holders(read("lsof", "-nP", "+L1", "-F", "pcs"))
         due = last is None or now() - last >= REPEAT
-        told = [
-            who
-            for who, sent in (("notification", notify), (CHIEF, tell))
-            if due and sent(message(free, min_free, held))
-        ]
-        alerted_at = now() if due else last
-    state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(DiskState(alerted_at=alerted_at).model_dump_json())
+        alerted_at, told = last, []
+        if due:
+            alerted_at, text = now(), message(free, min_free, held)
+            data = DiskAlert(at=alerted_at, free_bytes=free, min_free_bytes=min_free, holders=held, text=text)
+            sent = (("alert-file", lambda: publish(alert, data)), ("notification", lambda: notify(text)))
+            told = [who for who, send in sent if send()]
+    try:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(DiskState(alerted_at=alerted_at).model_dump_json())
+    except OSError:  # a full disk: keep running and alert again next check rather than crash and restart
+        pass
     return DiskCheck(free_bytes=free, min_free_bytes=min_free, alert=bool(told), holders=held, told=told)
 
 

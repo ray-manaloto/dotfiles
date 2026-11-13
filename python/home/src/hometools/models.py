@@ -80,7 +80,38 @@ class DiskCheck(BaseModel):
     """
     told: list[str]
     """
-    Who the alert reached: notification, chief-of-staff.
+    Where the alert went: notification, alert-file.
+    """
+
+
+class DiskAlert(BaseModel):
+    """
+    The alert file chief-of-staff's check-in reads: replaced on each alert, removed once the volume recovers.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    at: float
+    """
+    When the alert went out (epoch seconds).
+    """
+    free_bytes: int
+    """
+    Free bytes on the volume that holds the home folder.
+    """
+    min_free_bytes: int
+    """
+    Below this, the volume is low.
+    """
+    holders: list[DiskHolder]
+    """
+    The processes holding deleted files, biggest first.
+    """
+    text: str
+    """
+    The alert in one line of plain words, as the notification shows it.
     """
 
 
