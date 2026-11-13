@@ -133,7 +133,11 @@ path = [
 
 [tools]
 #"github:docker/buildx" = { version = "0.38.1", asset_pattern = "buildx-v0.38.0.darwin-arm64", bin = "docker-buildx" }
-"aqua:docker/buildx" = { version = "0.39.0", bin = "docker-buildx", minimum_release_age = "0s" }
+# Docker Desktop links its own buildx into ~/.docker/cli-plugins and re-links it on each update. Docker
+# searches config.json's cliPluginsExtraDirs first (docker/cli v29 cli-plugins/manager/manager.go:42-51),
+# so after every `mise install` (mise v2026.11.7 src/backend/mod.rs:5800, when = "always") this links the
+# pinned buildx into its own folder and puts that folder first; other keys in config.json stay as they are.
+"aqua:docker/buildx" = { version = "0.39.0", bin = "docker-buildx", minimum_release_age = "0s", postinstall = { when = "always", run = "d=\"$HOME/.local/share/docker/cli-plugins\" f=\"$HOME/.docker/config.json\"; mkdir -p \"$d\" \"$HOME/.docker\"; ln -sfn \"$MISE_TOOL_INSTALL_PATH/docker-cli-plugin-docker-buildx\" \"$d/docker-buildx\"; [ -s \"$f\" ] || echo '{}' > \"$f\"; jq -e --arg d \"$d\" '.cliPluginsExtraDirs[0] == $d' \"$f\" >/dev/null || { jq --arg d \"$d\" '.cliPluginsExtraDirs = [$d] + ((.cliPluginsExtraDirs // []) - [$d])' \"$f\" > \"$f.new\" && mv \"$f.new\" \"$f\"; }" } }
 # Python 3.15 is the default; retain 3.14.8 for incompatible CLI environments.
 # Affected tools select their interpreter with native per-tool options.
 # Runtime selectors are native mise options; see docs/python-upgrade-policy.md.
