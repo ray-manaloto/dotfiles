@@ -90,7 +90,8 @@ run = [
 # No usage spec: everything after the task name goes to pytest unchanged, e.g. -- tests/test_cli.py -x
 # --no-cov, -n auto, or --report-log <file> for the visual plan.
 description = "Real tests (no mocking library) at 100% line and branch coverage; extra args go to pytest"
-depends = ["sync"]
+# Heavy (real cmake, ninja and clang builds, -n auto): refused under 100 GiB free.
+depends = ["sync", "//home:disk-guard"]
 # prefix: mise reads the output, so task.logs keeps it for `mise run test:times`.
 output = "prefix"
 run = "uv run --locked pytest -n auto --durations=25"

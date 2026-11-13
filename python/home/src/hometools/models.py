@@ -28,6 +28,8 @@ class Command(StrEnum):
     herdr_doctor = "herdr-doctor"
     secret_set = "secret-set"
     opencode_jouet = "opencode-jouet"
+    disk_snapshot = "disk-snapshot"
+    disk_guard = "disk-guard"
 
 
 class Bootstrap(BaseModel):
@@ -108,6 +110,44 @@ class Failure(BaseModel):
     error: str
     """
     The lines the shell task printed, joined by newlines.
+    """
+
+
+class DiskSnapshot(BaseModel):
+    """
+    What disk-snapshot wrote: its folder (none while another run held the lock) and the roots du did not finish.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folder: str | None
+    """
+    The new folder under disk-alerts; null when another snapshot held the lock.
+    """
+    timed_out: list[str]
+    """
+    Roots whose du was stopped at its time limit; their lines are partial.
+    """
+
+
+class DiskGuard(BaseModel):
+    """
+    disk-guard's passing line: the data volume's free space and the floor it cleared.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    free_gib: int
+    """
+    Space a normal user can still write on the data volume (f_bavail), in GiB, as monit counts it.
+    """
+    floor_gib: int
+    """
+    The floor: heavy test tasks refuse to start below it.
     """
 
 

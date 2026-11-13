@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set", "opencode-jouet"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "secret-set", "opencode-jouet", "disk-snapshot", "disk-guard"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -44,6 +44,26 @@
       "required": ["error"],
       "properties": {
         "error": {"type": "string", "description": "The lines the shell task printed, joined by newlines."}
+      }
+    },
+    "DiskSnapshot": {
+      "description": "What disk-snapshot wrote: its folder (none while another run held the lock) and the roots du did not finish.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folder", "timed_out"],
+      "properties": {
+        "folder": {"type": ["string", "null"], "description": "The new folder under disk-alerts; null when another snapshot held the lock."},
+        "timed_out": {"type": "array", "items": {"type": "string"}, "description": "Roots whose du was stopped at its time limit; their lines are partial."}
+      }
+    },
+    "DiskGuard": {
+      "description": "disk-guard's passing line: the data volume's free space and the floor it cleared.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["free_gib", "floor_gib"],
+      "properties": {
+        "free_gib": {"type": "integer", "description": "Space a normal user can still write on the data volume (f_bavail), in GiB, as monit counts it."},
+        "floor_gib": {"type": "integer", "description": "The floor: heavy test tasks refuse to start below it."}
       }
     },
     "Result": {
