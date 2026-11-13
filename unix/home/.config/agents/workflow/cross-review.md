@@ -27,7 +27,7 @@ When the reviewer's harness is out of quota (Codex: until its limit resets), a f
 the author's own session gives the approval instead. Go back to the Codex pane when the quota returns.
 The subagent shares the author's model family, so it shares more blind spots; it is a stopgap.
 
-1. Stage everything and write the commit message (or pull request body) to a file with the line
+1. Stage the changed files by name and write the commit message (or pull request body) to a file with the line
    `Reviewed by the fallback reviewer (Codex quota depleted).` in its body, not as a trailer. Then get
    the fingerprint from the repository's pane-fingerprint (or pr-fingerprint) command: the line is part of
    the approved bytes, so adding it later voids the approval.

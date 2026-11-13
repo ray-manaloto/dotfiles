@@ -39,7 +39,7 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `tasks/review/python.md` does.
 - Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
   reviewer Codex in the checkout being committed and name its session once with
-  `mise run //repo:pane-pin <session id>`. Stage everything, write the message to a file, run
+  `mise run //repo:pane-pin <session id>`. Stage the changed files by name (jouet denies `git add -A`), write the message to a file, run
   `mise run //repo:pane-fingerprint <message file>` and commit with `git commit -F <message file>`.
   The reviewer's last final answer must end with the line `PANE-APPROVE <fingerprint>`. Any later
   final answer withdraws it, so ask for nothing after it. A new commit, a changed index or a changed
