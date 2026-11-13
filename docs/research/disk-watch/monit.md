@@ -65,8 +65,9 @@ changes, on the owner's OK:
   cycles`). A second rule on the same check runs `mise run disk:snapshot` every 30 cycles while the volume is low.
   monit 6.0.0 accepted both rules (`monit -t`), and a scratch monit run with launchd's minimal environment
   (`env -i HOME=... PATH=/usr/bin:/bin`) fired the task, which wrote its folder.
-- `hometools disk-snapshot` writes `~/.local/state/dotfiles/disk-alerts/<UTC time>/`: `du.txt` (the 40 biggest
-  folders two levels down under each root, every root at once, each stopped after 60 s), `ps.txt` (highest CPU
+- `hometools disk-snapshot` writes `~/.local/state/dotfiles/disk-alerts/<UTC time>/`: `folders.txt` (the 40
+  biggest folders two levels down under each root, measured by dust, one root after another, each stopped after 60 s;
+  dust took 17 s on `~/.cache` where du took 59 s, and prints nothing for a stopped root), `ps.txt` (highest CPU
   first), `lsof.txt` (open regular files of 1 GiB or more, and `lsof +L1`) and `free.txt`. It never deletes and
   never reuses a folder; a lock skips a run while one is going.
 - `hometools disk-guard` (`//home:disk-guard`) exits 1 under 100 GiB free, naming the free space and the floor.

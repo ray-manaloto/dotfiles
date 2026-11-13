@@ -4,8 +4,10 @@ disk-snapshot runs from monit's low-space rule (unix/home/.config/mise/config.to
 2026-11-13 the volume fell from about 315 GiB to 42 GiB free and was back within minutes, and nothing recorded what
 had written it. So each run writes one new folder under ~/.local/state/dotfiles/disk-alerts:
 
-- du.txt: the biggest folders, two levels down, under each root in ROOTS, every root measured at once and each
-  stopped at its time limit (a timed-out root keeps the lines du printed so far);
+- folders.txt: the biggest folders, two levels down, under each root in roots(), measured by dust (the Rust du, a
+  global mise tool; on ~/.cache it took 17 s where du took 59 s), one root after another and each stopped at its
+  time limit. dust is multithreaded and disk-bound: all nine roots at once took 163 s, one after another 111 s.
+  dust prints its JSON tree only when it finishes, so a stopped root has no totals;
 - ps.txt: every process, highest CPU first;
 - lsof.txt: regular files of 1 GiB or more held open, and files deleted while still open (lsof +L1): a
   write-then-delete shows there while the writer runs.
@@ -19,12 +21,13 @@ disk-guard exits 1 when the data volume has less than FLOOR_GIB free, so the hea
 
 import contextlib
 import fcntl
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -34,9 +37,10 @@ DATA = "/System/Volumes/Data"
 # monit's alert threshold (100 GB in monitrc, and monit's GB is 1024^3).
 FLOOR_GIB = 100
 GIB = 1 << 30
-# Each command's time limit: du per root, ps and each lsof. All roots run at once, so a run takes about this long.
+# Each command's time limit: dust per root, ps and each lsof. The roots run one after another, beside ps and lsof,
+# so a run is bounded by len(roots()) * SECONDS: 9 minutes for the nine roots; 111 s measured on 2026-11-13.
 SECONDS = 60
-DU_LINES = 40
+FOLDER_LINES = 40
 PS_LINES = 80
 LSOF_LINES = 200
 BIG = GIB
@@ -64,9 +68,10 @@ def guard(floor: int | None = None, path: str = DATA) -> DiskGuard:
 def roots() -> list[Path]:
     """Where the space went on this Mac before: caches, tool installs, state, checkouts and temporary folders."""
     home = Path.home()
-    mine = [".cache", "Library/Caches", ".local/share", ".local/state", "dev", "Library/Containers", ".tart"]
+    # The temporary folders first (where a test run writes) and ~/dev last (the slowest, about a minute).
+    mine = [".cache", "Library/Caches", ".local/share", ".local/state", "Library/Containers", ".tart", "dev"]
     temporary = Path(os.environ.get("TMPDIR") or tempfile.gettempdir())
-    return [home / name for name in mine] + [temporary, Path("/private/tmp")]
+    return [temporary, Path("/private/tmp")] + [home / name for name in mine]
 
 
 def output() -> Path:
@@ -86,25 +91,33 @@ def bounded(argv: Sequence[str], seconds: float) -> tuple[str, bool]:
     return out, False
 
 
-def du(root: Path, seconds: float) -> tuple[str, bool]:
+def flatten(node: dict[str, object]) -> Iterator[tuple[int, str]]:
+    """Each folder in dust's JSON tree, with its size in bytes (-o b prints "<n>B")."""
+    yield int(str(node["size"]).removesuffix("B")), str(node["name"])
+    children = node.get("children")
+    for child in children if isinstance(children, list) else []:
+        yield from flatten(child)
+
+
+def biggest(root: Path, seconds: float) -> tuple[str, bool]:
     """root's biggest folders, two levels down, largest first, in GiB with one decimal."""
     if not root.is_dir():
         return f"== {root}: not a folder\n", False
-    out, stopped = bounded(["du", "-xk", "-d", "2", str(root)], seconds)
-    sizes = []
-    lines = out.splitlines()
-    # du stopped mid-line leaves a cut last line: its size may be cut short too, so it is dropped.
-    for line in lines[:-1] if stopped else lines:
-        # A line du was writing when it was stopped still starts with its whole size.
-        kib, _, name = line.partition("\t")
-        # A folder name with a newline in it leaves a fragment with no size: skipped.
-        if kib.isdigit():
-            sizes.append((int(kib), name))
+    argv = ["dust", "-x", "-d", "2", "-n", str(FOLDER_LINES), "-p", "-j", "-o", "b", str(root)]
+    # One root that dust can't measure (no dust on PATH, an early exit, output that isn't its JSON tree) is named
+    # and skipped, so the rest of the snapshot is still written.
+    try:
+        out, stopped = bounded(argv, seconds)
+        if stopped:
+            return f"== {root} (stopped at its time limit: no totals)\n", True
+        tree = json.loads(out)
+        found = list(flatten(tree))
+    except (OSError, ValueError, KeyError, TypeError) as failed:
+        return f"== {root}: dust failed ({type(failed).__name__})\n", False
     # Largest first; on a tie the enclosing folder, the shorter path, comes first.
-    sizes.sort(key=lambda item: (-item[0], item[1]))
-    note = " (stopped at its time limit: partial)" if stopped else ""
-    lines = [f"{kib / (1 << 20):8.1f} GiB  {name}" for kib, name in sizes[:DU_LINES]]
-    return f"== {root}{note}\n" + "".join(f"{line}\n" for line in lines), stopped
+    sizes = sorted(found, key=lambda item: (-item[0], item[1]))
+    lines = [f"{size / GIB:8.1f} GiB  {name}" for size, name in sizes[:FOLDER_LINES]]
+    return f"== {root}\n" + "".join(f"{line}\n" for line in lines), False
 
 
 def big_open(lsof: str) -> list[str]:
@@ -159,7 +172,7 @@ def fresh(parent: Path, stamp: str | None = None) -> Path:
 
 
 def snapshot(parent: Path, where: Sequence[Path], seconds: float | None = None, data: str = DATA) -> DiskSnapshot:
-    seconds = SECONDS if seconds is None else seconds
+    limit = SECONDS if seconds is None else seconds
     # ps.txt holds whole command lines: the folders are the user's alone.
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with locked(parent) as mine:
@@ -167,13 +180,13 @@ def snapshot(parent: Path, where: Sequence[Path], seconds: float | None = None, 
             return DiskSnapshot(folder=None, timed_out=[])
         folder = fresh(parent)
         (folder / "free.txt").write_text(f"{data}: {free_gib(data)} GiB free\n")
-        with ThreadPoolExecutor(max_workers=len(where) + 3) as pool:
-            sizes = [pool.submit(du, root, seconds) for root in where]
-            ps = pool.submit(bounded, ["ps", "-Ao", "pid,ppid,etime,%cpu,rss,command", "-r"], seconds)
-            files = pool.submit(bounded, ["lsof", "-nP", "-F", "pcnst", data], seconds)
-            unlinked = pool.submit(bounded, ["lsof", "-nP", "+L1"], seconds)
-            measured = [future.result() for future in sizes]
-            (folder / "du.txt").write_text("".join(text for text, _ in measured))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            sizes = pool.submit(lambda: [biggest(root, limit) for root in where])
+            ps = pool.submit(bounded, ["ps", "-Ao", "pid,ppid,etime,%cpu,rss,command", "-r"], limit)
+            files = pool.submit(bounded, ["lsof", "-nP", "-F", "pcnst", data], limit)
+            unlinked = pool.submit(bounded, ["lsof", "-nP", "+L1"], limit)
+            measured = sizes.result()
+            (folder / "folders.txt").write_text("".join(text for text, _ in measured))
             (folder / "ps.txt").write_text("".join(f"{line}\n" for line in ps.result()[0].splitlines()[:PS_LINES]))
             big = big_open(files.result()[0])[:LSOF_LINES]
             gone = unlinked.result()[0].splitlines()[:LSOF_LINES]

@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,10 +63,10 @@ def test_the_command_fails_with_one_error_under_the_floor(
     assert json.loads(err)["error"].startswith(f"disk-guard: {disk.DATA} has ")
 
 
-def test_du_lists_the_biggest_folders_first(tmp_path: Path) -> None:
+def test_dust_lists_the_biggest_folders_first(tmp_path: Path) -> None:
     root = tree(tmp_path / "r", 3, 1 << 20)
     (root / "small").mkdir()
-    text, stopped = disk.du(root, 30)
+    text, stopped = disk.biggest(root, 30)
     lines = text.splitlines()
     assert (lines[0], stopped) == (f"== {root}", False)
     assert lines[1].endswith(f"  {root}")
@@ -74,23 +75,40 @@ def test_du_lists_the_biggest_folders_first(tmp_path: Path) -> None:
     assert lines[-1].endswith(f"  {root}/small")
 
 
-def test_du_keeps_what_it_read_when_stopped(tmp_path: Path) -> None:
+def test_a_root_stopped_at_its_limit_has_no_totals(tmp_path: Path) -> None:
     root = tree(tmp_path / "r", 3000)
-    text, stopped = disk.du(root, 1e-6)
-    assert stopped
-    assert text.startswith(f"== {root} (stopped at its time limit: partial)\n")
+    assert disk.biggest(root, 1e-6) == (f"== {root} (stopped at its time limit: no totals)\n", True)
 
 
-def test_du_skips_a_line_with_no_size(tmp_path: Path) -> None:
-    """A folder name with a newline makes du print a fragment line that starts with the name, not a size."""
+def test_a_folder_name_with_a_newline_is_one_entry(tmp_path: Path) -> None:
+    """dust's JSON keeps a newline inside a name, where du's lines would split it."""
     root = tmp_path / "r"
     (root / "two\nlines").mkdir(parents=True)
-    text, _ = disk.du(root, 30)
-    assert len(text.splitlines()) == 3  # the header, then root and the folder: the fragment "lines" is not one
+    text, _ = disk.biggest(root, 30)
+    assert text.count("two\nlines") == 1
 
 
-def test_du_of_a_missing_root_says_so(tmp_path: Path) -> None:
-    assert disk.du(tmp_path / "gone", 30) == (f"== {tmp_path / 'gone'}: not a folder\n", False)
+def test_a_root_dust_cannot_measure_is_named_and_the_snapshot_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tree(tmp_path / "r", 1)
+    monkeypatch.setenv("PATH", str(tmp_path / "no-dust"))
+    assert disk.biggest(root, 30) == (f"== {root}: dust failed (FileNotFoundError)\n", False)
+
+
+def test_output_that_is_not_dusts_tree_is_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A stand-in dust on PATH, a Python script, that prints something other than its JSON tree."""
+    root = tree(tmp_path / "r", 1)
+    fake = tmp_path / "bin/dust"
+    fake.parent.mkdir()
+    fake.write_text(f"#!{sys.executable} -I\nprint('not json')\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake.parent}{os.pathsep}{os.environ['PATH']}")
+    assert disk.biggest(root, 30) == (f"== {root}: dust failed (JSONDecodeError)\n", False)
+
+
+def test_a_missing_root_says_so(tmp_path: Path) -> None:
+    assert disk.biggest(tmp_path / "gone", 30) == (f"== {tmp_path / 'gone'}: not a folder\n", False)
 
 
 def test_a_command_past_its_limit_is_stopped() -> None:
@@ -140,10 +158,10 @@ def test_a_snapshot_writes_a_new_folder_and_deletes_nothing(tmp_path: Path) -> N
     assert first.timed_out == second.timed_out == []
     assert first.folder != second.folder
     folder = Path(first.folder or "")
-    assert sorted(p.name for p in folder.iterdir()) == ["du.txt", "free.txt", "lsof.txt", "ps.txt"]
+    assert sorted(p.name for p in folder.iterdir()) == ["folders.txt", "free.txt", "lsof.txt", "ps.txt"]
     assert folder.stat().st_mode & 0o777 == 0o700
-    assert f"== {root}\n" in (folder / "du.txt").read_text()
-    assert f"== {tmp_path / 'gone'}: not a folder" in (folder / "du.txt").read_text()
+    assert f"== {root}\n" in (folder / "folders.txt").read_text()
+    assert f"== {tmp_path / 'gone'}: not a folder" in (folder / "folders.txt").read_text()
     assert (folder / "ps.txt").read_text().startswith("  PID")
     assert "== deleted while still open (lsof +L1)" in (folder / "lsof.txt").read_text()
     assert (folder / "free.txt").read_text().startswith(f"{tmp_path}: ")
@@ -172,8 +190,8 @@ def test_the_roots_and_output_follow_home_and_xdg_state(tmp_path: Path, monkeypa
     (tmp_path / "tmp").mkdir()
     monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     assert disk.output() == tmp_path / ".local/state/dotfiles/disk-alerts"
-    assert disk.roots()[0] == tmp_path / ".cache"
-    assert disk.roots()[-2:] == [tmp_path / "tmp", Path("/private/tmp")]
+    assert disk.roots()[:3] == [tmp_path / "tmp", Path("/private/tmp"), tmp_path / ".cache"]
+    assert disk.roots()[-1] == tmp_path / "dev"
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     assert disk.output() == tmp_path / "state/dotfiles/disk-alerts"
 
@@ -189,5 +207,5 @@ def test_the_command_writes_under_the_state_folder(
     assert (code, err) == (0, "")
     folder = Path(json.loads(out)["folder"])
     assert folder.parent == tmp_path / "state/dotfiles/disk-alerts"
-    assert (folder / "du.txt").is_file()
+    assert (folder / "folders.txt").is_file()
     assert os.access(folder / "lsof.txt", os.R_OK)
