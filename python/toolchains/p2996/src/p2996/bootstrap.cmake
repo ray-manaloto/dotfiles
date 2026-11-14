@@ -16,7 +16,8 @@ set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 set(CLANG_REPOSITORY_STRING "$ENV{P2996_REMOTE}" CACHE STRING "" FORCE)
 set(CMAKE_OSX_ARCHITECTURES arm64 CACHE STRING "" FORCE)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 27.0 CACHE STRING "" FORCE)
-set(CMAKE_INSTALL_RPATH "@loader_path/../lib" CACHE STRING "Relocatable tool libraries" FORCE)
+# lldb loads libpython from the Python the build runs (build.py), which @loader_path alone does not reach.
+set(CMAKE_INSTALL_RPATH "@loader_path/../lib;$ENV{P2996_PYTHON_LIBDIR}" CACHE STRING "Relocatable tool libraries" FORCE)
 # DL-756, DL-757: every LLVM project and runtime that builds on macOS; libc is the Darwin overlay
 # (libllvmlibc.a beside the system libc). Skipped: libclc and offload (GPU device libraries),
 # llvm-libgcc (Linux), cross-project-tests (tests). A Linux cache will differ.

@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import anyio
@@ -41,6 +42,8 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     env["P2996_JOBS"] = str(cfg.jobs)
     env["P2996_REMOTE"] = cfg.remote
     env["P2996_ZSTD"] = await proc.output("mise", "where", "conda:zstd-static")
+    # lldb links libpython through @rpath; this is the folder of the Python that Python3_EXECUTABLE below runs.
+    env["P2996_PYTHON_LIBDIR"] = sysconfig.get_config_var("LIBDIR")
     configure = [
         "cmake",
         # A fresh cache: the id must not depend on what an earlier commit left in this folder.
