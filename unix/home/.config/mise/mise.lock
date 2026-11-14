@@ -1550,11 +1550,6 @@ version = "7.0.2"
 backend = "npm:typescript"
 specifiers = ["7.0.2"]
 
-[[tools."npm:typescript-language-server"]]
-version = "6.1.0"
-backend = "npm:typescript-language-server"
-specifiers = ["6.1.0"]
-
 [[tools."npm:yaml-cli"]]
 version = "1.1.8"
 backend = "npm:yaml-cli"

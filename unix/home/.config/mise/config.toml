@@ -253,7 +253,6 @@ rtk = { version = "1.2.0", minimum_release_age = "0s" }
 #"pipx:specify-cli" = { version = "1.2.3", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:pyright" = { version = "1.1.414", minimum_release_age = "0s" }
 "npm:typescript" = { version = "7.0.2", minimum_release_age = "0s" }
-"npm:typescript-language-server" = { version = "6.1.0", minimum_release_age = "0s" }
 kubectl = { version = "1.37.2", minimum_release_age = "0s" }
 "pipx:graphifyy" = { version = "0.9.108", extras = ["all"], minimum_release_age = "0s", uvx = "false", python = "3.14.8", install_env = { PIP_CONSTRAINT = "{{ env.HOME }}/.config/mise/python-overrides/graphify/constraints.txt" } }
 #"pipx:cli-anything-hub" = { version = "0.4.1", extras = ["all"], minimum_release_age = "0s" }
