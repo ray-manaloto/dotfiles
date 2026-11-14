@@ -258,6 +258,35 @@ run = "mkdir -p ~/.agents/skills"
 # since agentsview and openwiki install a different copy into ~/.claude/skills. `mise run skills:doctor` checks
 # these entries, herdr:doctor that ~/.claude/skills lists every skill of ~/.agents/skills.
 "~/.gemini/config/skills" = { source = "~/.agents/skills", mode = "symlink", relative = true }
+# Every repository: hk's global hooks. `hk install --global --mise` writes the mise that `which mise` finds,
+# which was a shim of a project-pinned aqua:jdx/mise until it was pruned; these name the native installer's
+# ~/.local/bin/mise instead, in hk's own escaping. HK=0 skips them.
+"~/.gitconfig/hk" = { block = '''
+[hook "hk-pre-commit"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run pre-commit --from-hook --staged
+	event = pre-commit
+[hook "hk-post-commit"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run post-commit --from-hook
+	event = post-commit
+[hook "hk-post-merge"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run post-merge --from-hook
+	event = post-merge
+[hook "hk-post-rewrite"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run post-rewrite --from-hook
+	event = post-rewrite
+[hook "hk-pre-merge-commit"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run pre-merge-commit --from-hook
+	event = pre-merge-commit
+[hook "hk-pre-push"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run pre-push --from-hook
+	event = pre-push
+[hook "hk-commit-msg"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run commit-msg --from-hook
+	event = commit-msg
+[hook "hk-prepare-commit-msg"]
+	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run prepare-commit-msg --from-hook
+	event = prepare-commit-msg
+''' }
 # Every repository: pushes run the gh checks in the global config. HK=0 skips, like the hk hooks.
 "~/.gitconfig/gh-doctor" = { block = '''
 [hook "gh-doctor-pre-push"]
