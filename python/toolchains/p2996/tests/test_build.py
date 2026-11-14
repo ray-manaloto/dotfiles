@@ -88,3 +88,22 @@ async def test_build_prepares_the_commit_it_is_given(recipe: Recipe, upstream: U
     old = upstream.write("a.txt", "old\n")
     upstream.write("a.txt", "new\n")
     assert (await recipe.build(old))["commit"] == old
+
+
+def test_the_libpython_rpath_names_the_major_minor_link_that_holds_the_same_library(tmp_path: Path) -> None:
+    hashed = tmp_path / "python-abc123" / "lib"
+    hashed.mkdir(parents=True)
+    (hashed / "libpython3.15.dylib").write_bytes(b"lib")
+    (tmp_path / "python").mkdir()
+    (tmp_path / "python" / "3.15").symlink_to("../python-abc123")
+    assert build.python_libdir(hashed, "libpython3.15.dylib", "3.15") == tmp_path / "python" / "3.15" / "lib"
+
+
+def test_the_libpython_rpath_keeps_libdir_when_the_link_holds_another_library(tmp_path: Path) -> None:
+    hashed = tmp_path / "python-abc123" / "lib"
+    other = tmp_path / "python" / "3.15" / "lib"
+    for folder in (hashed, other):
+        folder.mkdir(parents=True)
+        (folder / "libpython3.15.dylib").write_bytes(b"lib")
+    assert build.python_libdir(hashed, "libpython3.15.dylib", "3.15") == hashed
+    assert build.python_libdir(hashed, "libpython3.15.dylib", "3.16") == hashed
