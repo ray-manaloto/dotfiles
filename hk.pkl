@@ -210,6 +210,11 @@ hooks {
             ["main-guard"] {
                 check = "mise run //repo:main-guard-arm"
             }
+            // mise's records of worktree copies of the global config make mise reshim and install warn
+            // (mise:untrack-worktrees in the global config); a merge is when a worktree's work ends.
+            ["mise-untrack-worktrees"] {
+                check = "mise run mise:untrack-worktrees"
+            }
             // A merge that moved the rea pin installs the new package (//jbctl:rea-install). hk 2.9.0 selects a
             // post-merge step's files from the working tree, not the merge, so the step asks git itself: `git diff
             // --quiet` exits 1 only when ORIG_HEAD..HEAD differ at the pin (128 when ORIG_HEAD is missing, so no run).
