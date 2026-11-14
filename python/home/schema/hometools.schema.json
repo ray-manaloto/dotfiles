@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert", "roll"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -176,6 +176,213 @@
       "properties": {
         "observation": {"$ref": "#/$defs/Observation"},
         "checks": {"$ref": "#/$defs/Checks"}
+      }
+    },
+    "RollStep": {
+      "description": "One step of the herdr rolling restart (hometools roll <step>, the roll:<step> mise task).",
+      "type": "string",
+      "enum": ["snapshot", "update", "review", "stop", "start", "verify", "all"]
+    },
+    "Kind": {
+      "description": "What runs in a terminal: an agent harness whose session can be resumed, or a plain shell.",
+      "type": "string",
+      "enum": ["claude", "codex", "opencode", "shell"]
+    },
+    "Role": {
+      "description": "A tab's place in the graph: the one chief of staff, a lead (-lead, -coord or -v2), or a child.",
+      "type": "string",
+      "enum": ["coordinator", "lead", "child"]
+    },
+    "LaneParent": {
+      "description": "A wiki lane page's '## Children' line that names this terminal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lane", "line"],
+      "properties": {
+        "lane": {"type": "string", "description": "The lane page's file name."},
+        "line": {"type": "string", "description": "The line, at most 200 characters."}
+      }
+    },
+    "GraphTerminal": {
+      "description": "One terminal of graph.json: its agent, session id, folder and argv when the snapshot ran.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "kind", "session", "cwd", "argv", "status", "lane_parents", "is_coordinator"],
+      "properties": {
+        "address": {"type": "string", "description": "The hc terminal address, such as t2h4."},
+        "kind": {"$ref": "#/$defs/Kind"},
+        "session": {"type": ["string", "null"], "description": "The session id to resume; null for a shell or one not found."},
+        "cwd": {"type": ["string", "null"], "description": "The foreground process's folder, else the terminal's."},
+        "argv": {"type": ["array", "null"], "items": {"type": "string"}, "description": "The foreground process's argv."},
+        "status": {"type": ["string", "null"], "description": "hc get's status message."},
+        "lane_parents": {"type": "array", "items": {"$ref": "#/$defs/LaneParent"}, "description": "Lane pages that list it as a child."},
+        "is_coordinator": {"type": "boolean", "description": "It is the chief of staff's terminal."},
+        "pid": {"type": ["integer", "null"], "description": "The foreground pid: roll:verify proves an excluded session untouched by it."},
+        "kept_from_previous_graph": {"type": "boolean", "description": "Not live at the snapshot; carried from the previous graph."}
+      }
+    },
+    "GraphTab": {
+      "description": "One tab of graph.json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "terminals"],
+      "properties": {
+        "id": {"type": "string", "description": "herdr-app's tab id."},
+        "name": {"type": "string", "description": "The tab's name."},
+        "terminals": {"type": "array", "items": {"$ref": "#/$defs/GraphTerminal"}},
+        "kept_from_previous_graph": {"type": "boolean", "description": "Not live at the snapshot; carried from the previous graph."}
+      }
+    },
+    "GraphSpace": {
+      "description": "One space (project) of graph.json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "folder", "tabs"],
+      "properties": {
+        "id": {"type": "string", "description": "herdr-app's space id."},
+        "name": {"type": "string", "description": "The space's name."},
+        "folder": {"type": ["string", "null"], "description": "The space's folder."},
+        "tabs": {"type": "array", "items": {"$ref": "#/$defs/GraphTab"}},
+        "kept_from_previous_graph": {"type": "boolean", "description": "Not live at the snapshot; carried from the previous graph."}
+      }
+    },
+    "Graph": {
+      "description": "graph.json, which roll:snapshot writes and herdr-startup reads: every space, tab and terminal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taken_at", "coordinator", "spaces"],
+      "properties": {
+        "taken_at": {"type": "string", "description": "When the snapshot ran, ISO 8601 with the local offset."},
+        "coordinator": {"type": ["string", "null"], "description": "The chief of staff's terminal, found by name."},
+        "spaces": {"type": "array", "items": {"$ref": "#/$defs/GraphSpace"}}
+      }
+    },
+    "WorkElsewhere": {
+      "description": "A session whose checkout is clean while the worktree its lane bullet names has changes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tab", "session", "cwd", "work_in"],
+      "properties": {
+        "tab": {"type": "string", "description": "space / tab."},
+        "session": {"type": ["string", "null"], "description": "Its session id."},
+        "cwd": {"type": "string", "description": "Its clean checkout."},
+        "work_in": {"type": "string", "description": "The worktree with staged or uncommitted changes."}
+      }
+    },
+    "SnapshotReport": {
+      "description": "roll:snapshot's summary line.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["graph", "graph_copy", "terminals", "agents", "agents_without_session", "children_without_lane", "work_elsewhere"],
+      "properties": {
+        "graph": {"type": ["string", "null"], "description": "graph.json as written; null on a dry run."},
+        "graph_copy": {"type": ["string", "null"], "description": "The timestamped copy beside it; null on a dry run."},
+        "terminals": {"type": "integer", "description": "Live terminals."},
+        "agents": {"type": "integer", "description": "Live terminals running claude, codex or opencode."},
+        "agents_without_session": {"type": "array", "items": {"type": "string"}, "description": "Agent terminals whose session id was not found: they cannot be resumed."},
+        "children_without_lane": {"type": "array", "items": {"type": "string"}, "description": "Child Claude tabs no lane page lists."},
+        "work_elsewhere": {"type": "array", "items": {"$ref": "#/$defs/WorkElsewhere"}}
+      }
+    },
+    "SessionResult": {
+      "description": "What one step did, or would do, to one session.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["where", "terminal", "kind", "session", "result", "notes"],
+      "properties": {
+        "where": {"type": "string", "description": "space / tab."},
+        "terminal": {"type": "string", "description": "The terminal address at the time of the step."},
+        "kind": {"$ref": "#/$defs/Kind"},
+        "session": {"type": ["string", "null"], "description": "The session id."},
+        "result": {"type": "string", "description": "One word: planned, stopped, started, ok, untouched, or skipped-<why> or failed-<why>."},
+        "notes": {"type": "array", "items": {"type": "string"}, "description": "Details: the planned command, jobs found, the check that failed."}
+      }
+    },
+    "Timing": {
+      "description": "How long a roll step waits, in seconds: for a stop-point answer, for an exit or a start, between looks.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wait", "settle", "interval"],
+      "properties": {
+        "wait": {"type": "number", "minimum": 0, "description": "Seconds to wait for a stop-point answer."},
+        "settle": {"type": "number", "minimum": 0, "description": "Seconds to wait for an exit or a start."},
+        "interval": {"type": "number", "minimum": 0, "description": "Seconds between looks while waiting."}
+      }
+    },
+    "Background": {
+      "description": "What roll:stop found running before /exit, kept in <run>/background/ so it can be re-armed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["where", "terminal", "session", "jobs", "footer", "exit_dialog", "worktree"],
+      "properties": {
+        "where": {"type": "string", "description": "space / tab."},
+        "terminal": {"type": "string", "description": "The terminal address."},
+        "session": {"type": ["string", "null"], "description": "The session id."},
+        "jobs": {"type": "array", "items": {"type": "string"}, "description": "Child processes other than MCP servers and language servers, and hc run children that die with it."},
+        "footer": {"type": ["string", "null"], "description": "Claude's 'N in background' footer, when the screen shows one."},
+        "exit_dialog": {"type": "array", "items": {"type": "string"}, "description": "The items /exit's 'Background work is running' dialog listed."},
+        "worktree": {"type": ["string", "null"], "description": "Its folder's git status before /exit, for roll:verify; null outside a repository."}
+      }
+    },
+    "Marketplace": {
+      "description": "A Claude plugin marketplace at the snapshot: its GitHub repo and checked-out commit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "head"],
+      "properties": {
+        "repo": {"type": ["string", "null"], "description": "owner/name from known_marketplaces.json; null when it is not a GitHub source."},
+        "head": {"type": ["string", "null"], "description": "git rev-parse HEAD of its installLocation; null when it is not a git checkout (claude-plugins-official)."}
+      }
+    },
+    "Versions": {
+      "description": "<run>/versions.json: what roll:snapshot found installed, so roll:review can pair old with new.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harnesses", "plugins", "marketplaces"],
+      "properties": {
+        "harnesses": {"type": "object", "additionalProperties": {"type": ["string", "null"]}, "description": "claude, codex, opencode and agy: the version each one's --version prints; null when it can't run."},
+        "plugins": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Each user-scope plugin id: <version>-<gitCommitSha>, as installed_plugins.json records it."},
+        "marketplaces": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Marketplace"}}
+      }
+    },
+    "ReviewReport": {
+      "description": "roll:review's summary line.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review", "changed", "triaged", "gate", "flags"],
+      "properties": {
+        "review": {"type": ["string", "null"], "description": "<run>/review.md, the source of truth; null on a dry run."},
+        "changed": {"type": "array", "items": {"type": "string"}, "description": "Each item whose version changed: <tool> <old> -> <new>."},
+        "triaged": {"type": "boolean", "description": "The model triage ran for at least one pair (never for a pair seen before)."},
+        "gate": {"type": "boolean", "description": "BREAKING was flagged: roll:all pauses before roll:stop until rerun with --accept-review."},
+        "flags": {"type": "array", "items": {"type": "string"}, "description": "Why the gate closed: the triage's BREAKING items, plus the grep's lines when an item went untriaged."}
+      }
+    },
+    "MiseLinks": {
+      "description": "Links under mise's installs folder whose target is missing (reported, never removed).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "result", "dangling"],
+      "properties": {
+        "check": {"type": "string", "const": "mise-links", "description": "The check's name."},
+        "result": {"$ref": "#/$defs/Result"},
+        "dangling": {"type": "array", "items": {"type": "string"}, "description": "<tool>/<link> for each dangling link, the global links first."}
+      }
+    },
+    "RollRun": {
+      "description": "One line of ~/.local/state/dotfiles/roll/runs.jsonl: one step of one run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "step", "args", "start", "end", "rc", "log", "sessions"],
+      "properties": {
+        "run": {"type": "string", "description": "The run id, run-<UTC time>-<pid>, also its folder's name."},
+        "step": {"$ref": "#/$defs/RollStep"},
+        "args": {"type": "array", "items": {"type": "string"}, "description": "The step's arguments as given."},
+        "start": {"type": "string", "description": "When the step started, ISO 8601 in UTC."},
+        "end": {"type": "string", "description": "When it ended, ISO 8601 in UTC."},
+        "rc": {"type": "integer", "description": "Its exit code."},
+        "log": {"type": "string", "description": "<run folder>/<step>.log, its output."},
+        "sessions": {"type": "array", "items": {"$ref": "#/$defs/SessionResult"}}
       }
     }
   }

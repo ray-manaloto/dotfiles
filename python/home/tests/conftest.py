@@ -8,10 +8,19 @@ from pathlib import Path
 
 import pytest
 
+from .roll_world import World
 from .scratch_toolchain import Scratch, Session
 
 # pytest's and coverage's own variables stay; every other one comes from the scratch toolchain.
 KEEP = ("PYTEST_", "COV_CORE_")
+
+
+@pytest.fixture(autouse=True)
+def no_hook_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A git hook exports GIT_DIR, GIT_INDEX_FILE and friends; a test's git under them acts on the real repository.
+    The same fixture as python/jbctl/tests/conftest.py."""
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture(scope="session")
@@ -35,3 +44,11 @@ def toolchain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, session: Session)
     with contextlib.chdir(tc.home / "elsewhere"):
         tc.render()
         yield tc
+
+
+@pytest.fixture
+def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
+    """The roll tests' scratch herdr world (tests/roll_world.py); its processes end with the test."""
+    made = World(tmp_path, monkeypatch)
+    yield made
+    made.stop()

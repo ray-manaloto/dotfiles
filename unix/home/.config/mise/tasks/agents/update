@@ -1,5 +1,6 @@
 #!/usr/bin/env -S python3 -I
 #MISE description="Update the native agent CLIs (claude, codex, agy, opencode); install any that are missing"
+#USAGE flag "--skip <cli>" var=#true help="Leave this CLI alone (claude, codex, agy or opencode); repeat it or separate names with commas"
 """Each agent CLI updates itself, and mise never manages these.
 
 Only the native install path counts, so a copy elsewhere on PATH is ignored and
@@ -9,9 +10,11 @@ v2 installer, because its own updater stays on major version 1. Each download an
 command gets AGENTS_UPDATE_TIMEOUT seconds (default 600), including any time a prompt
 waits for an answer, after which it is stopped with every process it started. A CLI that
 fails or times out is reported as one JSON error event on stderr, the others still run,
-and the task exits 1. Ctrl-C cancels the whole run.
+and the task exits 1. Ctrl-C cancels the whole run. --skip leaves the named CLIs alone:
+roll:update skips OpenCode while an OpenCode session it leaves running uses the binary.
 """
 
+import argparse
 import contextlib
 import json
 import os
@@ -132,7 +135,18 @@ def major_version(binary: Path) -> str:
     return words[-1].removeprefix("v").split(".")[0] if words else ""
 
 
-def main() -> int:
+def skipped(argv: list[str]) -> set[str]:
+    """The CLIs --skip names; an unknown name exits 2 before anything runs."""
+    parser = argparse.ArgumentParser(prog="agents:update")
+    parser.add_argument("--skip", action="append", default=[])
+    names = {name.strip() for value in parser.parse_args(argv).skip for name in value.split(",") if name.strip()}
+    if unknown := names - set(AGENTS):
+        parser.error(f"--skip: unknown {sorted(unknown)}; choose from {sorted(AGENTS)}")
+    return names
+
+
+def main(argv: list[str]) -> int:
+    skip = skipped(argv)
     home = Path.home()
     # Installers skip their own shell-profile edits when their folder is already on PATH.
     os.environ["PATH"] = os.pathsep.join(
@@ -144,6 +158,9 @@ def main() -> int:
     )
     failed = False
     for name, (path, url, shell, args, env) in AGENTS.items():
+        if name in skip:
+            print(json.dumps({"event": "agent_skipped", "agent": name}), file=sys.stderr)
+            continue
         binary = home / path
         try:
             missing = not os.access(binary, os.X_OK)
@@ -170,4 +187,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
