@@ -5,7 +5,8 @@
 # programs update:all's other leaves run (CODING_STANDARDS 2): a test links this file as `brew` and `mise` in a
 # folder ahead of the real ones on PATH, and as each leaf program where its task body names it. The link's name is
 # the call's first word. $STAND_IN/script.json maps a call, its argv as a JSON list, to {"stdout", "stderr",
-# "code", "signal"}, where "signal" is one it then kills itself with; or to {"real": true}, the next program of
+# "code", "signal"} (or a list of them, one per call in turn), where "signal" is one it then kills itself with;
+# or to {"real": true}, the next program of
 # its name on PATH with the stand-ins off it, as brew list --pinned and mise run toolchain:verify run on the
 # scratch toolchain; or to {"real": "<path>"}, that program. A call it does not name fails with 127, as a
 # missing command does, so nothing reaches the network by mistake.
@@ -24,6 +25,18 @@ call = json.dumps([link.name, *sys.argv[1:]])
 with (folder / "calls.jsonl").open("a") as log:
     log.write(call + "\n")
 answer = json.loads((folder / "script.json").read_text()).get(call)
+# A list answers the same call differently each time, as a polled state changes: the n-th call gets the n-th
+# answer, and the last one repeats.
+made = (folder / "calls.jsonl").read_text().splitlines()
+if isinstance(answer, list):
+    seen = sum(1 for line in made if line == call)
+    # An empty list is no answer, as a call the script does not name.
+    answer = answer[min(seen, len(answer)) - 1] if answer else None
+# {"after": [[argv, answer], ...], "else": answer}: a state another call changes (an hc get after an /exit). The
+# last pair whose argv was already called answers; before any of them, "else" does.
+if isinstance(answer, dict) and "after" in answer:
+    done = set(made[:-1])
+    answer = next((a for argv, a in reversed(answer["after"]) if json.dumps(argv) in done), answer.get("else"))
 if answer is None:
     sys.stderr.write(f"stand-in: no answer for {call}\n")
     raise SystemExit(127)

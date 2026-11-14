@@ -119,6 +119,7 @@ class AgentsUpdateTest(unittest.TestCase):
         stalled_installers: tuple[str, ...] = (),
         answer: str | None = None,
         interrupt: bool = False,
+        args: tuple[str, ...] = (),
     ) -> tuple[int, list[str], str]:
         """`mise run agents:update` from a fresh HOME, `runs` times; rc, recorded calls, stderr.
         With `answer`, it runs in a terminal and `answer` is typed at each prompt. With
@@ -149,7 +150,7 @@ class AgentsUpdateTest(unittest.TestCase):
                 if interrupt:
                     done = self.mise_interrupted(home, stubs)
                 elif answer is None:
-                    done = self.mise(home, stubs)
+                    done = self.mise(home, stubs, args)
                 else:
                     done = self.mise_in_terminal(home, stubs, answer)
                 if done.returncode:
@@ -165,11 +166,13 @@ class AgentsUpdateTest(unittest.TestCase):
             lines = calls.read_text().splitlines() if calls.exists() else []
             return done.returncode, lines, done.stderr
 
-    def mise(self, home: Path, stubs: Path) -> subprocess.CompletedProcess[str]:
+    def mise(
+        self, home: Path, stubs: Path, args: tuple[str, ...] = ()
+    ) -> subprocess.CompletedProcess[str]:
         """One `mise run agents:update` from an unrelated folder, with HOME, XDG and PATH
         inside the temporary HOME, so only the global task folder can provide the task."""
         return subprocess.run(
-            [MISE, "run", "agents:update"],
+            [MISE, "run", "agents:update", *args],
             env=self.environment(home, stubs),
             cwd=self.elsewhere(home),
             stdin=subprocess.DEVNULL,
@@ -271,6 +274,27 @@ class AgentsUpdateTest(unittest.TestCase):
     def test_installed_tools_update_themselves(self) -> None:
         code, calls, err = self.run_task(tuple(NATIVE.values()))
         self.assertEqual((code, calls), (0, UPDATES), err)
+
+    def test_skip_leaves_the_named_clis_alone(self) -> None:
+        # Repeated and comma-separated: roll:update passes --skip opencode while an OpenCode
+        # session runs.
+        code, calls, err = self.run_task(
+            tuple(NATIVE.values()), args=("--skip", "opencode", "--skip", "agy,codex")
+        )
+        self.assertEqual((code, calls), (0, UPDATES[:1]), err)
+        skipped = [
+            json.loads(line)["agent"]
+            for line in err.splitlines()
+            if "agent_skipped" in line
+        ]
+        self.assertEqual(skipped, ["codex", "agy", "opencode"])
+
+    def test_skip_refuses_an_unknown_cli_before_anything_runs(self) -> None:
+        code, calls, err = self.run_task(
+            tuple(NATIVE.values()), args=("--skip", "gemini")
+        )
+        self.assertEqual((code, calls), (2, []), err)
+        self.assertIn("--skip: unknown", err)
 
     def test_a_fresh_mac_gets_each_native_installer_once(self) -> None:
         code, calls, err = self.run_task(())
