@@ -682,6 +682,14 @@ check program disk-log with path "{{ env.HOME }}/.local/bin/mise run disk:log"
     if status != 0 then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles
 
+# nightly:check touches this file each time it passes; a run that skips (busy or asleep) or fails leaves it alone,
+# so three days without a pass raise the alert instead of passing silently.
+check file nightly-passed with path {{ env.HOME }}/.local/state/dotfiles/nightly/passed
+    if does not exist then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+    if mtime is older than 3 days then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+
 check system $HOST
     if loadavg (5min) per core > 1.5 for 5 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles
@@ -703,6 +711,24 @@ run_at_load = true
 keep_alive = true
 process_type = "Background"
 working_directory = "~/.local/state/monit"
+
+# The nightly full run (owner, 2026-11-13): commits run only the linters and pushes only the suites their files reach
+# (hk.pkl), so a change can break another package's tests unseen, as #674 did; this runs them all once a day.
+# launchd, not monit: a monit check program on a cron schedule reads its exit status only at the next match, a day
+# later. Background yields CPU and disk I/O to the owner's work; a Mac asleep at 03:00 runs it on waking. launchd
+# appends each run's output to the log. Apply: mise bootstrap macos launchd-agents apply.
+[bootstrap.directories."~/.local/state/dotfiles/nightly"]
+os = "macos"
+mode = "0700"
+
+[bootstrap.macos.launchd.agents.nightly-check]
+program = "~/.local/bin/mise"
+args = ["run", "nightly:check"]
+start_calendar_interval = { hour = 3, minute = 0 }
+process_type = "Background"
+nice = 10
+stdout_path = "~/.local/state/dotfiles/nightly/check.log"
+stderr_path = "~/.local/state/dotfiles/nightly/check.log"
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
 # renders them from [vars] before the packages step. mise reads its config before this file is written:
@@ -847,3 +873,13 @@ run = "doppler secrets --only-names -p dotfiles -c dev_personal --no-check-versi
 [tasks."secret:doctor"]
 description = "Run the dotfiles fnox and Doppler checks (dotfiles doctor/mise.toml)"
 run = "mise -C \"$(git -C \"$(dirname \"$(realpath ~/.config/mise/config.toml)\")\" rev-parse --show-toplevel)/doctor\" doctor project"
+
+# Every hk check and every root's tests in the checkout this config links into (the launchd agent nightly-check
+# runs it at 03:00). hk runs 2 steps at a time (hk.pkl jobs) and --jobs 2 caps the test tasks, each pytest at 4
+# workers (the checkout's PYTEST_XDIST_AUTO_NUM_WORKERS). A pass touches nightly/passed, which monit watches (3 days
+# without one alert); a failure raises monit:alert and exits 1. This Mac sleeps
+# when nothing holds it awake, and launchd then starts a missed 03:00 run on waking, when the owner sits down: a
+# run that starts after 05:59, or with the 5-minute load average above the core count, says so and skips.
+[tasks."nightly:check"]
+description = "Run hk check --all and mise run test in the dotfiles checkout; a failure raises a monit alert"
+run = 'date && h=$(date +%H) && l=$(sysctl -n vm.loadavg | cut -d" " -f3 | cut -d. -f1) && { [ "$h" -lt 6 ] && [ "$l" -lt "$(sysctl -n hw.ncpu)" ] || { echo "nightly:check skipped: hour $h, 5-minute load $l"; exit 0; }; } && cd "$(git -C "$(dirname "$(realpath ~/.config/mise/config.toml)")" rev-parse --show-toplevel)" && git log -1 --oneline && { hk check --all && mise run --jobs 2 test && touch ~/.local/state/dotfiles/nightly/passed && echo nightly:check passed; } || { MONIT_SERVICE=nightly-check MONIT_EVENT="Check failed" MONIT_DESCRIPTION="hk check --all or mise run test failed; see ~/.local/state/dotfiles/nightly/check.log" mise run monit:alert; exit 1; }'
