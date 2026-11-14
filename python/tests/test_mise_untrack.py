@@ -1,4 +1,5 @@
-"""mise:untrack-worktrees drops mise's records of worktree copies of the global config, and nothing else."""
+"""mise:untrack-worktrees drops mise's records of worktree copies of the global config and of pytest scratch
+configs, and nothing else."""
 
 import os
 import subprocess
@@ -51,10 +52,23 @@ class UntrackTest(unittest.TestCase):
             self.record("d4", self.root / "project/mise.toml"),
         ]
         done = self.untrack(self.root / "state")
-        self.assertEqual(done.stdout, f"untracked {copy}\n")
+        self.assertEqual(done.stdout, "mise:untrack-worktrees: dropped 1 records\n")
         self.assertFalse(dropped.is_symlink())
         self.assertTrue(copy.is_file(), "the file itself stays")
         self.assertTrue(all(link.is_symlink() for link in kept))
+
+    def test_configs_under_a_pytest_temporary_folder_are_dropped(self) -> None:
+        # //home:integration's scratch ~/.config/mise, and a conf.d file beside it.
+        base = self.root / "T/pytest-of-someone/pytest-7/test_verify0/mise"
+        dropped = [
+            self.record("e5", base / "config.toml"),
+            self.record("f6", base / "conf.d/toolchain.toml"),
+        ]
+        kept = self.record("g7", self.root / "pytest-notes/mise.toml")
+        done = self.untrack(self.root / "state")
+        self.assertEqual(done.stdout, "mise:untrack-worktrees: dropped 2 records\n")
+        self.assertFalse(any(link.is_symlink() for link in dropped))
+        self.assertTrue(kept.is_symlink())
 
     def test_the_default_state_folder_is_under_home(self) -> None:
         self.tracked = self.root / "home/.local/state/mise/tracked-configs"
@@ -64,9 +78,10 @@ class UntrackTest(unittest.TestCase):
         self.assertFalse(dropped.is_symlink())
 
     def test_a_missing_folder_or_a_plain_file_is_left_alone(self) -> None:
-        self.assertEqual(self.untrack(self.root / "nowhere").stdout, "")
+        none = "mise:untrack-worktrees: dropped 0 records\n"
+        self.assertEqual(self.untrack(self.root / "nowhere").stdout, none)
         (self.tracked / "not-a-link").write_text("x")
-        self.assertEqual(self.untrack(self.root / "state").stdout, "")
+        self.assertEqual(self.untrack(self.root / "state").stdout, none)
         self.assertTrue((self.tracked / "not-a-link").is_file())
 
 

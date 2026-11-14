@@ -877,11 +877,12 @@ run = "mise -C \"$(git -C \"$(dirname \"$(realpath ~/.config/mise/config.toml)\"
 # mise records every config it loads in $MISE_STATE_DIR/tracked-configs, a worktree's copy of this file too when a
 # command points MISE_GLOBAL_CONFIG_FILE at it (lsptools, a pin bump). mise reshim and mise install then reload each
 # record as a project config and warn that its global-only settings are ignored, about five lines per copy
-# (src/config/mod.rs:4330 and src/config/tracking.rs at v2026.11.8). This drops the records of worktree copies,
-# never the files; hk's post-merge step runs it on each merge into main.
+# (src/config/mod.rs:4330 and src/config/tracking.rs at v2026.11.8). Tests record theirs too: //home:integration
+# loads a scratch ~/.config/mise under pytest's temporary folder. This drops the records of worktree copies and of
+# anything under a pytest temporary folder, never the files; hk's post-merge step runs it on each merge into main.
 [tasks."mise:untrack-worktrees"]
-description = "Drop mise's tracked-config records of dotfiles worktree copies of the global config"
-run = 'for l in "${MISE_STATE_DIR:-$HOME/.local/state/mise}"/tracked-configs/*; do t=$(readlink "$l") || continue; case "$t" in */dotfiles.worktrees/*/unix/home/.config/mise/config.toml) rm "$l" && echo "untracked $t";; esac; done'
+description = "Drop mise's tracked-config records of dotfiles worktree copies of the global config and of pytest scratch configs"
+run = 'n=0; for l in "${MISE_STATE_DIR:-$HOME/.local/state/mise}"/tracked-configs/*; do t=$(readlink "$l") || continue; case "$t" in */dotfiles.worktrees/*/unix/home/.config/mise/config.toml | */pytest-of-*/*) rm "$l" && n=$((n + 1));; esac; done; echo "mise:untrack-worktrees: dropped $n records"'
 
 # Every hk check and every root's tests in the checkout this config links into (the launchd agent nightly-check
 # runs it at 03:00). hk runs 2 steps at a time (hk.pkl jobs) and --jobs 2 caps the test tasks, each pytest at 4
