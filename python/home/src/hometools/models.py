@@ -29,6 +29,7 @@ class Command(StrEnum):
     opencode_jouet = "opencode-jouet"
     disk_snapshot = "disk-snapshot"
     disk_guard = "disk-guard"
+    disk_log = "disk-log"
     monit_alert = "monit-alert"
 
 
@@ -148,6 +149,60 @@ class DiskGuard(BaseModel):
     floor_gib: int
     """
     The floor: heavy test tasks refuse to start below it.
+    """
+
+
+class Writer(BaseModel):
+    """
+    One process that wrote to disk since the previous disk-log line (proc_pid_rusage, RUSAGE_INFO_V2).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    pid: int
+    """
+    The process id.
+    """
+    path: str
+    """
+    Its executable (proc_pidpath); empty when it exited before disk-log read it.
+    """
+    written_mib: int
+    """
+    MiB it wrote to disk since the previous line, or since it started when the previous line did not see it.
+    """
+
+
+class DiskSample(BaseModel):
+    """
+    One line of disk-log's samples.jsonl: free space, its drop and the processes that wrote most.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    at: str
+    """
+    When disk-log ran, ISO 8601 in UTC.
+    """
+    free_gib: int
+    """
+    Space a normal user can still write on the data volume (f_bavail), in GiB.
+    """
+    drop_gib: int | None
+    """
+    The previous line's free_gib minus this one's; null on the first line.
+    """
+    writers: list[Writer]
+    """
+    The processes that wrote most since the previous line, most first.
+    """
+    snapshot: bool
+    """
+    The drop reached DROP_GIB, so disk-log started a disk-snapshot.
     """
 
 

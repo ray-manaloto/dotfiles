@@ -1,4 +1,4 @@
-"""disk-snapshot and disk-guard: find what fills the data volume, and keep heavy test tasks off a nearly full one.
+"""disk-snapshot, disk-log and disk-guard: find what fills the data volume, and keep heavy tests off a nearly full one.
 
 disk-snapshot runs from monit's low-space rule (unix/home/.config/mise/config.toml, the monitrc entry). On
 2026-11-13 the volume fell from about 315 GiB to 42 GiB free and was back within minutes, and nothing recorded what
@@ -20,6 +20,7 @@ disk-guard exits 1 when the data volume has less than FLOOR_GIB free, so the hea
 """
 
 import contextlib
+import ctypes
 import fcntl
 import json
 import os
@@ -27,11 +28,11 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .models import DiskGuard, DiskSnapshot, Failure
+from .models import DiskGuard, DiskSample, DiskSnapshot, Failure, Writer
 
 DATA = "/System/Volumes/Data"
 # monit's alert threshold (100 GB in monitrc, and monit's GB is 1024^3). DISK_FLOOR_GIB overrides it for one run.
@@ -224,3 +225,96 @@ def run_guard() -> None:
     except ValueError as low:
         sys.stderr.write(Failure(error=str(low)).model_dump_json() + "\n")
         raise SystemExit(1) from None
+
+
+# disk-log: one line a minute from monit (the monitrc entry), so a drop that is back within minutes still shows
+# when it happened and which process wrote it. macOS counts each process's bytes written to disk since it started
+# (proc_pid_rusage with RUSAGE_INFO_V2, as sysinfo's src/unix/apple/macos/process.rs reads it), and a user can read
+# the counters of their own processes without root. A process that starts and exits between two lines is not
+# counted, so a drop of DROP_GIB or more also starts disk-snapshot, which names open and deleted-but-open files.
+DROP_GIB = 20
+WRITERS = 8
+MIB = 1 << 20
+LOG_BYTES = 20 << 20
+LIBPROC = "/usr/lib/libproc.dylib"
+RUSAGE_INFO_V2 = 2
+PATH_BYTES = 4096
+SNAPSHOT = (sys.executable, "-c", "from hometools.cli import main; main(['disk-snapshot'])")
+RUSAGE_FIELDS = (
+    "user_time system_time pkg_idle_wkups interrupt_wkups pageins wired_size resident_size phys_footprint "
+    "proc_start_abstime proc_exit_abstime child_user_time child_system_time child_pkg_idle_wkups "
+    "child_interrupt_wkups child_pageins child_elapsed_abstime diskio_bytesread diskio_byteswritten"
+)
+
+
+class RusageInfoV2(ctypes.Structure):
+    """struct rusage_info_v2 from <sys/resource.h>: a uuid, then 18 uint64 fields."""
+
+    _fields_ = [("uuid", ctypes.c_uint8 * 16)] + [(name, ctypes.c_uint64) for name in RUSAGE_FIELDS.split()]
+
+
+def written() -> dict[str, tuple[int, int, str]]:
+    """Each readable process's (pid, bytes written since it started, executable), keyed pid:start time so that a
+    reused pid counts as a new process. Another user's processes (root's) are refused by macOS and left out."""
+    lib = ctypes.CDLL(LIBPROC)
+    room = lib.proc_listallpids(None, 0) * 2
+    pids = (ctypes.c_int * room)()
+    count = lib.proc_listallpids(pids, ctypes.sizeof(pids))
+    found = {}
+    for pid in pids[:count]:
+        usage = RusageInfoV2()
+        if lib.proc_pid_rusage(pid, RUSAGE_INFO_V2, ctypes.byref(usage)) != 0:
+            continue
+        path = ctypes.create_string_buffer(PATH_BYTES)
+        lib.proc_pidpath(pid, path, PATH_BYTES)
+        key = f"{pid}:{usage.proc_start_abstime}"
+        found[key] = (pid, usage.diskio_byteswritten, path.value.decode(errors="replace"))
+    return found
+
+
+def writers(before: dict[str, int], now: dict[str, tuple[int, int, str]]) -> list[Writer]:
+    """The WRITERS processes that wrote the most since before, and at least 1 MiB; most first."""
+    grown = [(total - before.get(key, 0), pid, path) for key, (pid, total, path) in now.items()]
+    top = sorted((item for item in grown if item[0] >= MIB), key=lambda item: (-item[0], item[1]))[:WRITERS]
+    return [Writer(pid=pid, path=path, written_mib=size // MIB) for size, pid, path in top]
+
+
+def spawn(argv: Sequence[str] = SNAPSHOT) -> None:
+    """Start argv in its own session and don't wait: a snapshot takes minutes, and monit times a program out."""
+    quiet = subprocess.DEVNULL
+    subprocess.Popen(argv, stdin=quiet, stdout=quiet, stderr=quiet, start_new_session=True)
+
+
+def sample(folder: Path, data: str = DATA, snap: Callable[[], None] = spawn) -> DiskSample:
+    """Append one DiskSample to folder/samples.jsonl and keep each process's counter in folder/written.json for the
+    next run. The log moves to samples.jsonl.1 past LOG_BYTES, about two weeks of lines."""
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    log, counters = folder / "samples.jsonl", folder / "written.json"
+    previous = None
+    with contextlib.suppress(FileNotFoundError, IndexError, ValueError):
+        previous = DiskSample.model_validate_json(log.read_bytes().splitlines()[-1])
+    before: dict[str, int] = {}
+    with contextlib.suppress(FileNotFoundError, ValueError, AttributeError):
+        before = {str(key): int(value) for key, value in json.loads(counters.read_text()).items()}
+    now = written()
+    free = free_gib(data)
+    drop = None if previous is None else previous.free_gib - free
+    record = DiskSample(
+        at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        free_gib=free,
+        drop_gib=drop,
+        writers=writers(before, now),
+        snapshot=drop is not None and drop >= DROP_GIB,
+    )
+    if record.snapshot:
+        snap()
+    if log.exists() and log.stat().st_size > LOG_BYTES:
+        log.replace(folder / "samples.jsonl.1")
+    with log.open("a") as out:
+        out.write(record.model_dump_json() + "\n")
+    counters.write_text(json.dumps({key: total for key, (_, total, _) in now.items()}))
+    return record
+
+
+def run_log() -> None:
+    sys.stdout.write(sample(output()).model_dump_json() + "\n")
