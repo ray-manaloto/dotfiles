@@ -1,0 +1,50 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Ask each chosen herdr session for a stop point, record its background work, then /exit it"
+#USAGE flag "--sessions <sessions>" default="all" help="all, or the space names to roll, separated by commas"
+#USAGE flag "--exclude <spaces>" help="Space names to leave alone, separated by commas"
+#USAGE flag "--apply" help="Do it; without it the step prints its plan and changes nothing"
+#USAGE flag "--run <id>" help="The run id; default a new one (start and verify: the last stop's run)"
+#USAGE flag "--wiki <dir>" help="The chief-of-staff wiki (default ~/dev/tmp/fix-herdr/wiki)"
+#USAGE flag "--prompt <prompt>" help="The resume prompt" { choices "rolling" "reboot" }
+#USAGE flag "--wait <seconds>" help="Seconds to wait for a stop-point answer (default 900)"
+#USAGE flag "--settle <seconds>" help="Seconds to wait for an exit or a start (default 90)"
+#USAGE flag "--poll <seconds>" help="Seconds between looks while waiting (default 1)"
+"""roll:stop: hometools roll stop (python/home/src/hometools/roll/)."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the hometools package in the
+# checkout it is linked from and runs one command there, as tasks/disk/log does. Its flags go to hometools as given.
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/roll/stop.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+
+# The package's environment is synced as its own step first, so a uv that fails or can't start there ends the
+# task with one JSON error naming it: uv sync's exit code, or 127 for no uv. --inexact keeps packages the lock
+# doesn't list, as uv run did. A dry run changes nothing: it runs in the environment as it is, and without one it
+# refuses (exit 2) rather than create it.
+DRY = "--apply" not in sys.argv[1:]
+if DRY and not (PACKAGE / ".venv").is_dir():
+    task = f"{Path(__file__).parent.name}:{Path(__file__).name}"
+    error = f"{task}: a dry run changes nothing, and {PACKAGE / '.venv'} is missing; run mise run //home:check first"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(2)
+try:
+    sync = ["uv", "sync", "--project", str(PACKAGE), "--locked", "--inexact"]
+    synced = 0 if DRY else subprocess.run(sync, check=False).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    error = f"roll:stop: hometools could not start ({why})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(synced)
+argv = ["uv", "run", "--project", str(PACKAGE), "--no-sync", "hometools", "roll", "stop", *sys.argv[1:]]
+os.execvp("uv", argv)

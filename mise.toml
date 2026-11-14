@@ -242,8 +242,8 @@ run = "mkdir -p ~/.agents/skills"
 # secrets: the global secret:* tasks (the doppler CLI); user scope only, like lsp-server.
 "~/.claude/skills/secrets" = { source = "unix/home/.config/agents/skills/secrets", mode = "symlink" }
 "~/.agents/skills/secrets" = { source = "unix/home/.config/agents/skills/secrets", mode = "symlink" }
-# herdr-startup and herdr-shutdown: reopen and close the herdr sessions around a reboot. Their scripts are tracked
-# as they run, outside python/ (CODING_STANDARDS.md, "Exceptions"); packaging them is a later ticket.
+# herdr-startup and herdr-shutdown: reopen and close the herdr sessions around a reboot. Their steps are the global
+# roll:* tasks (hometools roll, python/home/src/hometools/roll/).
 "~/.claude/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
 "~/.agents/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
 "~/.claude/skills/herdr-shutdown" = { source = "unix/home/.config/agents/skills/herdr-shutdown", mode = "symlink" }

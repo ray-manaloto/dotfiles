@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
 
 class Hometools(BaseModel):
@@ -31,6 +31,7 @@ class Command(StrEnum):
     disk_guard = "disk-guard"
     disk_log = "disk-log"
     monit_alert = "monit-alert"
+    roll = "roll"
 
 
 class Bootstrap(BaseModel):
@@ -414,3 +415,461 @@ class DoctorReport(BaseModel):
     )
     observation: Observation
     checks: Checks
+
+
+class RollStep(StrEnum):
+    """
+    One step of the herdr rolling restart (hometools roll <step>, the roll:<step> mise task).
+    """
+
+    snapshot = "snapshot"
+    update = "update"
+    review = "review"
+    stop = "stop"
+    start = "start"
+    verify = "verify"
+    all = "all"
+
+
+class Kind(StrEnum):
+    """
+    What runs in a terminal: an agent harness whose session can be resumed, or a plain shell.
+    """
+
+    claude = "claude"
+    codex = "codex"
+    opencode = "opencode"
+    shell = "shell"
+
+
+class Role(StrEnum):
+    """
+    A tab's place in the graph: the one chief of staff, a lead (-lead, -coord or -v2), or a child.
+    """
+
+    coordinator = "coordinator"
+    lead = "lead"
+    child = "child"
+
+
+class LaneParent(BaseModel):
+    """
+    A wiki lane page's '## Children' line that names this terminal.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    lane: str
+    """
+    The lane page's file name.
+    """
+    line: str
+    """
+    The line, at most 200 characters.
+    """
+
+
+class GraphTerminal(BaseModel):
+    """
+    One terminal of graph.json: its agent, session id, folder and argv when the snapshot ran.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    address: str
+    """
+    The hc terminal address, such as t2h4.
+    """
+    kind: Kind
+    session: str | None
+    """
+    The session id to resume; null for a shell or one not found.
+    """
+    cwd: str | None
+    """
+    The foreground process's folder, else the terminal's.
+    """
+    argv: list[str] | None
+    """
+    The foreground process's argv.
+    """
+    status: str | None
+    """
+    hc get's status message.
+    """
+    lane_parents: list[LaneParent]
+    """
+    Lane pages that list it as a child.
+    """
+    is_coordinator: bool
+    """
+    It is the chief of staff's terminal.
+    """
+    pid: int | None = None
+    """
+    The foreground pid: roll:verify proves an excluded session untouched by it.
+    """
+    kept_from_previous_graph: bool | None = None
+    """
+    Not live at the snapshot; carried from the previous graph.
+    """
+
+
+class GraphTab(BaseModel):
+    """
+    One tab of graph.json.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    id: str
+    """
+    herdr-app's tab id.
+    """
+    name: str
+    """
+    The tab's name.
+    """
+    terminals: list[GraphTerminal]
+    kept_from_previous_graph: bool | None = None
+    """
+    Not live at the snapshot; carried from the previous graph.
+    """
+
+
+class GraphSpace(BaseModel):
+    """
+    One space (project) of graph.json.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    id: str
+    """
+    herdr-app's space id.
+    """
+    name: str
+    """
+    The space's name.
+    """
+    folder: str | None
+    """
+    The space's folder.
+    """
+    tabs: list[GraphTab]
+    kept_from_previous_graph: bool | None = None
+    """
+    Not live at the snapshot; carried from the previous graph.
+    """
+
+
+class Graph(BaseModel):
+    """
+    graph.json, which roll:snapshot writes and herdr-startup reads: every space, tab and terminal.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    taken_at: str
+    """
+    When the snapshot ran, ISO 8601 with the local offset.
+    """
+    coordinator: str | None
+    """
+    The chief of staff's terminal, found by name.
+    """
+    spaces: list[GraphSpace]
+
+
+class WorkElsewhere(BaseModel):
+    """
+    A session whose checkout is clean while the worktree its lane bullet names has changes.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    tab: str
+    """
+    space / tab.
+    """
+    session: str | None
+    """
+    Its session id.
+    """
+    cwd: str
+    """
+    Its clean checkout.
+    """
+    work_in: str
+    """
+    The worktree with staged or uncommitted changes.
+    """
+
+
+class SnapshotReport(BaseModel):
+    """
+    roll:snapshot's summary line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    graph: str | None
+    """
+    graph.json as written; null on a dry run.
+    """
+    graph_copy: str | None
+    """
+    The timestamped copy beside it; null on a dry run.
+    """
+    terminals: int
+    """
+    Live terminals.
+    """
+    agents: int
+    """
+    Live terminals running claude, codex or opencode.
+    """
+    agents_without_session: list[str]
+    """
+    Agent terminals whose session id was not found: they cannot be resumed.
+    """
+    children_without_lane: list[str]
+    """
+    Child Claude tabs no lane page lists.
+    """
+    work_elsewhere: list[WorkElsewhere]
+
+
+class SessionResult(BaseModel):
+    """
+    What one step did, or would do, to one session.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    where: str
+    """
+    space / tab.
+    """
+    terminal: str
+    """
+    The terminal address at the time of the step.
+    """
+    kind: Kind
+    session: str | None
+    """
+    The session id.
+    """
+    result: str
+    """
+    One word: planned, stopped, started, ok, untouched, or skipped-<why> or failed-<why>.
+    """
+    notes: list[str]
+    """
+    Details: the planned command, jobs found, the check that failed.
+    """
+
+
+class Timing(BaseModel):
+    """
+    How long a roll step waits, in seconds: for a stop-point answer, for an exit or a start, between looks.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    wait: Annotated[float, Field(ge=0.0)]
+    """
+    Seconds to wait for a stop-point answer.
+    """
+    settle: Annotated[float, Field(ge=0.0)]
+    """
+    Seconds to wait for an exit or a start.
+    """
+    interval: Annotated[float, Field(ge=0.0)]
+    """
+    Seconds between looks while waiting.
+    """
+
+
+class Background(BaseModel):
+    """
+    What roll:stop found running before /exit, kept in <run>/background/ so it can be re-armed.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    where: str
+    """
+    space / tab.
+    """
+    terminal: str
+    """
+    The terminal address.
+    """
+    session: str | None
+    """
+    The session id.
+    """
+    jobs: list[str]
+    """
+    Child processes other than MCP servers and language servers, and hc run children that die with it.
+    """
+    footer: str | None
+    """
+    Claude's 'N in background' footer, when the screen shows one.
+    """
+    exit_dialog: list[str]
+    """
+    The items /exit's 'Background work is running' dialog listed.
+    """
+    worktree: str | None
+    """
+    Its folder's git status before /exit, for roll:verify; null outside a repository.
+    """
+
+
+class Marketplace(BaseModel):
+    """
+    A Claude plugin marketplace at the snapshot: its GitHub repo and checked-out commit.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    repo: str | None
+    """
+    owner/name from known_marketplaces.json; null when it is not a GitHub source.
+    """
+    head: str | None
+    """
+    git rev-parse HEAD of its installLocation; null when it is not a git checkout (claude-plugins-official).
+    """
+
+
+class Versions(BaseModel):
+    """
+    <run>/versions.json: what roll:snapshot found installed, so roll:review can pair old with new.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    harnesses: dict[str, str | None]
+    """
+    claude, codex, opencode and agy: the version each one's --version prints; null when it can't run.
+    """
+    plugins: dict[str, str]
+    """
+    Each user-scope plugin id: <version>-<gitCommitSha>, as installed_plugins.json records it.
+    """
+    marketplaces: dict[str, Marketplace]
+
+
+class ReviewReport(BaseModel):
+    """
+    roll:review's summary line.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    review: str | None
+    """
+    <run>/review.md, the source of truth; null on a dry run.
+    """
+    changed: list[str]
+    """
+    Each item whose version changed: <tool> <old> -> <new>.
+    """
+    triaged: bool
+    """
+    The model triage ran for at least one pair (never for a pair seen before).
+    """
+    gate: bool
+    """
+    BREAKING was flagged: roll:all pauses before roll:stop until rerun with --accept-review.
+    """
+    flags: list[str]
+    """
+    Why the gate closed: the triage's BREAKING items, plus the grep's lines when an item went untriaged.
+    """
+
+
+class MiseLinks(BaseModel):
+    """
+    Links under mise's installs folder whose target is missing (reported, never removed).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    check: Literal["mise-links"]
+    """
+    The check's name.
+    """
+    result: Result
+    dangling: list[str]
+    """
+    <tool>/<link> for each dangling link, the global links first.
+    """
+
+
+class RollRun(BaseModel):
+    """
+    One line of ~/.local/state/dotfiles/roll/runs.jsonl: one step of one run.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    run: str
+    """
+    The run id, run-<UTC time>-<pid>, also its folder's name.
+    """
+    step: RollStep
+    args: list[str]
+    """
+    The step's arguments as given.
+    """
+    start: str
+    """
+    When the step started, ISO 8601 in UTC.
+    """
+    end: str
+    """
+    When it ended, ISO 8601 in UTC.
+    """
+    rc: int
+    """
+    Its exit code.
+    """
+    log: str
+    """
+    <run folder>/<step>.log, its output.
+    """
+    sessions: list[SessionResult]
