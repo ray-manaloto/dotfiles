@@ -28,9 +28,21 @@ pytestmark = [
 
 CHECKOUT = Path(__file__).resolve().parents[3]
 DEPLOYED = CHECKOUT / "unix/home/.config/mise"
+
+
+def mise_var_path(key: str) -> Path | None:
+    """An environment path as mise reads it: unset or empty is None, and only a leading ~ component is the home folder
+    (mise crates/mise-util/src/env.rs:736-741 var_path, file.rs:1043-1055 replace_path); ~user stays as written."""
+    value = os.environ.get(key)
+    if not value:
+        return None
+    path = Path(value)
+    return Path.home().joinpath(*path.parts[1:]) if path.parts[:1] == ("~",) else path
+
+
 # mise's own fallback chain: $MISE_STATE_DIR, else $XDG_STATE_HOME/mise, else ~/.local/state/mise.
-LIVE_STATE = Path(
-    os.environ.get("MISE_STATE_DIR") or Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "mise"
+LIVE_STATE = (
+    mise_var_path("MISE_STATE_DIR") or (mise_var_path("XDG_STATE_HOME") or Path.home() / ".local/state") / "mise"
 )
 
 
