@@ -27,7 +27,6 @@ class Command(StrEnum):
     shell_apply = "shell-apply"
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
-    toolchain_gate = "toolchain-gate"
     tools_install = "tools-install"
     test_times = "test-times"
     trust = "trust"
@@ -174,7 +173,7 @@ class ToolInstalled(BaseModel):
 
 class ZeroBash(BaseModel):
     """
-    Report tracked shell scripts, shell shebangs and multi-line mise run.
+    Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files.
     """
 
     model_config = ConfigDict(
@@ -184,6 +183,10 @@ class ZeroBash(BaseModel):
     strict: bool = False
     """
     Exit 1 when anything is left
+    """
+    files: str = ""
+    """
+    Files to check, as mise's shell-quoted usage_file; empty checks every tracked file
     """
 
 
@@ -268,17 +271,6 @@ class MainGuardRemove(BaseModel):
 class MainGuardArmed(BaseModel):
     """
     Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-
-
-class ToolchainGate(BaseModel):
-    """
-    Print run when the staged change can change what toolchain:verify sees on this Mac.
     """
 
     model_config = ConfigDict(
@@ -483,7 +475,6 @@ type Options = (
     | MainGuardArmed
     | ShellApply
     | ShellRollback
-    | ToolchainGate
     | ToolsInstall
     | TestTimes
     | Trust
@@ -817,7 +808,6 @@ class Repotools(BaseModel):
     shell_apply: ShellApply | None = None
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
-    toolchain_gate: ToolchainGate | None = None
     tools_install: ToolsInstall | None = None
     test_times: TestTimes | None = None
     test_time: TestTime | None = None

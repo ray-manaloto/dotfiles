@@ -9,7 +9,7 @@
 
 # This is the check that the config's [vars] versions are the ones installed: verify compares them exactly. The
 # in-process tests take theirs from the install, so only this tier fails a [vars] bump whose version is not
-# installed or is mistyped; repotools toolchain-gate runs it at pre-commit on any [vars] change. To bump gcc or
+# installed or is mistyped; hk's toolchain-gate step runs it at pre-commit on any global config change. To bump gcc or
 # llvm, install the new version first, then edit [vars] and run `mise run bootstrap:toolchain`.
 
 import os

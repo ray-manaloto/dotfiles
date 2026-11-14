@@ -6,15 +6,17 @@ entry's `value` (src/commands/set.rs:563-565), and with no provider as its `defa
 Doppler entry's `value` is the secret's name, which fnox hands to `doppler secrets get <value> --plain`
 (crates/fnox-core/src/providers/doppler.rs:114). Here that name is the entry's own key, so a `value` must equal it:
 an upper-case leak such as a base32 seed would pass a name pattern, but not this. This reads the git index, the
-snapshot a commit certifies, as zero_bash does, and names each bad entry by file and key, never by its value.
+snapshot a commit certifies, and names each bad entry by file and key, never by its value.
 """
 
 import re
+import subprocess
 import sys
 import tomllib
 from collections.abc import Iterator, Mapping
+from typing import cast
 
-from . import zero_bash
+from . import process
 from .models import FnoxFinding, FnoxRule
 
 # The names fnox reads (crates/fnox-core/src/config.rs:59-73): fnox.toml, fnox.<profile>.toml and fnox.local.toml,
@@ -29,8 +31,41 @@ RENAMES: Mapping[tuple[str, str], str] = {
     ("unix/home/.config/fnox/config.toml", "secrets.CF_ACCOUNT_ID"): "CLOUDFLARE_ACCOUNT_ID",
 }
 
+FILE_MODES = ("100644", "100755")  # Links (120000) and submodules (160000) have no content to read.
+
 # A parsed TOML table; tomllib returns plain dicts, so there is no schema model to generate for it.
 type Table = Mapping[str, object]
+
+
+def git(*args: str, stdin: bytes | None = None) -> bytes:
+    if stdin is None:
+        return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+    # This call keeps the helper's default capture_stdout=True.
+    return cast("bytes", process.run(["git", *args], stdin).stdout)
+
+
+def index() -> list[tuple[str, str, str]]:
+    """Mode, blob id and path of every index entry; :/ and --full-name list them all from any folder."""
+    found = []
+    for entry in git("ls-files", "-s", "-z", "--full-name", ":/").decode().split("\0")[:-1]:
+        meta, path = entry.split("\t", 1)
+        mode, blob, _stage = meta.split()
+        found.append((mode, blob, path))
+    return found
+
+
+def blobs(ids: list[str]) -> dict[str, bytes]:
+    """The content of each blob, read from the object store in one git call."""
+    out = git("cat-file", "--batch", stdin="".join(f"{blob}\n" for blob in ids).encode())
+    found: dict[str, bytes] = {}
+    start = 0
+    for _ in ids:
+        header_end = out.index(b"\n", start)
+        blob, _kind, size = out[start:header_end].decode().split()
+        body = header_end + 1
+        found[blob] = out[body : body + int(size)]
+        start = body + int(size) + 1
+    return found
 
 
 def tables(node: object) -> Table:
@@ -73,9 +108,9 @@ def check_config(path: str, config: Table, doppler: set[str]) -> Iterator[FnoxFi
 
 
 def findings() -> list[FnoxFinding]:
-    entries = [(blob, path) for mode, blob, path in zero_bash.index() if mode in zero_bash.FILE_MODES]
+    entries = [(blob, path) for mode, blob, path in index() if mode in FILE_MODES]
     wanted = [(blob, path) for blob, path in entries if path.endswith(".toml")]
-    content = zero_bash.blobs([blob for blob, _path in wanted])
+    content = blobs([blob for blob, _path in wanted])
     configs: dict[str, Table] = {}
     for blob, path in wanted:
         try:

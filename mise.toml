@@ -277,8 +277,9 @@ run = "mkdir -p ~/.agents/skills"
 [hook "hk-pre-merge-commit"]
 	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run pre-merge-commit --from-hook
 	event = pre-merge-commit
+# From a linked worktree git gives pre-push GIT_DIR, which would point the suites' scratch git at this checkout.
 [hook "hk-pre-push"]
-	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run pre-push --from-hook
+	command = test \"${HK:-1}\" = \"0\" || env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE ~/.local/bin/mise x hk -- hk run pre-push --from-hook
 	event = pre-push
 [hook "hk-commit-msg"]
 	command = test \"${HK:-1}\" = \"0\" || ~/.local/bin/mise x hk -- hk run commit-msg --from-hook

@@ -182,10 +182,8 @@ def anyio_backend() -> str:
 
 @pytest.fixture(scope="session", autouse=True)
 def isolated_git() -> Iterator[None]:
-    """Inside a commit hook git exports GIT_DIR and friends, and the global config fires hk on every commit."""
+    """The global config fires hk on every commit, so tests' git reads no global or system config."""
     with pytest.MonkeyPatch.context() as patch:
-        for name in [name for name in os.environ if name.startswith("GIT_")]:
-            patch.delenv(name)
         patch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
         patch.setenv("GIT_CONFIG_NOSYSTEM", "1")
         # This worker gets its own sccache server, never a real build's.

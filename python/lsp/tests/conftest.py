@@ -71,10 +71,6 @@ class World:
         self.mise(f'[tools]\n"npm:typescript" = "{typescript.version}"\n')
         # A session's own plugin folders would show up in claude plugin list as @inline plugins.
         monkeypatch.delenv("CLAUDE_CODE_PLUGIN_DIRS", raising=False)
-        # hk runs these tests from git's pre-commit hook, which exports GIT_INDEX_FILE, GIT_DIR and more: they would
-        # point every scratch repository's git at the real checkout (as python/workflow/tests/conftest.py says).
-        for name in [name for name in os.environ if name.startswith("GIT_")]:
-            monkeypatch.delenv(name)
         monkeypatch.delenv("LSPTOOLS_COMMAND_SECONDS", raising=False)
         monkeypatch.delenv("LSPTOOLS_REQUEST_SECONDS", raising=False)
         monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(self.claude))

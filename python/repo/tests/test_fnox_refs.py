@@ -4,12 +4,13 @@ import json
 import os
 import shutil
 import subprocess
+import zlib
 from pathlib import Path
 
 import pytest
 
 from repotools.cli import main
-from tests import clean_git_env
+from tests import run_python
 
 REPO = Path(__file__).resolve().parents[3]
 GLOBAL = "unix/home/.config/fnox/config.toml"
@@ -19,17 +20,16 @@ PEM = "-----BEGIN RSA PRIVATE KEY-----\\nAAAA\\n-----END RSA PRIVATE KEY-----"
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    clean_git_env(monkeypatch, config=False)
     subprocess.run(["git", "init", "-q", tmp_path], check=True)
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
 
-def add(root: Path, files: dict[str, str]) -> None:
+def add(root: Path, files: dict[str, str] | dict[str, bytes]) -> None:
     for name, text in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_bytes(text if isinstance(text, bytes) else text.encode())
     subprocess.run(["git", "-C", root, "add", "-f", "."], check=True)
 
 
@@ -157,6 +157,34 @@ def test_what_fnox_set_writes_for_a_doppler_provider_fails(
 
 
 def test_the_tracked_fnox_files_pass(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    clean_git_env(monkeypatch, config=False)
     monkeypatch.chdir(REPO)
     assert report(capsys) == (0, [])
+
+
+def test_a_large_index_and_blob_output_finish_without_a_pipe_deadlock(repo: Path) -> None:
+    # 2,048 SHA-1 request lines exceed 64 KiB. The first blob fills stdout before Git drains stdin.
+    files = {f"files/{number:04}.toml": b"plain\x00text\r\n\xff\n" for number in range(2048)}
+    files["files/0000.toml"] *= 8192
+    files["fnox.toml"] = (PROVIDER + '[secrets]\nK = { provider = "doppler_x", value = "leak" }\n').encode()
+    add(repo, files)
+    (repo / "fnox.toml").unlink()  # Only staged bytes may affect the check.
+    done = run_python("from repotools.cli import main\nmain(['fnox-refs'])\n")
+    assert done.returncode == 1, done.stderr.decode(errors="replace")
+    assert [json.loads(line) for line in done.stdout.splitlines()] == [
+        {"path": "fnox.toml", "key": "secrets.K", "rule": "value-not-a-reference"}
+    ]
+
+
+def test_an_early_batch_failure_reports_git_error_instead_of_a_broken_pipe(repo: Path) -> None:
+    add(repo, {f"files/{number:04}.toml": "object = 1\n" for number in range(2048)})
+    oid = subprocess.run(["git", "ls-files", "-s"], capture_output=True, check=True, text=True).stdout.split()[1]
+    # ls-files still reads the index, but cat-file fails on its first object while requests fill stdin.
+    blob = repo / ".git" / "objects" / oid[:2] / oid[2:]
+    blob.unlink()  # Git's object is read-only; replace it in this disposable repository.
+    blob.write_bytes(zlib.compress(b"blob 65536\x00" + b"x" * 65536)[:-4])
+    done = run_python("from repotools.cli import main\nmain(['fnox-refs'])\n")
+    assert done.returncode == 1
+    assert done.stdout == b""
+    event = json.loads(done.stderr)
+    assert set(event) == {"error"}
+    assert event["error"].startswith("git failed: ")

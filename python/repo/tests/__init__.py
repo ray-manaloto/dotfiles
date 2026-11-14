@@ -35,10 +35,7 @@ def run_python(code: str, *, stdin: BinaryIO | None = None) -> subprocess.Comple
     return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
 
 
-def clean_git_env(monkeypatch: pytest.MonkeyPatch, *, config: bool = True) -> None:
-    """A hook exports GIT_*, which would point git at the real checkout; config=True also drops the owner's config."""
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-    if config:
-        monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-        monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No global or system git config: the owner's global hk hooks would fire on a scratch repository's commit."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
