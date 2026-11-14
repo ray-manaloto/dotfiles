@@ -50,7 +50,19 @@ def tool(*args: str) -> Any:  # noqa: ANN401 - a JSON document whose shape the c
 
 
 def agent_desktop(*args: str) -> Any:  # noqa: ANN401 - agent-desktop's data member
-    return tool("agent-desktop", *args)["data"]
+    """agent-desktop prints one JSON object, its reason for a refusal included, on stdout; stderr stays empty."""
+    command = ["agent-desktop", *args]
+    done = subprocess.run(command, capture_output=True, text=True, check=False, timeout=helper_timeout())
+    # Even a bad argument gets a JSON reply, so only a crash prints nothing. Not covered, as for jbax: no test can
+    # make the real agent-desktop crash, and a stand-in is ruled out.
+    if not done.stdout:
+        msg = f"agent-desktop {args[0]} printed nothing (exit {done.returncode}): {done.stderr.strip()}"
+        raise IdeError(msg)
+    result = json.loads(done.stdout)
+    if not result["ok"]:
+        msg = f"agent-desktop {args[0]} failed: {result['error']['code']}: {result['error']['message']}"
+        raise IdeError(msg)
+    return result["data"]
 
 
 def jbax(*args: str) -> dict[str, Any]:
