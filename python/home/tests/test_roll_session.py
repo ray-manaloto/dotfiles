@@ -482,20 +482,12 @@ def test_a_transcript_must_be_the_only_one_of_its_session(world: World) -> None:
 
 def test_resume_commands_keep_what_each_session_ran_with(world: World) -> None:
     claude = target(world, argv=["claude", "--model", "opus", "--effort", "high", "--resume", SID, "old"])
-    assert session.resume_argv(claude, "hi") == [
-        "claude",
-        "--permission-mode",
-        "auto",
-        "--model",
-        "opus",
-        "--effort",
-        "high",
-        "--resume",
-        SID,
-        "hi",
-    ]
-    chief = target(world, space="chief-of-staff", tab="chief-of-staff")
-    assert session.resume_argv(chief, "hi") == list(session.CHIEF)
+    assert session.resume_argv(claude, "hi") == ["claude", "--model", "opus", "--effort", "high", "--resume", SID, "hi"]
+    old_chief = ["/x/claude", "--permission-mode", "auto", "--resume", "chief-of-staff", "/herdr-startup"]
+    chief = target(world, space="chief-of-staff", tab="chief-of-staff", argv=old_chief)
+    assert session.resume_argv(chief, "hi") == [
+        "claude", "--permission-mode", "auto", "--resume", "chief-of-staff", session.CHIEF_PROMPT,
+    ]  # fmt: skip
     assert session.resume_argv(target(world, Kind.codex), "hi") == ["codex-hc", "resume", SID]
     fnox = [
         "/mise/installs/fnox-1/fnox",
@@ -543,14 +535,14 @@ def started(world: World, folder: Path | None = None, address: str = "t3") -> in
 def test_a_dry_run_plans_the_resume(world: World) -> None:
     result = session.start(target(world), FAST, apply=False, prompt="hi")
     assert result.result == "planned"
-    assert result.notes == [f"claude --permission-mode auto --resume {SID} hi", f"in {world.root / 'proj'}"]
+    assert result.notes == [f"claude --resume {SID} hi", f"in {world.root / 'proj'}"]
 
 
 def test_the_resume_is_typed_into_the_tabs_bare_shell(world: World) -> None:
     scene(world, 1)
     world.answer({GET: out(info("t3", None, ["-zsh"], world.root))})
     folder = world.root / "proj"
-    typed = ("hc", "send", "t3", f"cd {folder} && claude --permission-mode auto --resume {SID} 'a prompt'")
+    typed = ("hc", "send", "t3", f"cd {folder} && claude --resume {SID} 'a prompt'")
     pid = started(world)
     shell = out(info("t3", None, ["-zsh"], world.root))
     world.answer({typed: {}, GET: after(shell, (typed, out(info("t3", pid, ["claude"], folder))))})
@@ -583,7 +575,7 @@ def test_a_tab_restored_under_a_new_id_gets_the_resume_in_its_one_terminal(world
             ("hc", "get", "t5", "--json"): out(info("t5", None, ["-zsh"], folder)),
         }
     )
-    typed = ("hc", "send", "t5", f"cd {folder} && claude --permission-mode auto --resume {SID} p")
+    typed = ("hc", "send", "t5", f"cd {folder} && claude --resume {SID} p")
     pid = started(world, address="t5")
     shell = out(info("t5", None, ["-zsh"], folder))
     world.answer(
@@ -602,7 +594,7 @@ def test_a_tab_whose_foreground_is_not_a_shell_is_left_alone(world: World) -> No
 
 def test_a_missing_tab_or_space_is_opened(world: World) -> None:
     folder = world.root / "proj"
-    argv = json.dumps(["claude", "--permission-mode", "auto", "--resume", SID, "p"])
+    argv = json.dumps(["claude", "--resume", SID, "p"])
     new_tab = (
         "herdr-app",
         "do",
@@ -653,12 +645,10 @@ def test_a_missing_tab_or_space_is_opened(world: World) -> None:
 def test_a_session_that_does_not_come_back_or_comes_back_elsewhere_fails(world: World) -> None:
     scene(world, 1)
     world.answer({GET: out(info("t3", None, ["zsh"], world.root))})
-    world.answer(
-        {("hc", "send", "t3", f"cd {world.root / 'proj'} && claude --permission-mode auto --resume {SID} p"): {}}
-    )
+    world.answer({("hc", "send", "t3", f"cd {world.root / 'proj'} && claude --resume {SID} p"): {}})
     assert session.start(target(world), FAST, apply=True, prompt="p").result == "failed-not-running"
     pid = started(world, world.root / "elsewhere")
-    again = ("hc", "send", "t3", f"cd {world.root / 'proj'} && claude --permission-mode auto --resume {SID} q")
+    again = ("hc", "send", "t3", f"cd {world.root / 'proj'} && claude --resume {SID} q")
     shell = out(info("t3", None, ["zsh"], world.root))
     world.answer({again: {}, GET: after(shell, (again, out(info("t3", pid, ["claude"], world.root))))})
     result = session.start(target(world), FAST, apply=True, prompt="q")
@@ -783,3 +773,35 @@ def test_verify_reads_the_version_in_the_terminal_start_resumed_in(world: World)
     world.transcript(SID, {"type": "user", "timestamp": dt.datetime.now(dt.UTC).isoformat()})
     result = session.verify(target(world), None, lambda _: "", None, "t8")
     assert (result.result, result.terminal) == ("ok", "t8")
+
+
+# The live test tab's launch (the test-tab launcher): a guarded session with no auto mode.
+GUARDED = ["claude", "--model", "haiku", "--effort", "low", "-n", "probe", "--permission-mode", "default",
+           "--strict-mcp-config", "--no-chrome", "--tools", "ToolSearch", "Read",
+           "--settings", "/s/guard.json"]  # fmt: skip
+
+
+def test_a_guarded_session_resumes_with_its_own_flags_and_no_raised_mode(world: World) -> None:
+    old = [*GUARDED, "-c", "--resume=old", "-r", "older", "--session-id", "x", "--add-dir", "/a", "/b", "-d", "--",
+           "a prompt", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions"]  # fmt: skip
+    argv = session.resume_argv(target(world, argv=old), "hi")
+    assert argv == [*GUARDED, "--add-dir", "/a", "/b", "-d", "--resume", SID, "hi"]
+    assert argv.count("--permission-mode") == 1
+    assert "auto" not in argv
+    plain = session.resume_argv(target(world, argv=["claude", "--permission-mode=plan", "go"]), "hi")
+    assert plain == ["claude", "--permission-mode=plan", "--resume", SID, "hi"]
+
+
+def test_a_launch_flag_it_cannot_carry_over_keeps_the_session_running(world: World) -> None:
+    odd = [*GUARDED, "--frobnicate", "1"]
+    result = session.start(target(world, argv=odd), FAST, apply=True, prompt="p")
+    assert result.result == "skipped-unknown-flag"
+    assert result.notes[0].startswith("--frobnicate in claude --model haiku")
+    # roll:stop checks it before the handshake, so the session is never stopped only to stay down.
+    pid = world.spawn("claude")
+    scene(world, pid)
+    ready(world)
+    result = session.stop(live.Live(), target(world, argv=odd), FAST, world.root / RUN, MARK)
+    assert result.result == "skipped-unknown-flag"
+    assert ASK not in world.calls()
+    assert EXIT not in world.calls()

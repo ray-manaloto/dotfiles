@@ -11,6 +11,7 @@ from urllib.parse import quote
 from hometools.models import Background, GraphSpace, GraphTab, GraphTerminal, Kind, Role, SessionResult, Timing
 from hometools.roll.graph import claude_session, codex_session, opencode_session
 from hometools.roll.live import (
+    COORDINATOR,
     PROGRAMS,
     Live,
     answer,
@@ -47,8 +48,9 @@ REBOOT = (
     "Read the 'Resume after reboot' block at the top of your lane page, check your worktree (git status), restart "
     "only the jobs listed there, then continue. If you had a pending owner question, ask it again interactively."
 )
-# The one chief of staff, resumed by name in its own tab; never claude respawn, never a second one.
-CHIEF = ("claude", "--permission-mode", "auto", "--resume", "chief-of-staff", "/herdr-startup rolling")
+# The one chief of staff, resumed by name in its own tab with its own launch flags; never claude respawn, never a
+# second one.
+CHIEF_PROMPT = "/herdr-startup rolling"
 CHIEF_KEY = "--resume chief-of-staff"
 READY, BUSY = "READY-TO-RESTART", "BUSY-KEEP-ME"
 IDLE = frozenset({"done", "idle"})
@@ -306,6 +308,8 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
     try:
         need(term.address != live.me, "skipped-self", "the tab running this step")
         pid = current(live, term, f"skipped-foreground-not-{term.kind}")
+        # A launch flag start can't carry over would leave the session down after /exit: skip it while it runs.
+        resume_argv(target, ROLLING)
         stale = outdated(term, started(pid) if pid else None, mark)
         need(stale, "skipped-already-current", "on the installed version, started after it changed")
         state, _, _ = status(term.address)
@@ -349,17 +353,14 @@ def write(path: Path, record: Background) -> None:
 
 
 def resume_argv(target: Target, prompt: str) -> list[str]:
-    """The command that resumes the session in its own folder."""
+    """The command that resumes the session in its own folder, with the launch flags it ran with: its permission
+    mode, settings, tools and the rest, never one added or raised. The chief of staff resumes by name."""
     space, tab, term = target
     old = term.argv or []
-    if role(space.name, tab.name) is Role.coordinator:
-        return list(CHIEF)
     if term.kind is Kind.claude:
-        # The model and effort the session was started with.
-        keep = [
-            word for i, flag in enumerate(old[:-1]) if flag in {"--model", "--effort"} for word in (flag, old[i + 1])
-        ]
-        return ["claude", "--permission-mode", "auto", *keep, "--resume", str(term.session), prompt]
+        if role(space.name, tab.name) is Role.coordinator:
+            return ["claude", *claude_flags(old), "--resume", COORDINATOR, CHIEF_PROMPT]
+        return ["claude", *claude_flags(old), "--resume", str(term.session), prompt]
     if term.kind is Kind.codex:
         return ["codex-hc", "resume", str(term.session), *codex_flags(old)]
     # OpenCode under the same fnox proxy launcher prefix it ran with, the launcher by name: its mise install
@@ -376,6 +377,62 @@ def resume_argv(target: Target, prompt: str) -> list[str]:
 CODEX_PAIRS = frozenset({"-a", "--ask-for-approval", "-s", "--sandbox", "-m", "--model", "-p", "--profile", "-c"})
 CODEX_ALONE = frozenset({"--dangerously-bypass-approvals-and-sandbox", "--yolo", "--approve-for-me", "--not-so-yolo"})
 HC_OVERRIDE = "shell_environment_policy.set.HC_"
+
+
+# Claude Code's launch flags (claude --help at 2.1.325) and what each takes: 0 nothing, 1 a value, "?" an optional
+# value, "*" values up to the next flag (commander reads them so). A resume keeps the KEEP flags as given and drops
+# the ones that pick or start a session, or a one-off run. A flag in neither stops the resume: a guessed flag could
+# lose a value or a permission the session ran with.
+KEEP: dict[str, int | str] = {
+    "--add-dir": "*", "--agent": 1, "--agents": 1, "--allow-dangerously-skip-permissions": 0, "--allowedTools": "*",
+    "--allowed-tools": "*", "--append-system-prompt": 1, "--autocompact": 1, "--ax-screen-reader": 0, "--bare": 0,
+    "--betas": "*", "--brief": 0, "--chrome": 0, "--dangerously-skip-permissions": 0, "-d": "?", "--debug": "?",
+    "--debug-file": 1, "--disable-slash-commands": 0, "--disallowedTools": "*", "--disallowed-tools": "*",
+    "--effort": 1, "--exclude-dynamic-system-prompt-sections": 0, "--fallback-model": 1, "--ide": 0,
+    "--max-budget-usd": 1, "--mcp-config": "*", "--model": 1, "-n": 1, "--name": 1, "--no-chrome": 0,
+    "--permission-mode": 1, "--permission-prompts": 1, "--plugin-dir": 1, "--plugin-url": 1,
+    "--prompt-suggestions": "?", "--remote-control": "?", "--remote-control-session-name-prefix": 1,
+    "--restricted": 0, "--safe-mode": 0, "--setting-sources": 1, "--settings": 1, "--strict-mcp-config": 0,
+    "--system-prompt": 1, "--system-prompt-snapshot": 1, "--tools": "*", "--verbose": 0,
+}  # fmt: skip
+DROP: dict[str, int | str] = {
+    "-r": "?", "--resume": "?", "-c": 0, "--continue": 0, "--session-id": 1, "--fork-session": 0, "--from-pr": "?",
+    "--teleport": "?", "--cloud": "?", "--environment": 1, "--desktop": 0, "--bg": 0, "--background": 0,
+    "--tmux": 0, "-w": "?", "--worktree": "?", "--file": "*", "-p": 0, "--print": 0, "--output-format": 1,
+    "--input-format": 1, "--json-schema": 1, "--include-hook-events": 0, "--include-partial-messages": 0,
+    "--replay-user-messages": 0, "--forward-subagent-text": 0, "--no-session-persistence": 0,
+}  # fmt: skip
+
+
+def claude_flags(old: list[str]) -> list[str]:
+    """The KEEP flags of a Claude argv (old[0] is the program), with their values; the prompt and the DROP flags
+    left out. Skip("skipped-unknown-flag") on a flag in neither table."""
+    kept_: list[str] = []
+    words = old[1:]
+    i = 0
+    while i < len(words):
+        word = words[i]
+        name, equals, _ = word.partition("=")
+        i += 1
+        if word == "--":
+            break  # every word after the end of options is prompt text, never a flag
+        if not word.startswith("-"):
+            continue  # the prompt: the resume brings its own
+        arity = KEEP.get(name, DROP.get(name))
+        need(arity is not None, "skipped-unknown-flag", f"{name} in {shlex.join(old)}")
+        taken = [word]
+        if not equals and arity == 1 and i < len(words):
+            taken.append(words[i])
+            i += 1
+        elif not equals and arity in {"?", "*"}:
+            while i < len(words) and not words[i].startswith("-"):
+                taken.append(words[i])
+                i += 1
+                if arity == "?":
+                    break
+        if name in KEEP:
+            kept_ += taken
+    return kept_
 
 
 def codex_flags(old: list[str]) -> list[str]:
@@ -427,7 +484,10 @@ def cwd(pid: int) -> str | None:
 def start(target: Target, timing: Timing, *, apply: bool, prompt: str) -> SessionResult:
     """Resume the session: typed into the tab's bare shell, else a new tab (and space) with that argv. A session
     that comes back in another folder is failed-wrong-folder (herdr has opened a tab in another space's folder)."""
-    argv, folder = resume_argv(target, prompt), folder_of(target)
+    try:
+        argv, folder = resume_argv(target, prompt), folder_of(target)
+    except Skip as skip:  # a launch flag it can't carry over: the owner resumes this one by hand
+        return outcome(target, skip.result, skip.notes)
     notes = [shlex.join(argv), f"in {folder}"]
     if not apply:
         return outcome(target, "planned", notes)

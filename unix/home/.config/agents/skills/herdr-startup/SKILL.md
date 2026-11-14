@@ -60,7 +60,9 @@ session one at a time without stopping work. Steps (each also a task of its own:
    BUSY-KEEP-ME tabs are skipped and listed; never interrupt them, and retry them later.
 
 Order: chief-of-staff first. It records its background jobs and crons in the run folder (`background/`), exits,
-and is resumed by name in its own tab: `claude --permission-mode auto --resume chief-of-staff "/herdr-startup rolling"`.
+and is resumed by name in its own tab: `claude <its launch flags> --resume chief-of-staff "/herdr-startup rolling"`.
+Every Claude session resumes with the launch flags it ran with (permission mode, settings, tools, name), never a mode
+added or raised; a flag roll does not know is `skipped-unknown-flag` at `roll:stop`, so that session keeps running.
 `roll:all` touches no space until it verifies. Then each space, its children before its leads.
 
 Dry run first: `mise run roll:all` (add `--exclude <space>` to leave a project alone; its sessions are reported

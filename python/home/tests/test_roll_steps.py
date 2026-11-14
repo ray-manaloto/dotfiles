@@ -74,9 +74,7 @@ def scene(world: World, chief_state: str = "idle") -> tuple[int, int]:
         "hc",
         "send",
         "t3",
-        f"cd {shlex.quote(str(proj))} && {
-            shlex.join(['claude', '--permission-mode', 'auto', '--resume', SID, session.ROLLING])
-        }",
+        f"cd {shlex.quote(str(proj))} && {shlex.join(['claude', '--resume', SID, session.ROLLING])}",
     )
     world.answer(
         {
@@ -208,7 +206,8 @@ def test_a_session_rolls_back_in_place_while_the_rest_stay_untouched(
     assert (world.state() / "codeset.json").exists()
     time.sleep(1.1)
     try:
-        code, got, err = hometools(capfd, "all", "--apply", "--sessions", "proj", "--wiki", str(world.wiki), *FAST)
+        args = ("all", "--apply", "--exclude", "chief-of-staff", "--wiki", str(world.wiki), *FAST)
+        code, got, err = hometools(capfd, *args)
     finally:
         end_resumed(world)
     assert code == 0, got + err
@@ -220,6 +219,9 @@ def test_a_session_rolls_back_in_place_while_the_rest_stay_untouched(
     assert steps[RollStep.verify].sessions[1].notes == [f"pid {chief} -> {chief}"]
     run = world.state() / str(steps[RollStep.stop].run)
     assert (run / f"background/proj--worker--{SID}.json").exists()
+    # --sessions scopes verify as it scopes the other steps: a space it did not choose is not reported.
+    code, got, _ = hometools(capfd, "verify", "--sessions", "proj", *FAST)
+    assert [r.get("where") for r in lines(got)] == ["proj / worker", None]
     assert sorted(p.name for p in run.iterdir()) == sorted(
         [
             "background",
@@ -610,7 +612,7 @@ def test_a_reboot_start_and_verify_share_a_run_without_being_told(
     proj = world.root / "proj"
     proj.mkdir()
     world.transcript(SID)
-    resume = shlex.join(["claude", "--permission-mode", "auto", "--resume", SID, session.REBOOT])
+    resume = shlex.join(["claude", "--resume", SID, session.REBOOT])
     typed = ("hc", "send", "t5", f"cd {shlex.quote(str(proj))} && {resume}")
     world.answer(
         {

@@ -3,7 +3,7 @@
 roll:all runs snapshot, update, review, then stop -> start -> verify for each chosen session before it touches the
 next. Order: chief-of-staff first when its space is chosen (owner ruling and herdr-startup's order): it records its
 background jobs and crons in the run folder, exits, is resumed by name in its own tab
-(claude --permission-mode auto --resume chief-of-staff "/herdr-startup rolling"), and roll:all waits for its verify
+(claude <its own launch flags> --resume chief-of-staff "/herdr-startup rolling"), and roll:all waits for its verify
 to pass before it touches any space, since a coordinator that did not come back leaves no one to recover the rest.
 Then each space in order, its children before its leads, so no lead restarts while a child it supervises is mid-stop.
 One session at a time keeps every other tab working: a failed start leaves one session down, not the whole graph.
@@ -182,6 +182,13 @@ def targets(
     return sorted(picked, key=order), [t for t in agents if t not in picked]
 
 
+def excluded(left: list[Target], args: argparse.Namespace) -> list[Target]:
+    """The sessions --exclude kept out of the chosen spaces: verify checks them untouched. A space --sessions did
+    not choose is out of the run's scope, as in every other step, and is not reported."""
+    chosen = set(names(args.sessions))
+    return [t for t in left if args.sessions == "all" or t[0].name in chosen]
+
+
 def timing(args: argparse.Namespace) -> session.Timing:
     return session.Timing(wait=args.wait, settle=args.settle, interval=args.poll)
 
@@ -351,7 +358,7 @@ def do_verify(step: Step) -> int:
             continue
         address = moved.get(str(target[2].session))
         step.add(session.verify(target, mark, session.screen, before(step, target), address))
-    for target in left:
+    for target in excluded(left, step.args):
         step.add(session.untouched(target, live))
     links = dangling()
     step.out(links.model_dump_json())
@@ -438,7 +445,7 @@ def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:
             if not one(target, (stop, start, check), live, mark, prompt) and coordinator and args.apply:
                 rc = FAILED
                 break
-        for target in left:
+        for target in excluded(left, args):
             check.add(session.untouched(target, Live()))
         links = dangling()
         check.out(links.model_dump_json())
