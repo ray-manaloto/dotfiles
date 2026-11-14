@@ -54,7 +54,7 @@ def installed_vars(checkout: Path, real: Path) -> dict[str, str]:
     """The checkout's [vars], with each toolchain version the one installed, so Homebrew drift breaks no test."""
     # These tests check hometools's own logic on a scratch copy, so they take the versions from the install and
     # never compare them with [vars]: a [vars] version that is not installed, or mistyped, still passes here.
-    # test_integration.py is the check that [vars] equals this Mac's install, and repotools toolchain-gate runs
+    # test_integration.py is the check that [vars] equals this Mac's install, and hk's toolchain-gate step runs
     # it at pre-commit on any [vars] change, so such a bump fails the commit until the version is installed.
     # Each [vars] key is taken from the first formula that names it: llvm before lld and lldb. The installed
     # version is opt/<name>'s keg folder, as mise reads it (pour.rs:113-120); a revision (_1) stays in it.

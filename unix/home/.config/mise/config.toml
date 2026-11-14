@@ -565,7 +565,7 @@ env = { RUST_LOG = "info,fnox::proxy=warn" }
 # [bootstrap.packages] from them and toolchain:verify checks the installs match.
 # To bump gcc or llvm: install the new version first (unpin it, brew upgrade it, pin it again), then edit
 # these and run `mise run bootstrap:toolchain`. A commit that changes [vars] runs //home:integration
-# (repotools toolchain-gate), which fails until the installs match: a typo or an uninstalled version stops it.
+# (hk's toolchain-gate step), which fails until the installs match: a typo or an uninstalled version stops it.
 gcc = "16.2.0"
 gcc_major = "16"
 llvm = "23.1.5"

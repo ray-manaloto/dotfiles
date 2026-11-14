@@ -52,11 +52,15 @@ dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pr-create --title "$usage_title" --body-file "$usage_body"'
 
 [tasks.zero-bash]
-description = "Report tracked shell scripts, shell shebangs and multi-line mise run; --strict fails on any"
-usage = 'flag "--strict" help="Exit 1 when anything is left"'
+description = "Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files; --strict fails on any"
+usage = '''
+flag "--strict" help="Exit 1 when anything is left"
+arg "[file]" var=#true help="Files to check, as hk passes them; default every tracked file"
+'''
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools zero-bash ${usage_strict:+--strict}'
+# --files=value: a name that starts with - would otherwise be read as an option.
+run = 'uv run --project python/repo --locked repotools zero-bash --files="${usage_file:-}" ${usage_strict:+--strict}'
 
 # hk's fnox-refs step: `fnox set` on a doppler provider writes the value into the TOML in plain text.
 [tasks.fnox-refs]
@@ -93,14 +97,6 @@ description = "On main, install the main guard unless it is HEAD's already or th
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'r=$(uv run --project python/repo --locked repotools main-guard-armed) && { test "$r" != install || mise run //repo:main-guard-install; }'
-
-# hk's pre-commit step for the toolchain tasks (#391): their real-toolchain test only when the staged change
-# reaches what they run from, so a bump of an unrelated pin never waits on this Mac's Homebrew.
-[tasks.toolchain-gate]
-description = "Run the real-toolchain test (//home:integration) when the staged change reaches the toolchain tasks"
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:integration; }'
 
 [tasks.main-guard-remove]
 description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"

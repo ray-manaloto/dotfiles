@@ -1,16 +1,13 @@
-"""repotools zero-bash through its command line, in real git repositories."""
+"""repotools zero-bash through its command line: the files given, or every tracked file of a real git repository."""
 
 import json
-import shutil
 import subprocess
 import sys
-import zlib
 from pathlib import Path
 
 import pytest
 
 from repotools.cli import main
-from tests import clean_git_env, run_python
 
 REPO = Path(__file__).resolve().parents[3]
 LONG_RUN = "[tasks.a]\nrun = '''\necho one\necho two\n'''\n"
@@ -18,7 +15,6 @@ LONG_RUN = "[tasks.a]\nrun = '''\necho one\necho two\n'''\n"
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    clean_git_env(monkeypatch, config=False)
     subprocess.run(["git", "init", "-q", tmp_path], check=True)
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -155,20 +151,26 @@ def test_backslashes_that_join_no_lines_pass(repo: Path, capsys: pytest.CaptureF
     assert report(capsys) == []
 
 
-def test_the_index_is_checked_not_the_working_tree(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_the_working_tree_is_checked_and_deleted_files_skipped(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     add(repo, {"gone.sh": "#!/bin/sh\n", "tool": "#!/usr/bin/env python3\n"})
     (repo / "gone.sh").unlink()
     (repo / "tool").write_text("#!/bin/sh\n")
-    assert report(capsys) == [
-        {"path": "gone.sh", "rule": "shell-file", "detail": ".sh"},
-        {"path": "gone.sh", "rule": "shell-shebang", "detail": "#!/bin/sh"},
+    assert report(capsys) == [{"path": "tool", "rule": "shell-shebang", "detail": "#!/bin/sh"}]
+
+
+def test_only_the_given_files_are_checked(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # As mise's usage_file holds hk's {{files}}: each name shell-quoted, a name with a space quoted whole.
+    add(repo, {"a.sh": "\n", "two words.sh": "\n", "b.py": "\n"})
+    assert report(capsys, "--files=b.py 'two words.sh' deleted.sh") == [
+        {"path": "two words.sh", "rule": "shell-file", "detail": ".sh"}
     ]
 
 
 def test_links_and_submodules_are_checked_by_name_only(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     (repo / "dangling.sh").symlink_to("nowhere")
     (repo / "run.toml").symlink_to("#!/bin/sh")
-    add(repo, {})  # before the gitlink: `git add .` would drop it, with no folder behind it
+    add(repo, {})  # before the gitlink: `git add .` would take the folder for a submodule to add
+    (repo / "vendor.sh").mkdir()  # a submodule's folder, as a checkout holds it
     gitlink = "160000," + "0" * 39 + "1,vendor.sh"  # a submodule entry; git never reads its commit here
     subprocess.run(["git", "update-index", "--add", "--cacheinfo", gitlink], check=True)
     assert report(capsys) == [
@@ -233,71 +235,11 @@ def test_the_console_script_reads_its_arguments(repo: Path) -> None:
     assert [json.loads(line)["path"] for line in done.stdout.splitlines()] == ["a.sh"]
 
 
-def test_a_subfolder_reports_the_whole_repository(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    add(repo, {"a.sh": "\n", "sub/b.py": "\n"})
-    monkeypatch.chdir(repo / "sub")
-    assert [finding["path"] for finding in report(capsys)] == ["a.sh"]
-
-
-def real_git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, check=True, text=True).stdout
-
-
 def test_this_repository_reports_no_zsh_startup_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clean_git_env(monkeypatch, config=False)
     monkeypatch.chdir(REPO)
-    # The scan reads a copy of this checkout's index with one probe added, so the proof that it read
-    # the real repository depends on no leftover there. The probe's blob goes to a temporary object
-    # folder that borrows the real one as an alternate: the checkout's index and objects stay untouched.
-    copy, objects, probe = tmp_path / "index", tmp_path / "objects", tmp_path / "probe.sh"
-    shutil.copyfile(real_git("rev-parse", "--path-format=absolute", "--git-path", "index").strip(), copy)
-    real_objects = real_git("rev-parse", "--path-format=absolute", "--git-path", "objects").strip()
-    objects.mkdir()
-    monkeypatch.setenv("GIT_INDEX_FILE", str(copy))
-    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", str(objects))
-    monkeypatch.setenv("GIT_ALTERNATE_OBJECT_DIRECTORIES", real_objects)
-    startup = ("unix/home/.z", "unix/home/.config/zsh/")
-    assert [path for path in real_git("ls-files", "--full-name", ":/").splitlines() if path.startswith(startup)]
-    probe.write_text("#!/bin/sh\n")  # the shebang finding needs the scan's cat-file to read this blob
-    blob = real_git("hash-object", "-w", str(probe)).strip()
-    real_git("update-index", "--add", "--cacheinfo", f"100644,{blob},probe/run.sh")
-    found = report(capsys)
-    assert [finding for finding in found if finding["path"] == "probe/run.sh"] == [
-        {"path": "probe/run.sh", "rule": "shell-file", "detail": ".sh"},
-        {"path": "probe/run.sh", "rule": "shell-shebang", "detail": "#!/bin/sh"},
-    ]
-    assert not [finding for finding in found if finding["path"].startswith(startup)]
-
-
-def test_large_index_and_blob_output_finish_without_a_pipe_deadlock(repo: Path) -> None:
-    # 2,048 SHA-1 request lines exceed 64 KiB. The first blob fills stdout before Git drains stdin.
-    files: dict[str, str | bytes] = {f"files/{number:04}.txt": b"plain\x00text\r\n\xff\n" for number in range(2048)}
-    files["files/0000.txt"] *= 8192
-    files["zz-last.sh"] = b"echo last\n"
-    add(repo, files)
-    (repo / "files/0000.txt").write_bytes(b"#!/bin/sh\n")  # Only staged bytes may affect the scan.
-    (repo / "zz-last.sh").unlink()
-    done = run_python("from repotools.cli import main\nmain(['zero-bash', '--strict'])\n")
-    assert done.returncode == 1, done.stderr.decode(errors="replace")
-    assert [json.loads(line) for line in done.stdout.splitlines()] == [
-        {"path": "zz-last.sh", "rule": "shell-file", "detail": ".sh"}
-    ]
-
-
-def test_an_early_batch_failure_reports_git_error_instead_of_a_broken_pipe(repo: Path) -> None:
-    add(repo, {f"files/{number:04}.txt": "object content\n" for number in range(2048)})
-    oid = subprocess.run(["git", "ls-files", "-s"], capture_output=True, check=True, text=True).stdout.split()[1]
-    # ls-files still reads the index, but cat-file fails on its first object while requests fill stdin.
-    blob = repo / ".git" / "objects" / oid[:2] / oid[2:]
-    blob.unlink()  # Git's object is read-only; replace it in this disposable repository.
-    blob.write_bytes(zlib.compress(b"blob 65536\x00" + b"x" * 65536)[:-4])
-    done = run_python("from repotools.cli import main\nmain(['zero-bash', '--strict'])\n")
-    assert done.returncode == 1
-    assert done.stdout == b""
-    event = json.loads(done.stderr)
-    assert set(event) == {"error"}
-    assert event["error"].startswith("git failed: ")
+    listed = subprocess.run(["git", "ls-files"], capture_output=True, check=True, text=True).stdout.splitlines()
+    startup = [path for path in listed if path.startswith(("unix/home/.z", "unix/home/.config/zsh/"))]
+    assert startup
+    assert report(capsys, "--files=" + " ".join(startup)) == []

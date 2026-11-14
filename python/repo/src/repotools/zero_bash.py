@@ -1,21 +1,20 @@
-"""The zero-bash rule: find shell scripts, shell shebangs and multi-line mise run in the git index."""
+"""The zero-bash rule: find shell scripts, shell shebangs and multi-line mise run in the files given."""
 
 # Pattern: Mbed-TLS/mbedtls-framework@ced31491 scripts/check_files.py:156-187,525 walks `git ls-files`
-# and matches each first line with a shebang regex beside a path-exemption regex. This reads the index
-# (`git ls-files -s`, `git cat-file --batch`), the snapshot a commit certifies, not the working tree.
+# and matches each first line with a shebang regex beside a path-exemption regex. hk's pre-commit passes the
+# staged files and stashes unstaged work first, so the working tree it reads is what the commit holds.
 
 import re
 import shlex
 import subprocess
 import sys
 from collections.abc import Iterator
-from pathlib import PurePosixPath
-from typing import cast
+from pathlib import Path, PurePosixPath
 
 import tomlkit
 from tomlkit.items import String
 
-from . import process
+from .gates import given
 from .models import Finding, Rule, ZeroBash
 
 SHELL_SUFFIXES = (".sh", ".bash", ".zsh", ".ksh", ".csh", ".fish")
@@ -35,42 +34,10 @@ ALLOWED = (
     "unix/home/.config/zsh/.zshrc.d/*.zsh",
     "unix/home/.config/zsh/*.zsh",
 )
-FILE_MODES = ("100644", "100755")  # Links (120000) and submodules (160000) have no content to read.
 
 
 def allowed(path: str) -> bool:
     return any(PurePosixPath(path).full_match(pattern) for pattern in ALLOWED)
-
-
-def git(*args: str, stdin: bytes | None = None) -> bytes:
-    if stdin is None:
-        return subprocess.run(["git", *args], capture_output=True, check=True).stdout
-    # This call keeps the helper's default capture_stdout=True.
-    return cast("bytes", process.run(["git", *args], stdin).stdout)
-
-
-def index() -> list[tuple[str, str, str]]:
-    """Mode, blob id and path of every index entry; :/ and --full-name list them all from any folder."""
-    found = []
-    for entry in git("ls-files", "-s", "-z", "--full-name", ":/").decode().split("\0")[:-1]:
-        meta, path = entry.split("\t", 1)
-        mode, blob, _stage = meta.split()
-        found.append((mode, blob, path))
-    return found
-
-
-def blobs(ids: list[str]) -> dict[str, bytes]:
-    """The content of each blob, read from the object store in one git call."""
-    out = git("cat-file", "--batch", stdin="".join(f"{blob}\n" for blob in ids).encode())
-    found: dict[str, bytes] = {}
-    start = 0
-    for _ in ids:
-        header_end = out.index(b"\n", start)
-        blob, _kind, size = out[start:header_end].decode().split()
-        body = header_end + 1
-        found[blob] = out[body : body + int(size)]
-        start = body + int(size) + 1
-    return found
 
 
 def interpreter(first: bytes) -> str | None:
@@ -156,19 +123,28 @@ def check_content(path: str, content: bytes | None) -> Iterator[Finding]:
                 yield Finding(path=path, rule=Rule.multi_line_run, detail=where)
 
 
-def findings() -> list[Finding]:
-    entries = index()
-    content = blobs([blob for mode, blob, _path in entries if mode in FILE_MODES])
+def content(path: Path) -> bytes | None:
+    """The file's bytes; None for a link or a folder (a submodule), whose name alone can break the rule."""
+    return None if path.is_symlink() or path.is_dir() else path.read_bytes()
+
+
+def findings(files: list[str]) -> list[Finding]:
+    """The given files' findings, or with none given every tracked file's, as the working tree holds it."""
+    names = (
+        files
+        or subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout.decode().split("\0")[:-1]
+    )
     return [
         finding
-        for mode, blob, path in entries
-        for finding in check_entry(path, content[blob] if mode in FILE_MODES else None)
+        for name in names
+        if Path(name).is_symlink() or Path(name).exists()  # hk drops deleted files; ls-files lists them
+        for finding in check_entry(name, content(Path(name)))
     ]
 
 
 def report(options: ZeroBash) -> None:
-    """Print every finding; --strict fails on any."""
-    found = findings()
+    """Print every finding in the given files, or in every tracked file; --strict fails on any."""
+    found = findings(given(options.files))
     sys.stdout.writelines(finding.model_dump_json() + "\n" for finding in found)
     if options.strict and found:
         raise SystemExit(1)

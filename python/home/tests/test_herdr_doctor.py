@@ -133,8 +133,6 @@ def scratch(request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.
     monkeypatch.setenv("STAND_IN", str(stand_in))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_STATE_HOME", str(home / ".local/state"))
-    for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
-        monkeypatch.delenv(name, raising=False)
     repo = tmp_path / "repo"
     git(tmp_path, "init", "-q", str(repo))
     (repo / "README.md").write_text("Nothing retired here.\n")

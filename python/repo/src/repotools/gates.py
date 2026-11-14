@@ -1,4 +1,4 @@
-"""The commit gates: review:python, review:python:approved, privacy:scan, and toolchain-gate."""
+"""The commit gates: review:python, review:python:approved and privacy:scan."""
 
 # Ported from the shell runs in mise.toml and tasks/privacy/scan.sh (#388) with the same arguments and output.
 # Their report and refusal lines stay plain text, as hk and AGENTS.md show them, not JSON events.
@@ -7,11 +7,10 @@ import os
 import shlex
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 from .git import git
-from .models import PrivacyScan, ReviewApproved, ReviewPython, ToolchainGate
+from .models import PrivacyScan, ReviewApproved, ReviewPython
 from .pane_approval import hashed
 
 PROMPT = Path("tasks/review/python.md")
@@ -25,16 +24,6 @@ SHORTEST = 8
 # The task always renders /Users/<user>/, 8 characters even for an empty user; a direct call may not.
 EMPTY = "privacy:scan: no patterns rendered"
 GITLINK = b"160000 "
-# What toolchain:verify runs from (#391): the hometools package and the two file tasks, by any change, deletion
-# included, and the global config by a change that the toolchain tasks can see.
-TOOLCHAIN_PATHS = (
-    "python/home/",
-    "unix/home/.config/mise/tasks/toolchain/",
-    "unix/home/.config/mise/tasks/bootstrap/",
-)
-GLOBAL_CONFIG = "unix/home/.config/mise/config.toml"
-# The [tools] pins the toolchain tasks run with; a bump of any other pin leaves what toolchain:verify sees alone.
-TASK_TOOLS = frozenset({"uv", "python", "mise", "hk"})
 
 
 def staged_python() -> str:
@@ -183,44 +172,11 @@ def privacy_scan(options: PrivacyScan) -> None:
         raise SystemExit(1)
 
 
-def global_config(tree: str) -> dict[str, object]:
-    """The global config, parsed, in tree (HEAD, or "" for the index), with only the task tools' [tools] pins:
-    comments, layout and the other pins drop out. Absent is empty; one that does not parse raises."""
-    listed = git("ls-tree", "--name-only", tree, "--", GLOBAL_CONFIG) if tree else git("ls-files", "--", GLOBAL_CONFIG)
-    if not listed:
-        return {}
-    config = tomllib.loads(git("show", f"{tree}:{GLOBAL_CONFIG}"))
-    tools = config.get("tools", {})
-    return config | {"tools": {name: pin for name, pin in tools.items() if name in TASK_TOOLS}}
-
-
-def toolchain_gate() -> None:
-    """run on stdout when the staged change reaches what toolchain:verify runs from; the reason otherwise."""
-    # Printed, not an exit status, as main-guard-armed: a failing check must never read as "skip".
-    # Any [vars] change runs: //home:integration is the only test that compares the [vars] toolchain versions
-    # with this Mac's install (the unit tests take theirs from the install), so a bump fails until installed.
-    changed = staged_paths()
-    if any(path.startswith(TOOLCHAIN_PATHS) for path in changed) or (
-        GLOBAL_CONFIG in changed and global_config("HEAD") != global_config("")
-    ):
-        sys.stdout.write("run\n")
-    else:
-        sys.stderr.write("toolchain-gate: nothing the toolchain tasks run from is staged; //home:integration skipped\n")
-
-
-def staged_paths() -> list[str]:
-    """Every path the staged change touches. --no-renames: a rename is its old path deleted and its new one added,
-    so both are seen."""
-    return git("diff", "--cached", "--name-only", "--no-renames", "-z").split("\0")
-
-
-def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate) -> None:
+def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan) -> None:
     match options:
         case ReviewPython():
             review(options)
         case ReviewApproved():
             approved()
-        case PrivacyScan():
+        case _:  # PrivacyScan
             privacy_scan(options)
-        case _:  # ToolchainGate
-            toolchain_gate()

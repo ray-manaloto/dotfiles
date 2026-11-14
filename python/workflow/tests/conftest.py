@@ -12,13 +12,6 @@ import pytest
 from workflowtools.cli import main
 
 
-@pytest.fixture(autouse=True)
-def no_hook_git(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pre-commit hook exports GIT_DIR and friends, and they would point every test's git at the real checkout."""
-    for name in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(name)
-
-
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "repo"

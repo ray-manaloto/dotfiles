@@ -297,7 +297,7 @@ def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path.resolve()
     for name in ("CBM_CLIENTS", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "OPENCODE_CONFIG", "CBM_CACHE_DIR",
                  "CBM_RUNTIME_DIR", "CBM_INSTALL_GIT_TIMEOUT_SECONDS", "CBM_PROBE_TIMEOUT_SECONDS",
-                 "CBM_INSTALL_ALLOW_NON_MAIN", *(key for key in os.environ if key.startswith("GIT_"))):  # fmt: skip
+                 "CBM_INSTALL_ALLOW_NON_MAIN"):  # fmt: skip
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)

@@ -52,9 +52,13 @@ local fast = new Mapping<String, Step> {
     // security. Both are hk builtins on the workflow files; the tools are global mise pins.
     ["jactionlint"] = Builtins.jactionlint
     ["zizmor"] = Builtins.zizmor
-    // AGENTS.md zero bash: lists the leftovers without failing until the last port adds --strict.
+    // AGENTS.md zero bash: lists the leftovers in hk's files without failing until the last port adds --strict. At
+    // pre-commit hk stashes unstaged work, so the files it reads are the staged ones. The glob makes hk skip a
+    // commit whose files were all deleted (hk 2.12.0 src/step/runner.rs:170-175) instead of passing it no files,
+    // which would list the whole repository.
     ["zero-bash"] {
-        check = "mise run //repo:zero-bash"
+        glob = List("**")
+        check = "mise run //repo:zero-bash -- {{files}}"
     }
     // `fnox set` on a doppler provider writes the value into the TOML in plain text: a tracked fnox file's Doppler
     // entries must hold Doppler secret names (repotools fnox-refs). It reads the index, so it runs on every commit.
@@ -170,13 +174,18 @@ hooks {
             // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
             // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
             ["no-commit-to-main"] = Builtins.no_commit_to_branch
-            // #391: the real-toolchain test (//home:integration) only, for a commit that reaches the toolchain tasks or
-            // a [vars] version; it reads the staged index, so it stays at commit. The rest of //home runs at pre-push
-            // (//home:unit): git exports GIT_DIR, GIT_INDEX_FILE and more to pre-commit only, and a suite's real git
-            // under them acts on this checkout. Otherwise it prints why it skipped and takes a second. No glob: hk
-            // drops a filtered step whose files were all deleted.
+            // #391: the real-toolchain test (//home:integration) only, for a commit that reaches the toolchain tasks
+            // or the global config; the rest of //home runs at pre-push (//home:unit). A commit that only deletes such
+            // files skips it: hk leaves deleted files out of a step's files (hk 2.12.0 src/git.rs:4336-4357) and skips
+            // a filtered step with none (src/step/runner.rs:170-175). //home:unit at pre-push still covers python/home.
             ["toolchain-gate"] {
-                check = "mise run //repo:toolchain-gate"
+                glob = List(
+                    "python/home/**",
+                    "unix/home/.config/mise/tasks/toolchain/**",
+                    "unix/home/.config/mise/tasks/bootstrap/**",
+                    "unix/home/.config/mise/config.toml"
+                )
+                check = "mise run //home:integration"
             }
             // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
             ["python-review"] {

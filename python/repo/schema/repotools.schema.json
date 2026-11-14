@@ -26,7 +26,6 @@
         "shell-apply",
         "shell-rollback",
         "scratch-env",
-        "toolchain-gate",
         "tools-install",
         "test-times",
         "trust",
@@ -126,10 +125,11 @@
       "additionalProperties": false
     },
     "ZeroBash": {
-      "description": "Report tracked shell scripts, shell shebangs and multi-line mise run.",
+      "description": "Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files.",
       "type": "object",
       "properties": {
-        "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" }
+        "strict": { "type": "boolean", "default": false, "description": "Exit 1 when anything is left" },
+        "files": { "type": "string", "default": "", "description": "Files to check, as mise's shell-quoted usage_file; empty checks every tracked file" }
       },
       "additionalProperties": false
     },
@@ -178,12 +178,6 @@
     },
     "MainGuardArmed": {
       "description": "Print install when hk's post-merge step must install the guard: on main, not switched off, no copy of HEAD's.",
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false
-    },
-    "ToolchainGate": {
-      "description": "Print run when the staged change can change what toolchain:verify sees on this Mac.",
       "type": "object",
       "properties": {},
       "additionalProperties": false
@@ -310,7 +304,6 @@
         { "$ref": "#/$defs/MainGuardArmed" },
         { "$ref": "#/$defs/ShellApply" },
         { "$ref": "#/$defs/ShellRollback" },
-        { "$ref": "#/$defs/ToolchainGate" },
         { "$ref": "#/$defs/ToolsInstall" },
         { "$ref": "#/$defs/TestTimes" },
         { "$ref": "#/$defs/Trust" },
@@ -488,7 +481,6 @@
     "shell_apply": { "$ref": "#/$defs/ShellApply" },
     "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
     "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
-    "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
     "test_times": { "$ref": "#/$defs/TestTimes" },
     "test_time": { "$ref": "#/$defs/TestTime" },
