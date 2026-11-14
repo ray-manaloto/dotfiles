@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "monit-alert"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -64,6 +64,30 @@
       "properties": {
         "free_gib": {"type": "integer", "description": "Space a normal user can still write on the data volume (f_bavail), in GiB, as monit counts it."},
         "floor_gib": {"type": "integer", "description": "The floor: heavy test tasks refuse to start below it."}
+      }
+    },
+    "Writer": {
+      "description": "One process that wrote to disk since the previous disk-log line (proc_pid_rusage, RUSAGE_INFO_V2).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "path", "written_mib"],
+      "properties": {
+        "pid": {"type": "integer", "description": "The process id."},
+        "path": {"type": "string", "description": "Its executable (proc_pidpath); empty when it exited before disk-log read it."},
+        "written_mib": {"type": "integer", "description": "MiB it wrote to disk since the previous line, or since it started when the previous line did not see it."}
+      }
+    },
+    "DiskSample": {
+      "description": "One line of disk-log's samples.jsonl: free space, its drop and the processes that wrote most.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "free_gib", "drop_gib", "writers", "snapshot"],
+      "properties": {
+        "at": {"type": "string", "description": "When disk-log ran, ISO 8601 in UTC."},
+        "free_gib": {"type": "integer", "description": "Space a normal user can still write on the data volume (f_bavail), in GiB."},
+        "drop_gib": {"type": ["integer", "null"], "description": "The previous line's free_gib minus this one's; null on the first line."},
+        "writers": {"type": "array", "items": {"$ref": "#/$defs/Writer"}, "description": "The processes that wrote most since the previous line, most first."},
+        "snapshot": {"type": "boolean", "description": "The drop reached DROP_GIB, so disk-log started a disk-snapshot."}
       }
     },
     "MonitAlert": {

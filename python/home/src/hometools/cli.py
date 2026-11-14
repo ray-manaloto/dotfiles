@@ -16,6 +16,7 @@ UPDATES = {
     Command.opencode_jouet: opencode.sync,
     Command.disk_snapshot: disk.run_snapshot,
     Command.disk_guard: disk.run_guard,
+    Command.disk_log: disk.run_log,
     Command.monit_alert: monit.run_alert,
 }
 

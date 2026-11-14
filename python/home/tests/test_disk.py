@@ -3,6 +3,7 @@
 import fcntl
 import json
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -210,3 +211,103 @@ def test_the_command_writes_under_the_state_folder(
     assert folder.parent == tmp_path / "state/dotfiles/disk-alerts"
     assert (folder / "folders.txt").is_file()
     assert os.access(folder / "lsof.txt", os.R_OK)
+
+
+def write_mib(path: Path, mib: int) -> None:
+    """mib MiB of incompressible data, forced to disk, so macOS counts it as this process's disk writes."""
+    with path.open("wb") as out:
+        out.write(os.urandom(mib * disk.MIB))
+        out.flush()
+        os.fsync(out.fileno())
+
+
+def mine(found: dict[str, tuple[int, int, str]]) -> tuple[str, int]:
+    key = next(key for key, (pid, _, _) in found.items() if pid == os.getpid())
+    return key, found[key][1]
+
+
+def test_the_counters_see_this_processes_own_writes_and_leave_out_roots(tmp_path: Path) -> None:
+    key, before = mine(disk.written())
+    write_mib(tmp_path / "w", 8)
+    again, after = mine(disk.written())
+    assert again == key
+    assert after - before >= 8 * disk.MIB
+    # launchd is root's: macOS refuses another user's counters.
+    assert all(pid != 1 for pid, _, _ in disk.written().values())
+
+
+def test_the_writers_are_the_most_written_first_and_a_new_process_counts_from_its_start() -> None:
+    now = {
+        "10:1": (10, 5 * disk.MIB, "/bin/small"),
+        "11:1": (11, 900 * disk.MIB, "/bin/big"),
+        "12:7": (12, 300 * disk.MIB, "/bin/new"),
+        "13:1": (13, disk.MIB - 1, "/bin/idle"),
+    }
+    before = {"10:1": 2 * disk.MIB, "11:1": 100 * disk.MIB, "12:6": 290 * disk.MIB}
+    assert [(w.pid, w.written_mib) for w in disk.writers(before, now)] == [(11, 800), (12, 300), (10, 3)]
+    many = {f"{n}:1": (n, (n + 1) * disk.MIB, "/bin/x") for n in range(20)}
+    assert [w.pid for w in disk.writers({}, many)] == list(range(19, 19 - disk.WRITERS, -1))
+
+
+def test_the_first_line_has_no_drop_and_the_next_names_this_process(tmp_path: Path) -> None:
+    calls: list[str] = []
+    folder = tmp_path / "alerts"
+    first = disk.sample(folder, snap=lambda: calls.append("snap"))
+    assert (first.drop_gib, first.snapshot, first.free_gib == disk.free_gib()) == (None, False, True)
+    assert folder.stat().st_mode & 0o777 == 0o700
+    write_mib(tmp_path / "w", 8)
+    second = disk.sample(folder, snap=lambda: calls.append("snap"))
+    assert second.drop_gib is not None
+    assert second.drop_gib < disk.DROP_GIB
+    assert any(w.pid == os.getpid() and w.written_mib >= 8 for w in second.writers)
+    lines = (folder / "samples.jsonl").read_text().splitlines()
+    assert [json.loads(line)["at"] for line in lines] == [first.at, second.at]
+    assert calls == []
+
+
+def test_a_drop_of_twenty_gib_starts_a_snapshot(tmp_path: Path) -> None:
+    calls: list[str] = []
+    higher = disk.DiskSample(at="then", free_gib=disk.free_gib() + 50, drop_gib=None, writers=[], snapshot=False)
+    (tmp_path / "samples.jsonl").write_text(higher.model_dump_json() + "\n")
+    dropped = disk.sample(tmp_path, snap=lambda: calls.append("snap"))
+    assert dropped.drop_gib is not None
+    assert dropped.drop_gib >= 50
+    assert dropped.snapshot
+    assert calls == ["snap"]
+
+
+def test_unreadable_state_starts_afresh(tmp_path: Path) -> None:
+    (tmp_path / "samples.jsonl").write_text("not json\n")
+    (tmp_path / "written.json").write_text("[1, 2]")
+    fresh_start = disk.sample(tmp_path, snap=lambda: None)
+    assert fresh_start.drop_gib is None
+    (tmp_path / "written.json").write_text("{")
+    assert disk.sample(tmp_path, snap=lambda: None).drop_gib is not None
+
+
+def test_a_full_log_moves_aside(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(disk, "LOG_BYTES", 10)
+    disk.sample(tmp_path, snap=lambda: None)
+    disk.sample(tmp_path, snap=lambda: None)
+    assert len((tmp_path / "samples.jsonl.1").read_text().splitlines()) == 1
+    assert len((tmp_path / "samples.jsonl").read_text().splitlines()) == 1
+
+
+def test_spawn_starts_the_command_without_waiting(tmp_path: Path) -> None:
+    marker = tmp_path / "ran"
+    disk.spawn(["/usr/bin/touch", str(marker)])
+    for _ in range(100):
+        if marker.exists():
+            break
+        time.sleep(0.05)
+    assert marker.exists()
+
+
+def test_the_log_command_writes_one_line_under_the_state_folder(
+    capfd: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    code, out, err = hometools(capfd, "disk-log")
+    assert (code, err) == (0, "")
+    log = tmp_path / "state/dotfiles/disk-alerts/samples.jsonl"
+    assert json.loads(log.read_text()) == json.loads(out)

@@ -676,6 +676,12 @@ check filesystem data with path /System/Volumes/Data
     if space free < 100 GB then exec "{{ env.HOME }}/.local/bin/mise run disk:snapshot"
         repeat every 30 cycles
 
+# One line a minute of free space and the processes that wrote most (hometools.disk, disk-log), and a disk-snapshot
+# on a drop of 20 GiB since the previous line: a write-then-delete that is back within minutes still gets named.
+check program disk-log with path "{{ env.HOME }}/.local/bin/mise run disk:log"
+    if status != 0 then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
+        repeat every 240 cycles
+
 check system $HOST
     if loadavg (5min) per core > 1.5 for 5 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles

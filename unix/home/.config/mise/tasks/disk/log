@@ -1,0 +1,34 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="log free space and the processes that wrote most each minute, to ~/.local/state/dotfiles/disk-alerts/samples.jsonl"
+"""disk:log: hometools disk-log logs free space and the biggest writers (python/home/src/hometools/disk.py)."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash, #392): this launcher only finds the hometools
+# package in the checkout it is linked from and runs one command there. monit runs this task every cycle
+# (unix/home/.config/mise/config.toml, the monitrc entry); run it by hand any time.
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/disk/log.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+
+# The package's environment is synced as its own step first, so a uv that fails or can't start there ends the
+# task with one JSON error naming it, as hometools' own steps do: uv sync's exit code, or 127 for no uv.
+# --inexact keeps packages the lock doesn't list, as uv run did: uv sync removes them by default
+# (uv 0.13.7 crates/uv-cli/src/settings.rs:851-855 for run, 2003-2007 for sync).
+try:
+    synced = subprocess.run(["uv", "sync", "--project", str(PACKAGE), "--locked", "--inexact"], check=False).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    error = f"disk:log: hometools could not start ({why})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(synced)
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--no-sync", "hometools", "disk-log"])
