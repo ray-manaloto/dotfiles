@@ -170,7 +170,9 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
         {
             ("mise", "run", "update:claude"): {"real": str(bump)},
             ("curl", "-fsSL", "--max-time", "30", review.CHANGELOG): {"stdout": "## 2.1.10\n- Removed a flag\n"},
-            review.TRIAGE: {"stdout": "## BREAKING\n- claude 2.1.10: Removed a flag\n## ADOPT\n## REVISIT\n"},
+            review.TRIAGE: {
+                "stdout": "## BREAKING\n- claude 2.1.10: Removed a flag\n## ADOPT\n- none\n## REVISIT\n- none\n"
+            },
         }
     )
     code, got, err = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST)
@@ -178,12 +180,29 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
     gate = world.state() / str(run) / "review.md"
     assert code == 3
     assert json.loads(err.splitlines()[-1])["error"] == (
-        f"roll:all paused before roll:stop: read {gate}, then rerun with --accept-review"
+        f"roll:all paused before roll:stop: read {gate}, then rerun with --accept-review; to drop this run instead, "
+        f"delete {world.state() / 'paused'} and rerun"
     )
     assert [line.step for line in world.runs()] == ["snapshot", "update", "review"]
     assert "updated" in got
     assert "$ mise run update:claude" in got
     assert ASK not in world.calls()
+    # A rerun without --accept-review stays paused on the same gate: a new snapshot would take the updated versions
+    # as its baseline, find nothing changed and open the gate.
+    code, _, err = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST[:-2])
+    assert code == 3
+    assert json.loads(err.splitlines()[-1])["error"].startswith(f"roll:all paused before roll:stop: read {gate}")
+    assert [line.step for line in world.runs()] == ["snapshot", "update", "review"]
+    # --accept-review continues the paused run from roll:stop, with no second snapshot or update.
+    try:
+        args = ("all", "--apply", "--accept-review", "--exclude", "chief-of-staff", "--wiki", str(world.wiki))
+        hometools(capfd, *args, *FAST[:-2])
+    finally:
+        end_resumed(world)
+    assert [(line.run, line.step) for line in world.runs()[3:]] == [(run, "stop"), (run, "start"), (run, "verify")]
+    assert [s.result for s in world.runs()[3].sessions] == ["stopped"]
+    assert world.calls().count(("mise", "run", "update:claude")) == 1
+    assert "Gate: CLOSED" in gate.read_text()
 
 
 def test_a_chief_of_staff_that_does_not_stop_holds_every_space(world: World, capfd: pytest.CaptureFixture[str]) -> None:
@@ -248,21 +267,22 @@ def test_steps_run_alone_continue_the_run_they_follow(world: World, capfd: pytes
     assert (code, [s.result for s in stopped.sessions]) == (0, ["stopped"])
     try:
         code, got, _ = hometools(capfd, "start", "--apply", *FAST)
+        # The live worker was resumed after the plugins last changed: a second stop leaves it running.
+        again, planned, _ = hometools(capfd, "stop", *FAST)
+        os.killpg(int((world.root / "resumed.pid").read_text()), 0)  # the resumed worker still runs
     finally:
         end_resumed(world)
     assert world.runs()[-1].run == stopped.run
     assert (code, [r["result"] for r in lines(got)]) == (0, ["started"])
+    assert (again, [(r["where"], r["result"]) for r in lines(planned)]) == (
+        0,
+        [("chief-of-staff / chief-of-staff", "planned"), ("proj / worker", "skipped-already-current")],
+    )
     # A session the stop did not stop is not started: the chief, whose space was not chosen.
     code, got, _ = hometools(capfd, "verify", *FAST)
     assert [r.get("where") for r in lines(got)] == ["proj / worker", None]
     # The resumed session has ended (end_resumed): verify fails it.
     assert code == 1
-    # The worker was resumed after the plugins last changed: a second stop leaves it running.
-    code, got, _ = hometools(capfd, "stop", *FAST)
-    assert (code, [(r["where"], r["result"]) for r in lines(got)]) == (
-        0,
-        [("chief-of-staff / chief-of-staff", "planned"), ("proj / worker", "skipped-already-current")],
-    )
 
 
 def test_a_dangling_mise_link_fails_verify_and_shows_in_the_update_plan(
@@ -287,13 +307,24 @@ def test_a_dangling_mise_link_fails_verify_and_shows_in_the_update_plan(
     assert [line["result"] for line in lines(got)[:-1]] == ["untouched", "untouched"]
 
 
-def test_update_runs_each_task_and_skips_opencode_while_an_excluded_one_runs(
-    world: World, capfd: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    ("session_id", "exclude", "left"),
+    [("ses_1", "oc", True), (None, "", True), ("ses_1", "", False)],
+    ids=["excluded", "no-session-found", "rolled"],
+)
+def test_update_runs_each_task_and_leaves_opencode_alone_while_a_session_it_keeps_runs(
+    world: World,
+    capfd: pytest.CaptureFixture[str],
+    session_id: str | None,
+    exclude: str,
+    left: bool,  # noqa: FBT001 - a parameter
 ) -> None:
+    """agents:update would replace the OpenCode binary under a session the roll does not restart: one --exclude
+    keeps, or one whose session id the snapshot did not find. update:claude, update:codex and update:agy still run."""
     oc = GraphTerminal(
         address="t5",
         kind=Kind.opencode,
-        session="ses_1",
+        session=session_id,
         cwd="/",
         argv=None,
         status=None,
@@ -314,18 +345,18 @@ def test_update_runs_each_task_and_skips_opencode_while_an_excluded_one_runs(
         )
         + "\n"
     )
-    skip = ("mise", "run", "agents:update", "--skip", "opencode")
     world.answer(
         {
             UPDATES[0]: {"stdout": "claude updated\n"},
             UPDATES[1]: {"stdout": "codex broke\n", "code": 3},
             UPDATES[2]: {},
-            skip: {"stdout": "agents updated\n"},
+            UPDATES[3]: {"stdout": "agents updated\n"},
         }
     )
-    code, got, _ = hometools(capfd, "update", "--exclude", "oc")
-    assert got.splitlines()[-1] == f"planned: {' '.join(skip)}"
-    code, got, _ = hometools(capfd, "update", "--apply", "--exclude", "oc")
+    skipped = "skipped: mise run agents:update, since OpenCode keeps running in oc / 1 (t5)"
+    code, got, _ = hometools(capfd, "update", "--exclude", exclude)
+    assert got.splitlines()[-1] == (skipped if left else "planned: mise run agents:update")
+    code, got, _ = hometools(capfd, "update", "--apply", "--exclude", exclude)
     assert code == 1
     assert got.splitlines()[1:] == [
         "$ mise run update:claude",
@@ -334,9 +365,9 @@ def test_update_runs_each_task_and_skips_opencode_while_an_excluded_one_runs(
         "codex broke",
         "update:codex exited 3",
         "$ mise run update:agy",
-        f"$ {' '.join(skip)}",
-        "agents updated",
+        *([skipped] if left else ["$ mise run agents:update", "agents updated"]),
     ]
+    assert (UPDATES[3] in world.calls()) is not left
     assert world.runs()[-1].run == "run-x"
 
 

@@ -164,7 +164,8 @@ def test_a_review_pairs_every_change_with_its_notes_triages_once_and_closes_the_
     assert "## rust-v0.169.0" in text
     assert "alpha" not in text
     assert "already had" not in text
-    assert "No verified release source for agy" in text
+    # agy has no verified release source: no notes, so no triage, and it stays not reviewed.
+    assert "## agy 1.5.8 -> 1.5.9\n\n```text\nno notes found\n```" in text
     assert "- Changed the hook\n## 1.1" in text
     assert "remote fix" in text
     assert "## late@m 1.0-a -> 1.0-b\n\n```text\nno notes found\n```" in text
@@ -181,7 +182,7 @@ def test_a_review_pairs_every_change_with_its_notes_triages_once_and_closes_the_
     assert "### codex 0.168.0 -> 0.169.0\n\n## BREAKING\n- none\n" in review_md
     asked = [call for call in world.calls() if call == review.TRIAGE]
     assert len(asked) == 1
-    assert "Not reviewed, no notes:\n- late@m 1.0-a -> 1.0-b\n" in review_md
+    assert "Not reviewed, no notes:\n- agy 1.5.8 -> 1.5.9\n- late@m 1.0-a -> 1.0-b\n" in review_md
     page = next((world.wiki / "updates").iterdir()).read_text()
     assert page.startswith(f"## run-1\n\n- Review: {run / 'review.md'}\n- Changed: 8 item(s): claude")
     assert (world.home / ".config/mise/update-evidence/roll-run-1.md").read_text() == page.split("\n\n", 1)[1].rstrip(
@@ -293,8 +294,17 @@ def test_a_plugin_whose_notes_have_no_source_has_none(world: World) -> None:
     assert review.load(world.home / ".claude/plugins") == {}
 
 
-@pytest.mark.parametrize("answer", ["## BREAKING\n- x: gone\n", "all fine"], ids=["one-heading", "none"])
-def test_a_triage_without_its_three_headings_is_no_answer(
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "## BREAKING\n- x: gone\n",
+        "all fine",
+        "## BREAKING\n## ADOPT\n## REVISIT\n",
+        "## BREAKING\n- none\n## ADOPT\nnothing to adopt\n## REVISIT\n- none\n",
+    ],
+    ids=["one-heading", "none", "headings-only", "a-section-without-a-bullet"],
+)
+def test_a_triage_without_its_three_sections_is_no_answer(
     world: World, capfd: pytest.CaptureFixture[str], answer: str
 ) -> None:
     setup(world)

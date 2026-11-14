@@ -47,10 +47,12 @@ to `~/.local/state/dotfiles/roll/runs.jsonl` and `~/.local/state/dotfiles/roll/<
    found by name: its space and tab are both `chief-of-staff`), then each space's children before its leads (`-lead`,
    `-coord`, `-v2`). The tab running the task is never stopped: run from chief-of-staff's own tab, it skips that tab,
    so `/exit` chief-of-staff last, by hand. It never closes a tab, checks every terminal against `herdr-app ls` and
-   its foreground against the harness right before acting, and leaves a session already current running.
+   its foreground against the harness right before acting, and leaves a session already current running
+   (`skipped-already-current`). A shutdown stops those too: each wrote its Resume block in step 2, so list them for
+   the owner to `/exit` by hand, like chief-of-staff; they are not counted as stopped.
 6. **Tell the owner** the counts (sessions captured, sessions stopped), where the graph is, and the two
    commands for after the reboot:
-   - close the chief of staff: `/exit` in its tab;
+   - close each `skipped-already-current` session, then the chief of staff: `/exit` in its tab;
    - after the reboot, in Herdr: `claude --permission-mode auto --resume <coordinator session id>`,
      then say "run herdr-startup".
 

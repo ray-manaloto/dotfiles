@@ -62,7 +62,8 @@ def parser() -> argparse.ArgumentParser:
     found.add_argument("--run", default=None, help="the run id; default a new one (start and verify: the last stop's)")
     found.add_argument("--wiki", type=Path, default=snap.default_wiki(), help="the chief-of-staff wiki")
     found.add_argument("--prompt", choices=["rolling", "reboot"], default="rolling", help="the resume prompt")
-    found.add_argument("--accept-review", action="store_true", help="roll:all goes past a closed review gate")
+    found.add_argument("--accept-review", action="store_true",
+                       help="roll:all goes past a closed review gate; a paused run goes on from roll:stop")  # fmt: skip
     found.add_argument("--wait", type=float, default=900, help="seconds to wait for a stop-point answer")
     found.add_argument("--settle", type=float, default=90, help="seconds to wait for an exit or a start")
     found.add_argument("--poll", type=float, default=1, help="seconds between looks while waiting")
@@ -218,16 +219,36 @@ def do_snapshot(step: Step) -> int:
     return 0
 
 
+def kept_opencode(graph: Graph, args: argparse.Namespace) -> list[str]:
+    """Each live OpenCode terminal the roll does not restart: one outside the chosen spaces or excluded, one whose
+    session id the snapshot did not find, or the caller's own. agents:update would replace the binary under it. A
+    space or tab kept from the previous graph is closed: nothing runs there."""
+    picked, _ = targets(graph, args, os.environ.get("HC_TERMINAL_ID"))
+    rolled = {term.address for _, _, term in picked}
+    return [
+        f"{space.name} / {tab.name} ({term.address})"
+        for space in graph.spaces
+        if not space.kept_from_previous_graph
+        for tab in space.tabs
+        if not tab.kept_from_previous_graph
+        for term in tab.terminals
+        if term.kind is Kind.opencode and term.address not in rolled
+    ]
+
+
 def do_update(step: Step) -> int:
-    """The existing global update tasks; agents:update skips OpenCode while an excluded OpenCode session runs."""
-    _, left = targets(run_graph(step), step.args, os.environ.get("HC_TERMINAL_ID"))
-    skip = ["--skip", "opencode"] if any(term.kind is Kind.opencode for _, _, term in left) else []
+    """The existing global update tasks. agents:update (the OpenCode update; update:claude, update:codex and
+    update:agy update the rest) is left out while an OpenCode session the roll does not restart runs."""
+    kept = kept_opencode(run_graph(step), step.args)
     env = os.environ | {"MISE_TASK_TIMINGS": "1", "MISE_TASK_OUTPUT": "prefix"}
     # Reported in the plan and the run, not a stop: the restart itself does not need those links.
     step.out(dangling().model_dump_json())
     rc = 0
     for task in UPDATES:
-        argv = ["mise", "run", task, *(skip if task == "agents:update" else [])]
+        argv = ["mise", "run", task]
+        if kept and task == "agents:update":
+            step.out(f"skipped: {' '.join(argv)}, since OpenCode keeps running in {', '.join(kept)}")
+            continue
         if not step.args.apply:
             step.out(f"planned: {' '.join(argv)}")
             continue
@@ -415,16 +436,32 @@ def do_all(args: argparse.Namespace, argv: Sequence[str]) -> int:
     if args.apply and (why := placed()):
         sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
         return REFUSED
+    # A paused run holds until the owner accepts its review: a new snapshot would take the updated versions as its
+    # baseline, find nothing changed and open the gate. Accepted, it goes on from roll:stop with its own snapshot.
+    paused = state() / "paused"
+    if args.apply and paused.is_file():
+        args.run = paused.read_text().strip()
+        if not args.accept_review:
+            return pause(state() / args.run / "review.md")
+        paused.unlink()
+        return roll(args, argv)
     for kind in (RollStep.snapshot, RollStep.update, RollStep.review):
         step = Step(args, argv, kind)
         if rc := step.end(STEPS[kind](step)):
             return rc
     gate = state() / args.run / "review.md"
     if args.apply and not args.accept_review and "Gate: CLOSED" in gate.read_text():
-        sys.stderr.write(Failure(error=f"roll:all paused before roll:stop: read {gate}, then rerun with "
-                                 "--accept-review").model_dump_json() + "\n")  # fmt: skip
-        return PAUSED
+        paused.write_text(f"{args.run}\n")
+        return pause(gate)
     return roll(args, argv)
+
+
+def pause(gate: Path) -> int:
+    # The way out of a paused run the owner will not finish (its graph is from its snapshot) is named with it.
+    why = (f"roll:all paused before roll:stop: read {gate}, then rerun with --accept-review; to drop this run "
+           f"instead, delete {state() / 'paused'} and rerun")  # fmt: skip
+    sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
+    return PAUSED
 
 
 def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:

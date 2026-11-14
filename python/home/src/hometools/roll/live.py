@@ -109,10 +109,25 @@ class Live:
         self.procs = processes()
         self.me = os.environ.get("HC_TERMINAL_ID")
 
-    def reread(self, address: str) -> None:
-        """The terminal's hc get and the process table again, after a wait in which a job may have started."""
+    def reread(self, address: str) -> list[str]:
+        """The terminal's hc get, the terminal list and the process table again, after a wait in which a job may have
+        started: an hc run child is a new herdr-core terminal, not a child process, so only hc ls and its hc get show
+        it. A terminal read before is not read again, and one gone from the list is kept as it was read. Returns
+        what could not be read (an hc ls or an hc get of another terminal that answered nothing): a job started
+        there would be unseen, so the caller treats the refresh as incomplete."""
+        read = answer("hc", "ls", "--json")
+        if not isinstance(field(read, "terminals"), list):
+            return ["hc ls --json answered nothing"]
+        self.terminals |= {str(row["address"]): row for row in rows(read, "terminals") if row.get("state") == "live"}
+        known = self.info
+        self.info = {other: known.get(other) or answer("hc", "get", other, "--json") for other in self.terminals}
         self.info[address] = answer("hc", "get", address, "--json")
         self.procs = processes()
+        return [
+            f"hc get {other} --json answered nothing"
+            for other, info in self.info.items()
+            if other != address and not info
+        ]
 
     def spaces(self) -> list[dict[str, object]]:
         return rows(self.layout, "spaces")

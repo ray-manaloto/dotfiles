@@ -193,7 +193,7 @@ def notes(tool: str, old: str, new: str, after: Versions) -> str:
     if tool in RELEASES:
         return releases(tool, old, new)
     if tool == "agy":
-        return "No verified release source for agy (Antigravity CLI); read its notes by hand."
+        return ""  # no verified release source for agy (Antigravity CLI): no notes, so it stays not reviewed
     if tool.startswith("marketplace "):
         name = tool.removeprefix("marketplace ")
         location = field(load(Path.home() / ".claude/plugins/known_marketplaces.json"), name, "installLocation")
@@ -245,10 +245,11 @@ def part(text: str, heading: str) -> str | None:
 
 
 def triage(prompt: str, folder: Path) -> str | None:
-    """The model's answer when it has the three sections; anything else (an error, a refusal, a cut-off reply) is no
-    answer, so the grep gate covers those items."""
+    """The model's answer when each of the three sections holds a bullet (ASK has an empty one say - none); anything
+    else (an error, a refusal, a cut-off reply, bare headings) is no answer, so the grep gate covers those items."""
     text = ask(prompt, folder)
-    return text if text and all(part(text, heading) is not None for heading in HEADINGS) else None
+    answered = text and all(any(BULLET.match(line) for line in (part(text, h) or "").splitlines()) for h in HEADINGS)
+    return text if answered else None
 
 
 def bullets(text: str, heading: str) -> list[str]:
