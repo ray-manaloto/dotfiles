@@ -174,11 +174,25 @@ def web(handler_class: type[socketserver.BaseRequestHandler]) -> socketserver.TC
     raise OSError(msg)
 
 
+def watch(owner: int) -> None:
+    """Exit once the owner process is gone; os.kill with signal 0 only asks whether it exists."""
+    while True:
+        try:
+            os.kill(owner, 0)
+        except ProcessLookupError:
+            os._exit(0)
+        threading.Event().wait(0.5)
+
+
 if __name__ == "__main__":
     # argv: flags (--mcp and --http each add a loopback listener, --mcp-late=PORT a late MCP one) and an IDE's own
     # arguments (project paths, written to STANDIN_RECORD when it is set). Prints the listeners' ports as one JSON
     # line, then serves until /exit, or with --stdin until stdin closes.
     flags = {arg for arg in sys.argv[1:] if arg.startswith("--")}
+    # jbctl starts an IDE in its own session, so a test run killed before its teardown would leave this running:
+    # it ends once STANDIN_OWNER, the test process that set it up, is gone.
+    if owner := os.environ.get("STANDIN_OWNER"):
+        threading.Thread(target=watch, args=(int(owner),), daemon=True).start()
     if record := os.environ.get("STANDIN_RECORD"):
         Path(record).write_text(json.dumps([arg for arg in sys.argv[1:] if not arg.startswith("--")]))
     kinds = [arg for arg in sys.argv[1:] if arg in {"--mcp", "--http"}]

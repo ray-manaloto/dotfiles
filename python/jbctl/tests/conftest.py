@@ -191,6 +191,9 @@ def toolbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     monkeypatch.setenv("JBCTL_STATION_DIR", str(station))
     # jbctl's lifecycle locks and Settings records, kept out of the user's own state folder.
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    # A run killed before this teardown (SIGTERM from hk aborting a step) skips the loop below; each stand-in also
+    # ends on its own once this process is gone (standin.watch).
+    monkeypatch.setenv("STANDIN_OWNER", str(os.getpid()))
     yield tmp_path
     shutil.rmtree(station)
     # Stand-in IDEs that jbctl started or restarted run in their own session until /exit; end any left over.
