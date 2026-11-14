@@ -28,6 +28,10 @@ pytestmark = [
 
 CHECKOUT = Path(__file__).resolve().parents[3]
 DEPLOYED = CHECKOUT / "unix/home/.config/mise"
+# mise's own fallback chain: $MISE_STATE_DIR, else $XDG_STATE_HOME/mise, else ~/.local/state/mise.
+LIVE_STATE = Path(
+    os.environ.get("MISE_STATE_DIR") or Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "mise"
+)
 
 
 @pytest.fixture
@@ -38,15 +42,28 @@ def config_dir(tmp_path: Path) -> Path:
     for entry in (Path.home() / ".config/mise").iterdir():
         target = DEPLOYED / entry.name if entry.name in {"config.toml", "tasks"} else entry
         (folder / entry.name).symlink_to(target)
+    # mise records each config it reads under $MISE_STATE_DIR/tracked-configs, so the scratch config would land in
+    # ~/.local/state/mise. A copy of the state folder links each entry back, as above, except tracked-configs: verify
+    # still reads the app receipts `bootstrap packages status` keeps there
+    # (crates/mise-system-packages/src/brew/cask/state.rs:2012).
+    state = state_dir(folder)
+    (state / "tracked-configs").mkdir(parents=True)
+    for entry in LIVE_STATE.iterdir():
+        if entry.name != "tracked-configs":
+            (state / entry.name).symlink_to(entry)
     return folder
+
+
+def state_dir(config_dir: Path) -> Path:
+    """The scratch mise state folder beside the scratch config folder."""
+    return config_dir.parent / "mise-state"
 
 
 def verify(config_dir: Path, cwd: Path) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"} | {
         "MISE_CONFIG_DIR": str(config_dir),
-        # No run record under $MISE_STATE_DIR/task-history (mise src/task/task_history.rs:175-194). The state folder
-        # stays the user's: it holds the app receipts `bootstrap packages status` reads
-        # (crates/mise-system-packages/src/brew/cask/state.rs:2012).
+        "MISE_STATE_DIR": str(state_dir(config_dir)),
+        # No run record under $MISE_STATE_DIR/task-history (mise src/task/task_history.rs:175-194).
         "MISE_TASK_HISTORY": "0",
         # Read-only: no tool install before the task runs (mise src/task/task_tool_installer.rs:234-245).
         "MISE_AUTO_INSTALL": "0",
@@ -62,6 +79,10 @@ def test_the_real_toolchain_verifies(config_dir: Path, tmp_path: Path) -> None:
     want = rf"toolchain:verify OK: clang {re.escape(held['llvm'])}, gcc {re.escape(held['gcc'])}, .*"
     assert re.fullmatch(want, done.stdout.splitlines()[-1]), done.stdout
     assert str(config_dir / "tasks/toolchain/verify") in done.stderr
+    # The config mise read is recorded in the scratch state folder, not the user's.
+    records = [link.resolve() for link in (state_dir(config_dir) / "tracked-configs").iterdir()]
+    assert (config_dir / "config.toml").resolve() in records
+    assert not [link for link in (LIVE_STATE / "tracked-configs").iterdir() if str(tmp_path) in str(link.readlink())]
 
 
 @pytest.mark.parametrize(("key", "program"), [("gcc", "gcc"), ("llvm", "clang")])
