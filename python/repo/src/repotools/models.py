@@ -28,7 +28,6 @@ class Command(StrEnum):
     shell_rollback = "shell-rollback"
     scratch_env = "scratch-env"
     toolchain_gate = "toolchain-gate"
-    herdr_gate = "herdr-gate"
     tools_install = "tools-install"
     test_times = "test-times"
     trust = "trust"
@@ -288,17 +287,6 @@ class ToolchainGate(BaseModel):
     )
 
 
-class HerdrGate(BaseModel):
-    """
-    Print run when the staged change reaches the herdr doctor, hc-safe or their tests, deletions included.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-
-
 class FnoxRefs(BaseModel):
     """
     Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.
@@ -496,7 +484,6 @@ type Options = (
     | ShellApply
     | ShellRollback
     | ToolchainGate
-    | HerdrGate
     | ToolsInstall
     | TestTimes
     | Trust
@@ -831,7 +818,6 @@ class Repotools(BaseModel):
     shell_rollback: ShellRollback | None = None
     scratch_env: ScratchEnv | None = None
     toolchain_gate: ToolchainGate | None = None
-    herdr_gate: HerdrGate | None = None
     tools_install: ToolsInstall | None = None
     test_times: TestTimes | None = None
     test_time: TestTime | None = None

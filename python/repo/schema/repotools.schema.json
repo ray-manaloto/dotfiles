@@ -27,7 +27,6 @@
         "shell-rollback",
         "scratch-env",
         "toolchain-gate",
-        "herdr-gate",
         "tools-install",
         "test-times",
         "trust",
@@ -189,12 +188,6 @@
       "properties": {},
       "additionalProperties": false
     },
-    "HerdrGate": {
-      "description": "Print run when the staged change reaches the herdr doctor, hc-safe or their tests, deletions included.",
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false
-    },
     "FnoxRefs": {
       "description": "Refuse a tracked fnox TOML whose Doppler entry holds anything but a Doppler secret name.",
       "type": "object",
@@ -318,7 +311,6 @@
         { "$ref": "#/$defs/ShellApply" },
         { "$ref": "#/$defs/ShellRollback" },
         { "$ref": "#/$defs/ToolchainGate" },
-        { "$ref": "#/$defs/HerdrGate" },
         { "$ref": "#/$defs/ToolsInstall" },
         { "$ref": "#/$defs/TestTimes" },
         { "$ref": "#/$defs/Trust" },
@@ -497,7 +489,6 @@
     "shell_rollback": { "$ref": "#/$defs/ShellRollback" },
     "scratch_env": { "$ref": "#/$defs/ScratchEnv" },
     "toolchain_gate": { "$ref": "#/$defs/ToolchainGate" },
-    "herdr_gate": { "$ref": "#/$defs/HerdrGate" },
     "tools_install": { "$ref": "#/$defs/ToolsInstall" },
     "test_times": { "$ref": "#/$defs/TestTimes" },
     "test_time": { "$ref": "#/$defs/TestTime" },

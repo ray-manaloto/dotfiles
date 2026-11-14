@@ -57,7 +57,7 @@ run = "uv run --locked hometools disk-guard"
 description = "lint and test"
 depends = ["lint", "test"]
 
-# hk's herdr step (//repo:herdr-gate): lint, then the doctor's and hc-safe's tests without coverage, so it shares
+# hk's herdr step (pre-push and hk check): lint, then the doctor's and hc-safe's tests without coverage, so it shares
 # no .coverage files with the home step that hk may run at the same time; the 100% gate stays on test.
 [tasks.herdr-unit]
 description = "lint and the herdr doctor and hc-safe tests (no coverage)"

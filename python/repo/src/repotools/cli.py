@@ -24,7 +24,6 @@ from .models import (
     Failure,
     Fingerprint,
     FnoxRefs,
-    HerdrGate,
     MainGuard,
     MainGuardArmed,
     MainGuardInstall,
@@ -63,7 +62,6 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.shell_apply: ShellApply,
     Command.shell_rollback: ShellRollback,
     Command.toolchain_gate: ToolchainGate,
-    Command.herdr_gate: HerdrGate,
     Command.tools_install: ToolsInstall,
     Command.test_times: TestTimes,
     Command.trust: Trust,
@@ -104,7 +102,7 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
 def run(command: Command, options: Options) -> None:
     if isinstance(options, ZeroBash):
         zero_bash.report(options)
-    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate | HerdrGate):
+    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan | ToolchainGate):
         gates.dispatch(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)

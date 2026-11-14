@@ -1,4 +1,4 @@
-"""hk runs //python:test for a commit that changes the shared agent rules or the zsh startup files."""
+"""hk runs //python:test for a push that changes the shared agent rules or the zsh startup files (pre-push, #674)."""
 
 import json
 import subprocess
@@ -23,9 +23,9 @@ def evaluated_hooks() -> dict:
 
 
 class PythonTestsStepTest(unittest.TestCase):
-    def test_check_and_pre_commit_run_the_python_tests(self) -> None:
+    def test_check_and_pre_push_run_the_python_tests(self) -> None:
         hooks = evaluated_hooks()
-        for hook in ("pre-commit", "check"):
+        for hook in ("pre-push", "check"):
             with self.subTest(hook=hook):
                 step = hooks[hook]["steps"][STEP]
                 self.assertEqual(
@@ -35,7 +35,7 @@ class PythonTestsStepTest(unittest.TestCase):
 
     def test_the_step_runs_only_for_the_files_the_tests_read(self) -> None:
         # The real step's glob in a scratch repo, with a check that only says it ran.
-        glob = evaluated_hooks()["pre-commit"]["steps"][STEP]["glob"]
+        glob = evaluated_hooks()["pre-push"]["steps"][STEP]["glob"]
         first_line = HK_PKL.read_text().splitlines()[0]
         cases = {
             "unix/home/.config/agents/AGENTS.md": True,
