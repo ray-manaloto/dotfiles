@@ -47,13 +47,13 @@ lockfile = true
 # DL-768: one global config and one lock for every OS this repo supports.
 lockfile_platforms = ["macos-arm64", "linux-x64", "linux-arm64"]
 
-disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "npm:@openai/codex", "aqua:openai/codex", "codex", "claude-code", "npm:@anthropic-ai/claude-code", "github:anthropics/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode"]
-# claude/codex/agy/opencode are native-installer-only (Ray, 2026-10-01; opencode 2026-11-02). `disable_tools` above is REPLACED by any
+disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "npm:@openai/codex", "aqua:openai/codex", "codex", "claude-code", "npm:@anthropic-ai/claude-code", "github:anthropics/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode", "mise", "aqua:jdx/mise", "github:jdx/mise"]
+# claude/codex/agy/opencode/mise are native-installer-only (Ray, 2026-10-01; opencode 2026-11-02; mise 2026-11-14). `disable_tools` above is REPLACED by any
 # project's own list, so a stale worktree pinning one of them still auto-installed it (dag-tick launchd job,
 # `mise exec` in a pytest gate). This key is NOT overridden by any tracked project and blocks auto-install on
 # `mise exec`/`mise run`; it does not block an explicit `mise install <tool>`. Match is literal to the config
 # key, so every spelling is listed. Never use MISE_DISABLE_TOOLS for this: it replaces project lists.
-auto_install_disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "codex", "aqua:openai/codex", "npm:@openai/codex", "claude-code", "github:anthropics/claude-code", "npm:@anthropic-ai/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode"]
+auto_install_disable_tools = ["antigravity-cli", "aqua:google-antigravity/antigravity-cli", "codex", "aqua:openai/codex", "npm:@openai/codex", "claude-code", "github:anthropics/claude-code", "npm:@anthropic-ai/claude-code", "opencode", "aqua:anomalyco/opencode", "npm:opencode-ai", "npm:@opencode/cli", "github:anomalyco/opencode", "aqua:sst/opencode", "github:sst/opencode", "mise", "aqua:jdx/mise", "github:jdx/mise"]
 pin = true
 install_layout = "identity"
 # Keep each task's last 20 runs (time, result, exit code) for `mise tasks history`, under
