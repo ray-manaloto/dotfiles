@@ -4,6 +4,7 @@ import os
 import shlex
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 
 import anyio
@@ -26,6 +27,18 @@ from .models import Build, Config, Source
 _CLEARED = ("CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "SDKROOT")
 
 
+def python_libdir(libdir: Path, library: str, version: str) -> Path:
+    """The folder lldb's rpath names for libpython: mise's major.minor link when it holds the same library.
+
+    sysconfig's LIBDIR is mise's hashed install folder (installs/python-<hash>/lib), which a reinstall or
+    prune replaces; installs/python/<major.minor> is the link mise keeps pointing at the current one.
+    """
+    stable = libdir.parent.parent / "python" / version / "lib"
+    if (stable / library).is_file() and (stable / library).samefile(libdir / library):
+        return stable
+    return libdir
+
+
 async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
     commit = args.commit or await source.latest(cfg)
     if not args.dry_run:
@@ -41,6 +54,14 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     env["P2996_JOBS"] = str(cfg.jobs)
     env["P2996_REMOTE"] = cfg.remote
     env["P2996_ZSTD"] = await proc.output("mise", "where", "conda:zstd-static")
+    # lldb links libpython through @rpath: the folder of the Python that Python3_EXECUTABLE below runs.
+    env["P2996_PYTHON_LIBDIR"] = str(
+        python_libdir(
+            Path(sysconfig.get_config_var("LIBDIR")),
+            sysconfig.get_config_var("LDLIBRARY"),
+            f"{sys.version_info.major}.{sys.version_info.minor}",
+        )
+    )
     configure = [
         "cmake",
         # A fresh cache: the id must not depend on what an earlier commit left in this folder.
