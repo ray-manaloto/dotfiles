@@ -97,10 +97,10 @@ run = 'r=$(uv run --project python/repo --locked repotools main-guard-armed) && 
 # hk's pre-commit step for the toolchain tasks (#391): their real-toolchain test only when the staged change
 # reaches what they run from, so a bump of an unrelated pin never waits on this Mac's Homebrew.
 [tasks.toolchain-gate]
-description = "Run //home:check, the real-toolchain test included, when the staged change reaches the toolchain tasks"
+description = "Run the real-toolchain test (//home:integration) when the staged change reaches the toolchain tasks"
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
-run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:check; }'
+run = 'r=$(uv run --project python/repo --locked repotools toolchain-gate) && { test "$r" != run || mise run //home:integration; }'
 
 [tasks.main-guard-remove]
 description = "Remove the main guard's hook entry from this repository's config; post-merge then leaves it off"

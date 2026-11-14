@@ -19,7 +19,7 @@ uv = "0.11.0"
 [vars]
 gcc = "16.2.0"
 """
-SKIP = "toolchain-gate: nothing the toolchain tasks run from is staged; //home:check skipped\n"
+SKIP = "toolchain-gate: nothing the toolchain tasks run from is staged; //home:integration skipped\n"
 
 
 def git(*args: str) -> str:

@@ -205,7 +205,7 @@ def toolchain_gate() -> None:
     ):
         sys.stdout.write("run\n")
     else:
-        sys.stderr.write("toolchain-gate: nothing the toolchain tasks run from is staged; //home:check skipped\n")
+        sys.stderr.write("toolchain-gate: nothing the toolchain tasks run from is staged; //home:integration skipped\n")
 
 
 def staged_paths() -> list[str]:

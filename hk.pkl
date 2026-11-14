@@ -170,9 +170,11 @@ hooks {
             // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
             // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
             ["no-commit-to-main"] = Builtins.no_commit_to_branch
-            // #391: the real-toolchain test (//home:check with //home:integration), only for a commit that reaches the
-            // toolchain tasks or a [vars] version; it reads the staged index, so it stays at commit. Otherwise it
-            // prints why it skipped and takes a second. No glob: hk drops a filtered step whose files were all deleted.
+            // #391: the real-toolchain test (//home:integration) only, for a commit that reaches the toolchain tasks or
+            // a [vars] version; it reads the staged index, so it stays at commit. The rest of //home runs at pre-push
+            // (//home:unit): git exports GIT_DIR, GIT_INDEX_FILE and more to pre-commit only, and a suite's real git
+            // under them acts on this checkout. Otherwise it prints why it skipped and takes a second. No glob: hk
+            // drops a filtered step whose files were all deleted.
             ["toolchain-gate"] {
                 check = "mise run //repo:toolchain-gate"
             }
