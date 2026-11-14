@@ -65,7 +65,8 @@ depends = ["lint"]
 run = "uv run --locked pytest --no-cov tests/test_herdr_doctor.py tests/test_herdr_contract.py"
 
 # The commit gate: owner 2026-11-05, the real-toolchain test runs on every commit that reaches the toolchain
-# tasks; hk's pre-commit step runs this through //repo:toolchain-gate, which says which commits those are.
+# tasks; hk's pre-commit step runs //home:integration through //repo:toolchain-gate, which says which commits those
+# are. lint and test run at pre-push (//home:unit).
 [tasks.check]
 description = "lint, test and integration"
 depends = ["lint", "test", "integration"]
