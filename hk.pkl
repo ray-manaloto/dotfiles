@@ -1,5 +1,5 @@
-amends "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v2.9.0/hk@2.9.0#/Builtins.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Builtins.pkl"
 
 // Commit-time checks: file-level linters that take seconds. pre-commit runs these only (owner, 2026-11-13).
 local fast = new Mapping<String, Step> {
@@ -41,7 +41,7 @@ local fast = new Mapping<String, Step> {
         exclude = "unix/home/.config/agents/workflow/**"
         check = "mise x github:agent-sh/agnix -- agnix {{files}}"
     }
-    // cclint covers Claude files only and reports without failing the hook (hk 2.9.0 Config.pkl:798-812).
+    // cclint covers Claude files only and reports without failing the hook (hk 2.12.0 Config.pkl:827-842).
     ["cclint"] {
         // It validates .md and .json files only.
         glob = List("**/CLAUDE.md", ".claude/**/*.md", ".claude/**/*.json", "unix/home/.config/agents/skills/**/*.md")
@@ -215,7 +215,7 @@ hooks {
             ["mise-untrack-worktrees"] {
                 check = "mise run mise:untrack-worktrees"
             }
-            // A merge that moved the rea pin installs the new package (//jbctl:rea-install). hk 2.9.0 selects a
+            // A merge that moved the rea pin installs the new package (//jbctl:rea-install). hk 2.12.0 selects a
             // post-merge step's files from the working tree, not the merge, so the step asks git itself: `git diff
             // --quiet` exits 1 only when ORIG_HEAD..HEAD differ at the pin (128 when ORIG_HEAD is missing, so no run).
             ["rea-install"] {
