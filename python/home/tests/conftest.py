@@ -15,6 +15,14 @@ from .scratch_toolchain import Scratch, Session
 KEEP = ("PYTEST_", "COV_CORE_")
 
 
+@pytest.fixture(autouse=True)
+def no_hook_git(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A git hook exports GIT_DIR, GIT_INDEX_FILE and friends; a test's git under them acts on the real repository.
+    The same fixture as python/jbctl/tests/conftest.py."""
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+
+
 @pytest.fixture(scope="session")
 def session(tmp_path_factory: pytest.TempPathFactory) -> Session:
     if sys.platform != "darwin":
