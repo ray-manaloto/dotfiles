@@ -13,6 +13,10 @@ P2996_ROOT = "{{ env.HOME }}/.local/share/p2996"
 P2996_CACHE = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/p2996"
 # Compile jobs: not part of the build id.
 P2996_JOBS = "{{ num_cpus() }}"
+# lldb builds its own debugserver, signed with this certificate. Create it once with LLVM's script, which
+# runs sudo itself (run under sudo, it loses TMPDIR): bash CACHE/source/work/lldb/scripts/macos-setup-codesign.sh
+P2996_CODESIGN = "lldb_codesign"
+P2996_KEYCHAIN = "/Library/Keychains/System.keychain"
 # sccache: one store that outlives every id. p2996 build adds the launcher path.
 # Eviction is size LRU only, with no age limit (sccache docs/Local.md); p2996 clean --sccache empties it by hand.
 SCCACHE_DIR = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/sccache"
@@ -36,7 +40,8 @@ run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${u
 
 [tasks.install]
 description = "Install the last successful build, verify it, then make it active in one rename"
-run = "uv run --locked p2996 install"
+usage = 'flag "--keep-current" help="Assemble and verify the build but leave ROOT/current where it is; a later plain install activates it"'
+run = 'uv run --locked p2996 install ${usage_keep_current:+--keep-current}'
 
 [tasks.verify]
 description = "Compile and run reflection.cpp with clang++-p2996"

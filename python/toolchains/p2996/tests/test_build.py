@@ -6,6 +6,7 @@ import anyio
 import pytest
 
 from p2996 import build, config, proc
+from p2996.log import P2996Error
 from p2996.models import Build, Config
 
 from .conftest import Recipe, Upstream, events, git
@@ -81,7 +82,28 @@ async def test_build_configures_with_the_real_bootstrap_cache_and_compiles(
     cache = (built / "CMakeCache.txt").read_text()
     assert "CMAKE_OSX_DEPLOYMENT_TARGET:STRING=27.0" in cache
     assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / 'current'}\n" in cache
+    assert "LLDB_USE_SYSTEM_DEBUGSERVER:BOOL=OFF\n" in cache
+    assert f"LLDB_CODESIGN_IDENTITY:STRING={cfg.codesign}\n" in cache
     assert (built / "tiny").is_file()
+
+
+@pytest.mark.parametrize(
+    "identity",
+    [
+        "p2996 no such certificate",
+        # A certificate with no private key beside it: an interrupted setup leaves this.
+        "Apple Root CA",
+    ],
+)
+async def test_build_stops_before_configure_when_the_codesign_identity_cannot_sign(
+    cfg: Config, recipe: Recipe, upstream: Upstream, identity: str
+) -> None:
+    head = git(upstream.path, "rev-parse", "HEAD")
+    await recipe.source(head)
+    unusable = cfg.model_copy(update={"codesign": identity})
+    with pytest.raises(P2996Error, match=rf"{identity} in .* cannot sign; .*macos-setup-codesign\.sh"):
+        await build.run(unusable, Build(commit=head), recipe.patches)
+    assert not (config.build_tree(cfg) / "CMakeCache.txt").exists()
 
 
 async def test_build_prepares_the_commit_it_is_given(recipe: Recipe, upstream: Upstream) -> None:

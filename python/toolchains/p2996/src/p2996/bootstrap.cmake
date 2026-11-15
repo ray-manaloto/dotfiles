@@ -24,8 +24,9 @@ set(CMAKE_INSTALL_RPATH "@loader_path/../lib;$ENV{P2996_PYTHON_LIBDIR}" CACHE ST
 set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang" CACHE STRING "" FORCE)
 set(LLVM_ENABLE_RUNTIMES "libc;libunwind;libcxxabi;libcxx;compiler-rt;openmp;flang-rt" CACHE STRING "" FORCE)
 set(LLVM_TARGETS_TO_BUILD "AArch64;X86" CACHE STRING "" FORCE)
-# lldb uses Xcode's signed debugserver instead of building and code-signing its own.
-set(LLDB_USE_SYSTEM_DEBUGSERVER ON CACHE BOOL "" FORCE)
+# lldb builds its own debugserver and signs it with P2996_CODESIGN, which p2996 build checks first.
+set(LLDB_USE_SYSTEM_DEBUGSERVER OFF CACHE BOOL "" FORCE)
+set(LLDB_CODESIGN_IDENTITY "$ENV{P2996_CODESIGN}" CACHE STRING "" FORCE)
 # DL-757: MLIR's Python bindings (nanobind, numpy from this project's uv lock, DL-758). lldb Lua and the
 # OCaml bindings switch on by themselves once the global Lua and opam switch are on PATH.
 set(MLIR_ENABLE_BINDINGS_PYTHON ON CACHE BOOL "" FORCE)

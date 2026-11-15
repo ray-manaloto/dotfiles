@@ -37,7 +37,8 @@ cmake_minimum_required(VERSION 3.20)
 project(toy NONE)
 add_subdirectory(builtins runtimes/builtins-bins)
 add_subdirectory(runtimes runtimes/runtimes-bins)
-install(PROGRAMS tools/clang tools/clang++ tools/clang-p2996 tools/clang++-p2996 tools/llvm-ar DESTINATION bin)
+install(PROGRAMS tools/clang tools/clang++ tools/clang-p2996 tools/clang++-p2996 tools/llvm-ar tools/debugserver
+  DESTINATION bin)
 """
 
 # Stands in for clang++-p2996 (a real one takes hours to build): reports its default config the way
@@ -69,6 +70,7 @@ LINKS = {
     "clang-p2996": "clang-p2996",
     "clang++-p2996": "clang++-p2996",
     "llvm-ar-p2996": "llvm-ar",
+    "debugserver-p2996": "debugserver",
     "runtime-tool-p2996": "runtime-tool",
 }
 
@@ -147,7 +149,9 @@ class Upstream:
     def write(self, name: str, text: str) -> str:
         return self.commit({name: text})
 
-    def release(self, version: str, *, answer: int = 43, skip: str = "", fail: bool = False) -> str:
+    def release(
+        self, version: str, *, answer: int = 43, skip: str = "", fail: bool = False, debugserver: int = 0
+    ) -> str:
         """Commit a toy toolchain marked version; answer is what its compiled sample prints."""
         cmake = TOY_CMAKE
         if skip != "include":
@@ -169,6 +173,8 @@ class Upstream:
                 "llvm/tools/clang-p2996": "#!/bin/sh\n",
                 "llvm/tools/clang++-p2996": compiler,
                 "llvm/tools/llvm-ar": "#!/bin/sh\n",
+                # debugserver is the exit status the stand-in returns, as a debugserver that cannot start would.
+                "llvm/tools/debugserver": f"#!/bin/sh\necho debugserver {version}\nexit {debugserver}\n",
                 "llvm/tools/meta": f"// {mark}",
                 "llvm/tools/libc++.txt": mark,
             }
@@ -264,6 +270,9 @@ def cfg(tmp_path: Path, upstream: Upstream) -> Config:
             "P2996_ROOT": str(tmp_path / "root"),
             "P2996_CACHE": str(tmp_path / "cache"),
             "P2996_JOBS": "3",
+            # Ad-hoc signing needs no certificate, so the codesign check passes and configure runs.
+            "P2996_CODESIGN": "-",
+            "P2996_KEYCHAIN": "/System/Library/Keychains/SystemRootCertificates.keychain",
             "P2996_LOCK": str(tmp_path / "state/heavy-gate.lock"),
         }
     )

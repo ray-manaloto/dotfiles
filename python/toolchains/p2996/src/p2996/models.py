@@ -46,6 +46,14 @@ class Config(BaseModel):
     """
     Compile jobs; not part of the build id
     """
+    codesign: str
+    """
+    Certificate that signs the debugserver lldb builds; p2996 build stops before configure without it
+    """
+    keychain: Path
+    """
+    Keychain that holds the codesign certificate
+    """
 
 
 type CommitId = Annotated[str, Field(pattern="^[0-9a-f]{40}$")]
@@ -115,6 +123,10 @@ class Install(BaseModel):
         extra="forbid",
         frozen=True,
     )
+    keep_current: bool = False
+    """
+    Assemble and verify the build but leave ROOT/current where it is; a later plain install activates it
+    """
 
 
 class Verify(BaseModel):

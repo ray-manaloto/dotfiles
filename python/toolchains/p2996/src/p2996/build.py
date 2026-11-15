@@ -2,9 +2,11 @@
 
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import sysconfig
+import tempfile
 from pathlib import Path
 
 import anyio
@@ -39,6 +41,22 @@ def python_libdir(libdir: Path, library: str, version: str) -> Path:
     return libdir
 
 
+async def require_codesign(cfg: Config) -> None:
+    """Stop before configure unless P2996_CODESIGN can sign, as lldb's debugserver will be at the end.
+
+    A certificate without its private key (an interrupted setup) finds no identity and fails here too.
+    """
+    with tempfile.TemporaryDirectory() as scratch:
+        probe = Path(scratch) / "probe"
+        shutil.copyfile("/usr/bin/true", probe)
+        try:
+            await proc.run("codesign", "-f", "-s", cfg.codesign, "--keychain", str(cfg.keychain), str(probe))
+        except subprocess.CalledProcessError as error:
+            script = checkout(cfg) / "lldb/scripts/macos-setup-codesign.sh"
+            msg = f"p2996 build: {cfg.codesign} in {cfg.keychain} cannot sign; create it once with bash {script}"
+            raise P2996Error(msg) from error
+
+
 async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path = BOOTSTRAP) -> None:
     commit = args.commit or await source.latest(cfg)
     if not args.dry_run:
@@ -53,6 +71,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     launcher = env["P2996_LAUNCHER"] = await proc.output("mise", "which", "sccache")
     env["P2996_JOBS"] = str(cfg.jobs)
     env["P2996_REMOTE"] = cfg.remote
+    env["P2996_CODESIGN"] = cfg.codesign
     env["P2996_ZSTD"] = await proc.output("mise", "where", "conda:zstd-static")
     # lldb links libpython through @rpath: the folder of the Python that Python3_EXECUTABLE below runs.
     env["P2996_PYTHON_LIBDIR"] = str(
@@ -92,6 +111,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
             compile=shlex.join(compile_),
         )
         return
+    await require_codesign(cfg)
     await anyio.to_thread.run_sync(inputs.forget_sub_builds, built)
     inputs.query(built)
     await proc.run(*configure, env=env, capture=False)

@@ -92,7 +92,9 @@ python as `Python3_EXECUTABLE` and `ROOT/current` as the configured prefix, and 
 27.0, `@loader_path/../lib` rpath; every LLVM project that builds on macOS (DL-756):
 `clang;clang-tools-extra;lld;lldb;mlir;polly;bolt;flang`, runtimes
 `libc;libunwind;libcxxabi;libcxx;compiler-rt;openmp;flang-rt` (libc is the Darwin overlay); targets
-`AArch64;X86`; lldb uses Xcode's debugserver, with Python and Lua scripting; MLIR Python bindings and
+`AArch64;X86`; lldb builds its own debugserver, signed with the `lldb_codesign` certificate that `p2996 build` checks for
+before configure (create it once with `lldb/scripts/macos-setup-codesign.sh` from the source tree), with Python and
+Lua scripting; MLIR Python bindings and
 LLVM's OCaml bindings on (DL-757). Every tool the build needs (SWIG, Lua, doxygen, opam switch `llvm`
 with ocamlfind and ctypes) comes from the global mise config; the Python modules (pygments, pyyaml,
 numpy, nanobind, pybind11, ml_dtypes, all uncapped) come from this project's uv lock. Assertions on; LLVM
