@@ -8,7 +8,8 @@ local fast = new Mapping<String, Step> {
     ["newlines"] = Builtins.newlines
     ["merge-conflicts"] = Builtins.check_merge_conflict
     // Secrets, as risu729/dotfiles does; this machine's home path through mise vars (repotools privacy-scan).
-    ["betterleaks"] = Builtins.betterleaks
+    // aube lock graphs are generated registry metadata: package names such as @inquirer/password read as secrets.
+    ["betterleaks"] = (Builtins.betterleaks) { exclude = "unix/home/.config/mise/locks/**/aube-lock.yaml" }
     ["shellcheck"] = Builtins.shellcheck
     ["private-paths"] {
         check = "mise run privacy:scan -- {{files}}"

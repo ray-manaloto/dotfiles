@@ -70,7 +70,9 @@ check_duration = "1h"
 set_gobin = false
 
 [settings.npm]
-package_manager = "bun"
+# The embedded aube: it checks provenance and trust, and a mise.lock holding an aube dependency graph (as
+# openwiki does) installs only under it.
+package_manager = "aube"
 
 [settings.pipx]
 uvx = true
@@ -239,8 +241,11 @@ xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
 bats = { version = "1.14.0", minimum_release_age = "0s" }
 "github:charmbracelet/gum" = { version = "2.0.2", minimum_release_age = "0s" }
 gemini = { version = "0.68.0", allow_builds = ["@github/keytar", "node-pty"], minimum_release_age = "0s" }
-"npm:@modelcontextprotocol/inspector" = { version = "2.15.0", minimum_release_age = "0s" }
-"npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s" }
+# trust_policy_excludes: a dependency release with less publisher evidence than an earlier one, reviewed and
+# exempted by exact version (owner, 2026-11-15); a newer release is checked again.
+"npm:@modelcontextprotocol/inspector" = { version = "2.15.0", minimum_release_age = "0s", trust_policy_excludes = ["pino@9.14.0"] }
+# allow_builds: puppeteer's install script downloads the headless Chrome that mermaid-cli renders with.
+"npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s", trust_policy_excludes = ["chromium-bidi@157.0.8090-0"], allow_builds = ["puppeteer"] }
 "npm:jscpd" = { version = "5.4.3", minimum_release_age = "0s" }
 "npm:@fission-ai/openspec" = { version = "1.17.0", minimum_release_age = "0s" }
 biome = { version = "2.6.7", minimum_release_age = "0s" }
@@ -254,7 +259,7 @@ rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "npm:yaml-cli" = { version = "1.1.8", minimum_release_age = "0s" }
 "npm:skills" = { version = "1.8.1", minimum_release_age = "0s" }
 "npm:agent-browser" = { version = "0.43.0", minimum_release_age = "0s" }
-"npm:dev3000" = { version = "0.0.192", minimum_release_age = "0s" }
+"npm:dev3000" = { version = "0.0.192", minimum_release_age = "0s", trust_policy_excludes = ["@vercel/detect-agent@1.2.5", "@vercel/oidc@4.0.0", "@vercel/cli-config@0.3.1", "@vercel/cli-exec@1.0.1"] }
 "npm:portless" = { version = "0.17.0", minimum_release_age = "0s" }
 "npm:@teng-lin/agent-fetch" = { version = "0.1.6", minimum_release_age = "0s" }
 #"pypi:skypilot" = { version = "0.14.1", python = "3.14.8", extras = "aws", minimum_release_age = "0s", uvx = "false" }
@@ -289,7 +294,8 @@ wait-for-gh-rate-limit = { version = "1.1.2", minimum_release_age = "0s" }
 #"cargo:procs" = { version = "0.14.12", minimum_release_age = "0s" }
 topgrade = { version = "17.16.0", minimum_release_age = "0s" }
 
-"npm:openwiki" = { version = "0.9.0", minimum_release_age = "0s" }
+# allow_builds: better-sqlite3 builds or downloads the native SQLite module openwiki opens its index with.
+"npm:openwiki" = { version = "0.9.0", minimum_release_age = "0s", allow_builds = ["better-sqlite3"] }
 
 # Deliberate upgrades only: update_mise.py excludes it from `upgrade --bump`. Close sessions and
 # stop the old daemon with the old binary before changing this pin (one build per account).

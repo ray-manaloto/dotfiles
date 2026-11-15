@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "firecrawl-cli": "1.29.0"
+  }
+}

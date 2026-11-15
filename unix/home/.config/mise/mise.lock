@@ -653,6 +653,7 @@ url_api = "https://api.github.com/repos/dandavison/delta/releases/assets/6104989
 
 [[tools.devcontainer-cli]]
 version = "0.90.0"
+aube = { path = "locks/devcontainer-cli/0.90.0", digest = "sha256:8a8a9e59feed6f3c786e90fcb8b436fec9cf4fa84a33211fc5998570a65501e2" }
 backend = "npm:@devcontainers/cli"
 specifiers = ["0.90.0"]
 
@@ -833,6 +834,7 @@ url_api = "https://api.github.com/repos/junegunn/fzf/releases/assets/720590797"
 
 [[tools.gemini]]
 version = "0.68.0"
+aube = { path = "locks/gemini/0.68.0~2b855d49", digest = "sha256:92d1d6eee4ddb18e2a651ddf578065dd34b670225d412209194668fa801ea0f3" }
 backend = "npm:@google/gemini-cli"
 specifiers = ["0.68.0"]
 
@@ -1493,111 +1495,146 @@ url = "https://registry.npmjs.org/npm/-/npm-12.2.2.tgz"
 
 [[tools."npm:@ai-sdk/openai-compatible"]]
 version = "3.0.92"
+aube = { path = "locks/npm-ai-sdk-openai-compatible/3.0.92", digest = "sha256:2809fbcdf00e30041e7717740cf0da1a2090adac22933a531570e4124aea65b4" }
 backend = "npm:@ai-sdk/openai-compatible"
 specifiers = ["3.0.92"]
 
 [[tools."npm:@fission-ai/openspec"]]
 version = "1.17.0"
+aube = { path = "locks/npm-fission-ai-openspec/1.17.0", digest = "sha256:1f358950ad292c7e0299396e675adf4f17908f58c3341300e6e1d4879d8c2685" }
 backend = "npm:@fission-ai/openspec"
 specifiers = ["1.17.0"]
 
 [[tools."npm:@mermaid-js/mermaid-cli"]]
 version = "12.2.0"
+aube = { path = "locks/npm-mermaid-js-mermaid-cli/12.2.0~a166a2bd", digest = "sha256:ef28083c5ee0fb86e1685872edfbe9783a77b63d4b1668ede25329954ab87f41" }
 backend = "npm:@mermaid-js/mermaid-cli"
 specifiers = ["12.2.0"]
 
+[tools."npm:@mermaid-js/mermaid-cli".options]
+allow_builds = '["puppeteer"]'
+trust_policy_excludes = '["chromium-bidi@157.0.8090-0"]'
+
 [[tools."npm:@modelcontextprotocol/inspector"]]
 version = "2.15.0"
+aube = { path = "locks/npm-modelcontextprotocol-inspector/2.15.0~4c109bea", digest = "sha256:8ae021ef263ce04d698fc049f141c8fd62c339aae99eb9a511497ab692301c09" }
 backend = "npm:@modelcontextprotocol/inspector"
 specifiers = ["2.15.0"]
 
+[tools."npm:@modelcontextprotocol/inspector".options]
+trust_policy_excludes = '["pino@9.14.0"]'
+
 [[tools."npm:@playwright/cli"]]
 version = "0.1.24"
+aube = { path = "locks/npm-playwright-cli/0.1.24", digest = "sha256:c8f8e02aba95d0e381988bcf1627f9265a4cc0577939ce30b81263237482756f" }
 backend = "npm:@playwright/cli"
 specifiers = ["0.1.24"]
 
 [[tools."npm:@ralph-orchestrator/ralph-cli"]]
 version = "2.10.1"
+aube = { path = "locks/npm-ralph-orchestrator-ralph-cli/2.10.1", digest = "sha256:5398286a287e4fe19e2f1836c17b8e2fa3bde2d6e3d342961008640ab67be24d" }
 backend = "npm:@ralph-orchestrator/ralph-cli"
 specifiers = ["2.10.1"]
 
 [[tools."npm:@tauri-apps/cli"]]
 version = "2.12.4"
+aube = { path = "locks/npm-tauri-apps-cli/2.12.4", digest = "sha256:46621deddd319661d878332adea952cd3b4ff431918412c8576364c12d651eb6" }
 backend = "npm:@tauri-apps/cli"
 specifiers = ["2.12.4"]
 
 [[tools."npm:@teng-lin/agent-fetch"]]
 version = "0.1.6"
+aube = { path = "locks/npm-teng-lin-agent-fetch/0.1.6", digest = "sha256:9f132e7588bdfcd3ee4a9c3b99285a0e4267083c895f6d0d7146cb5ce91606aa" }
 backend = "npm:@teng-lin/agent-fetch"
 specifiers = ["0.1.6"]
 
 [[tools."npm:agent-browser"]]
 version = "0.43.0"
+aube = { path = "locks/npm-agent-browser/0.43.0", digest = "sha256:26dc6355a3d44f0a01bcc1448870942cea8621cc5402b4fdd77e6a16f7e4f401" }
 backend = "npm:agent-browser"
 specifiers = ["0.43.0"]
 
 [[tools."npm:ajv-cli"]]
 version = "5.0.0"
+aube = { path = "locks/npm-ajv-cli/5.0.0", digest = "sha256:de14666238c2c1fcdcb8c94d67fc7642597b3c2dcbbd3cd155c09f5ec732d209" }
 backend = "npm:ajv-cli"
 specifiers = ["5.0.0"]
 
 [[tools."npm:apify-cli"]]
 version = "1.12.0"
+aube = { path = "locks/npm-apify-cli/1.12.0", digest = "sha256:9e2d868b872f401ad0f3c8222aa705f22c2ec60162128d539b374e4d5cd8b618" }
 backend = "npm:apify-cli"
 specifiers = ["1.12.0"]
 
 [[tools."npm:ctx7"]]
 version = "0.11.1"
+aube = { path = "locks/npm-ctx7/0.11.1", digest = "sha256:6bfa0e971e6fafb3db6b3469a954664554194ceef3d40126274615c44b696c41" }
 backend = "npm:ctx7"
 specifiers = ["0.11.1"]
 
 [[tools."npm:defuddle"]]
 version = "0.19.6"
+aube = { path = "locks/npm-defuddle/0.19.6", digest = "sha256:a27d84bc77845818fda006e024c399951ff3dd5cf456ce2fbbed16e4d2a9c1dc" }
 backend = "npm:defuddle"
 specifiers = ["0.19.6"]
 
 [[tools."npm:dev3000"]]
 version = "0.0.192"
+aube = { path = "locks/npm-dev3000/0.0.192~dedf1c8f", digest = "sha256:ab9ca6bacde128e61299e078a6110fb85262ac96e52be548264d1d8aa167f5d2" }
 backend = "npm:dev3000"
 specifiers = ["0.0.192"]
 
+[tools."npm:dev3000".options]
+trust_policy_excludes = '["@vercel/cli-config@0.3.1", "@vercel/cli-exec@1.0.1", "@vercel/detect-agent@1.2.5", "@vercel/oidc@4.0.0"]'
+
 [[tools."npm:firecrawl-cli"]]
 version = "1.29.0"
+aube = { path = "locks/npm-firecrawl-cli/1.29.0", digest = "sha256:366526e6270e05c5f4fe9ff4d40bf01ae013642293221d4fabc2249759315c37" }
 backend = "npm:firecrawl-cli"
 specifiers = ["1.29.0"]
 
 [[tools."npm:jscpd"]]
 version = "5.4.3"
+aube = { path = "locks/npm-jscpd/5.4.3", digest = "sha256:2e1793140644f9a9aabf23cce4c37111bd06e8caecc5dc9dcdf8fb11de793713" }
 backend = "npm:jscpd"
 specifiers = ["5.4.3"]
 
 [[tools."npm:openwiki"]]
 version = "0.9.0"
+aube = { path = "locks/npm-openwiki/0.9.0~db21a3e0", digest = "sha256:eaa0ccacc021b89461cf6397b56ddb9c9f7b1b9fcd3243cfff51fc1ffeba295c" }
 backend = "npm:openwiki"
 specifiers = ["0.9.0"]
 
+[tools."npm:openwiki".options]
+allow_builds = '["better-sqlite3"]'
+
 [[tools."npm:portless"]]
 version = "0.17.0"
+aube = { path = "locks/npm-portless/0.17.0", digest = "sha256:056fce5ac2c1e80331deabb71cfba3df5a02ba2e6ee0be2537e7f7a8a86837a2" }
 backend = "npm:portless"
 specifiers = ["0.17.0"]
 
 [[tools."npm:pyright"]]
 version = "1.1.414"
+aube = { path = "locks/npm-pyright/1.1.414", digest = "sha256:69cd62e5613c907964fbb78b05a85eb9d12a503285d716f6529144cc884cf656" }
 backend = "npm:pyright"
 specifiers = ["1.1.414"]
 
 [[tools."npm:skills"]]
 version = "1.8.1"
+aube = { path = "locks/npm-skills/1.8.1", digest = "sha256:feea553339456325640178c34bc369c6eee4070ef960e95660a708c4ebb4e138" }
 backend = "npm:skills"
 specifiers = ["1.8.1"]
 
 [[tools."npm:typescript"]]
 version = "7.0.2"
+aube = { path = "locks/npm-typescript/7.0.2", digest = "sha256:3d06b3b23564c68cdad7815c356edb1506fab1c42bfb8c54234134fd9650ec17" }
 backend = "npm:typescript"
 specifiers = ["7.0.2"]
 
 [[tools."npm:yaml-cli"]]
 version = "1.1.8"
+aube = { path = "locks/npm-yaml-cli/1.1.8", digest = "sha256:4d65a5223a7597cdd1167b14dd12643764178cd9caa603ad51d939a94baa018c" }
 backend = "npm:yaml-cli"
 specifiers = ["1.1.8"]
 
