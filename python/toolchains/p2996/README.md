@@ -40,10 +40,11 @@ the lock. uv runs only through these tasks, with this folder's `.venv` (`_.pytho
 `mise.toml` `[env]` holds every value the package reads (the generated `Config`, field `<name>` from
 `P2996_<NAME>`): `P2996_REMOTE`, `P2996_BRANCH`, `P2996_ROOT` (default `~/.local/share/p2996`;
 prefix `ROOT/<id>`, only `ROOT/bin` on PATH) and `P2996_CACHE` (`~/.cache/dotfiles/p2996`, holding
-one `source/work` and one `build/work`). `<id>` is `<commit>-<12 hex>`, the hex being a digest of
+one `source/work` and one `build/work`), and `P2996_IWYU_REMOTE` and `P2996_IWYU_COMMIT`
+(include-what-you-use, below). `<id>` is `<commit>-<12 hex>`, the hex being a digest of
 `build/work/p2996-inputs.json`: what CMake found after configure, read from its file API (DL-809,
 DL-811). That file holds the commit, patches, `uv.lock`, CMake version, compilers, the resolved Python
-the digest of every file in the SDK, and every cache entry, with outside files named by their content. It leaves out the launchers, job
+the digest of every file in the SDK, the include-what-you-use commit, and every cache entry, with outside files named by their content. It leaves out the launchers, job
 counts and values inside the source, build or project folders, so a worktree does not change the id.
 No lock: two builds at once are not supported.
 
@@ -59,6 +60,13 @@ Always the newest commit of `refs/heads/p2996` on `https://github.com/bloomberg/
 (`git ls-remote` on each `source` run), unless `--commit` names one; build and install read the
 tree of that commit. Shallow fetch into `source/work`, reset and cleaned, then the patches. Build
 configures from a fresh cache, computes the id and skips the compile when `ROOT/<id>/installed` exists.
+`source` also checks out include-what-you-use at `P2996_IWYU_COMMIT` into `source/iwyu`; configure builds
+it in the LLVM tree as an external project (`LLVM_EXTERNAL_PROJECTS=iwyu`), so the install puts
+`include-what-you-use`, `fix_includes.py`, `iwyu_tool.py` and the `.imp` mappings in the prefix and the view links
+them as `include-what-you-use-p2996`, `fix_includes.py-p2996` and `iwyu_tool.py-p2996`. Its `clang_NN` branch
+must match the LLVM major of the p2996 branch: when p2996 moves to a new major, the build fails until
+`P2996_IWYU_COMMIT` names the matching branch. For libc++ headers pass libc++'s own mapping,
+`-Xiwyu --mapping_file=ROOT/include/c++/v1/libcxx.imp`.
 Install writes that mark after verify, so an interrupted or failed install is assembled again.
 `build/last` names the id the build tree holds and exists only after a successful build; `source`
 removes it, so a failed build or a changed tree cannot be installed. A reinstall of the active id only rewrites the `.cfg` files, which is the

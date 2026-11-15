@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -79,3 +81,50 @@ async def test_a_resolved_commit_that_is_not_a_full_sha_is_refused(cfg: Config, 
     with pytest.raises(ValidationError):
         await source.run(cfg.model_copy(update={"remote": longer.as_uri()}), Source())
     assert not config.src(cfg).exists()
+
+
+async def test_source_checks_out_include_what_you_use_at_its_pinned_commit(
+    cfg: Config, iwyu: Upstream, patches: Path
+) -> None:
+    pinned = git(iwyu.path, "rev-parse", "HEAD")
+    iwyu.write("later.txt", "not pinned\n")
+    await source.run(cfg, Source(), patches)
+    tree = config.iwyu_checkout(cfg)
+    assert git(tree, "rev-parse", "HEAD") == pinned
+    assert not (tree / "later.txt").exists()
+    # A new pin replaces the tree in place, as a new p2996 commit does.
+    newer = git(iwyu.path, "rev-parse", "HEAD")
+    await source.run(cfg.model_copy(update={"iwyu_commit": newer}), Source(), patches)
+    assert git(tree, "rev-parse", "HEAD") == newer
+    assert (tree / "later.txt").is_file()
+
+
+@pytest.mark.parametrize("shape", ["link", "folder", "repository"])
+async def test_source_refuses_an_iwyu_folder_it_did_not_make(
+    cfg: Config, patches: Path, tmp_path: Path, shape: str
+) -> None:
+    # git clean in that folder would delete files source never wrote.
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "keep.txt").write_text("mine\n")
+    tree = config.iwyu_checkout(cfg)
+    tree.parent.mkdir(parents=True)
+    if shape == "link":
+        tree.symlink_to(elsewhere)
+    else:
+        shutil.copytree(elsewhere, tree)
+    if shape == "repository":
+        git(tree, "init", "-q")
+    with pytest.raises(P2996Error, match="not a checkout p2996 source made"):
+        await source.run(cfg, Source(), patches)
+    assert (elsewhere / "keep.txt").read_text() == "mine\n"
+    assert (tree / "keep.txt").read_text() == "mine\n"
+
+
+async def test_a_failed_first_iwyu_fetch_can_be_retried(cfg: Config, iwyu: Upstream, patches: Path) -> None:
+    # A pin the remote does not have: the first fetch fails after the folder exists.
+    missing = "0" * 40
+    with pytest.raises(subprocess.CalledProcessError):
+        await source.run(cfg.model_copy(update={"iwyu_commit": missing}), Source(), patches)
+    await source.run(cfg, Source(), patches)
+    assert git(config.iwyu_checkout(cfg), "rev-parse", "HEAD") == git(iwyu.path, "rev-parse", "HEAD")

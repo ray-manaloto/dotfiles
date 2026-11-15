@@ -6,9 +6,12 @@ import anyio
 from pydantic import TypeAdapter
 
 from . import proc
-from .config import PATCHES, checkout, git, last_build
+from .config import PATCHES, checkout, git, iwyu_checkout, last_build
 from .log import P2996Error, log
 from .models import CommitId, Config, Source
+
+# Written inside .git by source, so a later run knows the folder is its own to reset and clean.
+MADE_BY_SOURCE = "p2996-source"
 
 
 async def latest(cfg: Config) -> str:
@@ -23,7 +26,18 @@ async def run(cfg: Config, args: Source, patches: Path = PATCHES) -> None:
     tree = checkout(cfg)
     tree.mkdir(parents=True, exist_ok=True)
     await prepare(tree, cfg, commit, patches)
-    log.info("source ready", checkout=str(tree), commit=commit)
+    iwyu = iwyu_checkout(cfg)
+    # fetch resets and cleans the folder, so it must be empty or one an earlier source run marked.
+    made = iwyu / ".git" / MADE_BY_SOURCE
+    if iwyu.is_symlink() or (iwyu.exists() and any(iwyu.iterdir()) and not made.is_file()):
+        msg = f"p2996 source: {iwyu} is not a checkout p2996 source made; move it away and run source again"
+        raise P2996Error(msg)
+    iwyu.mkdir(parents=True, exist_ok=True)
+    # Marked before the fetch, which can fail after git init: a retry then finds its own folder.
+    await git(iwyu, "init", "-q")
+    made.touch()
+    await fetch(iwyu, cfg.iwyu_remote, cfg.iwyu_commit)
+    log.info("source ready", checkout=str(tree), commit=commit, iwyu_commit=cfg.iwyu_commit)
 
 
 async def fetch(tree: Path, remote: str, commit: str) -> None:

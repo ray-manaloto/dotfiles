@@ -19,6 +19,7 @@ from .config import (
     checkout,
     configured_prefix,
     installed_mark,
+    iwyu_checkout,
     last_build,
     link,
     sccache_stats,
@@ -100,6 +101,9 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
         # so a python upgrade needs a rebuild.
         f"-DPython3_EXECUTABLE={sys.executable}",
         "-DLLDB_ENABLE_PYTHON=ON",
+        # include-what-you-use builds in the LLVM tree (bootstrap.cmake names it); its folder is in the
+        # cache, so the id counts it through P2996_IWYU_COMMIT.
+        f"-DLLVM_EXTERNAL_IWYU_SOURCE_DIR:PATH={iwyu_checkout(cfg)}",
     ]
     compile_ = ["cmake", "--build", str(built), "--parallel", env["P2996_JOBS"]]
     if args.dry_run:
@@ -130,7 +134,11 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
     try:
         await proc.run(*compile_, env=env, capture=False)
     except subprocess.CalledProcessError as error:
-        msg = f"p2996 build: {commit} failed to compile; the previous install stays active"
+        msg = (
+            f"p2996 build: {commit} with include-what-you-use {cfg.iwyu_commit} failed to compile; the previous "
+            "install stays active. If include-what-you-use failed, P2996_IWYU_COMMIT may need the clang_NN branch "
+            "of the new LLVM major"
+        )
         raise P2996Error(msg) from error
     finally:
         stats = await proc.output(launcher, "--show-adv-stats", "--stats-format=json", env=env)

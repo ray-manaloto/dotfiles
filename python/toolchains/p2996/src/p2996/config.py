@@ -41,6 +41,11 @@ def checkout(cfg: Config) -> Path:
     return src(cfg) / "work"
 
 
+def iwyu_checkout(cfg: Config) -> Path:
+    """include-what-you-use at P2996_IWYU_COMMIT, built in the LLVM tree as an external project."""
+    return src(cfg) / "iwyu"
+
+
 def build_dir(cfg: Config) -> Path:
     return cfg.cache / "build"
 

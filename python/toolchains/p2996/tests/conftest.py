@@ -261,7 +261,13 @@ def upstream(tmp_path: Path) -> Upstream:
 
 
 @pytest.fixture
-def cfg(tmp_path: Path, upstream: Upstream) -> Config:
+def iwyu(tmp_path: Path) -> Upstream:
+    """Stands in for include-what-you-use: a second repo the source step checks out at a pinned commit."""
+    return Upstream(tmp_path / "iwyu-upstream")
+
+
+@pytest.fixture
+def cfg(tmp_path: Path, upstream: Upstream, iwyu: Upstream) -> Config:
     # P2996_LOCK is what an older shell still exports: the package reads no such setting.
     return config.load(
         {
@@ -273,6 +279,8 @@ def cfg(tmp_path: Path, upstream: Upstream) -> Config:
             # Ad-hoc signing needs no certificate, so the codesign check passes and configure runs.
             "P2996_CODESIGN": "-",
             "P2996_KEYCHAIN": "/System/Library/Keychains/SystemRootCertificates.keychain",
+            "P2996_IWYU_REMOTE": iwyu.url,
+            "P2996_IWYU_COMMIT": git(iwyu.path, "rev-parse", "HEAD"),
             "P2996_LOCK": str(tmp_path / "state/heavy-gate.lock"),
         }
     )

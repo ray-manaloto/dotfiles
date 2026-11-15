@@ -17,6 +17,12 @@ P2996_JOBS = "{{ num_cpus() }}"
 # runs sudo itself (run under sudo, it loses TMPDIR): bash CACHE/source/work/lldb/scripts/macos-setup-codesign.sh
 P2996_CODESIGN = "lldb_codesign"
 P2996_KEYCHAIN = "/Library/Keychains/System.keychain"
+# include-what-you-use, built in the LLVM tree as an external project and installed as
+# include-what-you-use-p2996. Its clang_NN branch must match the LLVM major of P2996_BRANCH.
+P2996_IWYU_REMOTE = "https://github.com/include-what-you-use/include-what-you-use.git"
+# Pin, ADR 0004 (docs/adr/0004-p2996-builds-iwyu-in-tree.md): the clang_21 head, IWYU 0.25. The build id counts it.
+# Move it when P2996_BRANCH reaches a new LLVM major: then point it at that clang_NN branch head.
+P2996_IWYU_COMMIT = "791e69ea4662cb3e74e8128fd5fd69bd7f4ea6b3"
 # sccache: one store that outlives every id. p2996 build adds the launcher path.
 # Eviction is size LRU only, with no age limit (sccache docs/Local.md); p2996 clean --sccache empties it by hand.
 SCCACHE_DIR = "{{ get_env(name='XDG_CACHE_HOME', default=env.HOME ~ '/.cache') }}/dotfiles/sccache"
