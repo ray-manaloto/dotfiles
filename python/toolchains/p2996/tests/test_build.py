@@ -130,3 +130,14 @@ def test_the_libpython_rpath_keeps_libdir_when_the_link_holds_another_library(tm
         (folder / "libpython3.15.dylib").write_bytes(b"lib")
     assert build.python_libdir(hashed, "libpython3.15.dylib", "3.15") == hashed
     assert build.python_libdir(hashed, "libpython3.15.dylib", "3.16") == hashed
+
+
+async def test_include_what_you_use_is_configured_as_an_external_project(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    await recipe.ship(upstream.release("v1"))
+    cache = (config.build_tree(cfg) / "CMakeCache.txt").read_text()
+    assert "LLVM_EXTERNAL_PROJECTS:STRING=iwyu\n" in cache
+    # Builtin headers from the installed prefix, not from the build tree the next commit reuses.
+    assert "IWYU_RESOURCE_RELATIVE_TO:STRING=iwyu\n" in cache
+    assert f"LLVM_EXTERNAL_IWYU_SOURCE_DIR:PATH={config.iwyu_checkout(cfg)}\n" in cache

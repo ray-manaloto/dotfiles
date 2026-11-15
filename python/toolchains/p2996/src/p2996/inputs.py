@@ -101,6 +101,7 @@ def write(cfg: Config, commit: str, patches: Path, bootstrap: Path, sdk: Path) -
     linked = {e["name"]: Path(e["value"]) for e in found["cache"]["entries"] if e["name"] in _PYTHON_LINKED}
     inputs = {
         "commit": commit,
+        "iwyu_commit": cfg.iwyu_commit,
         "patches": {file.name: sha(file) for file in sorted(patches.glob("*.patch"))},
         "uv_lock": sha(config.PROJECT / "uv.lock"),
         "cmake": cmake,

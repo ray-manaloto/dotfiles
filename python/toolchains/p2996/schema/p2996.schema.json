@@ -15,9 +15,11 @@
         "cache": { "type": "string", "format": "path", "description": "Holds the one source tree and the one build tree" },
         "jobs": { "type": "integer", "minimum": 1, "description": "Compile jobs; not part of the build id" },
         "codesign": { "type": "string", "description": "Certificate that signs the debugserver lldb builds; p2996 build stops before configure without it" },
-        "keychain": { "type": "string", "format": "path", "description": "Keychain that holds the codesign certificate" }
+        "keychain": { "type": "string", "format": "path", "description": "Keychain that holds the codesign certificate" },
+        "iwyu_remote": { "type": "string", "description": "include-what-you-use git URL; p2996 builds it in the LLVM tree" },
+        "iwyu_commit": { "$ref": "#/$defs/CommitId", "description": "include-what-you-use commit built with every p2996 commit; part of the build id" }
       },
-      "required": ["remote", "branch", "root", "cache", "jobs", "codesign", "keychain"],
+      "required": ["remote", "branch", "root", "cache", "jobs", "codesign", "keychain", "iwyu_remote", "iwyu_commit"],
       "additionalProperties": false
     },
     "CommitId": {

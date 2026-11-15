@@ -437,3 +437,18 @@ async def test_a_link_back_up_keeps_the_id_when_the_folder_moves(ids: Ids, tmp_p
         (include / "self").symlink_to(include)
         found.append(await ids.id())
     assert found[0] == found[1]
+
+
+async def test_another_include_what_you_use_commit_changes_the_id(cfg: Config, ids: Ids, iwyu: Upstream) -> None:
+    before = await ids.id()
+    newer = iwyu.write("iwyu.cc", "// changed\n")
+    ids.cfg = cfg.model_copy(update={"iwyu_commit": newer})
+    assert await ids.id() != before
+    inputs = json.loads((cfg.cache / "build/work/p2996-inputs.json").read_text())
+    assert inputs["iwyu_commit"] == newer
+
+
+async def test_a_failed_compile_names_both_commits(cfg: Config, ids: Ids, upstream: Upstream) -> None:
+    broken = upstream.release("v1", fail=True)
+    with pytest.raises(P2996Error, match=f"{broken} with include-what-you-use {cfg.iwyu_commit} failed to compile"):
+        await ids.id(broken)

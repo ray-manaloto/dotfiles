@@ -16,6 +16,8 @@ ENVIRON = {
     "P2996_JOBS": "8",
     "P2996_CODESIGN": "lldb_codesign",
     "P2996_KEYCHAIN": "/Library/Keychains/System.keychain",
+    "P2996_IWYU_REMOTE": "https://example.invalid/iwyu.git",
+    "P2996_IWYU_COMMIT": "791e69ea4662cb3e74e8128fd5fd69bd7f4ea6b3",
 }
 
 
@@ -29,12 +31,17 @@ def test_load_reads_one_variable_per_field() -> None:
             "jobs": 8,
             "codesign": "lldb_codesign",
             "keychain": Path("/Library/Keychains/System.keychain"),
+            "iwyu_remote": "https://example.invalid/iwyu.git",
+            "iwyu_commit": "791e69ea4662cb3e74e8128fd5fd69bd7f4ea6b3",
         }
     )
 
 
 def test_load_names_every_missing_variable() -> None:
-    missing = r"p2996: P2996_ROOT, P2996_CACHE, P2996_JOBS, P2996_CODESIGN, P2996_KEYCHAIN unset"
+    missing = (
+        r"p2996: P2996_ROOT, P2996_CACHE, P2996_JOBS, P2996_CODESIGN, P2996_KEYCHAIN, "
+        r"P2996_IWYU_REMOTE, P2996_IWYU_COMMIT unset"
+    )
     with pytest.raises(P2996Error, match=missing):
         config.load({"P2996_REMOTE": "r", "P2996_BRANCH": "b"})
 
