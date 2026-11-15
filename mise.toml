@@ -200,6 +200,9 @@ run = "mkdir -p ~/.agents/skills"
 "~/.local/bin/codex-hc" = { source = "unix/home/.local/bin/codex-hc", mode = "symlink" }
 # hc calls that can't start a second core (docs/agents/herdr-core.md): the herdr cutover's coordinator and /verify.
 "~/.local/bin/hc-safe" = { source = "unix/home/.local/bin/hc-safe", mode = "symlink" }
+# Claude Code mods that CLAUDE_CODE_PLUGIN_DIRS in ~/.claude/settings.json loads. Tests: `claude plugin test <folder>`.
+"~/.local/share/claude-mods/side-notes" = { source = "unix/home/.local/share/claude-mods/side-notes", mode = "symlink" }
+"~/.local/share/claude-mods/you-should-know-forward" = { source = "unix/home/.local/share/claude-mods/you-should-know-forward", mode = "symlink" }
 # The Codex profile for isolated, read-only adversarial reviews (codex exec --profile adversarial-review).
 "~/.codex/adversarial-review.config.toml" = { source = "unix/home/.codex/adversarial-review.config.toml", mode = "symlink" }
 # A skill written here: Codex reads ~/.agents/skills and Claude ~/.claude/skills, so both link to it.

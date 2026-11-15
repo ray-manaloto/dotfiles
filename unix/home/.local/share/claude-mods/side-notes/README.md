@@ -6,7 +6,7 @@ risk the agent or you may be missing. That means a wrong fact, an unsafe or irre
 broken, or a "done" the session contradicts. Never style.
 
 - **Each note goes straight to the main agent**, marked as written by a separate model and to be verified before
-  acting: at once while it works, or with your next prompt while it is idle. A toast shows you the line.
+  acting: with the next tool result while it works (0.3.19), or with your next prompt while it is idle. A toast shows you the line.
 - **Each note quotes the session word for word.** A note whose quote is not in the session is dropped. A note is
   passed on once; the same note is not raised twice in a session.
 - **Your answers count as your words** (0.3.3): when the agent asks you a question, your answer is kept in the digest

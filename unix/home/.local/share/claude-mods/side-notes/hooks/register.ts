@@ -91,8 +91,10 @@ export function settingsOf(o: PluginOptions): Settings {
 // ledger file carries what must outlive it (caps, the turn's count, a stop).
 let settings = settingsOf({})
 let isStoodDown = false
-// Unknown after a reload: a note is then appended, which is safe either way.
+// Unknown after a reload counts as working: a note then waits for a safe point.
 let isWorking: boolean | undefined
+// Notes may wait for the next tool result: spares every tool call a ledger read when none do.
+let isHeld = false
 let isChecking = false
 // A turn ended while a check ran: its end-of-turn check runs once that one is done.
 let finalOwed: { isDeep: boolean } | undefined
@@ -117,7 +119,7 @@ export type CheckOutcome =
 export type LogEvent =
   | { event: 'check'; trigger: 'step' | 'final' | 'know'; deep: boolean; digestChars: number; tokens: number; outcome: CheckOutcome; line?: string; kind?: string; reply?: string; model?: string; builtinLine?: string }
   | { event: 'skipped'; trigger: 'step' | 'final' | 'know'; reason: 'cap' | 'unchanged' | 'empty' }
-  | { event: 'delivered'; route: 'append' | 'prompt' | 'wake'; lines: string[] }
+  | { event: 'delivered'; route: 'append' | 'prompt' | 'wake' | 'tool'; lines: string[] }
 
 export const appendLog = (existing: string, entries: readonly object[], max = LOG_MAX_LINES): string => {
   const lines = [...existing.split('\n').filter(l => l.trim() !== ''), ...entries.map(e => JSON.stringify(e))]
@@ -264,9 +266,9 @@ async function readRules($: EngineInterface): Promise<Rules> {
   return { text: rulesText(files), files: files.map(({ name, path }) => ({ name, path })) }
 }
 
-// Appends what is owed as a row the model reads at its next request. Reserved
-// and saved first, so a refused append is released and goes with the next
-// prompt. Never throws: a failure stops the mod.
+// Appends what is owed as a row the model reads at its next request: only at a
+// turn's start, before the model runs. Reserved and saved first, so a refused
+// append is released and goes with the next prompt. Never throws: a failure stops the mod.
 async function deliverNow($: EngineInterface, sid: string) {
   try {
     const message = await update($, sid, ledger => {
@@ -289,6 +291,28 @@ async function deliverNow($: EngineInterface, sid: string) {
   } catch (error) {
     standDown($, `delivery failed: ${String(error)}`)
   }
+}
+
+// A note found while the agent works rides on the next main-loop tool result as
+// context, read with that result and never a row of its own: a row appended
+// mid-turn can split a server tool's use from its result (an advisor call), and
+// the session then fails every request with a 400. Undefined when nothing waits.
+async function takeForTool($: EngineInterface): Promise<string | undefined> {
+  const sid = await $.session.id()
+  const message = await update($, sid, ledger => {
+    const m = compose(ledger, settings.model)
+    if (m !== undefined) applyMarks(ledger, m.marks, 'reserve')
+    return m
+  })
+  isHeld = false
+  if (message === undefined) return undefined
+  log($, sid, { event: 'delivered', route: 'tool', lines: noteLines(message.marks) })
+  return message.text
+}
+
+// A note found while the agent works waits for a safe point (see takeForTool).
+function hold() {
+  isHeld = true
 }
 
 // Idle, with wakeIdle on: starts a turn of its own with what is owed, within the
@@ -449,7 +473,7 @@ async function check($: EngineInterface, turnId: string, isFinal: boolean, isDee
     if (note === undefined || isStoodDown) return
     $.ui.toast(`Side note · ${note.line}`, { timeoutMs: 8000 })
     // Idle: it waits for the next prompt, or the next turn that starts without one.
-    if (isWorking !== false) await deliverNow($, sid)
+    if (isWorking !== false) hold()
     else if (settings.wakeIdle) await wake($, sid)
   } catch (error) {
     standDown($, `error: ${String(error)}`)
@@ -567,7 +591,7 @@ async function knowCheck($: EngineInterface) {
     })
     if (note === undefined || isStoodDown) return
     $.ui.toast(`Side note · ${note.line}`, { timeoutMs: 8000 })
-    if (isWorking !== false) await deliverNow($, sid)
+    if (isWorking !== false) hold()
     else if (settings.wakeIdle) await wake($, sid)
   } catch (error) {
     standDown($, `error: ${String(error)}`)
@@ -615,6 +639,7 @@ export function resetForTests() {
   isTrialOver = false
   isStoodDown = false
   isWorking = undefined
+  isHeld = false
   isChecking = false
   finalOwed = undefined
   turn = { id: '', lastIndex: -1, checks: 0 }
@@ -637,19 +662,35 @@ export const register: Register = (on, options) => {
     // A new turn's own checks cover what the last turn's owed check would have seen.
     finalOwed = undefined
     turn = { id: e.turnId, lastIndex: -1, checks: 0 }
-    // A turn no prompt started (a task's notification) still gets what waits.
+    // A turn no prompt started (a task's notification) still gets what waits, appended
+    // here and awaited, so the row lands before the model runs, never inside its turn.
     if (!isStoodDown) {
-      await bounded(
+      const sid = await bounded(
         $,
         run($, async () => {
           const sid = await $.session.id()
           sessionId = sid
-          if (isOwed(await load($, sid))) void deliverNow($, sid)
+          return isOwed(await load($, sid)) ? sid : undefined
         }),
       )
+      // Not bounded: a timeout would start the turn while the append is still in flight.
+      if (sid !== undefined) await deliverNow($, sid)
     }
     return next(e)
   }).catch(($, e, next) => next(e))
+
+  // The tool runs first and is never held up or run twice: nothing after `next` throws.
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    if (!isHeld || isStoodDown || e.agentId !== undefined || result.deny !== undefined || result.isError === true) return result
+    try {
+      // Not bounded: a timeout would drop a note already reserved as sent.
+      const text = await takeForTool($)
+      return text === undefined ? result : { ...result, context: [...(result.context ?? []), text] }
+    } catch {
+      return result
+    }
+  })
 
   on('turn.step', async function* ($, e, next) {
     if (e.agentId === undefined && !isStoodDown) {
@@ -681,6 +722,8 @@ export const register: Register = (on, options) => {
         maybeCheck($, true, isDeep)
         maybeKnow($)
       }
+      // A note held for a tool result that never came: it wakes the session, or waits for the next prompt.
+      if (isHeld && !isStoodDown && settings.wakeIdle && sessionId !== '') void wake($, sessionId)
     } catch (error) {
       standDown($, `error: ${String(error)}`)
     }

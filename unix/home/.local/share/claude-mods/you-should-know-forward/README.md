@@ -4,7 +4,7 @@ A Claude Code mod that passes each note from the built-in "You should know" side
 agent of the session where the note was shown. The agent receives it labeled as a separate model's claim to check
 before acting on it.
 
-- **While the session works:** the note is appended at once (`$.session.append`), and the agent reads it at its next step.
+- **While the session works:** the note rides on the next main-loop tool result as context (`tool.call`), and the agent reads it with that result (0.4.2). It is never appended mid-turn: a row added then can split a server tool's use from its result, and the session fails every request with a 400.
 - **While the session is idle:** the note waits and goes with your next prompt, as context only the model reads
   (`prompt.submit` context). If a turn starts without a prompt, it is appended instead.
 - **Each note is passed on once per session.** Your answer to a note is passed on too: "known" (Knew this already, Got

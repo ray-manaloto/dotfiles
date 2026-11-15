@@ -277,7 +277,7 @@ export const applyMarks = (ledger: Ledger, marks: readonly Mark[], step: 'reserv
 // is logged to debug once and never touches delivery.
 export type LogEvent =
   | { event: 'shown'; line: string; tag?: string }
-  | { event: 'delivered'; route: 'append' | 'prompt' | 'wake'; lines: string[] }
+  | { event: 'delivered'; route: 'append' | 'prompt' | 'wake' | 'tool'; lines: string[] }
   | { event: 'verdict'; line: string; verdict: Verdict }
   | { event: 'owner-chat'; line: string; alreadySent: boolean }
 
@@ -298,8 +298,10 @@ export const changes = (before: Ledger, after: Ledger, tag?: string): LogEvent[]
 }
 
 // Module state: a reload runs this file afresh.
-// Unknown after a reload; then a note is appended, which is safe either way.
+// Unknown after a reload counts as working: a note then waits for a safe point.
 let isWorking: boolean | undefined
+// Notes may wait for the next tool result: spares every tool call a ledger read when none do.
+let isHeld = false
 let wakeIdle = false
 let isStoodDown = false
 let chain: Promise<unknown> = Promise.resolve()
@@ -384,12 +386,21 @@ async function append($: EngineInterface, sid: string, ledger: Ledger) {
 
 // The person sees the box above the prompt but not the row the agent got, so
 // each delivery shows a toast too.
+// Never throws: a delivery already saved must not be lost to a failed toast.
 function toastSent($: EngineInterface, lines: readonly string[]) {
-  for (const line of lines) $.ui.toast(`Side note sent to the agent · ${line}`, { timeoutMs: 8000 })
-  if (lines.length === 0) return
-  const now = Date.now()
-  markers = [...markers.filter(m => !lines.some(l => same(l, m.line))), ...lines.map(line => ({ line, sentAt: now }))]
-  $.ui.invalidate('ui.render')
+  try {
+    for (const line of lines) $.ui.toast(`Side note sent to the agent · ${line}`, { timeoutMs: 8000 })
+    if (lines.length === 0) return
+    const now = Date.now()
+    markers = [...markers.filter(m => !lines.some(l => same(l, m.line))), ...lines.map(line => ({ line, sentAt: now }))]
+    $.ui.invalidate('ui.render')
+  } catch (error) {
+    try {
+      $.ui.log(`${SELF}: toast failed: ${String(error)}`, { to: 'debug' })
+    } catch {
+      // Nothing more to tell: the note was delivered.
+    }
+  }
 }
 // The built-in closed these notes (known, dismissed or turned off): their rows go.
 function clearMarkers($: EngineInterface, lines: readonly string[]) {
@@ -442,8 +453,33 @@ async function observe($: EngineInterface, storeKey: string, value: unknown) {
     }
   }
   if (pending(ledger).length === 0) return save($, sid, ledger)
-  if (isWorking !== false) return append($, sid, ledger)
+  // Never append while a turn may run: a row added mid-turn can split a server tool's use from its
+  // result (an advisor call), and the session then fails every request with a 400. The note waits for
+  // the next tool result (`tool.call` context), the next turn, the next prompt or a wake.
+  if (isWorking !== false) {
+    isHeld = true
+    return save($, sid, ledger)
+  }
   await wake($, sid, ledger)
+}
+
+// A note held while the agent works rides on a main-loop tool result as context, read with that
+// result and never a row of its own. Undefined when nothing waits.
+async function takeForTool($: EngineInterface): Promise<string | undefined> {
+  const sid = await $.session.id()
+  const ledger = await load($, sid)
+  const message = compose(ledger, '', { holdKnown: true })
+  if (message?.text === undefined) {
+    isHeld = false
+    return undefined
+  }
+  applyMarks(ledger, message.marks, 'reserve')
+  applyMarks(ledger, message.marks, 'confirm')
+  await save($, sid, ledger)
+  isHeld = false
+  if (deliveredLines(message.marks).length > 0) log($, sid, [{ event: 'delivered', route: 'tool', lines: deliveredLines(message.marks) }])
+  toastSent($, deliveredLines(message.marks))
+  return message.text
 }
 
 // Idle, with wakeIdle on: starts a turn with what is owed. At most MAX_WAKES_PER_DAY a
@@ -489,6 +525,7 @@ async function wake($: EngineInterface, sid: string, ledger: Ledger) {
 export const register: Register = (on, options) => {
   wakeIdle = options.wakeIdle === true
   isWorking = undefined
+  isHeld = false
   isStoodDown = false
   logDir = typeof options.logDir === 'string' ? options.logDir.trim() : LOG_DIR
   isLogBroken = false
@@ -558,9 +595,30 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // The tool runs first and is never held up or run twice: nothing after `next` throws.
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    if (!isHeld || isStoodDown || e.agentId !== undefined || result.deny !== undefined || result.isError === true) return result
+    try {
+      const text = await run($, () => takeForTool($))
+      return text === undefined ? result : { ...result, context: [...(result.context ?? []), text] }
+    } catch {
+      return result
+    }
+  })
+
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       isWorking = false
+      // A note held for a tool result that never came: it wakes the session, or waits for the next prompt.
+      if (isHeld && !isStoodDown) {
+        void run($, async () => {
+          if (isWorking !== false) return
+          const sid = await $.session.id()
+          const ledger = await load($, sid)
+          if (pending(ledger).length > 0) await wake($, sid, ledger)
+        })
+      }
       // A turn that ended after a delivery carried the agent's answer to it (the frame asks for it there).
       const now = Date.now()
       let isChanged = false

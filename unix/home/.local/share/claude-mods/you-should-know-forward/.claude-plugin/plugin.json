@@ -1,6 +1,6 @@
 {
   "name": "you-should-know-forward",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pass each \"You should know\" note to the session's own agent once, marked as a separate model's claim to verify",
   "license": "MIT",
   "userConfig": {

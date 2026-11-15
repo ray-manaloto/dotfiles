@@ -1,6 +1,6 @@
 {
   "name": "side-notes",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "A side agent (Haiku by default) that checks the session every few steps for real risks (wrong facts, unsafe actions, owner rules broken, unverified claims) and passes each note straight to the main agent, with a toast for you",
   "license": "MIT",
   "userConfig": {

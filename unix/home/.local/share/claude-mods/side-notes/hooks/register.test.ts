@@ -135,6 +135,8 @@ const world = (on: On, store: Record<string, unknown> = {}, isAppendRefused = fa
   on('turn.step', async function* (_, e) {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'tool_use', usage: null } as never
   })
+  // A stand-in tool: every call answers "ok".
+  on('tool.call', () => ({ result: 'ok' }))
   return {
     ...w,
     rows: () => session.appended().map(r => JSON.stringify(r.message.content)),
@@ -160,10 +162,17 @@ const steps = async ($: Engine, upto: number, turnId = 't1') => {
 const complete = ($: Engine, turnId = 't1') =>
   $.turn.complete({ answer: 'done', turnId, reason: 'answer', durationMs: 1, isAborted: false })
 const typed = ($: Engine, text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+// One main-loop tool call: what the model reads beside its result ('' when nothing rides on it).
+const toolCall = async ($: Engine, agentId?: string) => {
+  const r = (await $.tool.call({ tool: 'Bash', command: 'ls', ...(agentId === undefined ? {} : { agentId }) } as never)) as { context?: readonly string[] }
+  return (r.context ?? []).join('\n')
+}
 
 // --- The mod in the engine ---
 
-test('a risk found mid-turn reaches the agent once, framed, with a toast (breaks if notes stay with the person or repeat)', async ($, on) => {
+// A row appended while a turn runs can split a server tool's use from its result (an advisor
+// call), and the session then fails every request with a 400 (2026-11-15).
+test('a risk found mid-turn is never appended; it rides once on the next main-loop tool result, framed, with a toast (breaks if notes stay with the person, repeat or split a turn)', async ($, on) => {
   const w = world(on)
   await begin($)
   await start($)
@@ -172,8 +181,11 @@ test('a risk found mid-turn reaches the agent once, framed, with a toast (breaks
   await w.settle()
   expect(w.asked.length).toBe(1)
   expect(w.asked[0]?.model).toBe('haiku')
-  expect(w.rows().length).toBe(1)
-  const row = w.rows()[0] ?? ''
+  expect(w.rows().length).toBe(0)
+  // A subagent's tool result does not carry it.
+  expect(await toolCall($, 'sub-1')).toBe('')
+  const row = await toolCall($)
+  expect(await toolCall($)).toBe('')
   expect(row).toContain(TAG)
   expect(row).toContain('A separate model')
   expect(row).toContain('Verify the claim')
@@ -187,8 +199,35 @@ test('a risk found mid-turn reaches the agent once, framed, with a toast (breaks
   await complete($)
   await w.settle()
   expect(w.asked.length).toBe(2)
-  expect(w.rows().length).toBe(1)
+  expect(w.rows().length).toBe(0)
   expect(w.toasts.length).toBe(1)
+})
+
+test('after a reload, before any turn is seen, a found note is held, not appended (breaks the split-turn fix)', async ($, on) => {
+  const w = world(on)
+  await begin($)
+  w.replies.push(NOTE)
+  await steps($, 6)
+  await w.settle()
+  expect(w.asked.length).toBe(1)
+  expect(w.rows().length).toBe(0)
+  expect(await toolCall($)).toContain(QUOTE)
+})
+
+test('a note held mid-turn that no tool result carried goes with the next prompt (breaks delivery after the fix)', async ($, on) => {
+  const w = world(on)
+  await begin($)
+  await start($)
+  w.replies.push(NOTE)
+  await steps($, 6)
+  await w.settle()
+  await complete($)
+  await w.settle()
+  expect(w.rows().length).toBe(0)
+  await typed($, 'next')
+  await w.settle()
+  expect(w.prompts[0]?.context.join('')).toContain(QUOTE)
+  expect(w.rows().length).toBe(0)
 })
 
 test('no check before step 6 or on a subagent step (breaks if every step costs a call)', async ($, on) => {
@@ -509,7 +548,7 @@ test('a note citing a rule tells the agent which file holds it (breaks: the agen
   w.replies.push(`NOTE: The agent deleted the backups folder in the home directory without asking.\nKIND: rule-broken\nEVIDENCE: ${QUOTE}\nRULE: never-delete-logs`)
   await steps($, 6)
   await w.settle()
-  expect(w.rows()[0]).toContain('Rule it cites: /w/rulings/never-delete-logs.md; read that file to verify.')
+  expect(await toolCall($)).toContain('Rule it cites: /w/rulings/never-delete-logs.md; read that file to verify.')
 })
 
 test('deep check: a long turn ends in one fork on the main model when enabled (breaks the opt-in)', { options: { deepCheck: 1, everySteps: 100 } }, async ($, on) => {
@@ -535,6 +574,8 @@ test('the ledger lives in the state folder, never under ~/.claude/plugins (break
   w.replies.push(NOTE)
   await steps($, 6)
   await w.settle()
+  await toolCall($)
+  await w.settle()
   expect(w.written.length).toBeGreaterThan(0)
   // The ledger, and the audit log next to it; nothing else.
   expect(w.written.every(p => p === LEDGER || p === AUDIT)).toBe(true)
@@ -557,10 +598,12 @@ test('the audit log records each check with its outcome and tokens, and the deli
   w.replies.push(NOTE)
   await steps($, 6)
   await w.settle()
+  await toolCall($)
+  await w.settle()
   const ev = audit(w)
   expect(ev.map(e => e.event)).toEqual(['check', 'delivered'])
   expect(ev[0]).toMatchObject({ mod: 'side-notes', sid: SID, trigger: 'step', outcome: 'note', tokens: 1050 })
-  expect(ev[1]).toMatchObject({ route: 'append' })
+  expect(ev[1]).toMatchObject({ route: 'tool' })
 })
 
 test('a reply echoing the format placeholder is never passed on (seen in the A/B replay)', async ($, on) => {
@@ -620,7 +663,7 @@ test('an audit log that cannot be read leaves checks and delivery working', asyn
   w.replies.push(NOTE)
   await steps($, 6)
   await w.settle()
-  expect(w.rows().length).toBe(1)
+  expect(await toolCall($)).toContain(QUOTE)
   expect(w.logs.some(l => l.includes('stopped'))).toBe(false)
 })
 
