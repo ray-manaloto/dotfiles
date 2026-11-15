@@ -39,6 +39,8 @@ set(LLVM_LINK_LLVM_DYLIB ON CACHE BOOL "" FORCE)
 set(CLANG_LINKS_TO_CREATE "clang++;clang-cpp;clang-p2996;clang++-p2996;clang-cpp-p2996" CACHE STRING "" FORCE)
 set(CLANG_LINK_CLANG_DYLIB ON CACHE BOOL "Shared Clang libraries for IWYU" FORCE)
 set(LLVM_INSTALL_TOOLCHAIN_ONLY OFF CACHE BOOL "Keep headers and CMake exports for IWYU" FORCE)
+# FileCheck, not, count and yaml2obj in the prefix, for lit tests run against this build.
+set(LLVM_INSTALL_UTILS ON CACHE BOOL "" FORCE)
 set(LLVM_PARALLEL_COMPILE_JOBS "$ENV{P2996_JOBS}" CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_LINK_JOBS 1 CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_TABLEGEN_JOBS 1 CACHE STRING "" FORCE)
