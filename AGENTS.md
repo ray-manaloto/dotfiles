@@ -60,7 +60,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
   publish anything. `gh pr merge` is not on that list: the owner's sentence "merge #N" is the OK.
   Merge once with `gh pr merge N --merge --match-head-commit <sha>`, only when the head is the
-  reviewer-approved commit and the checks pass; otherwise stop and tell the owner.
+  reviewer-approved commit and its local hk hooks passed; otherwise stop and tell the owner.
+  Hosted checks from free apps are advisory, and no paid CI is added.
 - This repo is public and the approval is its leak check. Before approving, the reviewer reads the
   whole staged diff and the commit message, or the PR title and body, for content from a private
   project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
