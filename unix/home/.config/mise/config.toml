@@ -212,6 +212,12 @@ hadolint = { version = "2.15.1", minimum_release_age = "0s" }
 pre-commit = { version = "4.7.0", minimum_release_age = "0s" }
 #"pipx:mgrep" = { version = "0.1.6", minimum_release_age = "0s" }
 typos = { version = "1.52.2", minimum_release_age = "0s" }
+# Lint tools hk builtins run in C++ projects: shellharden, editorconfig_checker, lychee and lychee_extended,
+# which runs `flint checker lychee` (grafana/flint, signed with packslip, the backend hk names for it).
+shellharden = { version = "4.3.2", minimum_release_age = "0s" }
+editorconfig-checker = { version = "4.0.2", minimum_release_age = "0s" }
+lychee = { version = "0.24.2", minimum_release_age = "0s" }
+"packslip:grafana/flint" = { version = "0.22.15", minimum_release_age = "0s" }
 #"pypi:yamllint" = { version = "1.38.0", python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s" }
 aws-cli = { version = "2.40.2", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
@@ -372,6 +378,9 @@ swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 # gcovr: C++ coverage reports. Was a bare `uv tool install`, whose venv broke when mise pruned the Python it was
 # built on; as a mise tool it is pinned, locked with its dependency graph, and reinstalled on a Python bump.
 "pypi:gcovr" = { version = "8.8", python = "3.14.8", minimum_release_age = "0s" }
+# gersemi: the maintained CMake formatter. cmake-format (cmakelang 0.6.13, last released 2020) fails on Python 3.15.
+# gersemi ships compiled wheels up to cp314 only, so it runs on 3.14 like gcovr.
+"pypi:gersemi" = { version = "0.29.2", python = "3.14.8", minimum_release_age = "0s" }
 # agent-desktop drives macOS apps through the Accessibility tree (vercel-labs/agent-desktop, Apache-2.0). On trial:
 # can an agent work with an IDE that is not the frontmost app? It needs Accessibility, which macOS charges to the
 # process that launched it (herdr-core under herdr), not to this binary. The lock records its GitHub attestation.
