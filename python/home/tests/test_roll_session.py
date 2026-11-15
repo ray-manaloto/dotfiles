@@ -178,6 +178,31 @@ def test_a_ready_session_exits_and_its_background_is_kept(world: World) -> None:
     assert world.calls().index(ASK) < world.calls().index(EXIT)
 
 
+def test_a_stopped_session_stays_stopped_when_its_last_receipt_write_fails(world: World) -> None:
+    """The session has exited: it is reported stopped (roll:start resumes it), and the receipt written before /exit
+    stays whole."""
+    scene(world, world.spawn("claude"))
+    ready(world)
+    folder = world.root / RUN / "background"
+    kept = folder / f"proj--worker--{SID}.json"
+    # /exit lands while the run folder stops taking writes (a full or read-only disk).
+    lock = world.bin / "lock"
+    lock.write_text(
+        f"#!{sys.executable} -I\nimport os\nos.chmod({str(kept)!r}, 0o400)\nos.chmod({str(folder)!r}, 0o500)\n"
+    )
+    lock.chmod(0o755)
+    world.answer({EXIT: {"real": str(lock)}})
+    try:
+        result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+        record = Background.model_validate_json(kept.read_text())
+    finally:
+        folder.chmod(0o755)
+    assert result.result == "stopped"
+    assert result.notes[0] == f"background: {kept}"
+    assert result.notes[1].startswith("receipt not updated with the exit dialog: ")
+    assert (record.session, record.exit_dialog) == (SID, [])
+
+
 def test_a_session_moved_during_the_handshake_is_left_alone(world: World) -> None:
     scene(world, world.spawn("claude"))
     ready(world)
@@ -277,6 +302,45 @@ def test_a_job_started_during_the_handshake_keeps_it_running(world: World) -> No
     assert (result.result, result.notes) == ("skipped-job-started", ["sleep 60"])
 
 
+def test_an_hc_run_child_started_during_the_handshake_keeps_it_running(world: World) -> None:
+    """hc run children are herdr-core terminals, not child processes: the check before /exit lists them again."""
+    scene(world, world.spawn("claude"))
+    ready(world)
+    alone = out({"terminals": [terminal("t3", "proj / worker")]})
+    both = out({"terminals": [terminal("t3", "proj / worker"), terminal("t4", "proj / job")]})
+    world.answer(
+        {
+            ("hc", "ls", "--json"): after(alone, (ASK, both)),
+            ("hc", "get", "t4", "--json"): out(info("t4", None, ["x"], world.root, parent="t3")),
+        }
+    )
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-job-started", ["hc run child t4 dies with this session"])
+    assert EXIT not in world.calls()
+
+
+@pytest.mark.parametrize(
+    ("listed", "child", "missing"),
+    [
+        ({"code": 1}, {}, "hc ls --json answered nothing"),
+        (None, {"code": 1}, "hc get t4 --json answered nothing"),
+    ],
+    ids=["hc-ls-failed", "hc-get-failed"],
+)
+def test_a_refresh_that_fails_before_exit_leaves_the_session_running(
+    world: World, listed: dict[str, object] | None, child: dict[str, object], missing: str
+) -> None:
+    """The check before /exit can't see an hc run child it could not read: the session is left running."""
+    scene(world, world.spawn("claude"))
+    ready(world)
+    alone = out({"terminals": [terminal("t3", "proj / worker")]})
+    both = out({"terminals": [terminal("t3", "proj / worker"), terminal("t4", "proj / job")]})
+    world.answer({("hc", "ls", "--json"): after(alone, (ASK, listed or both)), ("hc", "get", "t4", "--json"): child})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-refresh-failed", [missing])
+    assert EXIT not in world.calls()
+
+
 DIALOG = """Background work is running. These will stop when you exit:
   {items}
 \N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT} 1. Exit and stop tasks
@@ -321,6 +385,28 @@ def test_an_exit_that_never_lands_fails(world: World) -> None:
     world.answer({READ: after({"stdout": ""}, (EXIT, {"stdout": DIALOG.format(items="scheduled task: x")})), ENTER: {}})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
     assert (result.result, result.notes) == ("failed-exit-timeout", ["scheduled task: x"])
+
+
+@pytest.mark.parametrize(
+    ("listed", "result"),
+    [([terminal("t3", "proj / worker")], "failed-exit-timeout"), ([], "stopped")],
+    ids=["still-listed", "gone"],
+)
+def test_a_failed_status_read_after_exit_proves_no_exit(
+    world: World, listed: list[dict[str, object]], result: str
+) -> None:
+    """hc get fails after /exit: only hc ls no longer listing the terminal live shows that the session exited."""
+    pid = world.spawn("claude")
+    scene(world, pid)
+    ready(world)
+    first = out({"terminals": [terminal("t3", "proj / worker")]})
+    world.answer(
+        {
+            GET: after(out(info("t3", pid, ["claude"], world.root / "proj")), (EXIT, {"code": 1})),
+            ("hc", "ls", "--json"): after(first, (EXIT, out({"terminals": listed}))),
+        }
+    )
+    assert session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK).result == result
 
 
 def harness(world: World, kind: Kind) -> Target:
@@ -415,7 +501,7 @@ def test_a_codex_resume_keeps_its_policies_but_not_the_old_terminals(world: Worl
            "-a", "never", "-s", "read-only", "--model=gpt-x", "--yolo", "-p"]  # fmt: skip
     assert session.resume_argv(target(world, Kind.codex, argv=old), "hi") == [
         "codex-hc", "resume", SID, "-c", "model_reasoning_effort=high", "-a", "never", "-s", "read-only",
-        "--model=gpt-x", "--yolo",
+        "--model=gpt-x", "--yolo", "hi",
     ]  # fmt: skip
 
 
@@ -427,6 +513,21 @@ def test_a_codex_resume_keeps_its_policies_but_not_the_old_terminals(world: Worl
         ("python example.py", False),
         ("bun xyz.ts", False),
         ("sleep 60", False),
+        # A node script named as a server is a service; one that only mentions server is a job.
+        ("/usr/local/bin/node /srv/app/dist/server.js", True),
+        ("node --enable-source-maps /srv/app/dist/server.js", True),
+        ("node --max-old-space-size=4096 build.js --target server", False),
+        ("node --max-old-space-size=4096 dist/server.js", True),
+        # An option that takes a separate value is no script: the script after it is the one that runs.
+        ("node --require ./server.js build.js", False),
+        ("node -r ./server.js build.js", False),
+        ("node /x/some-server --stdio", True),
+        ("node scripts/server-build.js", False),
+        ("node build.js --target server-side", False),
+        # Only the language servers that run as <tool> server; any other command ending in server is a job.
+        ("node build.js --target server", False),
+        ("/x/ruff-aarch64-apple-darwin/ruff server", True),
+        ("ty server", True),
     ],
 )
 def test_services_are_whole_words(args: str, service: bool) -> None:  # noqa: FBT001 - a parameter
@@ -488,7 +589,9 @@ def test_resume_commands_keep_what_each_session_ran_with(world: World) -> None:
     assert session.resume_argv(chief, "hi") == [
         "claude", "--permission-mode", "auto", "--resume", "chief-of-staff", session.CHIEF_PROMPT,
     ]  # fmt: skip
-    assert session.resume_argv(target(world, Kind.codex), "hi") == ["codex-hc", "resume", SID]
+    # Codex and OpenCode take the prompt too: codex resume <id> [PROMPT] (codex-rs/cli/src/main.rs
+    # resume_with_session_id_accepts_prompt_positional at rust-v0.169.0), opencode --prompt.
+    assert session.resume_argv(target(world, Kind.codex), "hi") == ["codex-hc", "resume", SID, "hi"]
     fnox = [
         "/mise/installs/fnox-1/fnox",
         "--non-interactive",
@@ -515,8 +618,12 @@ def test_resume_commands_keep_what_each_session_ran_with(world: World) -> None:
         "--standalone",
         "-s",
         SID,
+        "--prompt",
+        "hi",
     ]
-    assert session.resume_argv(target(world, Kind.opencode), "hi") == ["opencode", "--standalone", "-s", SID]
+    assert session.resume_argv(target(world, Kind.opencode), "hi") == [
+        "opencode", "--standalone", "-s", SID, "--prompt", "hi",
+    ]  # fmt: skip
 
 
 def test_a_folder_that_is_gone_falls_back_to_the_space_then_home(world: World) -> None:

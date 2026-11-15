@@ -9,7 +9,7 @@
 #USAGE flag "--wait <seconds>" help="Seconds to wait for a stop-point answer (default 900)"
 #USAGE flag "--settle <seconds>" help="Seconds to wait for an exit or a start (default 90)"
 #USAGE flag "--poll <seconds>" help="Seconds between looks while waiting (default 1)"
-#USAGE flag "--accept-review" help="Go past a closed review gate (read the run's review.md first)"
+#USAGE flag "--accept-review" help="Go past a closed review gate (read the run's review.md first); a paused run goes on from roll:stop"
 """roll:all: hometools roll all (python/home/src/hometools/roll/)."""
 
 # A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the hometools package in the

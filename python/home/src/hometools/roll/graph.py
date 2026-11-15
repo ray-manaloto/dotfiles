@@ -141,6 +141,12 @@ def build(live: Live, wiki: Path) -> Graph:
     if not live.listed:
         msg = "roll: hc ls --json answered no terminal list; is the herdr core running? nothing was written"
         raise GraphError(msg)
+    # A live agent whose hc get answered nothing would be recorded with no session, and merge would drop the one the
+    # previous graph kept for its tab; an agent that answered without a session id found is recorded as it is.
+    for address, row in live.terminals.items():
+        if row.get("agent") in APPS and not live.info.get(address):
+            msg = f"roll: hc get {address} --json answered nothing for a live agent; nothing was written"
+            raise GraphError(msg)
     lanes = lane_children(wiki)
     coordinator = coordinator_of(live)
     spaces = []

@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from hometools.models import Background, GraphSpace, GraphTab, GraphTerminal, Kind, Role, SessionResult, Timing
+from hometools.roll import graph as snap
 from hometools.roll.graph import claude_session, codex_session, opencode_session
 from hometools.roll.live import (
     COORDINATOR,
@@ -61,7 +62,12 @@ SERVICE = re.compile(
     r"\b(mcp|lsp|language-server|clangd|pyright|gopls|rust-analyzer|typescript-language-server|jdtls|sourcekit|"
     r"caffeinate|codebase-memory|openwiki|context7|exa|firecrawl|playwright|uv tool run|uv tool uvx|npx -y|npm exec|"
     r"bun x|modelcontextprotocol|node_repl|cua_node|codex-code-mode-host|hc (watch|tail)|fnox (daemon|mcp))\b|"
-    r"node .*server|^codex | server(\s|$)",
+    # A node script named as a server (dist/server.js, some-mcp-server), not any command line that mentions one.
+    # Before the script only options that take no separate value: --name=value and a few flags; any other option
+    # (-r ./server.js) may hold the next word, so the command counts as a job. Of the commands ending in "server",
+    # only the language servers that run as <tool> server (ty, ruff).
+    r"\bnode\s+(--[\w-]+=\S*\s+|--(enable-source-maps|no-warnings|inspect|trace-warnings)\s+)*"
+    r"(\S*/)?[\w.-]*server(\.[cm]?js)?(\s|$)|^codex |(^|/)(ty|ruff) server(\s|$)",
     re.IGNORECASE,
 )
 DIALOG = "Background work is running"
@@ -226,7 +232,8 @@ def same_tab(space: GraphSpace, tab: GraphTab, address: str) -> None:
 def current(live: Live, term: GraphTerminal, why: str) -> int | None:
     """The terminal's foreground, read now, still runs the harness and the session the graph names (found as the
     snapshot finds it): result why otherwise. Its foreground pid."""
-    live.reread(term.address)
+    missing = live.reread(term.address)
+    need(not missing, "skipped-refresh-failed", *missing)
     pid, argv = live.foreground(term.address)
     need(runs(term.kind, argv), why, shlex.join(argv))
     tree = live.tree(term.address)
@@ -267,7 +274,14 @@ def handshake(term: GraphTerminal, timing: Timing, token: str) -> str | None:
 
 
 def exited(term: GraphTerminal) -> bool | None:
-    return True if not runs(term.kind, status(term.address)[2]) else None
+    """True once the terminal runs something else, or hc ls answers and no longer lists it live. A failed hc get
+    (no foreground argv) proves nothing: keep waiting."""
+    argv = status(term.address)[2]
+    if argv:
+        return True if not runs(term.kind, argv) else None
+    read = answer("hc", "ls", "--json")
+    live = {str(row["address"]) for row in rows(read, "terminals") if row.get("state") == "live"}
+    return True if isinstance(field(read, "terminals"), list) and term.address not in live else None
 
 
 def exit_session(term: GraphTerminal, timing: Timing) -> list[str]:
@@ -337,16 +351,21 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         items = exit_session(term, timing)
     except Skip as skip:
         return outcome(target, skip.result, skip.notes)
-    write(path, record.model_copy(update={"exit_dialog": items}))
+    # The session has exited: it stays reported stopped, so roll:start resumes it, even when this last update fails;
+    # the receipt written before /exit is left whole.
+    try:
+        write(path, record.model_copy(update={"exit_dialog": items}))
+    except Skip as skip:
+        return outcome(target, "stopped", [f"background: {path}", f"receipt not updated with the exit dialog: {skip}"])
     return outcome(target, "stopped", [f"background: {path}"])
 
 
 def write(path: Path, record: Background) -> None:
     """The background record, written before the handshake (a run folder that can't take it stops the session
-    from being asked at all) and again with what /exit showed."""
+    from being asked at all) and again with what /exit showed; atomically, so a failed write keeps the last one."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(record.model_dump_json(indent=1) + "\n")
+        snap.write(path, record.model_dump_json(indent=1) + "\n")
     except OSError as failed:
         why = "failed-background-not-written"
         raise Skip(why, str(failed)) from None
@@ -362,12 +381,15 @@ def resume_argv(target: Target, prompt: str) -> list[str]:
             return ["claude", *claude_flags(old), "--resume", COORDINATOR, CHIEF_PROMPT]
         return ["claude", *claude_flags(old), "--resume", str(term.session), prompt]
     if term.kind is Kind.codex:
-        return ["codex-hc", "resume", str(term.session), *codex_flags(old)]
+        # codex resume <id> [PROMPT] (codex-rs/cli/src/main.rs resume_with_session_id_accepts_prompt_positional at
+        # rust-v0.169.0).
+        return ["codex-hc", "resume", str(term.session), *codex_flags(old), prompt]
     # OpenCode under the same fnox proxy launcher prefix it ran with, the launcher by name: its mise install
     # path changes with each fnox upgrade.
     cut = next((i for i, word in enumerate(old) if Path(word).name == "opencode"), 0)
     prefix = [Path(old[0]).name, *old[1:cut]] if cut else []
-    return [*prefix, "opencode", "--standalone", "-s", str(term.session)]
+    # --prompt: the session route submits it once the session loads (packages/tui/src/routes/session/index.tsx).
+    return [*prefix, "opencode", "--standalone", "-s", str(term.session), "--prompt", prompt]
 
 
 # What a Codex session ran with that its resume keeps (codex-rs/utils/cli/src/shared_options.rs and
@@ -605,8 +627,9 @@ def verify(
     address: str | None = None,
 ) -> SessionResult:
     """Back and current: running in its terminal (address: the one start resumed it in, else the graph's), current,
-    its resume prompt taken, no trust or other dialog, in its folder, and its worktree's git status as roll:stop
-    recorded it (before; None when it recorded none)."""
+    a Claude session's resume prompt in its transcript (Codex and OpenCode are not checked), no trust or other
+    dialog, in its folder, and its worktree's git status as roll:stop recorded it (before; None when it recorded
+    none)."""
     term = target[2]
     address = address or term.address
     pid = running(address, key_of(target), term.kind)

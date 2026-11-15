@@ -60,6 +60,8 @@ class World:
         # Every XDG folder follows the scratch HOME (state, config, data, cache, runtime).
         for name in [name for name in os.environ if name.startswith("XDG_")]:
             monkeypatch.delenv(name)
+        # So is mise's data folder: a runner's MISE_DATA_DIR would show its installs' links to every roll.
+        monkeypatch.delenv("MISE_DATA_DIR", raising=False)
         self.script: dict[str, Answer] = {}
         self.started: list[subprocess.Popen[bytes]] = []
         self.wiki = root / "wiki"

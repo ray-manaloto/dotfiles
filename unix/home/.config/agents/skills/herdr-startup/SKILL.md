@@ -30,9 +30,10 @@ without `--apply` each prints its plan and changes nothing.
    `herdr-app do tab.close --id <tab> --confirmed true` and `tab.new` in the right folder with the same resume argv
    (`hc send` cannot run `/exit`: it arrives as chat).
 4. **Verify each agent.** `mise run roll:verify --prompt reboot` (with the same `--sessions` as the start): every
-   session the start resumed from the saved graph runs, is current, got its resume prompt, waits on
-   no trust or other dialog (Codex "Trust this folder": ask the owner first) and is in its folder. Re-send the prompt with
-   `hc send` where it did not arrive. Codex reviewer panes: re-pin with `repotools pane-pin` if the session
+   session the start resumed from the saved graph runs, is current, waits on no trust or other dialog (Codex "Trust
+   this folder": ask the owner first) and is in its folder; a Claude session also got its resume prompt (read from
+   its transcript). Verify does not check the prompt for Codex and OpenCode: `hc read <t>` each one. Re-send the prompt
+   with `hc send` where it did not arrive. Codex reviewer panes: re-pin with `repotools pane-pin` if the session
    id changed.
 5. **Restore your own duties:** re-create the 30-minute check-in cron from
    `wiki/playbooks/restart-chief-of-staff.md`, confirm the mods loaded (side-notes log for your session), and
@@ -50,10 +51,12 @@ session one at a time without stopping work. Steps (each also a task of its own:
 `roll:review`, `roll:stop`, `roll:start`, `roll:verify`):
 
 1. snapshot: graph.json and the installed versions, into the run folder `~/.local/state/dotfiles/roll/<run-id>/`.
-2. update: `update:claude`, `update:codex`, `update:agy` and `agents:update` (with `--skip opencode` while an
-   excluded OpenCode session runs).
+2. update: `update:claude`, `update:codex`, `update:agy` and `agents:update`; `agents:update` (OpenCode) is left out
+   while an OpenCode session the roll does not restart runs.
 3. review: the changed items' release notes, one budget-capped Claude triage, written to `<run-id>/review.md`. A
-   BREAKING item pauses `roll:all` before any session stops; read review.md, then rerun with `--accept-review`.
+   BREAKING item pauses `roll:all` before any session stops; read review.md, then rerun with `--accept-review`: the paused run goes on from
+   `roll:stop` with the graph its snapshot took (tabs opened since are not in it), and a rerun without it stays
+   paused. To drop a paused run instead, delete `~/.local/state/dotfiles/roll/paused`; the next `roll:all` starts anew.
 4. Per session: stop (left running when already current; foreground and busy gates, the stop-point handshake: the tab writes its Resume block and ends with
    READY-TO-RESTART or BUSY-KEEP-ME, both gates again, `/exit`), start (same tab, same session id), verify (also that
    the worktree's git status is as stop recorded it). Busy and
