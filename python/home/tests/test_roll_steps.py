@@ -17,7 +17,7 @@ from hometools.cli import main
 from hometools.models import Background, Graph, GraphSpace, GraphTab, GraphTerminal, Kind, RollStep
 from hometools.roll import review, session
 
-from .roll_world import EMPTY, World, after, hometools, info, layout, lines, out, replier, terminal
+from .roll_world import EMPTY, MARK_LINE, World, after, box, hometools, info, layout, lines, out, replier, terminal
 
 SID = f"sid-{uuid.uuid4().hex}"
 UPDATES = [("mise", "run", task) for task in roll.UPDATES]
@@ -289,6 +289,42 @@ def test_a_session_rolls_back_in_place_while_the_rest_stay_untouched(
         ]
     )
     assert (world.wiki / "sessions/graph.json").exists()
+
+
+def test_a_stop_that_reads_no_box_anywhere_warns(world: World, capfd: pytest.CaptureFixture[str]) -> None:
+    """A Claude Code update that drew the prompt box differently skips every tab: say so loudly, in the log too.
+    The tab's name goes out escaped, so a name holding terminal controls can't rewrite the screen or the log."""
+    scene(world)
+    hostile = "work\x1b[2Jer"
+    world.answer(
+        {
+            ("hc", "read", "t3"): {"stdout": "a screen with no prompt box\n"},
+            ("hc", "ls", "--json"): out({"terminals": [terminal("t3", f"proj / {hostile}")]}),
+            ("herdr-app", "ls"): out(layout(("proj", str(world.root / "proj"), [("tb3", hostile, ["t3"])]))),
+        }
+    )
+    code, got, err = hometools(capfd, "stop", "--apply", "--sessions", "proj", *FAST)
+    assert (code, [r["result"] for r in lines(got)]) == (0, ["skipped-draft"])
+    warning = next(line for line in err.splitlines() if line.startswith("roll:stop WARNING"))
+    assert '(["proj / work\\u001b[2Jer"])' in warning
+    assert "\x1b" not in err
+    assert warning in Path(world.runs()[-1].log).read_text().splitlines()
+
+
+@pytest.mark.parametrize(
+    ("screen", "result"),
+    [(EMPTY, "stopped"), (box(MARK_LINE + "a half-written note"), "skipped-draft")],
+)
+def test_a_stop_that_reads_a_box_does_not_warn(
+    world: World, capfd: pytest.CaptureFixture[str], screen: str, result: str
+) -> None:
+    """A tab that was stopped, or skipped for a real draft, had a box the step could read: the layout is fine."""
+    scene(world)
+    world.answer({("hc", "read", "t3"): {"stdout": screen}})
+    code, got, err = hometools(capfd, "stop", "--apply", "--sessions", "proj", *FAST)
+    assert (code, [r["result"] for r in lines(got)]) == (0, [result])
+    assert "WARNING" not in err
+    assert "WARNING" not in Path(world.runs()[-1].log).read_text()
 
 
 def test_steps_run_alone_continue_the_run_they_follow(world: World, capfd: pytest.CaptureFixture[str]) -> None:

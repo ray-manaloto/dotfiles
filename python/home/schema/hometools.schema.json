@@ -295,7 +295,8 @@
         "kind": {"$ref": "#/$defs/Kind"},
         "session": {"type": ["string", "null"], "description": "The session id."},
         "result": {"type": "string", "description": "One word: planned, stopped, started, ok, untouched, or skipped-<why> or failed-<why>."},
-        "notes": {"type": "array", "items": {"type": "string"}, "description": "Details: the planned command, jobs found, the check that failed."}
+        "notes": {"type": "array", "items": {"type": "string"}, "description": "Details: the planned command, jobs found, the check that failed."},
+        "box": {"type": ["boolean", "null"], "default": null, "description": "roll:stop on a Claude tab: whether it read the tab's prompt box; null when the step never looked."}
       }
     },
     "Timing": {
