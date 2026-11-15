@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.92"
+  }
+}

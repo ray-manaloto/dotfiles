@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "@teng-lin/agent-fetch": "0.1.6"
+  }
+}

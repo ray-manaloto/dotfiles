@@ -1,0 +1,7 @@
+{
+  "name": "mise-npm-install",
+  "private": true,
+  "dependencies": {
+    "@ralph-orchestrator/ralph-cli": "2.10.1"
+  }
+}

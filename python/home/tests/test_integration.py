@@ -1,11 +1,11 @@
 """The integration tier: this checkout's toolchain:verify through real mise, uv and the toolchain on this Mac."""
 
 # The in-process tests run the real tools on a scratch copy of the toolchain (tests/scratch_toolchain.py); this tier
-# runs them on the install itself, with this Mac's own conf.d and mise.lock. It only reads: verify changes nothing,
-# task history is off for it, and bootstrap:toolchain stays out because it installs packages. A copy of
-# ~/.config/mise links each entry back, except config.toml and tasks, which link to this checkout, as `mise run
-# shell:apply` deploys them; MISE_CONFIG_DIR moves the whole global config folder there, conf.d and mise.lock
-# included.
+# runs them on the install itself, with this Mac's own conf.d. It only reads: verify changes nothing, task history
+# is off for it, and bootstrap:toolchain stays out because it installs packages. A copy of ~/.config/mise links each
+# entry back, except the links deployed from a checkout (config.toml, tasks, mise.lock, locks, miserc.toml), which
+# link to this checkout: a config checked against another checkout's lock resolves tools to installs that are not
+# there. MISE_CONFIG_DIR moves the whole global config folder there, conf.d included.
 
 # This is the check that the config's [vars] versions are the ones installed: verify compares them exactly. The
 # in-process tests take theirs from the install, so only this tier fails a [vars] bump whose version is not
@@ -52,7 +52,7 @@ def config_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "mise"
     folder.mkdir()
     for entry in (Path.home() / ".config/mise").iterdir():
-        target = DEPLOYED / entry.name if entry.name in {"config.toml", "tasks"} else entry
+        target = DEPLOYED / entry.name if entry.is_symlink() and (DEPLOYED / entry.name).exists() else entry
         (folder / entry.name).symlink_to(target)
     # mise records each config it reads under $MISE_STATE_DIR/tracked-configs, so the scratch config would land in
     # ~/.local/state/mise. A copy of the state folder links each entry back, as above, except tracked-configs: verify
