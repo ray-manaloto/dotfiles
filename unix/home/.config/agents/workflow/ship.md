@@ -40,7 +40,8 @@ the approval and the commit belong to the coordinator or the owner.
    includes the reviewer's leak check. A clean scan is not a leak check.
 4. The reviewer pane approves the pull-request fingerprint of the exact title and body; only then
    does the repository's create command open it. Edits and comments go through the same approval.
-5. Watch the checks. The owner merges on GitHub.
+5. The owner merges on GitHub. The gate is the local hk hooks, pre-push included, and the reviewer's
+   approval. Hosted checks from free apps are advisory, and no paid CI is added.
 
 ## Close-out
 
