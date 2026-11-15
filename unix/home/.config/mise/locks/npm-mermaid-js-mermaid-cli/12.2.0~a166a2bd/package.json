@@ -1,6 +1,11 @@
 {
   "name": "mise-npm-install",
   "private": true,
+  "aube": {
+    "allowBuilds": {
+      "puppeteer": true
+    }
+  },
   "dependencies": {
     "@mermaid-js/mermaid-cli": "12.2.0"
   }

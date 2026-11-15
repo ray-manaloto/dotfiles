@@ -1507,11 +1507,12 @@ specifiers = ["1.17.0"]
 
 [[tools."npm:@mermaid-js/mermaid-cli"]]
 version = "12.2.0"
-aube = { path = "locks/npm-mermaid-js-mermaid-cli/12.2.0~4d3a2c1e", digest = "sha256:ef28083c5ee0fb86e1685872edfbe9783a77b63d4b1668ede25329954ab87f41" }
+aube = { path = "locks/npm-mermaid-js-mermaid-cli/12.2.0~a166a2bd", digest = "sha256:ef28083c5ee0fb86e1685872edfbe9783a77b63d4b1668ede25329954ab87f41" }
 backend = "npm:@mermaid-js/mermaid-cli"
 specifiers = ["12.2.0"]
 
 [tools."npm:@mermaid-js/mermaid-cli".options]
+allow_builds = '["puppeteer"]'
 trust_policy_excludes = '["chromium-bidi@157.0.8090-0"]'
 
 [[tools."npm:@modelcontextprotocol/inspector"]]
@@ -1600,9 +1601,12 @@ specifiers = ["5.4.3"]
 
 [[tools."npm:openwiki"]]
 version = "0.9.0"
-aube = { path = "locks/npm-openwiki/0.9.0", digest = "sha256:eaa0ccacc021b89461cf6397b56ddb9c9f7b1b9fcd3243cfff51fc1ffeba295c" }
+aube = { path = "locks/npm-openwiki/0.9.0~db21a3e0", digest = "sha256:eaa0ccacc021b89461cf6397b56ddb9c9f7b1b9fcd3243cfff51fc1ffeba295c" }
 backend = "npm:openwiki"
 specifiers = ["0.9.0"]
+
+[tools."npm:openwiki".options]
+allow_builds = '["better-sqlite3"]'
 
 [[tools."npm:portless"]]
 version = "0.17.0"

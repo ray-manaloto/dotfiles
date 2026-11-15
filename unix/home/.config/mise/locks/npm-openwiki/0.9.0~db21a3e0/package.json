@@ -1,6 +1,11 @@
 {
   "name": "mise-npm-install",
   "private": true,
+  "aube": {
+    "allowBuilds": {
+      "better-sqlite3": true
+    }
+  },
   "dependencies": {
     "openwiki": "0.9.0"
   }
