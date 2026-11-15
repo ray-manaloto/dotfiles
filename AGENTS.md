@@ -58,11 +58,14 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
   text. This is a rule, not a lock: `.claude/settings.json` makes Claude ask the owner before
   `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
-  publish anything. `gh pr merge` is not on that list: the owner's sentence "merge #N" is the OK.
-  Merge once with `gh pr merge N --merge --match-head-commit <sha> --author-email
-  1428022+sortakool@users.noreply.github.com` (the merging account's noreply address, never a personal
-  email), only when the head is the reviewer-approved commit and its local hk hooks passed; otherwise
-  stop and tell the owner.
+  publish anything. `gh pr merge` is not on that list: the lead merges its own pull request (owner
+  ruling, 2026-11-15) with `mise run //repo:pr-merge <number> <title> <body file>` from the PR's clean
+  checkout. It refuses unless HEAD is the PR head, the reviewer's last answer approves the PR text at
+  that HEAD and `hk check --all` passes; then it runs `gh pr merge N --merge --match-head-commit
+  <HEAD> --author-email 1428022+sortakool@users.noreply.github.com` (the merging account's noreply
+  address, never a personal email) and checks the merge commit's author. If it refuses, fix the cause.
+  It runs the repotools that `mise run //repo:tools-install` installed from `main`, never the branch's
+  own code; rerun that install on `main` after a merge that changes repotools.
   Hosted checks from free apps are advisory, and no paid CI is added.
 - This repo is public and the approval is its leak check. Before approving, the reviewer reads the
   whole staged diff and the commit message, or the PR title and body, for content from a private
@@ -115,7 +118,7 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents
   root the pushed files reach, e.g. `mise run //visualplan:check`. Run that root's `check` before committing a
   change under `python/<package>/` or `swift/`; `hk check --all && mise run test` runs everything.
 - Shipping: a branch and a pull request into `main`, opened with `mise run //repo:pr-create`
-  (it wraps `repotools pr-create`); the owner merges on GitHub, and local `main` only fast-forwards
+  (it wraps `repotools pr-create`); the lead merges it with `mise run //repo:pr-merge`, and local `main` only fast-forwards
   to `origin/main`.
 - Research: notes go in `docs/research/`.
 - Review approval: the pinned reviewer pane approves each commit (`repotools pane-pin`,

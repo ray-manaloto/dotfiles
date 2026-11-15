@@ -40,10 +40,12 @@ the approval and the commit belong to the coordinator or the owner.
    includes the reviewer's leak check. A clean scan is not a leak check.
 4. The reviewer pane approves the pull-request fingerprint of the exact title and body; only then
    does the repository's create command open it. Edits and comments go through the same approval.
-5. The owner merges on GitHub. The gate is the local hk hooks, pre-push included, and the reviewer's
-   approval. Hosted checks from free apps are advisory, and no paid CI is added. An agent that runs the
-   merge on the owner's "merge #N" passes `--author-email 1428022+sortakool@users.noreply.github.com`
-   to `gh pr merge`, so the merge commit carries the account's noreply address, not a personal email.
+5. The lead merges its own pull request (owner ruling, 2026-11-15) once local `hk check --all` passes on
+   the exact head and the reviewer approved that head and the pull request's text. Hosted checks from
+   free apps are advisory, and no paid CI is added. The merge is `gh pr merge N --merge
+   --match-head-commit <sha> --author-email 1428022+sortakool@users.noreply.github.com`, so the merge
+   commit carries the account's noreply address, not a personal email. A repository can check these
+   gates in one task: dotfiles has `mise run //repo:pr-merge`.
 
 ## Close-out
 

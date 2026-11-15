@@ -15,6 +15,7 @@
         "pr-fingerprint",
         "pr-approved",
         "pr-create",
+        "pr-merge",
         "zero-bash",
         "review-python",
         "review-python-approved",
@@ -239,6 +240,28 @@
       "required": ["title", "body_file"],
       "additionalProperties": false
     },
+    "PrMerge": {
+      "description": "A pull request to merge once its head is this clean HEAD, the reviewer approved it and hk check --all passes.",
+      "type": "object",
+      "properties": {
+        "number": { "type": "integer", "minimum": 1, "description": "The pull request number" },
+        "title": { "type": "string", "pattern": "^[^\\n]+$", "description": "The title the reviewer approved, one line" },
+        "body_file": { "type": "string", "description": "The file holding the body the reviewer approved" }
+      },
+      "required": ["number", "title", "body_file"],
+      "additionalProperties": false
+    },
+    "Merged": {
+      "description": "What pr-merge printed after the merge: the pull request, its merge commit and that commit's author email.",
+      "type": "object",
+      "properties": {
+        "number": { "type": "integer", "description": "The pull request number" },
+        "merge_commit": { "type": "string", "description": "The merge commit GitHub made" },
+        "author_email": { "type": "string", "description": "The merge commit's author email" }
+      },
+      "required": ["number", "merge_commit", "author_email"],
+      "additionalProperties": false
+    },
     "PanePin": {
       "description": "Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.",
       "type": "object",
@@ -293,6 +316,7 @@
       "anyOf": [
         { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
+        { "$ref": "#/$defs/PrMerge" },
         { "$ref": "#/$defs/PanePin" },
         { "$ref": "#/$defs/ZeroBash" },
         { "$ref": "#/$defs/ReviewPython" },
@@ -469,6 +493,8 @@
     "command": { "$ref": "#/$defs/Command" },
     "commit_text": { "$ref": "#/$defs/CommitText" },
     "pr_text": { "$ref": "#/$defs/PrText" },
+    "pr_merge": { "$ref": "#/$defs/PrMerge" },
+    "merged": { "$ref": "#/$defs/Merged" },
     "pane_pin": { "$ref": "#/$defs/PanePin" },
     "zero_bash": { "$ref": "#/$defs/ZeroBash" },
     "review_python": { "$ref": "#/$defs/ReviewPython" },
