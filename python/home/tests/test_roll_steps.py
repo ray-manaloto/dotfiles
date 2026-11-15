@@ -17,7 +17,7 @@ from hometools.cli import main
 from hometools.models import Background, Graph, GraphSpace, GraphTab, GraphTerminal, Kind, RollStep
 from hometools.roll import review, session
 
-from .roll_world import World, after, hometools, info, layout, lines, out, replier, terminal
+from .roll_world import EMPTY, World, after, hometools, info, layout, lines, out, replier, terminal
 
 SID = f"sid-{uuid.uuid4().hex}"
 UPDATES = [("mise", "run", task) for task in roll.UPDATES]
@@ -102,8 +102,8 @@ def scene(world: World, chief_state: str = "idle") -> tuple[int, int]:
                 (typed, foreground(world)),
             ),
             ("hc", "get", "t9", "--json"): out(info("t9", None, ["zsh"], proj, where="proj / roll")),
-            ("hc", "read", "t1"): {"stdout": ""},
-            ("hc", "read", "t3"): {"stdout": ""},
+            ("hc", "read", "t1"): {"stdout": EMPTY},
+            ("hc", "read", "t3"): {"stdout": EMPTY},
             EXIT: {},
             ASK: replier(world, path, "READY-TO-RESTART"),
             typed: resumed(world),

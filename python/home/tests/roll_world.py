@@ -36,6 +36,23 @@ time.sleep(120)
 type Answer = dict[str, object] | list[dict[str, object]]
 
 
+RULE = "\N{BOX DRAWINGS LIGHT HORIZONTAL}" * 40
+MARK_LINE = "\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT}\N{NO-BREAK SPACE}"
+
+
+def box(*inside: str) -> str:
+    """A Claude screen: a past prompt in the scrollback, then the prompt box between two rules, then the footer."""
+    head = [
+        "\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT} an earlier prompt",
+        "done.",
+        f"{RULE} worker \N{BOX DRAWINGS LIGHT HORIZONTAL}",
+    ]
+    return "\n".join([*head, *inside, RULE, "  ? for shortcuts"]) + "\n"
+
+
+EMPTY = box(MARK_LINE)
+
+
 def out(value: object) -> dict[str, object]:
     """A stand-in answer that prints value as JSON."""
     return {"stdout": json.dumps(value)}

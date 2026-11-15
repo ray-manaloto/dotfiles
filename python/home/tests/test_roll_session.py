@@ -15,7 +15,7 @@ from hometools.models import Background, GraphSpace, GraphTab, GraphTerminal, Ki
 from hometools.roll import live, session
 from hometools.roll.session import HANDSHAKE, Target, Timing
 
-from .roll_world import World, after, info, layout, out, replier, terminal
+from .roll_world import EMPTY, MARK_LINE, RULE, World, after, box, info, layout, out, replier, terminal
 
 # Unique to this test process: the steps find a session's process by its id among every process on the Mac.
 SID = f"sid-{uuid.uuid4().hex}"
@@ -64,7 +64,7 @@ def scene(world: World, pid: int, program: str = "claude", **answers: dict[str, 
             ("hc", "ls", "--json"): out({"terminals": [terminal("t3", "proj / worker")]}),
             ("herdr-app", "ls"): out(layout(("proj", str(folder), [("tb3", "worker", ["t3"])]))),
             GET: after(out(info("t3", pid, [program], folder)), (EXIT, out(info("t3", None, ["-zsh"], folder)))),
-            READ: {"stdout": ""},
+            READ: {"stdout": EMPTY},
             EXIT: {},
         }
         | {tuple(key.split()): value for key, value in answers.items()}
@@ -162,7 +162,7 @@ def test_an_opencode_session_under_fnox_is_not_its_own_job(world: World) -> None
 def test_a_ready_session_exits_and_its_background_is_kept(world: World) -> None:
     scene(world, world.spawn("claude"))
     ready(world)
-    world.answer({READ: {"stdout": "esc to interrupt  3 in background"}})
+    world.answer({READ: {"stdout": EMPTY + "esc to interrupt  3 in background"}})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
     kept = world.root / RUN / f"background/proj--worker--{SID}.json"
     assert (result.result, result.notes) == ("stopped", [f"background: {kept}"])
@@ -355,7 +355,7 @@ def test_scheduled_tasks_alone_at_exit_are_confirmed(world: World) -> None:
     folder = world.root / "proj"
     world.answer(
         {
-            READ: after({"stdout": ""}, (EXIT, {"stdout": DIALOG.format(items="scheduled task: check-in")})),
+            READ: after({"stdout": EMPTY}, (EXIT, {"stdout": DIALOG.format(items="scheduled task: check-in")})),
             GET: after(out(info("t3", pid, ["claude"], folder)), (ENTER, out(info("t3", None, ["zsh"], folder)))),
             ENTER: {},
         }
@@ -370,7 +370,7 @@ def test_other_work_at_exit_means_stay(world: World) -> None:
     pid = world.spawn("claude")
     scene(world, pid)
     ready(world)
-    world.answer({READ: after({"stdout": ""}, (EXIT, {"stdout": DIALOG.format(items="agent: a review")})), ESC: {}})
+    world.answer({READ: after({"stdout": EMPTY}, (EXIT, {"stdout": DIALOG.format(items="agent: a review")})), ESC: {}})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
     assert (result.result, result.notes) == ("skipped-background-work-at-exit", ["agent: a review"])
     assert ESC in world.calls()
@@ -382,7 +382,12 @@ def test_an_exit_that_never_lands_fails(world: World) -> None:
     ready(world)
     world.answer({GET: out(info("t3", pid, ["claude"], world.root))})
     assert session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK).result == "failed-exit-timeout"
-    world.answer({READ: after({"stdout": ""}, (EXIT, {"stdout": DIALOG.format(items="scheduled task: x")})), ENTER: {}})
+    world.answer(
+        {
+            READ: after({"stdout": EMPTY}, (EXIT, {"stdout": EMPTY + DIALOG.format(items="scheduled task: x")})),
+            ENTER: {},
+        }
+    )
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
     assert (result.result, result.notes) == ("failed-exit-timeout", ["scheduled task: x"])
 
@@ -468,6 +473,70 @@ def test_only_a_user_turn_after_the_send_that_carries_the_token_counts_as_asked(
     asked = {"type": "user", "timestamp": at(3), "message": {"content": [{"type": "text", "text": f"stop {TOKEN}"}]}}
     path.write_text(path.read_text() + json.dumps(asked) + "\n")
     assert session.asked(path, since, TOKEN)
+
+
+def test_only_text_inside_the_prompt_box_is_a_draft() -> None:
+    """The empty box (mark and no-break space) and the past prompts above it are not a draft; a screen with no box
+    has none."""
+    assert session.draft(box(MARK_LINE)) == ""
+    assert session.draft(box(MARK_LINE + "fix the", "  tests please")) == "fix the tests please"
+    assert (
+        session.draft(box(MARK_LINE + "a draft that ends in a line of", RULE))
+        == f"a draft that ends in a line of {RULE}"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "no box here\n" + RULE + "\n",
+        "the middle of a long draft\n" + RULE + "\n",
+        box(MARK_LINE + "explain this terminal excerpt:", RULE, MARK_LINE),
+    ],
+)
+def test_a_screen_with_no_prompt_box_is_not_an_empty_box(text: str) -> None:
+    """A failed read, a draft whose start scrolled out of the screen, or one holding a pasted box, is unknown, never
+    empty."""
+    assert session.draft(text) is None
+
+
+def test_a_claude_tab_with_a_draft_in_its_box_is_skipped_unasked(world: World) -> None:
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({READ: {"stdout": box(MARK_LINE + "half-written note")}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-draft", ["17 characters in the prompt box"])
+    assert ASK not in world.calls()
+
+
+def test_a_claude_tab_whose_box_cannot_be_read_is_skipped_unasked(world: World) -> None:
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({READ: {"stdout": ""}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-draft", ["no prompt box on screen"])
+    assert ASK not in world.calls()
+
+
+def test_a_long_draft_holding_a_pasted_box_is_read_whole(world: World) -> None:
+    """Cut to the screen tail, the draft's own top falls off and the pasted box reads as empty."""
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    long = box(MARK_LINE + "x" * (session.SCREEN + 100), RULE, MARK_LINE)
+    assert session.draft(long[-session.SCREEN :]) == ""
+    world.answer({READ: {"stdout": long}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-draft", ["no prompt box on screen"])
+    assert ASK not in world.calls()
+
+
+def test_a_claude_tab_with_an_empty_box_is_asked(world: World) -> None:
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({ASK: {}})
+    session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert ASK in world.calls()
 
 
 def test_a_handshake_that_never_starts_a_turn_is_not_delivered(world: World) -> None:
