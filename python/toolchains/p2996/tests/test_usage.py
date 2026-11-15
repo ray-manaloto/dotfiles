@@ -22,7 +22,7 @@ from .conftest import Upstream, git
 TASKS = tomllib.loads((config.PROJECT / "mise.toml").read_text())["tasks"]
 
 # A value the model accepts for a flag that has a pattern; every other flag takes sample-<name>.
-SAMPLES = {"commit": "0" * 40}
+SAMPLES = {"commit": "0" * 40, "jobs": "3"}
 
 # uv run --locked p2996 <argv>: drop "run --locked", then print the argv p2996 would get.
 SHIMS = 'uv() { shift 2; "$@"; }; p2996() { printf "%s\\0" "$@"; }; '

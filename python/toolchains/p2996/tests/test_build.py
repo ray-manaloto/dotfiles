@@ -55,6 +55,15 @@ async def test_the_job_count_reaches_the_compile_pool(cfg: Config, recipe: Recip
     assert f"LLVM_PARALLEL_COMPILE_JOBS:STRING={cfg.jobs}\n" in cache
 
 
+async def test_jobs_overrides_the_job_count_for_one_run(
+    cfg: Config, recipe: Recipe, upstream: Upstream, patches: Path, logs: pytest.CaptureFixture[str]
+) -> None:
+    await recipe.source(git(upstream.path, "rev-parse", "HEAD"))
+    await build.run(cfg, Build(dry_run=True, jobs=cfg.jobs + 2), patches)
+    [dry] = events(logs)[0]
+    assert dry["compile"].endswith(f" --parallel {cfg.jobs + 2}")
+
+
 async def test_zstd_is_linked_statically_from_the_managed_tool(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
     await recipe.ship(upstream.release("v1"))
     cache = (config.build_tree(cfg) / "CMakeCache.txt").read_text()

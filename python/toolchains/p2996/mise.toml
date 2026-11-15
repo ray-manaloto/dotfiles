@@ -41,8 +41,9 @@ usage = '''
 flag "--commit <sha>" help="Build this commit instead of the newest on P2996_BRANCH"
 flag "--dry-run" help="Print the cmake commands only"
 flag "--force" help="Recompile past sccache even when the id is installed; install then replaces it"
+flag "--jobs <n>" help="Compile jobs for this run instead of P2996_JOBS, e.g. to keep the machine's load down"
 '''
-run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${usage_dry_run:+--dry-run} ${usage_force:+--force}'
+run = 'uv run --locked p2996 build ${usage_commit:+--commit "$usage_commit"} ${usage_dry_run:+--dry-run} ${usage_force:+--force} ${usage_jobs:+--jobs "$usage_jobs"}'
 
 [tasks.install]
 description = "Install the last successful build, verify it, then make it active in one rename"
