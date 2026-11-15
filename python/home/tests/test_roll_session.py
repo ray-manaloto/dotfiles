@@ -105,7 +105,7 @@ def test_a_dry_run_plans_an_idle_session(world: World) -> None:
 def test_a_session_already_current_keeps_running(world: World) -> None:
     scene(world, world.spawn("claude"))
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, None)
-    assert result.result == "skipped-already-current"
+    assert (result.result, result.box) == ("skipped-already-current", None)
     assert ASK not in world.calls()
 
 
@@ -238,7 +238,8 @@ def test_a_foreground_that_changes_before_exit_is_left_alone(world: World, reads
     shell = out(info("t3", None, ["vim"], folder))
     world.answer({GET: [out(info("t3", pid, ["claude"], folder))] * (reads - 1) + [shell]})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
-    assert result.result == "skipped-foreground-changed"
+    # The box was read before the foreground changed: it counts as a readable box.
+    assert (result.result, result.box) == ("skipped-foreground-changed", True)
     assert EXIT not in world.calls()
 
 
@@ -506,7 +507,7 @@ def test_a_claude_tab_with_a_draft_in_its_box_is_skipped_unasked(world: World) -
     world.transcript(SID)
     world.answer({READ: {"stdout": box(MARK_LINE + "half-written note")}})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
-    assert (result.result, result.notes) == ("skipped-draft", ["17 characters in the prompt box"])
+    assert (result.result, result.notes, result.box) == ("skipped-draft", ["17 characters in the prompt box"], True)
     assert ASK not in world.calls()
 
 
@@ -515,7 +516,7 @@ def test_a_claude_tab_whose_box_cannot_be_read_is_skipped_unasked(world: World) 
     world.transcript(SID)
     world.answer({READ: {"stdout": ""}})
     result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
-    assert (result.result, result.notes) == ("skipped-draft", ["no prompt box on screen"])
+    assert (result.result, result.notes, result.box) == ("skipped-draft", ["no prompt box on screen"], False)
     assert ASK not in world.calls()
 
 

@@ -103,12 +103,22 @@ class Step:
             with self.log.open("a") as log:
                 log.write(f"{line}\n")
 
+    def warn(self, line: str) -> None:
+        """Only an applied stop reads prompt boxes (a dry run plans), so the step folder and its log exist."""
+        sys.stderr.write(f"{line}\n")
+        with self.log.open("a") as log:
+            log.write(f"{line}\n")
+
     def add(self, result: SessionResult) -> SessionResult:
         self.results.append(result)
         self.out(result.model_dump_json())
         return result
 
     def end(self, rc: int) -> int:
+        if self.step is RollStep.stop and (lost := session.no_box_anywhere(self.results)):
+            self.warn(f"roll:stop WARNING: no Claude tab showed a prompt box this step can read, so none was restarted "
+                      f"({json.dumps(lost)}). Check whether Claude Code changed how it draws the prompt box; roll:stop "
+                      "reads it in hometools/roll/session.py draft().")  # fmt: skip
         if self.args.apply:
             line = RollRun(run=self.args.run, step=self.step, args=self.argv, start=self.start, end=now(), rc=rc,
                            log=str(self.log), sessions=self.results)  # fmt: skip

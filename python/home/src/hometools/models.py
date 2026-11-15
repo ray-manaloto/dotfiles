@@ -684,6 +684,10 @@ class SessionResult(BaseModel):
     """
     Details: the planned command, jobs found, the check that failed.
     """
+    box: bool | None = None
+    """
+    roll:stop on a Claude tab: whether it read the tab's prompt box; null when the step never looked.
+    """
 
 
 class Timing(BaseModel):

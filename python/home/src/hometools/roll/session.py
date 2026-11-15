@@ -110,12 +110,23 @@ def where(target: Target) -> str:
     return f"{target[0].name} / {target[1].name}"
 
 
-def outcome(target: Target, result: str, notes: list[str], address: str | None = None) -> SessionResult:
+NO_BOX = "no prompt box on screen"
+
+
+def no_box_anywhere(results: list[SessionResult]) -> list[str]:
+    """The Claude tabs whose box could not be read, when no Claude tab's box was: a Claude Code update that drew the
+    prompt box differently would skip every tab this way, so a roll would quietly load nothing."""
+    return [] if any(r.box for r in results) else [r.where for r in results if r.box is False]
+
+
+def outcome(
+    target: Target, result: str, notes: list[str], address: str | None = None, *, box: bool | None = None
+) -> SessionResult:
     """The step's line for the session; address is the terminal it now runs in when start opened a new tab."""
     term = target[2]
     return SessionResult(
         where=where(target), terminal=address or term.address, kind=term.kind, session=term.session, result=result,
-        notes=notes,
+        notes=notes, box=box,
     )  # fmt: skip
 
 
@@ -367,6 +378,7 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
     A session already current (mark: when the plugin code set last changed) is left running. The foreground and the
     session are read fresh before the handshake and again before /exit."""
     space, tab, term = target
+    box: bool | None = None
     try:
         need(term.address != live.me, "skipped-self", "the tab running this step")
         pid = current(live, term, f"skipped-foreground-not-{term.kind}")
@@ -387,8 +399,8 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         # hc send types into the box: text someone left there would be sent with the handshake (t2fw, 2026-11-15).
         # The whole screen, not screen()'s tail: a cut could drop the box's top and leave a pasted one.
         typed = draft(call("hc", "read", term.address) or "") if term.kind is Kind.claude else ""
-        need(typed == "", "skipped-draft",
-             "no prompt box on screen" if typed is None else f"{len(typed)} characters in the prompt box")  # fmt: skip
+        box = typed is not None if term.kind is Kind.claude else None
+        need(typed == "", "skipped-draft", NO_BOX if typed is None else f"{len(typed)} characters in the prompt box")
         heard = handshake(term, timing, attempt(keep, term))
         state, kind, argv = status(term.address)
         need(kind not in WAITING, "skipped-blocked", f"answer {heard}")
@@ -404,14 +416,15 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         write(path, record)
         items = exit_session(term, timing)
     except Skip as skip:
-        return outcome(target, skip.result, skip.notes)
+        return outcome(target, skip.result, skip.notes, box=box)
     # The session has exited: it stays reported stopped, so roll:start resumes it, even when this last update fails;
     # the receipt written before /exit is left whole.
     try:
         write(path, record.model_copy(update={"exit_dialog": items}))
     except Skip as skip:
-        return outcome(target, "stopped", [f"background: {path}", f"receipt not updated with the exit dialog: {skip}"])
-    return outcome(target, "stopped", [f"background: {path}"])
+        why = f"receipt not updated with the exit dialog: {skip}"
+        return outcome(target, "stopped", [f"background: {path}", why], box=box)
+    return outcome(target, "stopped", [f"background: {path}"], box=box)
 
 
 def write(path: Path, record: Background) -> None:
