@@ -213,6 +213,9 @@ hooks {
                 exclusive = true
                 check = "mise run privacy:scan --outgoing"
             }
+            // The suites run real git in scratch repositories. If a hook variable ever reaches them again (a linked
+            // worktree gives pre-push GIT_DIR, #694), the core.worktree they write fails the push, not a later commit.
+            ["no-core-worktree"] = (fast["no-core-worktree"]) { exclusive = true }
         }
     }
     // AGENTS.md main guard: a fast-forward of main to a new guard source installs it (//repo:main-guard-arm).
