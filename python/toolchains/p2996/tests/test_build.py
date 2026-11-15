@@ -84,6 +84,7 @@ async def test_build_configures_with_the_real_bootstrap_cache_and_compiles(
     assert f"CMAKE_INSTALL_PREFIX:PATH={cfg.root / 'current'}\n" in cache
     assert "LLDB_USE_SYSTEM_DEBUGSERVER:BOOL=OFF\n" in cache
     assert f"LLDB_CODESIGN_IDENTITY:STRING={cfg.codesign}\n" in cache
+    assert "LLVM_INSTALL_UTILS:BOOL=ON\n" in cache
     assert (built / "tiny").is_file()
 
 
