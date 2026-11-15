@@ -1,0 +1,20 @@
+{
+  "name": "you-should-know-forward",
+  "version": "0.4.1",
+  "description": "Pass each \"You should know\" note to the session's own agent once, marked as a separate model's claim to verify",
+  "license": "MIT",
+  "userConfig": {
+    "wakeIdle": {
+      "type": "boolean",
+      "title": "Wake an idle session",
+      "description": "When a note arrives while the session is idle, start a turn with it (at least 2 minutes apart, at most 1 in a row without a prompt you typed, at most 10 per session per day; side-notes has the same limits; each one is a billed turn). Off: the note waits for your next prompt.",
+      "default": false
+    },
+    "logDir": {
+      "type": "string",
+      "title": "Audit log folder",
+      "description": "One JSON line per note event (shown, delivered, verdict, owner chat), one file per session, so missed or doubly delivered notes can be counted. Empty turns it off.",
+      "default": "~/.local/state/side-notes/log"
+    }
+  }
+}
