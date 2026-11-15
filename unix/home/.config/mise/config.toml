@@ -235,6 +235,13 @@ lefthook = { version = "2.2.2", minimum_release_age = "0s" }
 devcontainer-cli = { version = "0.90.0", minimum_release_age = "0s" }
 docker-cli = { version = "29.9.3", minimum_release_age = "0s" }
 docker-compose = { version = "5.7.1", minimum_release_age = "0s" }
+# Tart, the macOS VM host. The registry maps tart to aqua:openai/tart: the release tart.tar.gz,
+# sha256-checked. A project that pins its own tart should pin this same version. macOS only.
+tart = { version = "2.41.1", os = ["macos"] }
+# Docker Sandboxes (sbx), from its release app bundle. Not a bootstrap brew-cask: entry: its cask lives in
+# docker/tap and uses uninstall_preflight_steps, which mise 2026.11.8 cannot evaluate. bin_path keeps the
+# Sbx.app bundle whole (setting it turns off mise's automatic strip), so sbx finds its Helpers.
+"github:docker/sbx-releases" = { version = "0.50.1", asset_pattern = "DockerSandboxes-darwin.tar.gz", bin_path = "Sbx.app/Contents/MacOS", filter_bins = "sbx", os = ["macos"], minimum_release_age = "0s" }
 #"github:docker/docker-agent" = { version = "1.152.0", asset_pattern = "*-arm64", minimum_release_age = "0s" }
 "github:docker/docker-agent" = { version = "1.159.0", minimum_release_age = "0s" }
 xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
@@ -809,6 +816,35 @@ content = '''
 # and leaves it unchanged. adopt keeps an existing app in place on a fresh mise install.
 "brew-cask:tailscale-app" = { os = "macos", adopt = true }
 "brew-cask:moonlight" = { os = "macos", adopt = true }
+# Every other formula and cask this Mac had from a bare brew install, so mise declares them all (owner,
+# 2026-11-15). mise installs brew: and brew-cask: entries itself, without the brew program. All are
+# unversioned: update:brew runs `brew upgrade` on anything not in its PINNED list, so a version here
+# would also need a PINNED entry in python/home/src/hometools/update.py. All casks were installed
+# before these entries, so adopt keeps each app in place.
+"brew:boost" = { os = "macos" }
+"brew:chafa" = { os = "macos" }
+"brew:dockerfilegraph" = { os = "macos" }
+"brew:gmic" = { os = "macos" }
+"brew:gnupg" = { os = "macos" }
+"brew:icu4c@77" = { os = "macos" }
+"brew:imagemagick" = { os = "macos" }
+"brew:mas" = { os = "macos" }
+"brew:openssl@3" = { os = "macos" }
+"brew:tree" = { os = "macos" }
+"brew:viu" = { os = "macos" }
+"brew-cask:ghostty" = { os = "macos", adopt = true }
+"brew-cask:gimp" = { os = "macos", adopt = true }
+# GCM is no longer git's global helper (the keychain prompts); after an apply, check that
+# `git config --global --get-all credential.helper` names no GCM path: its pkg may run `configure`.
+"brew-cask:git-credential-manager" = { os = "macos", adopt = true }
+"brew-cask:iterm2" = { os = "macos", adopt = true }
+"brew-cask:jordanbaird-ice" = { os = "macos", adopt = true }
+"brew-cask:krita" = { os = "macos", adopt = true }
+"brew-cask:mactex" = { os = "macos", adopt = true }
+"brew-cask:ollama-app" = { os = "macos", adopt = true }
+"brew-cask:orbstack" = { os = "macos", adopt = true }
+"brew-cask:sublime-text" = { os = "macos", adopt = true }
+"brew-cask:swiftbar" = { os = "macos", adopt = true }
 # The Omarchy (Arch) x86 desktop: Tailscale, and the Sunshine game-stream host from Omarchy's own
 # pacman repository. mise runs `pacman -S --needed` with sudo; a machine without pacman skips
 # these. Keep updates with the distribution's own full upgrade: `mise bootstrap packages upgrade`
