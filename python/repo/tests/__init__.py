@@ -35,6 +35,16 @@ def run_python(code: str, *, stdin: BinaryIO | None = None) -> subprocess.Comple
     return subprocess.CompletedProcess(command, child.returncode, stdout, stderr)
 
 
+def drop_repo_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Drop git's repository variables (its own list, `git rev-parse --local-env-vars`). A hook in a linked worktree
+    exports GIT_DIR, GIT_WORK_TREE and GIT_INDEX_FILE; under them a test's scratch `git init`, `git config` or
+    `git add` writes into the real repository: core.worktree or a test identity into its shared config, or files
+    into its index."""
+    names = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True, check=True, text=True)
+    for name in names.stdout.split():
+        monkeypatch.delenv(name, raising=False)
+
+
 def clean_git_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """No global or system git config: the owner's global hk hooks would fire on a scratch repository's commit."""
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
