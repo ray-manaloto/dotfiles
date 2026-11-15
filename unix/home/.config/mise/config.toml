@@ -240,8 +240,10 @@ docker-compose = { version = "5.7.1", minimum_release_age = "0s" }
 tart = { version = "2.41.1", os = ["macos"] }
 # Docker Sandboxes (sbx), from its release app bundle. Not a bootstrap brew-cask: entry: its cask lives in
 # docker/tap and uses uninstall_preflight_steps, which mise 2026.11.8 cannot evaluate. bin_path keeps the
-# Sbx.app bundle whole (setting it turns off mise's automatic strip), so sbx finds its Helpers.
-"github:docker/sbx-releases" = { version = "0.50.1", asset_pattern = "DockerSandboxes-darwin.tar.gz", bin_path = "Sbx.app/Contents/MacOS", filter_bins = "sbx", os = ["macos"], minimum_release_age = "0s" }
+# Sbx.app bundle whole (setting it turns off mise's automatic strip), so sbx finds its Helpers. The bundle ships
+# zsh, bash and fish completions; postinstall links them where each shell looks (zsh: the fpath folder in 10-zsh.zsh),
+# on every install, as buildx's does above, so an upgrade repoints them at the new install.
+"github:docker/sbx-releases" = { version = "0.50.1", asset_pattern = "DockerSandboxes-darwin.tar.gz", bin_path = "Sbx.app/Contents/MacOS", filter_bins = "sbx", os = ["macos"], minimum_release_age = "0s", postinstall = { when = "always", run = "c=\"$MISE_TOOL_INSTALL_PATH/Sbx.app/Contents/Resources/completions\" z=\"${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions\" b=\"${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion/completions\" f=\"${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions\"; mkdir -p \"$z\" \"$b\" \"$f\"; ln -sfn \"$c/zsh/_sbx\" \"$z/_sbx\"; ln -sfn \"$c/bash/sbx\" \"$b/sbx\"; ln -sfn \"$c/fish/sbx.fish\" \"$f/sbx.fish\"" } }
 #"github:docker/docker-agent" = { version = "1.152.0", asset_pattern = "*-arm64", minimum_release_age = "0s" }
 "github:docker/docker-agent" = { version = "1.159.0", minimum_release_age = "0s" }
 xcodegen = { version = "2.46.0", minimum_release_age = "0s" }
