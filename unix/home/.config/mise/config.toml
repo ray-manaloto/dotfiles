@@ -144,7 +144,10 @@ npm_config_node_gyp = "{% set lock = xdg_config_home ~ '/mise/mise.lock' %}{% if
 # Prefix is arch-aware: arm64=/opt/homebrew, amd64=/usr/local
 # DL-591: keg-only llvm and lldb need their opt bins; make gnubin gives an unprefixed GNU make;
 # DL-755: ~/.local/share/p2996/bin holds <name>-p2996 links into the prefix ~/.local/share/p2996/<id>.
+# apple-bin holds only a dsymutil link to /usr/bin/dsymutil, ahead of Homebrew LLVM: GCC's -g link runs
+# dsymutil from PATH, and Homebrew LLVM's was reported to fail with SIGILL there. clang, clang-format and lldb stay Homebrew's.
 path = [
+  "~/.config/mise/apple-bin",
   "$HOMEBREW_PREFIX/opt/llvm/bin",
   "$HOMEBREW_PREFIX/opt/lldb/bin",
   "$HOMEBREW_PREFIX/opt/make/libexec/gnubin",
