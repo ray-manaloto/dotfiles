@@ -138,4 +138,6 @@ async def test_include_what_you_use_is_configured_as_an_external_project(
     await recipe.ship(upstream.release("v1"))
     cache = (config.build_tree(cfg) / "CMakeCache.txt").read_text()
     assert "LLVM_EXTERNAL_PROJECTS:STRING=iwyu\n" in cache
+    # Builtin headers from the installed prefix, not from the build tree the next commit reuses.
+    assert "IWYU_RESOURCE_RELATIVE_TO:STRING=iwyu\n" in cache
     assert f"LLVM_EXTERNAL_IWYU_SOURCE_DIR:PATH={config.iwyu_checkout(cfg)}\n" in cache

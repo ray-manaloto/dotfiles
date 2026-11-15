@@ -43,6 +43,9 @@ set(LLVM_INSTALL_TOOLCHAIN_ONLY OFF CACHE BOOL "Keep headers and CMake exports f
 set(LLVM_INSTALL_UTILS ON CACHE BOOL "" FORCE)
 # include-what-you-use builds in this tree and installs into the prefix; p2996 build passes its source folder.
 set(LLVM_EXTERNAL_PROJECTS "iwyu" CACHE STRING "" FORCE)
+# IWYU finds clang's builtin headers next to its own binary, in the prefix; its default, clang, would bake in
+# the build-tree clang, which the next commit reuses.
+set(IWYU_RESOURCE_RELATIVE_TO "iwyu" CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_COMPILE_JOBS "$ENV{P2996_JOBS}" CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_LINK_JOBS 1 CACHE STRING "" FORCE)
 set(LLVM_PARALLEL_TABLEGEN_JOBS 1 CACHE STRING "" FORCE)
