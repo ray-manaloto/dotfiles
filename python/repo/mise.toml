@@ -51,6 +51,20 @@ depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pr-create --title "$usage_title" --body-file "$usage_body"'
 
+# A lead's self-merge (owner ruling, 2026-11-15): every gate checked, then the one merge form, from the PR's checkout.
+# It runs the repotools installed from main by //repo:tools-install, by its path in uv's tool bin folder: the venv this
+# file activates puts the branch's own repotools first on PATH, and a pull request that changed the merge gates would
+# then judge itself by them.
+[tasks.pr-merge]
+description = "Merge a pull request whose head is this clean HEAD, once the reviewer approved it and hk check --all passes"
+usage = '''
+arg "<number>" help="The pull request number"
+arg "<title>" help="The title the reviewer approved"
+arg "<body>" help="The file holding the body the reviewer approved"
+'''
+dir = "{{ config_root }}/../.."
+run = '"$(uv tool dir --bin)/repotools" pr-merge --number "$usage_number" --title "$usage_title" --body-file "$usage_body"'
+
 [tasks.zero-bash]
 description = "Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files; --strict fails on any"
 usage = '''

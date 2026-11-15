@@ -10,6 +10,7 @@ from . import (
     fnox_refs,
     gates,
     main_guard,
+    merge,
     pane_approval,
     scratch_env,
     shell,
@@ -31,6 +32,7 @@ from .models import (
     Options,
     PanePin,
     PrivacyScan,
+    PrMerge,
     PrText,
     ReviewApproved,
     ReviewPython,
@@ -50,6 +52,7 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.pr_fingerprint: PrText,
     Command.pr_approved: PrText,
     Command.pr_create: PrText,
+    Command.pr_merge: PrMerge,
     Command.zero_bash: ZeroBash,
     Command.review_python: ReviewPython,
     Command.review_python_approved: ReviewApproved,
@@ -108,6 +111,8 @@ def run(command: Command, options: Options) -> None:
         shell.dispatch(options)
     elif isinstance(options, PanePin):
         pane_approval.pin(options)
+    elif isinstance(options, PrMerge):
+        merge.merge(options)
     elif isinstance(options, PrText) and command is Command.pr_create:
         pane_approval.create(options)
     elif isinstance(options, ToolsInstall | TestTimes | Trust | FnoxRefs):

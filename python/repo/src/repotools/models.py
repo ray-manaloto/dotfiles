@@ -16,6 +16,7 @@ class Command(StrEnum):
     pr_fingerprint = "pr-fingerprint"
     pr_approved = "pr-approved"
     pr_create = "pr-create"
+    pr_merge = "pr-merge"
     zero_bash = "zero-bash"
     review_python = "review-python"
     review_python_approved = "review-python-approved"
@@ -383,6 +384,52 @@ class PrText(BaseModel):
     """
 
 
+class PrMerge(BaseModel):
+    """
+    A pull request to merge once its head is this clean HEAD, the reviewer approved it and hk check --all passes.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    number: Annotated[int, Field(ge=1)]
+    """
+    The pull request number
+    """
+    title: Annotated[str, Field(pattern="^[^\\n]+$")]
+    """
+    The title the reviewer approved, one line
+    """
+    body_file: str
+    """
+    The file holding the body the reviewer approved
+    """
+
+
+class Merged(BaseModel):
+    """
+    What pr-merge printed after the merge: the pull request, its merge commit and that commit's author email.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    number: int
+    """
+    The pull request number
+    """
+    merge_commit: str
+    """
+    The merge commit GitHub made
+    """
+    author_email: str
+    """
+    The merge commit's author email
+    """
+
+
 class PanePin(BaseModel):
     """
     Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.
@@ -464,6 +511,7 @@ class PrivacyScan(BaseModel):
 type Options = (
     CommitText
     | PrText
+    | PrMerge
     | PanePin
     | ZeroBash
     | ReviewPython
@@ -796,6 +844,8 @@ class Repotools(BaseModel):
     command: Command | None = None
     commit_text: CommitText | None = None
     pr_text: PrText | None = None
+    pr_merge: PrMerge | None = None
+    merged: Merged | None = None
     pane_pin: PanePin | None = None
     zero_bash: ZeroBash | None = None
     review_python: ReviewPython | None = None
