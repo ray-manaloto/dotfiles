@@ -176,13 +176,16 @@ def after(otherwise: dict[str, object], *pairs: tuple[Sequence[str], dict[str, o
 
 
 def replier(world: World, path: Path, text: str) -> dict[str, object]:
-    """An hc send --wait that the tab answers: it appends an assistant turn, stamped now, to its transcript."""
+    """An hc send --wait that the tab answers: it appends the sent text as a user turn, as Claude records a typed
+    prompt, then an assistant turn, both stamped now, to its transcript."""
     script = world.bin / f"reply-{len(list(world.bin.iterdir()))}"
     record = {"type": "assistant", "isSidechain": False, "message": {"content": [{"type": "text", "text": text}]}}
     script.write_text(
-        f"#!{sys.executable} -I\nimport datetime, json\nrecord = {record!r}\n"
-        "record['timestamp'] = datetime.datetime.now(datetime.UTC).isoformat()\n"
-        f"open({str(path)!r}, 'a').write(json.dumps(record) + '\\n')\n"
+        f"#!{sys.executable} -I\nimport datetime, json, sys\nrecord = {record!r}\n"
+        "now = datetime.datetime.now(datetime.UTC).isoformat()\n"
+        "asked = {'type': 'user', 'timestamp': now, 'message': {'content': sys.argv[-1]}}\n"
+        "record['timestamp'] = now\n"
+        f"open({str(path)!r}, 'a').write(json.dumps(asked) + '\\n' + json.dumps(record) + '\\n')\n"
     )
     script.chmod(0o755)
     return {"real": str(script)}
