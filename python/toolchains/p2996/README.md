@@ -106,8 +106,9 @@ Lua scripting; MLIR Python bindings and
 LLVM's OCaml bindings on (DL-757). Every tool the build needs (SWIG, Lua, doxygen, opam switch `llvm`
 with ocamlfind and ctypes) comes from the global mise config; the Python modules (pygments, pyyaml,
 numpy, nanobind, pybind11, ml_dtypes, all uncapped) come from this project's uv lock. Assertions on; LLVM
-and Clang dylibs; full install (headers and CMake exports, for IWYU); compile jobs 4, link and
-tablegen jobs 1; tests, docs, examples and the iOS, watchOS, tvOS and visionOS runtimes off;
+and Clang dylibs; full install (headers and CMake exports, for IWYU); compile jobs `P2996_JOBS`, the
+core count (`mise run //p2996:build --jobs N` lowers it for one run), link and tablegen jobs 1; tests,
+docs, examples and the iOS, watchOS, tvOS and visionOS runtimes off;
 zlib, zstd, libxml2, libedit and the compiler-rt runtimes keep LLVM's defaults, whose own checks
 skip Linux-only parts. Not built on macOS: libclc, offload, llvm-libgcc, cross-project-tests.
 A Linux build needs its own cache with the Linux choices.

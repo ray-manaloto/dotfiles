@@ -52,6 +52,12 @@ class Source(BaseModel):
     """
 
 
+type Jobs = Annotated[int, Field(ge=1)]
+"""
+Compile jobs for this run instead of P2996_JOBS, e.g. to keep the machine's load down
+"""
+
+
 class Build(BaseModel):
     """
     Configure one commit, then build it unless that id is installed; a rerun resumes it.
@@ -72,6 +78,10 @@ class Build(BaseModel):
     force: bool = False
     """
     Recompile past sccache even when the id is installed; install then replaces it
+    """
+    jobs: Jobs | None = None
+    """
+    Compile jobs for this run instead of P2996_JOBS, e.g. to keep the machine's load down
     """
 
 

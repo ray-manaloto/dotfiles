@@ -46,7 +46,12 @@
       "properties": {
         "commit": { "anyOf": [{ "$ref": "#/$defs/CommitId" }, { "type": "null" }], "default": null, "description": "Build this commit instead of the newest on P2996_BRANCH" },
         "dry_run": { "type": "boolean", "default": false, "description": "Print the cmake commands only" },
-        "force": { "type": "boolean", "default": false, "description": "Recompile past sccache even when the id is installed; install then replaces it" }
+        "force": { "type": "boolean", "default": false, "description": "Recompile past sccache even when the id is installed; install then replaces it" },
+        "jobs": {
+          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
+          "default": null,
+          "description": "Compile jobs for this run instead of P2996_JOBS, e.g. to keep the machine's load down"
+        }
       },
       "additionalProperties": false
     },
