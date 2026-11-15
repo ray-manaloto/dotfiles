@@ -532,12 +532,87 @@ def test_a_long_draft_holding_a_pasted_box_is_read_whole(world: World) -> None:
     assert ASK not in world.calls()
 
 
-def test_a_claude_tab_with_an_empty_box_is_asked(world: World) -> None:
+PROBE, BACK = ("hc", "keys", "t3", session.PROBE_KEY), ("hc", "keys", "t3", "backspace")
+GHOST = box(MARK_LINE + "run the tests and open a pull request")
+
+
+def test_ghost_text_in_an_empty_box_is_not_a_draft(world: World) -> None:
+    """next-steps draws a suggestion as ghost text hc read shows like typing (t2k6, 2026-11-15): one key makes the
+    box read just that key, so the tab is asked, and the key is taken back."""
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    keyed = box(MARK_LINE + session.PROBE_KEY)
+    world.answer({READ: after({"stdout": GHOST}, (PROBE, {"stdout": keyed}), (BACK, {"stdout": GHOST})),
+                  PROBE: {}, BACK: {}, ASK: {}})  # fmt: skip
+    session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    calls = world.calls()
+    assert calls.index(PROBE) < calls.index(BACK) < calls.index(ASK)
+    assert session.draft(session.call("hc", "read", "t3") or "") == session.draft(GHOST)
+
+
+def test_a_draft_that_gains_the_probe_key_stays_a_draft_and_is_left_as_it_was(world: World) -> None:
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    typed = box(MARK_LINE + "half-written note")
+    keyed = box(MARK_LINE + "half-written note" + session.PROBE_KEY)
+    world.answer({READ: after({"stdout": typed}, (PROBE, {"stdout": keyed}), (BACK, {"stdout": typed})),
+                  PROBE: {}, BACK: {}})  # fmt: skip
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-draft", ["17 characters in the prompt box"])
+    calls = world.calls()
+    assert calls.index(PROBE) < calls.index(BACK)
+    assert ASK not in calls
+    assert session.draft(session.call("hc", "read", "t3") or "") == "half-written note"
+
+
+def test_a_probe_key_that_fails_to_send_leaves_the_draft_untouched(world: World) -> None:
+    """hc keys failed and the box reads as before: no backspace, which could eat a character of the draft."""
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({READ: {"stdout": GHOST}, PROBE: {"code": 1}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert result.result == "skipped-draft"
+    calls = world.calls()
+    assert PROBE in calls
+    assert BACK not in calls
+    assert ASK not in calls
+
+
+KEYED = box(MARK_LINE + session.PROBE_KEY)
+
+
+@pytest.mark.parametrize(
+    ("probe", "back", "after_back", "why"),
+    [
+        ({"code": 1}, {}, KEYED, "hc keys failed and the box changed"),
+        ({}, {"code": 1}, KEYED, "hc keys backspace failed"),
+        ({}, {}, KEYED, "the box did not read as before after the backspace"),
+    ],
+)
+def test_a_probe_key_left_in_the_box_fails_the_session_unasked(
+    world: World, probe: dict[str, object], back: dict[str, object], after_back: str, why: str
+) -> None:
+    """The key may still be in the box: the owner looks, and the handshake is never typed after it."""
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({READ: after({"stdout": GHOST}, (PROBE, {"stdout": KEYED}), (BACK, {"stdout": after_back})),
+                  PROBE: probe, BACK: back, ASK: {}})  # fmt: skip
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == (
+        "failed-draft-probe",
+        [why, f"the probe key {session.PROBE_KEY!r} may still be in the prompt box"],
+    )
+    assert ASK not in world.calls()
+
+
+def test_a_claude_tab_with_an_empty_box_is_asked_with_no_probe_key(world: World) -> None:
     scene(world, world.spawn("claude"))
     world.transcript(SID)
     world.answer({ASK: {}})
     session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
-    assert ASK in world.calls()
+    calls = world.calls()
+    assert ASK in calls
+    assert PROBE not in calls
 
 
 def test_a_handshake_that_never_starts_a_turn_is_not_delivered(world: World) -> None:
