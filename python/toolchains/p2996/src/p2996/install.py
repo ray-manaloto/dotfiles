@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 
 from . import config, proc, verify
@@ -33,6 +34,7 @@ async def run(cfg: Config, args: Install) -> None:
         if unmarked:
             await assemble(cfg, name)
         await verify.check(root / view / "bin/clang++-p2996")
+        await check_debugserver(root / name / "bin/debugserver")
         installed_mark(cfg, name).touch()
         if args.keep_current:  # active != view: the check above refused the active build
             log.info("installed, not active", prefix=str(root / name), active=active)
@@ -69,6 +71,16 @@ async def write_configs(pre: Path) -> None:
     )
 
 
+async def check_debugserver(debugserver: Path) -> None:
+    """A debugserver whose signature is broken, or that cannot start, fails here rather than under lldb."""
+    try:
+        await proc.run("codesign", "--verify", "--strict", debugserver)
+        await proc.run(debugserver, "--version")
+    except subprocess.CalledProcessError as error:
+        msg = f"p2996 install: {debugserver.name} does not start signed: {error.stderr.decode().strip()}"
+        raise P2996Error(msg) from error
+
+
 async def assemble(cfg: Config, name: str) -> None:
     """Install the build tree into ROOT/<name> and lay out ROOT/<name>/view; nothing active changes."""
     pre, build = cfg.root / name, build_tree(cfg)
@@ -83,6 +95,18 @@ async def assemble(cfg: Config, name: str) -> None:
         if not (pre / part).is_dir():
             msg = f"p2996 install: {name} has no {part}"
             raise P2996Error(msg)
+    # cmake --install rewrites debugserver's rpaths after the build signed it, which breaks the signature
+    # (the kernel then kills it); sign it again, keeping its identifier and debugger entitlement.
+    await proc.run(
+        "codesign",
+        "--force",
+        "--sign",
+        cfg.codesign,
+        "--keychain",
+        str(cfg.keychain),
+        "--preserve-metadata=identifier,entitlements,flags,runtime",
+        pre / "bin/debugserver",
+    )
     await write_configs(pre)
     view = pre / "view"
     shutil.rmtree(view, ignore_errors=True)

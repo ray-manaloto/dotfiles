@@ -126,6 +126,7 @@ async def test_keep_current_refuses_the_active_build(cfg: Config, recipe: Recipe
         ({"answer": 44}, "sample printed 'reflection value=44'"),
         ({"skip": "include"}, "include"),
         ({"skip": "lib"}, "lib"),
+        ({"debugserver": 1}, "debugserver does not start signed"),
     ],
 )
 async def test_a_bad_version_is_never_activated(
