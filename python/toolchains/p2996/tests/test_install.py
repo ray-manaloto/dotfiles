@@ -89,6 +89,37 @@ async def test_the_previous_view_stays_available_for_rollback(cfg: Config, recip
     assert versions(Path(previous)) == whole("v1")
 
 
+async def test_keep_current_installs_a_build_without_activating_it(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    await recipe.ship(upstream.release("v1"))
+    await recipe.install()
+    active = entries(cfg.root), read(cfg.root / "current")
+    await recipe.ship(upstream.release("v2"))
+    await install.run(cfg, Install(keep_current=True))
+    kept = recipe.logged("installed, not active")
+    assert (entries(cfg.root), read(cfg.root / "current")) == active
+    assert versions(cfg.root) == whole("v1")
+    assert versions(Path(kept["prefix"]) / "view") == whole("v2")
+    assert config.installed_mark(cfg, Path(kept["prefix"]).name).exists()
+
+    # A plain install then activates it without assembling it again.
+    assert Path((await recipe.install())["prefix"]) == Path(kept["prefix"])
+    assert versions(cfg.root) == whole("v2")
+    assert read(cfg.root / "previous") == active[1]
+
+
+async def test_keep_current_refuses_the_active_build(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    active = await recipe.ship(upstream.release("v1"))
+    await recipe.install()
+    # A forced rebuild of the active id drops its mark; --keep-current must not reassemble it in place.
+    await build.run(cfg, Build(commit=active, force=True), recipe.patches)
+    before = entries(cfg.root), versions(cfg.root)
+    with pytest.raises(P2996Error, match="is the active build"):
+        await install.run(cfg, Install(keep_current=True))
+    assert (entries(cfg.root), versions(cfg.root)) == before
+
+
 @pytest.mark.parametrize(
     ("bad", "reason"),
     [

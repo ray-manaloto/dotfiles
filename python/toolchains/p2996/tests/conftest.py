@@ -264,6 +264,9 @@ def cfg(tmp_path: Path, upstream: Upstream) -> Config:
             "P2996_ROOT": str(tmp_path / "root"),
             "P2996_CACHE": str(tmp_path / "cache"),
             "P2996_JOBS": "3",
+            # Ad-hoc signing needs no certificate, so the codesign check passes and configure runs.
+            "P2996_CODESIGN": "-",
+            "P2996_KEYCHAIN": "/System/Library/Keychains/SystemRootCertificates.keychain",
             "P2996_LOCK": str(tmp_path / "state/heavy-gate.lock"),
         }
     )

@@ -13,7 +13,7 @@ from .models import Config, Install
 ENTRIES = ("bin", "include", "lib", "libexec", "share")
 
 
-async def run(cfg: Config, _: Install) -> None:
+async def run(cfg: Config, args: Install) -> None:
     last = last_build(cfg)
     if not last.is_symlink():
         msg = "p2996 install: no successful build; run p2996 build"
@@ -25,12 +25,18 @@ async def run(cfg: Config, _: Install) -> None:
     name = last.readlink().name
     view, current = f"{name}/view", root / "current"
     active = str(current.readlink()) if current.is_symlink() else None
+    if args.keep_current and active == view:
+        msg = f"p2996 install: {name} is the active build; --keep-current installs only another one"
+        raise P2996Error(msg)
     unmarked = not installed_mark(cfg, name).exists()  # Marked: a skipped build, this id is already installed.
     if active != view or unmarked:
         if unmarked:
             await assemble(cfg, name)
         await verify.check(root / view / "bin/clang++-p2996")
         installed_mark(cfg, name).touch()
+        if args.keep_current:  # active != view: the check above refused the active build
+            log.info("installed, not active", prefix=str(root / name), active=active)
+            return
         if active and active != view:
             config.link(root / "previous", active)
         config.link(current, view)

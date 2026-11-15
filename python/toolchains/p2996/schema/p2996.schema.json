@@ -13,9 +13,11 @@
         "branch": { "type": "string", "description": "Branch whose newest commit p2996 source builds" },
         "root": { "type": "string", "format": "path", "description": "Install root: ROOT/<id> is the prefix, ROOT/bin goes on PATH" },
         "cache": { "type": "string", "format": "path", "description": "Holds the one source tree and the one build tree" },
-        "jobs": { "type": "integer", "minimum": 1, "description": "Compile jobs; not part of the build id" }
+        "jobs": { "type": "integer", "minimum": 1, "description": "Compile jobs; not part of the build id" },
+        "codesign": { "type": "string", "description": "Certificate that signs the debugserver lldb builds; p2996 build stops before configure without it" },
+        "keychain": { "type": "string", "format": "path", "description": "Keychain that holds the codesign certificate" }
       },
-      "required": ["remote", "branch", "root", "cache", "jobs"],
+      "required": ["remote", "branch", "root", "cache", "jobs", "codesign", "keychain"],
       "additionalProperties": false
     },
     "CommitId": {
@@ -49,6 +51,9 @@
     "Install": {
       "description": "Install the last successful build, verify it, then make it active in one rename.",
       "type": "object",
+      "properties": {
+        "keep_current": { "type": "boolean", "default": false, "description": "Assemble and verify the build but leave ROOT/current where it is; a later plain install activates it" }
+      },
       "additionalProperties": false
     },
     "Verify": {
