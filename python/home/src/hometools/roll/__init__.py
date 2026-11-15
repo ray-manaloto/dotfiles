@@ -18,6 +18,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
@@ -418,17 +419,22 @@ STEPS: dict[RollStep, Callable[[Step], int]] = {
 }
 
 
-def placed() -> str | None:
-    """Why roll:all may not run here: it needs its own tab named roll with no parent terminal."""
+def placed(argv: Sequence[str]) -> str | None:
+    """Why roll:all may not run here: it needs its own tab named roll with no parent terminal.
+
+    The command it prints carries the caller's own arguments, so pasting it rolls the same sessions.
+    """
     me = os.environ.get("HC_TERMINAL_ID")
     info = answer("hc", "get", me, "--json") if me else {}
     where = str(field(info, "labels", "where") or "")
     if where.rpartition(" / ")[2] == "roll" and field(info, "parent") is None:
         return None
+    flags = list(argv[1:] if argv[:1] == [RollStep.all.value] else argv)
+    command = ["env", "MISE_TASK_TIMINGS=1", "MISE_TASK_OUTPUT=prefix", "mise", "run", "roll:all", *flags]
     return (
         "roll:all --apply runs only in its own herdr tab named roll, not as a child of chief-of-staff; open one with "
         "herdr-app do tab.new --space <space id> --name roll --folder ~ --argv "
-        """'["env","MISE_TASK_TIMINGS=1","MISE_TASK_OUTPUT=prefix","mise","run","roll:all","--apply"]'"""
+        + shlex.quote(json.dumps(command, separators=(",", ":")))
     )
 
 
@@ -437,7 +443,7 @@ def do_all(args: argparse.Namespace, argv: Sequence[str]) -> int:
     # baseline, find nothing changed and open the gate. Accepted, it goes on from roll:stop with its own snapshot.
     paused = state() / "paused"
     held = paused.read_text().strip() if args.apply and paused.is_file() else None
-    if args.apply and (why := placed() or orphaned(paused, held)):
+    if args.apply and (why := placed(argv) or orphaned(paused, held)):
         sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
         return REFUSED
     if held is not None:
