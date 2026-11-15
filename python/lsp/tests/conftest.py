@@ -55,7 +55,8 @@ def typescript() -> Typescript:
     active = next((entry for entry in found if entry["installed"] and entry["active"]), None)
     if active is None:
         pytest.skip("the global mise config installs no npm:typescript: the tests start its tsc")
-    return Typescript(version=active["version"], tsc=Path(active["install_path"], "bin/tsc"))
+    # npm tools install through aube, which links each binary under node_modules/.bin, not bin.
+    return Typescript(version=active["version"], tsc=Path(active["install_path"], "node_modules/.bin/tsc"))
 
 
 class World:
@@ -87,7 +88,7 @@ class World:
         # in the scratch installs/npm-typescript folder.
         installs = root / "mise/data/installs/npm-typescript"
         installs.mkdir(parents=True)
-        (installs / typescript.version).symlink_to(typescript.tsc.parents[1])
+        (installs / typescript.version).symlink_to(typescript.tsc.parents[2])
         monkeypatch.setenv("MISE_DATA_DIR", str(root / "mise/data"))
         # The global git config's hooks (hook.hk-pre-commit.command) run even with core.hooksPath=/dev/null, and
         # they start hk through mise, which the scratch data folder doesn't hold. Each hook command skips on HK=0.

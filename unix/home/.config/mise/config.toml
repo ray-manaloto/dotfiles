@@ -124,7 +124,7 @@ VCPKG_DISABLE_METRICS = "1"
 # TypeScript 7's own language server (`tsc --lsp --stdio`), started by the dotfiles typescript-native-lsp plugin.
 # Claude Code expands no environment variables in an LSP command, so the plugin's sh reads this one, and an npm
 # tool that bundles an older tsc can't shadow it on PATH.
-TS_LSP_TSC = { value = "{{ tools['npm:typescript'].path }}/bin/tsc", tools = true }
+TS_LSP_TSC = { value = "{{ tools['npm:typescript'].path }}/node_modules/.bin/tsc", tools = true }
 # NotebookLM auth: standardize paths so agents find credentials consistently
 NOTEBOOKLM_HOME = "~/.notebooklm"
 # Mossop pattern: name the brew prefix once; PATH entries below expand it (env_shell_expand).
