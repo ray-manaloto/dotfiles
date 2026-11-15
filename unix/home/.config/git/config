@@ -1,0 +1,15 @@
+# Read before ~/.gitconfig, which keeps machine-local settings and the hook blocks mise manages.
+[credential]
+	# No global helper: the empty value clears any earlier one, Homebrew's system osxkeychain included.
+	# Otherwise git stores every login it sees, such as the fnox proxy's 127.0.0.1 login, in the
+	# keychain, and a locked keychain then prompts. A host that needs a helper names its own below
+	# or in ~/.gitconfig.
+	helper =
+# Each GitHub host clears the list and asks gh, as risu729/dotfiles does
+# (ref: https://github.com/cli/cli/issues/3796#issuecomment-1065150465).
+[credential "https://github.com"]
+	helper =
+	helper = !gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !gh auth git-credential
