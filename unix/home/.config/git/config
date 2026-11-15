@@ -1,4 +1,7 @@
 # Read before ~/.gitconfig, which keeps machine-local settings and the hook blocks mise manages.
+[user]
+	# The GitHub account's noreply address, so a commit in any clone publishes no personal email.
+	email = 1428022+sortakool@users.noreply.github.com
 [credential]
 	# No global helper: the empty value clears any earlier one, Homebrew's system osxkeychain included.
 	# Otherwise git stores every login it sees, such as the fnox proxy's 127.0.0.1 login, in the
