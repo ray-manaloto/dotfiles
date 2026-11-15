@@ -162,6 +162,11 @@ run = "mkdir -p ~/.agents/skills"
 # tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
 # from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
+# Leads merge their own PRs after their Codex reviewer approves (owner ruling 2026-11-15). The auto-mode soft-deny
+# "Merge Without Review" wants a human approval, so the classifier blocked those merges. Auto mode reads prose
+# exceptions from autoMode.allow in user settings only (https://code.claude.com/docs/en/auto-mode-config.md);
+# "$defaults" keeps the shipped list. Undo: remove this entry, then `claude auto-mode reset`.
+"~/.claude/settings.json/automode" = { source = "unix/home/.claude/settings.automode.json", merge = true }
 # ssh: the PC over the tailnet. The line goes first in ~/.ssh/config, so the folder's hosts win over older
 # entries below it; the rest of ~/.ssh/config stays the owner's. tailnet.conf is a template: the PC's private
 # name and its break-glass LAN address (`ssh pc-lan`) come from Doppler (PC_HOST and PC_LAN_HOST, see
