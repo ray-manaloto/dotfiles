@@ -1,0 +1,92 @@
+{
+  "name": "side-notes",
+  "version": "0.3.19",
+  "description": "A side agent (Haiku by default) that checks the session every few steps for real risks (wrong facts, unsafe actions, owner rules broken, unverified claims) and passes each note straight to the main agent, with a toast for you",
+  "license": "MIT",
+  "userConfig": {
+    "model": {
+      "type": "string",
+      "title": "Side model",
+      "description": "The model each check runs on: an alias (haiku, sonnet) or a full id.",
+      "default": "haiku"
+    },
+    "everySteps": {
+      "type": "number",
+      "title": "Check every N steps",
+      "description": "A check runs on every Nth model step of a turn, and once at the end of a turn that used tools.",
+      "default": 6
+    },
+    "maxChecksPerTurn": {
+      "type": "number",
+      "title": "Checks per turn",
+      "description": "At most this many checks in one turn. 0 turns checks off.",
+      "default": 2
+    },
+    "maxChecksPerSession": {
+      "type": "number",
+      "title": "Checks per session per day",
+      "description": "At most this many checks in one session per UTC day; the count starts again at 00:00 UTC. (Named before it became daily.)",
+      "default": 30
+    },
+    "maxTokensPerDay": {
+      "type": "number",
+      "title": "Tokens per session per day",
+      "description": "Checks stop for the day once they have used this many tokens (input, cache and output) in one session on one UTC day; they start again at 00:00 UTC. Replaces maxTokensPerSession, which is now ignored.",
+      "default": 3000000
+    },
+    "deepCheck": {
+      "type": "number",
+      "title": "Deep checks per session",
+      "description": "At most this many end-of-turn checks (on turns of 12 steps or more) run as a fork on the session's own model over the whole conversation. Each costs 10-100 times a normal check. 0: never.",
+      "default": 0
+    },
+    "rules": {
+      "type": "string",
+      "title": "Owner rules",
+      "description": "Comma-separated files or folders of .md files the side model must respect. ~/ is your home folder.",
+      "default": "~/.config/agents/AGENTS.md,~/dev/tmp/fix-herdr/wiki/rulings"
+    },
+    "stateDir": {
+      "type": "string",
+      "title": "State folder",
+      "description": "Where each session's ledger (checks, tokens, notes) is kept, one small JSON file per session. ~/ is your home folder.",
+      "default": "~/.local/state/side-notes"
+    },
+    "wakeIdle": {
+      "type": "boolean",
+      "title": "Wake an idle session",
+      "description": "When a note is found after the agent stopped, start a turn with it instead of waiting for your next message (at least 2 minutes apart, at most 1 in a row without a prompt you typed, at most 10 per session per day; the forwarder has the same limits; each is a billed turn on the main model). Off: it waits, and the toast shows it.",
+      "default": false
+    },
+    "trialUntil": {
+      "type": "string",
+      "title": "Trial window end",
+      "description": "An ISO date-time (for example 2026-11-08T23:40:00Z). After it, side-notes runs no more checks; notes already found are still delivered. Empty: no window. The trial start step sets it to now + 30 minutes by default.",
+      "default": ""
+    },
+    "logDir": {
+      "type": "string",
+      "title": "Audit log folder",
+      "description": "One JSON line per side check (outcome, tokens, digest size) and per delivery, one file per session, for comparing with the built-in. Empty turns it off.",
+      "default": "~/.local/state/side-notes/log"
+    },
+    "knowModel": {
+      "type": "string",
+      "title": "Know-check model",
+      "description": "Model for the know check: at a turn's end, what the owner should know now (the built-in's kind of note). Empty turns it off.",
+      "default": "sonnet"
+    },
+    "knowEveryMinutes": {
+      "type": "number",
+      "title": "Know-check interval (minutes)",
+      "description": "Least minutes between two know checks in a session.",
+      "default": 30
+    },
+    "knowMaxTokensPerDay": {
+      "type": "number",
+      "title": "Know-check tokens per session per day",
+      "description": "Token budget for know checks per session per UTC day; 450000 is about $1 at Sonnet list price.",
+      "default": 450000
+    }
+  }
+}
