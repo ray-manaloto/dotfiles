@@ -224,7 +224,7 @@ def test_a_triage_that_cannot_answer_leaves_the_grep_gate(
     assert (code, report["triaged"], report["gate"]) == (0, False, True)
     assert "- claude 2.1.10: Removed the --legacy flag" not in report["flags"]
     assert report["flags"][:2] == ["claude: - Removed the --legacy flag", "codex: Deprecated the old sandbox flag"]
-    assert not (world.state() / "review-cache/index.json").exists()
+    assert not (world.state() / review.CACHE / "index.json").exists()
     _ = run
 
 
@@ -256,7 +256,7 @@ def test_the_input_stays_under_its_size_limits(world: World, capfd: pytest.Captu
     code, got, _ = hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))
     assert (code, json.loads(got)["gate"]) == (0, False)
     # Only the items with their notes went to the triage and the cache; the ones left out stay unanswered.
-    index = json.loads((world.state() / "review-cache/index.json").read_text())
+    index = json.loads((world.state() / review.CACHE / "index.json").read_text())
     left = (run / "review.md").read_text().split("Not reviewed, no notes:\n", 1)[1].split("\n\n", 1)[0]
     assert len(index) + len(left.splitlines()) == len(names)
     assert not set(index) & {line[2:] for line in left.splitlines()}
@@ -313,13 +313,13 @@ def test_a_triage_without_its_three_sections_is_no_answer(
     report = json.loads(got)
     assert (code, report["triaged"], report["gate"]) == (0, False, True)
     assert "- x: gone" not in report["flags"]
-    assert not (world.state() / "review-cache/index.json").exists()
+    assert not (world.state() / review.CACHE / "index.json").exists()
 
 
 def test_a_cached_answer_whose_file_is_gone_is_asked_again(world: World, capfd: pytest.CaptureFixture[str]) -> None:
     setup(world)
     hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))
-    for answer in (world.state() / "review-cache").glob("*.md"):
+    for answer in (world.state() / review.CACHE).glob("*.md"):
         answer.unlink()
     code, got, _ = hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))
     report = json.loads(got)
@@ -382,3 +382,87 @@ def test_a_release_page_that_fails_leaves_the_item_without_notes(world: World, f
     newer = [{"tag_name": "rust-v0.172.0", "prerelease": False, "body": "note"}]
     world.answer({CODEX: out(newer), ("gh", "api", "repos/openai/codex/releases?per_page=100&page=2"): failed})
     assert review.releases("codex", "0.100.0", "0.172.0") == ""
+
+
+def test_every_scope_of_a_plugin_is_its_own_item_and_an_old_user_only_baseline_still_pairs(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Run 1's update.log: five project-scope updates review never saw, since only user scope was recorded."""
+    project = world.root / "cache/p-project"
+    project.mkdir(parents=True)
+    (project / "CHANGELOG.md").write_text("## 2\n- Changed the project copy\n\n## 1\n- First\n")
+    plugins(
+        world,
+        {
+            "p@m": [
+                entry("1", "u"),
+                {**entry("2", "new", project, scope="project"), "projectPath": "/a"},
+                {**entry("1", "same", scope="project"), "projectPath": "/b"},
+                {**entry("1", "loc", scope="local"), "projectPath": "/a"},
+                entry("1", "managed", scope="managed"),
+            ]
+        },
+        {},
+    )
+    assert review.plugins() == {
+        "p@m": "1-u",
+        "p@m (project /a)": "2-new",
+        "p@m (project /b)": "1-same",
+        "p@m (local /a)": "1-loc",
+        "p@m (managed)": "1-managed",
+    }
+    # An old versions.json keyed by the bare id alone still pairs its user-scope entries.
+    run = world.state() / "run-1"
+    run.mkdir(parents=True)
+    before = review.collect().model_copy(update={"plugins": {"p@m": "1-u", "p@m (project /a)": "1-old"}})
+    (run / "versions.json").write_text(before.model_dump_json())
+    world.answer({review.TRIAGE: {"code": 1}})
+    code, got, _ = hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))
+    assert (code, json.loads(got)["changed"]) == (0, ["p@m (project /a) 1-old -> 2-new"])
+    # The notes are the changed scope's own install's.
+    assert "- Changed the project copy" in (run / "review-input.md").read_text()
+
+
+def test_a_bullet_naming_a_marketplace_by_its_name_goes_to_that_marketplace_alone() -> None:
+    """Run 1's review.md: the nyldn-plugins REVISIT bullets were repeated under every item."""
+    answer = "## BREAKING\n- none\n## ADOPT\n- none\n## REVISIT\n- nyldn-plugins: rollback refuses dirty work\n"
+    tools = {
+        "marketplace nyldn-plugins a -> b": "marketplace nyldn-plugins",
+        "marketplace m c -> d": "marketplace m",
+        "octo@nyldn-plugins (project /a) 1-a -> 2-b": "octo@nyldn-plugins (project /a)",
+    }
+    per = review.split(answer, tools)
+    assert review.bullets(per["marketplace nyldn-plugins a -> b"], "REVISIT") == [
+        "nyldn-plugins: rollback refuses dirty work"
+    ]
+    assert review.bullets(per["marketplace m c -> d"], "REVISIT") == []
+    assert review.bullets(per["octo@nyldn-plugins (project /a) 1-a -> 2-b"], "REVISIT") == []
+    # A scoped plugin's bullet may name it by its bare id.
+    per = review.split("## REVISIT\n- octo@nyldn-plugins: a\n", tools)
+    assert review.bullets(per["octo@nyldn-plugins (project /a) 1-a -> 2-b"], "REVISIT") == ["octo@nyldn-plugins: a"]
+    assert review.bullets(per["marketplace nyldn-plugins a -> b"], "REVISIT") == []
+
+
+def test_a_bullet_naming_a_scoped_plugin_in_full_goes_to_that_scope_alone() -> None:
+    """Codex round 1: a bullet "p@m (project /a): ..." reached /a, /b and the user install, since \\b after ")" never
+    matches before ":"."""
+    tools = {
+        "p@m 1-a -> 1-b": "p@m",
+        "p@m (project /a) 1 -> 2": "p@m (project /a)",
+        "p@m (project /b) 1 -> 2": "p@m (project /b)",
+    }
+    per = review.split("## REVISIT\n- p@m (project /a): moved a hook\n", tools)
+    assert [name for name, text in per.items() if review.bullets(text, "REVISIT")] == ["p@m (project /a) 1 -> 2"]
+
+
+def test_answers_cached_before_the_splitter_fix_are_not_replayed(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Codex round 1: old per-item answers hold the nyldn-plugins bullets under every item; a new cache starts empty."""
+    setup(world)
+    old = world.state() / "review-cache"
+    old.mkdir(parents=True)
+    (old / "a.md").write_text("## BREAKING\n- nyldn-plugins: stale\n## ADOPT\n- none\n## REVISIT\n- none\n")
+    (old / "index.json").write_text(json.dumps({"claude 2.1.9 -> 2.1.10": "a.md"}))
+    code, got, _ = hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))
+    assert (code, json.loads(got)["flags"]) == (0, ["- claude 2.1.10: Removed the --legacy flag"])

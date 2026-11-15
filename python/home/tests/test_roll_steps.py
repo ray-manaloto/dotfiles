@@ -714,3 +714,99 @@ def test_a_receipt_is_read_only_for_its_own_session() -> None:
     assert roll.before(step, target) == "## main"
     path.write_text(receipt.model_copy(update={"terminal": "t4"}).model_dump_json())
     assert roll.before(step, target) is None
+
+
+def test_a_run_whose_update_failed_before_its_review_keeps_its_baseline(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Run 1 installed updates and failed before roll:review; its rerun's snapshot took the updated versions and its
+    review saw almost nothing. The next snapshot keeps the earlier baseline until a review finishes."""
+    scene(world)
+    claude = world.home / ".local/bin/claude"
+    claude.parent.mkdir(parents=True)
+    claude.write_text(f"#!{sys.executable} -I\nimport sys\nprint(open(sys.argv[0] + '.v').read())\n")
+    claude.chmod(0o755)
+    Path(f"{claude}.v").write_text("2.1.9")
+    bump = world.bin / "bump"
+    bump.write_text(f"#!{sys.executable} -I\nopen({f'{claude}.v'!r}, 'w').write('2.1.10')\nprint('updated')\n")
+    bump.chmod(0o755)
+    world.answer({("mise", "run", "update:claude"): {"real": str(bump)}, UPDATES[1]: {"code": 3}})
+    code, _, _ = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST[:-1], "run-1")
+    assert code == 1
+    assert (world.state() / "baseline").read_text() == "run-1\n"
+    world.answer({UPDATES[1]: {"stdout": "done\n"}, review.TRIAGE: {"code": 1}})
+    code, got, _ = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST[:-1], "run-2")
+    assert "versions.json: run-1's, kept since its review did not finish" in got
+    assert (world.state() / "run-2/versions.json").read_text() == (world.state() / "run-1/versions.json").read_text()
+    assert "- claude 2.1.9 -> 2.1.10" in (world.state() / "run-2/review.md").read_text()
+    # The finished review clears the marker: the next snapshot records what is installed then.
+    assert not (world.state() / "baseline").exists()
+
+
+def test_a_review_of_another_run_leaves_the_baseline_marker(world: World, capfd: pytest.CaptureFixture[str]) -> None:
+    """Only a review against the marked run's versions.json clears it; any other review would drop that baseline."""
+    for run, claude in (("run-1", "2.1.9"), ("run-x", "2.1.10")):
+        versions = review.collect().model_copy(update={"harnesses": {"claude": claude}})
+        (world.state() / run).mkdir(parents=True)
+        (world.state() / run / "versions.json").write_text(versions.model_dump_json())
+    (world.state() / "baseline").write_text("run-1\n")
+    world.answer({review.TRIAGE: {"code": 1}})
+    assert hometools(capfd, "review", "--apply", "--run", "run-x", "--wiki", str(world.wiki))[0] == 0
+    assert (world.state() / "baseline").read_text() == "run-1\n"
+    assert hometools(capfd, "review", "--run", "run-1", "--wiki", str(world.wiki))[0] == 0
+    assert (world.state() / "baseline").exists()
+    assert hometools(capfd, "review", "--apply", "--run", "run-1", "--wiki", str(world.wiki))[0] == 0
+    assert not (world.state() / "baseline").exists()
+
+
+def test_a_standalone_update_keeps_a_baseline_it_does_not_inherit(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Codex round 1: roll:update --apply --run B replaced the marker for run A though B had no versions.json, so the
+    next snapshot recorded the updated versions and A's pending changes were lost. Only a run that inherits A's
+    baseline takes the marker over."""
+    scene(world)
+    (world.state() / "run-a").mkdir(parents=True)
+    (world.state() / "run-a/versions.json").write_text("{}")
+    (world.state() / "baseline").write_text("run-a\n")
+    assert hometools(capfd, "update", "--apply", *FAST[:-1], "run-b")[0] == 0
+    assert (world.state() / "baseline").read_text() == "run-a\n"
+    (world.state() / "run-c").mkdir(parents=True)
+    (world.state() / "run-c/versions.json").write_text("{}")
+    assert hometools(capfd, "update", "--apply", *FAST[:-1], "run-c")[0] == 0
+    assert (world.state() / "baseline").read_text() == "run-c\n"
+
+
+def test_a_session_counts_only_the_project_plugins_of_its_own_folder(world: World) -> None:
+    """The owner's pick in round 1: a project-scope update for the session's folder makes it outdated; one for
+    another folder leaves it current."""
+    proj, other = world.root / "proj", world.root / "other"
+    term = GraphTerminal(
+        address="t3", kind=Kind.claude, session="s", cwd=str(proj), argv=None, status=None, lane_parents=[],
+        is_coordinator=False,
+    )  # fmt: skip
+    target = (
+        GraphSpace(id="s1", name="proj", folder=str(proj), tabs=[]),
+        GraphTab(id="b1", name="w", terminals=[]),
+        term,
+    )
+
+    def install(mine: str, theirs: str) -> None:
+        entries = [
+            {"scope": "user", "version": "1", "gitCommitSha": "u"},
+            {"scope": "project", "projectPath": str(proj), "version": "1", "gitCommitSha": mine},
+            {"scope": "local", "projectPath": str(other), "version": "1", "gitCommitSha": theirs},
+        ]
+        installed = {"p@m": entries}
+        folder = world.home / ".claude/plugins"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": installed}))
+
+    install("a", "x")
+    roll.codeset(target, apply=True)
+    install("a", "y")  # another project's plugin: still current
+    roll.codeset(target, apply=True)
+    assert len(json.loads((world.state() / "codeset.json").read_text())) == 1
+    install("b", "y")  # its own project's plugin: outdated
+    roll.codeset(target, apply=True)
+    assert len(json.loads((world.state() / "codeset.json").read_text())) == 2
