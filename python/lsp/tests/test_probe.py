@@ -32,13 +32,15 @@ def test_smoke_asks_tsc_about_the_fixture(world: World, lsp: Lsp) -> None:
     lines = result.out.splitlines()
     assert lines[3].startswith("  ok  initialize: typescript-go ")
     assert lines[3].endswith("/tsc --lsp --stdio")
-    assert lines[4:] == [
+    assert lines[4:-1] == [
         "  ok  documentSymbol: greet",
         "  ok  hover: function greet(name: string): string",
         "  ok  definition: 1 location(s)",
         "  ok  references: 3 in a.ts, b.ts",
-        "  ok  shutdown: clean",
     ]
+    # tsc 7.0.2 panics now and then as it shuts down; the probe notes that, and
+    # test_a_server_that_dies_on_shutdown_is_noted_not_failed covers it with a stand-in.
+    assert lines[-1] == "  ok  shutdown: clean" or lines[-1].startswith("  ok  shutdown: not clean: ")
 
 
 def test_health_only_initializes(world: World, lsp: Lsp) -> None:
