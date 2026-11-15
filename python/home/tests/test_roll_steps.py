@@ -175,10 +175,16 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
             },
         }
     )
+    # A link left at the marker's path is replaced, not written through: the marker is written by a rename.
+    elsewhere = world.root / "elsewhere"
+    world.state().mkdir(parents=True, exist_ok=True)
+    (world.state() / "paused").symlink_to(elsewhere)
     code, got, err = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST)
     run = world.runs()[0].run
     gate = world.state() / str(run) / "review.md"
     assert code == 3
+    assert not elsewhere.exists()
+    assert (world.state() / "paused").read_text() == f"{run}\n"
     assert json.loads(err.splitlines()[-1])["error"] == (
         f"roll:all paused before roll:stop: read {gate}, then rerun with --accept-review; to drop this run instead, "
         f"delete {world.state() / 'paused'} and rerun"
@@ -203,6 +209,25 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
     assert [s.result for s in world.runs()[3].sessions] == ["stopped"]
     assert world.calls().count(("mise", "run", "update:claude")) == 1
     assert "Gate: CLOSED" in gate.read_text()
+
+
+@pytest.mark.parametrize("marker", ["\n", "../other\n", "gone\n"], ids=["empty", "not-a-name", "no-run-folder"])
+def test_a_paused_marker_without_its_run_is_refused(
+    world: World, capfd: pytest.CaptureFixture[str], marker: str
+) -> None:
+    """A marker naming no run of its own (empty, a path, a folder that is gone) is not continued: with no run id the
+    run folder would be the state folder itself, and roll:stop would build a live graph instead of the snapshot."""
+    scene(world)
+    paused = world.state() / "paused"
+    paused.parent.mkdir(parents=True, exist_ok=True)
+    paused.write_text(marker)
+    code, _, err = hometools(capfd, "all", "--apply", "--accept-review", "--wiki", str(world.wiki), *FAST)
+    assert code == roll.REFUSED
+    assert json.loads(err.splitlines()[-1])["error"] == (
+        f"roll:all: {paused} names no run with a snapshot ({marker.strip()!r}); delete it and rerun"
+    )
+    assert (world.runs(), paused.read_text()) == ([], marker)
+    assert ASK not in world.calls()
 
 
 def test_a_chief_of_staff_that_does_not_stop_holds_every_space(world: World, capfd: pytest.CaptureFixture[str]) -> None:

@@ -433,14 +433,15 @@ def placed() -> str | None:
 
 
 def do_all(args: argparse.Namespace, argv: Sequence[str]) -> int:
-    if args.apply and (why := placed()):
-        sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
-        return REFUSED
     # A paused run holds until the owner accepts its review: a new snapshot would take the updated versions as its
     # baseline, find nothing changed and open the gate. Accepted, it goes on from roll:stop with its own snapshot.
     paused = state() / "paused"
-    if args.apply and paused.is_file():
-        args.run = paused.read_text().strip()
+    held = paused.read_text().strip() if args.apply and paused.is_file() else None
+    if args.apply and (why := placed() or orphaned(paused, held)):
+        sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
+        return REFUSED
+    if held is not None:
+        args.run = held
         if not args.accept_review:
             return pause(state() / args.run / "review.md")
         paused.unlink()
@@ -451,9 +452,17 @@ def do_all(args: argparse.Namespace, argv: Sequence[str]) -> int:
             return rc
     gate = state() / args.run / "review.md"
     if args.apply and not args.accept_review and "Gate: CLOSED" in gate.read_text():
-        paused.write_text(f"{args.run}\n")
+        snap.write(paused, f"{args.run}\n")
         return pause(gate)
     return roll(args, argv)
+
+
+def orphaned(paused: Path, run: str | None) -> str | None:
+    """Why the paused marker can't be continued: a run id that is empty or a path would make the state folder (or
+    another) the run folder, and roll:stop would build a live graph instead of reading the paused snapshot."""
+    if run is None or (run and Path(run).name == run and (state() / run / "graph.json").is_file()):
+        return None
+    return f"roll:all: {paused} names no run with a snapshot ({run!r}); delete it and rerun"
 
 
 def pause(gate: Path) -> int:

@@ -515,6 +515,12 @@ def test_a_codex_resume_keeps_its_policies_but_not_the_old_terminals(world: Worl
         ("sleep 60", False),
         # A node script named as a server is a service; one that only mentions server is a job.
         ("/usr/local/bin/node /srv/app/dist/server.js", True),
+        ("node --enable-source-maps /srv/app/dist/server.js", True),
+        ("node --max-old-space-size=4096 build.js --target server", False),
+        ("node --max-old-space-size=4096 dist/server.js", True),
+        # An option that takes a separate value is no script: the script after it is the one that runs.
+        ("node --require ./server.js build.js", False),
+        ("node -r ./server.js build.js", False),
         ("node /x/some-server --stdio", True),
         ("node scripts/server-build.js", False),
         ("node build.js --target server-side", False),

@@ -62,9 +62,12 @@ SERVICE = re.compile(
     r"\b(mcp|lsp|language-server|clangd|pyright|gopls|rust-analyzer|typescript-language-server|jdtls|sourcekit|"
     r"caffeinate|codebase-memory|openwiki|context7|exa|firecrawl|playwright|uv tool run|uv tool uvx|npx -y|npm exec|"
     r"bun x|modelcontextprotocol|node_repl|cua_node|codex-code-mode-host|hc (watch|tail)|fnox (daemon|mcp))\b|"
-    # A node script named as a server (dist/server.js, some-mcp-server), not any command line that mentions one; of
-    # the commands ending in "server", only the language servers that run as <tool> server (ty, ruff).
-    r"\bnode\s+(\S*/)?[\w.-]*server(\.[cm]?js)?(\s|$)|^codex |(^|/)(ty|ruff) server(\s|$)",
+    # A node script named as a server (dist/server.js, some-mcp-server), not any command line that mentions one.
+    # Before the script only options that take no separate value: --name=value and a few flags; any other option
+    # (-r ./server.js) may hold the next word, so the command counts as a job. Of the commands ending in "server",
+    # only the language servers that run as <tool> server (ty, ruff).
+    r"\bnode\s+(--[\w-]+=\S*\s+|--(enable-source-maps|no-warnings|inspect|trace-warnings)\s+)*"
+    r"(\S*/)?[\w.-]*server(\.[cm]?js)?(\s|$)|^codex |(^|/)(ty|ruff) server(\s|$)",
     re.IGNORECASE,
 )
 DIALOG = "Background work is running"
