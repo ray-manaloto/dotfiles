@@ -7,7 +7,7 @@ Claude Code's CHANGELOG sections between the two versions, the GitHub releases b
 OpenCode, a plugin's CHANGELOG.md or its git log, a marketplace's git log. agy has no release source we could verify.
 
 One `claude -p --model sonnet` call with a budget cap and read-only tools triages only the pairs it has never seen
-(cache: <state>/review-cache). <run>/review.md is the source of truth; /herdr-startup rolling reads it and sends the
+(cache: <state>/<CACHE>). <run>/review.md is the source of truth; /herdr-startup rolling reads it and sends the
 owner its BREAKING and REVISIT items. The gate closes on the triage's BREAKING items, and roll:all then pauses
 before roll:stop until it is rerun with --accept-review. The grep for breaking, removed and deprecated lines is
 listed for reading; it closes the gate only when the triage gave no answer for a changed item.
@@ -40,6 +40,8 @@ FLAG = re.compile(r"\b(breaking|removed|deprecated)\b", re.IGNORECASE)
 HEADER = re.compile(r"^##\s+\[?v?(\d+(?:\.\d+)+)", re.MULTILINE)
 VERSION = re.compile(r"\d+(?:\.\d+)+")
 BUDGET = "1.00"
+# The triage cache's folder under <state>; a new name when split() changes, so answers cut the old way are not replayed.
+CACHE = "review-cache-2"
 TRIAGE = (
     "claude", "-p", "--model", "sonnet", "--max-budget-usd", BUDGET, "--restricted", "--strict-mcp-config",
     "--tools", "Read", "--no-session-persistence",
@@ -77,20 +79,31 @@ def load(path: Path) -> dict[str, object]:
     return found if isinstance(found, dict) else {}
 
 
-def user_plugins() -> dict[str, str]:
-    """Each user-scope plugin id: <version>-<gitCommitSha>."""
-    plugins: dict[str, str] = {}
+def scoped(name: str, entry: object) -> str:
+    """A plugin entry's key: the bare id for user scope (the shape older versions.json files have), else the id with
+    its scope and project folder, so each (id, scope, projectPath) is its own item."""
+    scope, folder = field(entry, "scope"), field(entry, "projectPath")
+    if scope == "user":
+        return name
+    return f"{name} ({scope}{f' {folder}' if isinstance(folder, str) else ''})"
+
+
+def plugins(folder: str | None = None, *, every: bool = True) -> dict[str, str]:
+    """Installed plugin entries keyed by scoped(): <version>-<gitCommitSha>. Every entry; with every=False only the ones
+    a session in folder loads: those with no project folder (user, managed) and those whose projectPath is folder."""
+    found: dict[str, str] = {}
+    here = Path(folder).resolve() if folder else None
     installed = field(load(Path.home() / ".claude/plugins/installed_plugins.json"), "plugins")
     for name, entries in (installed if isinstance(installed, dict) else {}).items():
         for entry in entries if isinstance(entries, list) else []:
-            if field(entry, "scope") == "user":
-                plugins[name] = f"{field(entry, 'version')}-{field(entry, 'gitCommitSha')}"
-    return plugins
+            path = field(entry, "projectPath")
+            if every or not isinstance(path, str) or Path(path).resolve() == here:
+                found[scoped(name, entry)] = f"{field(entry, 'version')}-{field(entry, 'gitCommitSha')}"
+    return found
 
 
 def collect() -> Versions:
     """What is installed now."""
-    plugins = user_plugins()
     markets = {}
     for name, entry in load(Path.home() / ".claude/plugins/known_marketplaces.json").items():
         repo = field(entry, "source", "repo") if field(entry, "source", "source") == "github" else None
@@ -98,7 +111,7 @@ def collect() -> Versions:
         head = call("git", "-C", folder, "rev-parse", "HEAD") if isinstance(folder, str) else None
         markets[name] = Marketplace(repo=repo if isinstance(repo, str) else None, head=head.strip() if head else None)
     return Versions(
-        harnesses={name: harness_version(name) for name in HARNESSES}, plugins=plugins, marketplaces=markets
+        harnesses={name: harness_version(name) for name in HARNESSES}, plugins=plugins(), marketplaces=markets
     )
 
 
@@ -159,12 +172,14 @@ def releases(name: str, old: str, new: str) -> str:
 
 
 def plugin_notes(tool: str, old: str, new: str, after: Versions) -> str:
-    """The plugin's CHANGELOG.md, else its marketplace's git log for it, else GitHub's compare."""
-    name, _, market = tool.partition("@")
+    """The plugin's CHANGELOG.md (its own scope's install), else its marketplace's git log for it, else GitHub's
+    compare."""
+    ident = tool.partition(" (")[0]
+    name, _, market = ident.partition("@")
     old_sha, new_sha = old.rpartition("-")[2], new.rpartition("-")[2]
-    installed = field(load(Path.home() / ".claude/plugins/installed_plugins.json"), "plugins", tool)
+    installed = field(load(Path.home() / ".claude/plugins/installed_plugins.json"), "plugins", ident)
     folder = (
-        next((field(e, "installPath") for e in installed if field(e, "scope") == "user"), None)
+        next((field(e, "installPath") for e in installed if scoped(ident, e) == tool), None)
         if isinstance(installed, list)
         else None
     )
@@ -265,15 +280,18 @@ def breaking(text: str) -> list[str]:
 
 def split(answer: str, tools: dict[str, str]) -> dict[str, str]:
     """One batch answer cut into one answer per item (name -> its tool), so a cached item never replays another
-    item's bullets. A bullet goes to the item whose tool it begins with (the longest one); a bullet that names no
-    item goes to every item of the batch, so nothing BREAKING is lost."""
+    item's bullets. A bullet goes to the item whose tool it begins with (the longest one), a marketplace's tool
+    counting its bare name too and a scoped plugin's its bare id; a bullet that names no item goes to every item of
+    the batch, so nothing BREAKING is lost."""
     per: dict[str, dict[str, list[str]]] = {name: {heading: [] for heading in HEADINGS} for name in tools}
+    aliases = {name: {tool, tool.removeprefix("marketplace "), tool.partition(" (")[0]} for name, tool in tools.items()}
     for heading in HEADINGS:
         for item in bullets(answer, heading):
             bare = item.lstrip("*`_ ")
-            owners = [name for name, tool in tools.items() if re.match(rf"{re.escape(tool)}\b", bare)]
-            longest = max((len(tools[name]) for name in owners), default=0)
-            for name in [name for name in owners if len(tools[name]) == longest] or list(tools):
+            match = {name: max((len(n) for n in found if re.match(rf"{re.escape(n)}(?!\w)", bare)), default=0)
+                     for name, found in aliases.items()}  # fmt: skip
+            longest = max(match.values(), default=0)
+            for name in [name for name in tools if longest and match[name] == longest] or list(tools):
                 per[name][heading].append(item)
     return {
         name: "\n\n".join(f"## {h}\n" + "\n".join(f"- {i}" for i in items[h] or ["none"]) for h in HEADINGS)

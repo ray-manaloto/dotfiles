@@ -341,7 +341,7 @@
       "required": ["harnesses", "plugins", "marketplaces"],
       "properties": {
         "harnesses": {"type": "object", "additionalProperties": {"type": ["string", "null"]}, "description": "claude, codex, opencode and agy: the version each one's --version prints; null when it can't run."},
-        "plugins": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Each user-scope plugin id: <version>-<gitCommitSha>, as installed_plugins.json records it."},
+        "plugins": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Each plugin entry: <version>-<gitCommitSha>; key: the id (user scope), else '<id> (<scope> <projectPath>)'."},
         "marketplaces": {"type": "object", "additionalProperties": {"$ref": "#/$defs/Marketplace"}}
       }
     },

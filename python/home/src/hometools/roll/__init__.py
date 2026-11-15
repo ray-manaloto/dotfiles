@@ -50,6 +50,19 @@ def state() -> Path:
     return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "dotfiles/roll"
 
 
+def baseline() -> Path:
+    """The run whose roll:update ran and whose review has not finished: the next snapshot keeps its versions.json, so
+    the updates it installed are still reviewed. A finished roll:review --apply of that baseline removes it."""
+    return state() / "baseline"
+
+
+def held() -> tuple[str, str] | None:
+    """The baseline run and its versions.json text; None when there is no marker or it names no run with one."""
+    run = baseline().read_text().strip() if baseline().is_file() else ""
+    kept = state() / run / "versions.json"
+    return (run, kept.read_text()) if run and Path(run).name == run and kept.is_file() else None
+
+
 def names(text: str) -> list[str]:
     return [name.strip() for name in text.split(",") if name.strip()]
 
@@ -212,7 +225,11 @@ def do_snapshot(step: Step) -> int:
         check=lambda made: targets(made, step.args, me),
     )  # fmt: skip
     if step.args.apply:
-        (step.folder / "versions.json").write_text(rev.collect().model_dump_json(indent=1) + "\n")
+        if kept := held():
+            (step.folder / "versions.json").write_text(kept[1])
+            step.out(f"versions.json: {kept[0]}'s, kept since its review did not finish")
+        else:
+            (step.folder / "versions.json").write_text(rev.collect().model_dump_json(indent=1) + "\n")
     step.out(report.model_dump_json())
     picked, left = targets(graph, step.args, me)
     step.out(f"chosen: {', '.join(f'{s.name} / {t.name} ({x.address})' for s, t, x in picked) or 'none'}")
@@ -245,6 +262,10 @@ def do_update(step: Step) -> int:
     # Reported in the plan and the run, not a stop: the restart itself does not need those links.
     step.out(dangling().model_dump_json())
     rc = 0
+    # A held baseline stays until a run that inherited it (its versions.json is the held one) takes it over.
+    base, mine = held(), step.folder / "versions.json"
+    if step.args.apply and (base is None or (mine.is_file() and mine.read_text() == base[1])):
+        snap.write(baseline(), f"{step.args.run}\n")
     for task in UPDATES:
         argv = ["mise", "run", task]
         if kept and task == "agents:update":
@@ -281,8 +302,11 @@ def do_review(step: Step) -> int:
         why = f"roll:review: {step.folder} has no versions.json; run roll:snapshot --apply first"
         sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
         return FAILED
-    cache = state() / "review-cache"
+    cache = state() / rev.CACHE
     report = rev.review(step.folder, cache, step.args.wiki, apply=step.args.apply)
+    # Only a review against the marked baseline clears it: a review of another run leaves those updates unreviewed.
+    if step.args.apply and ((kept := held()) is None or kept[1] == (step.folder / "versions.json").read_text()):
+        baseline().unlink(missing_ok=True)
     step.out(report.model_dump_json())
     return 0
 
@@ -295,9 +319,8 @@ def do_stop(step: Step) -> int:
         # roll:start resumes from this graph: after /exit the live one shows only shells.
         snap.write(keep / "graph.json", graph.model_dump_json(indent=2, exclude_unset=True))
     picked, _ = targets(graph, step.args, live.me)
-    mark = codeset(apply=step.args.apply)
     for target in picked:
-        step.add(session.stop(live, target, timing(step.args), keep, mark))
+        step.add(session.stop(live, target, timing(step.args), keep, codeset(target, apply=step.args.apply)))
     return failed(step)
 
 
@@ -337,11 +360,14 @@ def do_start(step: Step) -> int:
     return failed(step)
 
 
-def codeset(*, apply: bool) -> dt.datetime | None:
-    """When the plugin code set a session loads last changed: a hash of the user-scope plugin records, enabled
-    plugins and plugin configs, remembered when first seen (installed_plugins.json's own times move on every start)."""
+def codeset(target: Target | None = None, *, apply: bool) -> dt.datetime | None:
+    """When the plugin code set the target session loads last changed: a hash of its plugin records (user scope, plus
+    project and local scope for its own folder; user scope alone with no target), enabled plugins and plugin configs,
+    remembered when first seen (installed_plugins.json's own times move on every start)."""
     home = Path.home()
-    parts = [f"{name}|{plugin}" for name, plugin in sorted(rev.user_plugins().items())]
+    # A session loads the project and local plugins installed for its own folder, not another project's.
+    folder = (target[2].cwd or target[0].folder) if target else None
+    parts = [f"{name}|{plugin}" for name, plugin in sorted(rev.plugins(folder, every=False).items())]
     settings = rev.load(home / ".claude/settings.json")
     parts += [repr(settings.get("enabledPlugins")), repr(settings.get("pluginConfigs"))]
     # Inline mods a session loads from CLAUDE_CODE_PLUGIN_DIRS (side-notes, you-should-know-forward): their
@@ -373,12 +399,12 @@ def do_verify(step: Step) -> int:
     else:
         picked, left = targets(run_graph(step), step.args, live.me)
         done = stopped(step)
-    mark = codeset(apply=step.args.apply)
     moved = resumed_in(step)
     for target in picked:
         if done and target[2].address not in done:
             continue
         address = moved.get(str(target[2].session))
+        mark = codeset(target, apply=step.args.apply)
         step.add(session.verify(target, mark, session.screen, before(step, target), address))
     for target in excluded(left, step.args):
         step.add(session.untouched(target, live))
@@ -486,7 +512,6 @@ def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:
     graph = run_graph(stop)
     picked, left = targets(graph, args, live.me)
     prompt = session.ROLLING if args.prompt == "rolling" else session.REBOOT
-    mark = codeset(apply=args.apply)
     rc = 0
     # The run log is written even when an error or Ctrl-C ends the loop, so roll:start finds what was stopped.
     try:
@@ -494,6 +519,7 @@ def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:
             coordinator = role(target[0].name, target[1].name) is Role.coordinator
             # Nothing else moves until the chief of staff is back and verified. A skipped child or lead is listed
             # to retry later; it fails nothing.
+            mark = codeset(target, apply=args.apply)
             if not one(target, (stop, start, check), live, mark, prompt) and coordinator and args.apply:
                 rc = FAILED
                 break

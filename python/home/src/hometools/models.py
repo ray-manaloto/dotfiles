@@ -782,7 +782,7 @@ class Versions(BaseModel):
     """
     plugins: dict[str, str]
     """
-    Each user-scope plugin id: <version>-<gitCommitSha>, as installed_plugins.json records it.
+    Each plugin entry: <version>-<gitCommitSha>; key: the id (user scope), else '<id> (<scope> <projectPath>)'.
     """
     marketplaces: dict[str, Marketplace]
 
