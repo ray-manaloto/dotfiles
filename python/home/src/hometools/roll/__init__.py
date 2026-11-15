@@ -26,6 +26,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from hometools import nativeclaude
 from hometools.models import (
     Background,
     Failure,
@@ -575,6 +576,9 @@ def main(argv: Sequence[str]) -> int:
     """The step's exit code."""
     args = parser().parse_args(argv)
     args.run = args.run or run_id(args.step)
+    # A start resumes each Claude session with plain `claude`, which a stray npm copy in a mise node would win.
+    if args.apply and args.step in {RollStep.all, RollStep.start} and (stray := nativeclaude.stray(Path.home())):
+        return refused(RefusedError(f"roll: Claude Code outside its native install at {stray[0]}; run claude:doctor"))
     if args.step is RollStep.all:
         try:
             return do_all(args, argv)

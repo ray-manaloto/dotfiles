@@ -846,3 +846,17 @@ def test_a_session_counts_only_the_project_plugins_of_its_own_folder(world: Worl
     install("b", "y")  # its own project's plugin: outdated
     roll.codeset(target, apply=True)
     assert len(json.loads((world.state() / "codeset.json").read_text())) == 2
+
+
+@pytest.mark.parametrize("step", ["start", "all"])
+def test_a_stray_claude_in_a_mise_node_refuses_the_roll(
+    world: World, capfd: pytest.CaptureFixture[str], step: str
+) -> None:
+    """start resumes sessions with plain `claude`, which an npm copy in a mise node would win on a shell's PATH."""
+    scene(world)
+    stray = world.home / ".local/share/mise/installs/node-x/lib/node_modules/@anthropic-ai/claude-code"
+    stray.mkdir(parents=True)
+    code, got, err = hometools(capfd, step, "--apply", *FAST, "--run", "run-stray")
+    assert (code, got) == (2, "")
+    assert json.loads(err)["error"] == f"roll: Claude Code outside its native install at {stray}; run claude:doctor"
+    assert not [call for call in world.calls() if call[:2] == ("hc", "send")]
