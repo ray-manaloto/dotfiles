@@ -111,6 +111,8 @@ def where(target: Target) -> str:
 
 
 NO_BOX = "no prompt box on screen"
+# The key box_draft presses to tell ghost text from a draft.
+PROBE_KEY = "x"
 
 
 def no_box_anywhere(results: list[SessionResult]) -> list[str]:
@@ -238,8 +240,7 @@ def draft(text: str) -> str | None:
     """The text in a Claude prompt box: from the one line that opens with its prompt mark under a rule, to the
     screen's last rule. An empty box shows the mark and a no-break space; past prompts above the box don't count.
     None when no box is found (a failed read, or a draft so long its start scrolled off): unknown, not empty. hc read
-    has no colours, so a grey prompt suggestion would count as a draft too: dotfiles turns suggestions off
-    (promptSuggestionEnabled), and a suggestion only costs a skip."""
+    has no colours, so grey ghost text reads as a draft too: box_draft tells them apart."""
     lines = [line.strip() for line in text.splitlines()]
     rule = [line.startswith(RULE * 3) for line in lines]  # the top rule may carry the session name
     tops = [n for n, line in enumerate(lines) if n and rule[n - 1] and line.startswith(PROMPT)]
@@ -248,6 +249,31 @@ def draft(text: str) -> str | None:
     if len(tops) != 1 or bottom < tops[0]:
         return None
     return " ".join(lines[tops[0] : bottom]).removeprefix(PROMPT).strip()
+
+
+def box_draft(address: str, timing: Timing) -> str | None:
+    """draft() of the terminal's box, with ghost text told from typing. next-steps@claude-community draws its
+    suggestion as ghost text in an empty box, which promptSuggestionEnabled does not hide and Ctrl-U and Esc leave
+    (t2k6, 2026-11-15). One key settles it: an empty box then reads just that key, while a real draft gains it.
+    A box that never changes stays a draft. The key is taken back with a backspace only when it was pressed, and the
+    box must then read as it did before; otherwise the key may be left in it, and the session is failed-draft-probe
+    for the owner to look at."""
+
+    def read_box() -> str | None:
+        return draft(call("hc", "read", address) or "")
+
+    typed = read_box()
+    if not typed:
+        return typed
+    left = f"the probe key {PROBE_KEY!r} may still be in the prompt box"
+    if call("hc", "keys", address, PROBE_KEY) is None:
+        need(read_box() == typed, "failed-draft-probe", "hc keys failed and the box changed", left)
+        return typed
+    seen = poll(lambda: now if (now := read_box()) != typed else None, timing.settle, timing.interval)
+    need(call("hc", "keys", address, "backspace") is not None, "failed-draft-probe", "hc keys backspace failed", left)
+    restored = poll(lambda: True if read_box() == typed else None, timing.settle, timing.interval)
+    need(restored, "failed-draft-probe", "the box did not read as before after the backspace", left)
+    return "" if seen == PROBE_KEY else typed
 
 
 def footer(address: str) -> str | None:
@@ -398,7 +424,7 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         same_tab(space, tab, term.address)
         # hc send types into the box: text someone left there would be sent with the handshake (t2fw, 2026-11-15).
         # The whole screen, not screen()'s tail: a cut could drop the box's top and leave a pasted one.
-        typed = draft(call("hc", "read", term.address) or "") if term.kind is Kind.claude else ""
+        typed = box_draft(term.address, timing) if term.kind is Kind.claude else ""
         box = typed is not None if term.kind is Kind.claude else None
         need(typed == "", "skipped-draft", NO_BOX if typed is None else f"{len(typed)} characters in the prompt box")
         heard = handshake(term, timing, attempt(keep, term))
