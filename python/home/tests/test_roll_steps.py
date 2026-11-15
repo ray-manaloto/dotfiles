@@ -142,9 +142,15 @@ def test_the_dry_run_plans_every_step_and_writes_nothing(world: World, capfd: py
 def test_all_runs_only_in_its_own_roll_tab(world: World, capfd: pytest.CaptureFixture[str], label: dict) -> None:
     scene(world)
     world.answer({("hc", "get", "t9", "--json"): out(info("t9", None, ["zsh"], world.root, **label))})
-    code, got, err = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki))
+    wiki = str(world.wiki)
+    flags = ["--sessions", "free-models", "--exclude", "cpp-core", "--apply", "--wiki", wiki]
+    code, got, err = hometools(capfd, "all", *flags)
     assert (code, got) == (2, "")
-    assert json.loads(err)["error"].startswith("roll:all --apply runs only in its own herdr tab named roll")
+    error = json.loads(err)["error"]
+    assert error.startswith("roll:all --apply runs only in its own herdr tab named roll")
+    # The printed command keeps the caller's choice of sessions: pasted as is, it rolls the same ones.
+    printed = json.loads(shlex.split(error.rpartition(" --argv ")[2])[0])
+    assert printed[printed.index("roll:all") + 1 :] == flags
     assert world.runs() == []
 
 
