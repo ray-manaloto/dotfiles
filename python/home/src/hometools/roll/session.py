@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import re
 import shlex
+import time
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
@@ -56,6 +57,9 @@ CHIEF_KEY = "--resume chief-of-staff"
 READY, BUSY = "READY-TO-RESTART", "BUSY-KEEP-ME"
 IDLE = frozenset({"done", "idle"})
 WAITING = frozenset({"permission", "blocked"})
+# Seconds an idle tab has to show the handshake as a turn before it counts as never delivered: hc send types into the
+# prompt box, and text typed while someone drafts there can be lost (2026-11-15, t2fw).
+START = 60
 # Long-lived children a session keeps for itself; anything else under it counts as a background job.
 SERVICE = re.compile(
     # Whole words only: a bare exa or bun x would also match python example.py or bun xyz, a job /exit kills.
@@ -188,6 +192,23 @@ def reply(path: Path, since: dt.datetime, token: str) -> str | None:
     return found
 
 
+def asked(path: Path, since: dt.datetime, token: str) -> bool:
+    """The handshake reached the session as a turn: a user record after since whose text carries the token."""
+    for record in records(path):
+        stamp = field(record, "timestamp")
+        if field(record, "type") != "user" or not isinstance(stamp, str) or dt.datetime.fromisoformat(stamp) <= since:
+            continue
+        content = field(record, "message", "content")
+        texts = (
+            [content]
+            if isinstance(content, str)
+            else [str(block.get("text", "")) for block in rows(record.get("message"), "content")]
+        )
+        if any(token in text for text in texts):
+            return True
+    return False
+
+
 def screen_reply(address: str, token: str) -> str | None:
     """For Codex and OpenCode, whose transcripts differ: the last marker line on the screen that carries this run's
     token. The transcript is read by time; a screen has no times, so a bare marker may be an earlier run's."""
@@ -260,12 +281,22 @@ def handshake(term: GraphTerminal, timing: Timing, token: str) -> str | None:
     src/cli.rs:355 at v0.1.21) asked nothing: skipped."""
     path = transcript(term.session) if term.kind is Kind.claude and term.session else None
     need(path or term.kind is not Kind.claude, "skipped-no-transcript", f"session {term.session}")
-    since = dt.datetime.now(dt.UTC)
+    since, began = dt.datetime.now(dt.UTC), time.monotonic()
+
+    def shown() -> bool:
+        """The handshake started a turn, as the Claude transcript records it. A Codex or OpenCode screen cannot tell
+        a sent request from one still in the prompt box, so there the handshake counts as shown once sent."""
+        return asked(path, since, token) if path else True
 
     def heard() -> str | None:
         found = reply(path, since, token) if path else screen_reply(term.address, token)
-        # An idle tab with no marker has answered nothing: stop waiting.
-        return found or (None if status(term.address)[0] not in IDLE else "")
+        if found or status(term.address)[0] not in IDLE:
+            return found
+        # Idle with no marker after the handshake ran: it answered nothing. Idle before it ever showed up: the text
+        # may still be on its way, until START runs out.
+        if shown():
+            return ""
+        return "not-delivered" if time.monotonic() - began >= min(START, timing.wait) else None
 
     wait = str(int(timing.wait))
     sent = call("hc", "send", "--wait", "--timeout", wait, term.address, request(token), timeout=timing.wait + 60)
@@ -339,7 +370,8 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         heard = handshake(term, timing, attempt(keep, term))
         state, kind, argv = status(term.address)
         need(kind not in WAITING, "skipped-blocked", f"answer {heard}")
-        need(heard == "ready", f"skipped-{heard or 'no-answer'}")
+        lost = ["the handshake never started a turn; its text may still be in the prompt box"]
+        need(heard == "ready", f"skipped-{heard or 'no-answer'}", *(lost if heard == "not-delivered" else []))
         need(state in IDLE, "skipped-busy-after-answer", f"status {state}")
         need(runs(term.kind, argv), "skipped-foreground-changed", shlex.join(argv))
         same_tab(space, tab, term.address)

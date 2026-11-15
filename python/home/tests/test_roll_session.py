@@ -454,6 +454,46 @@ def test_a_retry_in_the_same_run_does_not_take_the_first_attempts_answer(world: 
     assert (world.root / RUN / "handshakes.log").read_text().splitlines()[1] == f"{RUN}-2 t3 {CODEX_SID}"
 
 
+def test_only_a_user_turn_after_the_send_that_carries_the_token_counts_as_asked(tmp_path: Path) -> None:
+    since = dt.datetime(2026, 11, 15, 2, 44, 50, tzinfo=dt.UTC)
+    at = lambda seconds: (since + dt.timedelta(seconds=seconds)).isoformat()  # noqa: E731
+    path = tmp_path / "t.jsonl"
+    lines = [
+        {"type": "user", "timestamp": at(-5), "message": {"content": f"old {TOKEN}"}},
+        {"type": "assistant", "timestamp": at(1), "message": {"content": [{"type": "text", "text": TOKEN}]}},
+        {"type": "user", "timestamp": at(2), "message": {"content": [{"type": "text", "text": "/verify something"}]}},
+    ]
+    path.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    assert not session.asked(path, since, TOKEN)
+    asked = {"type": "user", "timestamp": at(3), "message": {"content": [{"type": "text", "text": f"stop {TOKEN}"}]}}
+    path.write_text(path.read_text() + json.dumps(asked) + "\n")
+    assert session.asked(path, since, TOKEN)
+
+
+def test_a_handshake_that_never_starts_a_turn_is_not_delivered(world: World) -> None:
+    """hc send typed into a box someone was drafting in (t2fw, 2026-11-15): the tab stays idle and no user turn
+    carries the token, so the wait ends as not delivered, not as an answer of nothing."""
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({ASK: {}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == (
+        "skipped-not-delivered",
+        ["the handshake never started a turn; its text may still be in the prompt box"],
+    )
+    assert EXIT not in world.calls()
+
+
+@pytest.mark.parametrize("kind", [Kind.codex, Kind.opencode])
+def test_a_codex_or_opencode_request_still_in_the_box_is_no_answer(world: World, kind: Kind) -> None:
+    """Their screens show an unsent request like a sent one, so an idle tab with no marker answered nothing."""
+    made = harness(world, kind)
+    world.answer(
+        {ASK: {}, READ: {"stdout": "\N{SINGLE RIGHT-POINTING ANGLE QUOTATION MARK} " + session.request(TOKEN) + "\n"}}
+    )
+    assert session.stop(live.Live(), made, FAST, world.root / RUN, MARK).result == "skipped-no-answer"
+
+
 def test_a_handshake_that_is_not_sent_asks_nothing(world: World) -> None:
     scene(world, world.spawn("claude"))
     world.transcript(SID)
