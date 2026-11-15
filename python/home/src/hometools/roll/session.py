@@ -79,6 +79,7 @@ DIALOG = "Background work is running"
 DIALOG_CHROME = ("\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT}", "1.", "2.")
 TRUST = re.compile(r"trust (this|the) folder|do you trust", re.IGNORECASE)
 FOOTER = re.compile(r"(\d+) in background")
+RULE, PROMPT = "\N{BOX DRAWINGS LIGHT HORIZONTAL}", "\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT}"
 STAMP = "%a %b %d %H:%M:%S %Y"
 SCREEN = 4000
 
@@ -220,6 +221,22 @@ def screen_reply(address: str, token: str) -> str | None:
         elif text.startswith(f"{BUSY} {token}"):
             found = "busy"
     return found
+
+
+def draft(text: str) -> str | None:
+    """The text in a Claude prompt box: from the one line that opens with its prompt mark under a rule, to the
+    screen's last rule. An empty box shows the mark and a no-break space; past prompts above the box don't count.
+    None when no box is found (a failed read, or a draft so long its start scrolled off): unknown, not empty. hc read
+    has no colours, so a grey prompt suggestion would count as a draft too: dotfiles turns suggestions off
+    (promptSuggestionEnabled), and a suggestion only costs a skip."""
+    lines = [line.strip() for line in text.splitlines()]
+    rule = [line.startswith(RULE * 3) for line in lines]  # the top rule may carry the session name
+    tops = [n for n, line in enumerate(lines) if n and rule[n - 1] and line.startswith(PROMPT)]
+    bottom = max((n for n, ruled in enumerate(rule) if ruled), default=-1)
+    # Past prompts sit under no rule, so a second mark under a rule is a pasted box inside a draft: unknown.
+    if len(tops) != 1 or bottom < tops[0]:
+        return None
+    return " ".join(lines[tops[0] : bottom]).removeprefix(PROMPT).strip()
 
 
 def footer(address: str) -> str | None:
@@ -367,6 +384,11 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
                             exit_dialog=[], worktree=None)  # fmt: skip
         write(path, record)
         same_tab(space, tab, term.address)
+        # hc send types into the box: text someone left there would be sent with the handshake (t2fw, 2026-11-15).
+        # The whole screen, not screen()'s tail: a cut could drop the box's top and leave a pasted one.
+        typed = draft(call("hc", "read", term.address) or "") if term.kind is Kind.claude else ""
+        need(typed == "", "skipped-draft",
+             "no prompt box on screen" if typed is None else f"{len(typed)} characters in the prompt box")  # fmt: skip
         heard = handshake(term, timing, attempt(keep, term))
         state, kind, argv = status(term.address)
         need(kind not in WAITING, "skipped-blocked", f"answer {heard}")
