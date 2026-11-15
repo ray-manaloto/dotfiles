@@ -605,6 +605,17 @@ def test_a_probe_key_left_in_the_box_fails_the_session_unasked(
     assert ASK not in world.calls()
 
 
+def test_a_code_mode_session_is_skipped_unasked(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Its resume would lack the variable it started with, and a Code Mode session resumes only with it."""
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_CODE_MODE", "1")
+    scene(world, world.spawn("claude"))
+    world.transcript(SID)
+    world.answer({ASK: {}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-code-mode", ["started by claude:code-mode; restart it by hand"])
+    assert ASK not in world.calls()
+
+
 def test_a_claude_tab_with_an_empty_box_is_asked_with_no_probe_key(world: World) -> None:
     scene(world, world.spawn("claude"))
     world.transcript(SID)

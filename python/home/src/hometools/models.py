@@ -33,6 +33,7 @@ class Command(StrEnum):
     monit_alert = "monit-alert"
     roll = "roll"
     claude_doctor = "claude-doctor"
+    claude_code_mode = "claude-code-mode"
 
 
 class Bootstrap(BaseModel):

@@ -40,6 +40,11 @@ requires = ["uv_build>=0.13.6"]
 build-backend = "uv_build"
 
 # Flags live here, so the codegen task stays one line (zero-bash rule).
+[tool.coverage.run]
+# Measure the hometools processes tests start (claude-code-mode replaces itself with a stand-in claude):
+# coverage starts in Python subprocesses and saves its data before an exec (coverage 7.10 patch option).
+patch = ["subprocess", "execv"]
+
 [tool.datamodel-codegen]
 input = "schema/hometools.schema.json"
 input-file-type = "jsonschema"

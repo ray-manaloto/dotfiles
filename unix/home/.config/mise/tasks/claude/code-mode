@@ -1,0 +1,38 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Start one interactive Claude session in Code Mode, with overrides for this launch only"
+#MISE raw=true
+#USAGE flag "--folder <dir>" help="The folder the session works in (default: this one)"
+#USAGE arg "[prompt]" help="The first prompt"
+"""claude:code-mode: hometools claude-code-mode (python/home/src/hometools/codemode.py)."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash): this launcher only finds the hometools package in the
+# checkout it is linked from and runs one command there, as tasks/disk/log does. raw: Claude's TUI needs the terminal
+# itself, not mise's line-collected output. Its arguments go to hometools as given. In a herdr tab:
+# herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["mise", "run", "claude:code-mode", "<prompt>"]'
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/claude/code-mode.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+
+# The package's environment is synced as its own step first, so a uv that fails or can't start there ends the
+# task with one JSON error naming it: uv sync's exit code, or 127 for no uv. --inexact keeps packages the lock
+# doesn't list, as uv run did.
+try:
+    synced = subprocess.run(["uv", "sync", "--project", str(PACKAGE), "--locked", "--inexact"], check=False).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    error = f"claude:code-mode: hometools could not start ({why})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(synced)
+argv = ["uv", "run", "--project", str(PACKAGE), "--no-sync", "hometools", "claude-code-mode", *sys.argv[1:]]
+os.execvp("uv", argv)

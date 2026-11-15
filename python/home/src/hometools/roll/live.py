@@ -8,6 +8,7 @@ import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from hometools import codemode
 from hometools.models import Kind, MiseLinks, Result, Role
 
 COORDINATOR = "chief-of-staff"
@@ -195,6 +196,13 @@ def program(argv: list[str]) -> str | None:
 def runs(kind: Kind, argv: list[str]) -> bool:
     """argv runs the harness kind, directly or under its launchers."""
     return program(argv) == PROGRAMS[kind]
+
+
+def code_mode(pid: int) -> bool:
+    """Whether the process started with Claude Code's Code Mode variable set (hometools claude-code-mode). Its argv
+    does not show it; ps -E adds the environment the process started with, for this user's own processes."""
+    started_with = (call("ps", "-E", "-o", "command=", "-p", str(pid)) or "").split()
+    return f"{codemode.VARIABLE}=1" in started_with
 
 
 def bare_shell(argv: list[str]) -> bool:
