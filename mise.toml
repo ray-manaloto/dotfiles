@@ -181,6 +181,8 @@ run = "mkdir -p ~/.agents/skills"
 "~/.config/mise/conf.d/cloudflare.toml" = { source = "unix/home/.config/mise/conf.d/cloudflare.toml.tera", mode = "template", permissions = "0600" }
 # The dependency-map registry (#510): which deps `//depmaps:sync` maps, never their versions.
 "~/.config/dep-maps/deps.json" = { source = "unix/home/.config/dep-maps/deps.json", mode = "symlink" }
+# jouet loads user rules from ~/.config/jouet/rules; Claude Code is native-install only (claude:doctor checks it).
+"~/.config/jouet/rules/npm-claude-code.toml" = { source = "unix/home/.config/jouet/rules/npm-claude-code.toml", mode = "symlink" }
 # zsh reads everything but ~/.zshenv from $ZDOTDIR=~/.config/zsh (set in ~/.zshenv), so ~/.zprofile and ~/.zshrc are
 # unused: an installer that appends to them edits nothing tracked. Separate entries, so ~/.config/zsh/.zshrc.d stays
 # a real folder. Applied by shell:apply, which backs up first.

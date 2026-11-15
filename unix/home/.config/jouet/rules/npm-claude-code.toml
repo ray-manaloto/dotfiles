@@ -1,0 +1,57 @@
+#:schema https://jouet.jdx.dev/schema/rules.json
+# Claude Code is installed only by its native installer (~/.local/bin/claude;
+# owner's decision, 2026-10-01). mise's disable_tools stops mise from
+# installing npm:@anthropic-ai/claude-code, but not a plain global npm, pnpm,
+# bun or yarn install, which put a second claude into mise's node on 2026-11-15.
+
+[[rule]]
+name = "npm-claude-code"
+why = "Claude Code is native-install only; a global package-manager install puts a second, stale claude into mise's node."
+mode = "deny"
+author = "dotfiles, for the owner"
+created = "2026-11-15"
+message = "Claude Code is installed only by its native installer (`~/.local/bin/claude`, which updates itself). A global npm, pnpm, bun or yarn install of @anthropic-ai/claude-code puts a second, stale copy into mise's node and is not allowed. Use the `claude` already on PATH; for the Agent SDK in a project, install @anthropic-ai/claude-agent-sdk locally, without -g."
+suggest = "claude --version"
+
+# Words, not flags and subcommands: an option before the subcommand (`npm -g install`) is dropped before flag
+# matching, and a flag cannot name its value (`--location=global`, not `--location=project`). A matcher cannot tie a
+# separate value word to its option, so `--location global` is not caught here; claude:doctor finds what it installs.
+[[rule.match]]
+command = "npm"
+text = ["^(install|i|add|isntall|update|up|upgrade|link)$", "^(-[A-Za-z]*g[A-Za-z]*|--global(=true)?|--location=global)$", "^@anthropic-ai/claude-code(@.*)?$"]
+
+[[rule.match]]
+command = ["pnpm", "bun"]
+text = ["^(add|install|i|update|up)$", "^(-[A-Za-z]*g[A-Za-z]*|--global(=true)?)$", "^@anthropic-ai/claude-code(@.*)?$"]
+
+[[rule.match]]
+command = ["yarn global add", "yarn global upgrade"]
+args = ["@anthropic-ai/claude-code", "@anthropic-ai/claude-code@*"]
+
+[rule.examples]
+fires = [
+  "npm install --global @anthropic-ai/claude-code",
+  "npm i -g @anthropic-ai/claude-code@latest",
+  "cd /tmp/x && npm install -g @anthropic-ai/claude-code",
+  "mise exec -- npm install --location=global @anthropic-ai/claude-code",
+  "pnpm add -g @anthropic-ai/claude-code",
+  "bun add --global @anthropic-ai/claude-code",
+  "npm -g install @anthropic-ai/claude-code",
+  "pnpm -g add @anthropic-ai/claude-code@2",
+  "npm install -fg @anthropic-ai/claude-code",
+  "npm install --global=true @anthropic-ai/claude-code",
+  "yarn global add @anthropic-ai/claude-code",
+]
+quiet = [
+  "npm install @anthropic-ai/claude-code",
+  "npm install --location=project @anthropic-ai/claude-code",
+  "npm install global @anthropic-ai/claude-code",
+  "npm install --location=project global @anthropic-ai/claude-code",
+  "npm install --global=false @anthropic-ai/claude-code",
+  "npm uninstall -g @anthropic-ai/claude-code",
+  "npm install -g @anthropic-ai/claude-code-extras",
+  "npm install -g @anthropic-ai/claude-agent-sdk",
+  "npm uninstall --global @anthropic-ai/claude-code",
+  "npm view @anthropic-ai/claude-code version",
+  "claude --version",
+]

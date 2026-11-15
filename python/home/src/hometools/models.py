@@ -32,6 +32,7 @@ class Command(StrEnum):
     disk_log = "disk-log"
     monit_alert = "monit-alert"
     roll = "roll"
+    claude_doctor = "claude-doctor"
 
 
 class Bootstrap(BaseModel):
