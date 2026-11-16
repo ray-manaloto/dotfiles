@@ -30,7 +30,7 @@
     "Command": {
       "description": "The p2996 subcommands, one per mise task.",
       "type": "string",
-      "enum": ["source", "build", "install", "verify", "clean", "review-log", "projects"]
+      "enum": ["source", "build", "install", "verify", "clean", "review-log", "projects", "status"]
     },
     "Source": {
       "description": "Check out the newest P2996 commit (or --commit) in the cache and apply the macOS patches.",
@@ -93,6 +93,11 @@
       "properties": {
         "manifest": { "type": ["string", "null"], "format": "path", "default": null, "description": "Manifest file (default: the shipped projects.json)" }
       },
+      "additionalProperties": false
+    },
+    "Status": {
+      "description": "Report each build tree's ninja progress from its own files, running no ninja.",
+      "type": "object",
       "additionalProperties": false
     },
     "KnownFailure": {

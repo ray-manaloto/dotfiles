@@ -11,6 +11,7 @@ From the repository root the tasks are `//p2996:<task>` (a `[monorepo.path_alias
 ```sh
 mise run //p2996:source      # newest commit of P2996_BRANCH (or --commit <sha>), patches applied
 mise run //p2996:build       # prepares source, then hours; a rerun resumes. --dry-run prints the cmake commands
+mise run //p2996:status      # each build tree's ninja progress from its own files; runs no ninja
 mise run //p2996:review-log -- <log>  # read-only Codex team reports warnings, errors, skipped parts
 mise run //p2996:install     # ROOT/<id>, verify, one rename to activate; default .cfg files
 mise run //p2996:verify      # compile and run src/p2996/reflection.cpp with clang++-p2996
@@ -135,6 +136,21 @@ To watch a build, read `build/work/p2996-build.log`: the compile's output (the n
 starts it again), with ninja's `[done/total seconds]` lines. The builtins and runtimes sub-builds print the
 same lines inside one outer step. Since the compile now writes to a pipe, ninja prints one line per step
 instead of updating one line, and compiler diagnostics may lose their colour.
+
+`mise run //p2996:status` runs no ninja. For `build/work`, `runtimes/builtins-bins` and
+`runtimes/runtimes-bins`, each with a `.ninja_log`, it logs one `tree status` event: `running` (a `ninja`
+process works in that folder, from `lsof`; `cmake --build` starts it there), `outputs`, `last` and `idle_s`
+(seconds since ninja last wrote its log there: a step ending, or a recompaction as a run starts). The log has
+one line per output, so it counts outputs, not steps; most steps have one. For a running tree, `outputs` counts
+what this run has built and `last` names the output of its step that ended last: a log line's mtime is the wall
+clock as its step started, or for a restat step whose outputs changed their later mtime (ninja v1.13.2
+`src/build.cc:833-849`, `916-948`), so its mtime less its start (ms from the run's start) is when its run
+started, and this run's lines are those at or after the process's start (`ps`, whole seconds; 1 ms plus 1000
+ppm of the step's start allowed for clock slew). A run that ended within a second before this one started
+would count too. For a finished tree, `outputs` counts every output its builds have logged, and `last` is
+empty. Ninja recompacts the log in any order as a run starts (`src/build_log.cc:314-321`, `359-369`), so
+nothing reads line order. The log holds no totals, so there is no k/N or ETA. Last comes `sccache stats`, from
+the running server (`--show-stats` starts none).
 
 ## Prefix layout
 

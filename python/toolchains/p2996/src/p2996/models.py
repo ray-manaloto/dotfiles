@@ -35,6 +35,7 @@ class Command(StrEnum):
     clean = "clean"
     review_log = "review-log"
     projects = "projects"
+    status = "status"
 
 
 class Source(BaseModel):
@@ -162,6 +163,17 @@ class Projects(BaseModel):
     """
     Manifest file (default: the shipped projects.json)
     """
+
+
+class Status(BaseModel):
+    """
+    Report each build tree's ninja progress from its own files, running no ninja.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
 
 
 class KnownFailure(BaseModel):
