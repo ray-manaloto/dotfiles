@@ -80,6 +80,14 @@ DIALOG = "Background work is running"
 DIALOG_CHROME = ("\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT}", "1.", "2.")
 TRUST = re.compile(r"trust (this|the) folder|do you trust", re.IGNORECASE)
 FOOTER = re.compile(r"(\d+) in background")
+RESTART = "/restart"
+# /restart's refusals in Claude Code 2.1.325 (Remote Control, a version on hold, a launch file, an unsaved session,
+# restrictions such as a tool allowlist...): each leaves the session as it was.
+REFUSED = re.compile(
+    r"^.*(Can't restart|Couldn't restart|/restart isn't available|Can't switch to the new version|"
+    r"Couldn't save this session to disk).*$",
+    re.MULTILINE,
+)
 RULE, PROMPT = "\N{BOX DRAWINGS LIGHT HORIZONTAL}", "\N{HEAVY RIGHT-POINTING ANGLE QUOTATION MARK ORNAMENT}"
 STAMP = "%a %b %d %H:%M:%S %Y"
 SCREEN = 4000
@@ -150,6 +158,50 @@ def native(pid: int | None, kind: Kind) -> list[str]:
     if state == "idle" and not waiting:
         return []
     return [f"claude: {state}" + (f", waiting for {waiting}" if waiting else "")]
+
+
+def in_place(pid: int, kind: Kind) -> bool:
+    """Whether /restart can restart the session in place: a Claude session its record shows with Remote Control off
+    (bridgeSessionId null; /restart refuses while it is connected) and no name the user gave it (/restart does not
+    carry -n over). Today that is a claude:code-mode session."""
+    record = claude_record(pid) if kind is Kind.claude else None
+    return (
+        isinstance(record, dict) and "bridgeSessionId" in record and record["bridgeSessionId"] is None
+        and field(record, "nameSource") != "user" and isinstance(field(record, "startedAt"), int)
+    )  # fmt: skip
+
+
+def restart_session(term: GraphTerminal, pid: int, timing: Timing, token: str) -> None:
+    """/restart, untagged, and wait for the record to show the same session started again: a later startedAt, the
+    same sessionId and name. A refusal on the screen after the handshake's answer (its token) is a skip; the session
+    keeps running as it was."""
+    was = claude_record(pid)
+    need(in_place(pid, term.kind), "skipped-remote-control", "Remote Control connected since the plan")
+    names, before = (field(was, "sessionId"), field(was, "name")), field(was, "startedAt")
+    call("hc", "send", term.address, RESTART, env=raw_env())
+
+    def settled() -> str | None:
+        now = claude_record(pid)
+        if isinstance(after := field(now, "startedAt"), int) and isinstance(before, int) and after > before:
+            return ""
+        # Only what this /restart printed: below the handshake's answer, which carries this attempt's token. With
+        # the answer scrolled off nothing on the screen counts, and the restart times out.
+        text = screen(term.address)
+        refused = REFUSED.search(text.rpartition(token)[2]) if token in text else None
+        return refused.group(0).strip() if refused else None
+
+    said = poll(settled, timing.settle, timing.interval)
+    need(said is not None, "failed-restart-timeout", f"startedAt still {before}")
+    need(not said, "skipped-restart-refused", str(said))
+
+    def same() -> bool | None:
+        now = claude_record(pid)
+        return True if (field(now, "sessionId"), field(now, "name")) == names else None
+
+    if not poll(same, timing.settle, timing.interval):
+        now = claude_record(pid)
+        lost = f"session {names[0]} as {names[1]}, now {field(now, 'sessionId')} as {field(now, 'name')}"
+        raise Skip("failed-name-lost" if field(now, "sessionId") == names[0] else "failed-session-changed", lost)
 
 
 def screen(address: str) -> str:
@@ -420,18 +472,23 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
     try:
         need(term.address != live.me, "skipped-self", "the tab running this step")
         pid = current(live, term, f"skipped-foreground-not-{term.kind}")
-        # A launch flag start can't carry over would leave the session down after /exit: skip it while it runs.
-        resume_argv(target, ROLLING)
-        # Nor can it carry a Code Mode session's variable, and without it the session does not resume.
-        need(not (pid and code_mode(pid)), "skipped-code-mode", "started by claude:code-mode; restart it by hand")
-        stale = outdated(term, started(pid) if pid else None, mark)
+        # /restart re-runs the session in its own process, launch flags and environment kept: none of the checks below
+        # for a resume by roll:start applies to it.
+        restart = pid if pid and in_place(pid, term.kind) else None
+        if restart is None:
+            # A launch flag start can't carry over would leave the session down after /exit: skip it while it runs.
+            resume_argv(target, ROLLING)
+            # Nor can it carry a Code Mode session's variable, and without it the session does not resume.
+            need(not (pid and code_mode(pid)), "skipped-code-mode", "started by claude:code-mode; restart it by hand")
+        stale = outdated(term, began(pid, term.kind) if pid else None, mark)
         need(stale, "skipped-already-current", "on the installed version, started after it changed")
         state, _, _ = status(term.address)
         busy = jobs(live, term.address, term.kind)
         need(state in IDLE and not busy, "skipped-busy", f"status {state}", *busy[:6])
         need(not (held := native(pid, term.kind)), "skipped-busy", f"status {state}", *held)
         if keep is None:
-            return outcome(target, "planned", ["handshake, then /exit", f"status {state}", *stale])
+            how, planned = (RESTART, "planned-restart") if restart else ("/exit", "planned")
+            return outcome(target, planned, [f"handshake, then {how}", f"status {state}", *stale])
         path = kept(keep, target)
         record = Background(where=where(target), terminal=term.address, session=term.session, jobs=[], footer=None,
                             exit_dialog=[], worktree=None)  # fmt: skip
@@ -442,7 +499,8 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         typed = box_draft(term.address, timing) if term.kind is Kind.claude else ""
         box = typed is not None if term.kind is Kind.claude else None
         need(typed == "", "skipped-draft", NO_BOX if typed is None else f"{len(typed)} characters in the prompt box")
-        heard = handshake(term, timing, attempt(keep, term))
+        token = attempt(keep, term)
+        heard = handshake(term, timing, token)
         state, kind, argv = status(term.address)
         need(kind not in WAITING, "skipped-blocked", f"answer {heard}")
         lost = ["the handshake never started a turn; its text may still be in the prompt box"]
@@ -455,6 +513,9 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         need(not busy, "skipped-job-started", *busy[:6])
         record = record.model_copy(update={"footer": footer(term.address), "worktree": worktree(term.cwd)})
         write(path, record)
+        if restart:
+            restart_session(term, restart, timing, token)
+            return outcome(target, "restarted", [f"background: {path}"], box=box)
         items = exit_session(term, timing)
     except Skip as skip:
         return outcome(target, skip.result, skip.notes, box=box)
@@ -690,6 +751,17 @@ def installed_claude() -> str | None:
     return max(names, key=lambda name: [int(n) for n in re.findall(r"\d+", name)], default=None)
 
 
+def began(pid: int, kind: Kind) -> dt.datetime | None:
+    """When the session last started: ps's start time, or a Claude record's later startedAt (/restart keeps the
+    process, and with it ps's start time)."""
+    since = started(pid)
+    stamp = field(claude_record(pid), "startedAt") if kind is Kind.claude else None
+    if not isinstance(stamp, int):
+        return since
+    again = dt.datetime.fromtimestamp(stamp / 1000)  # noqa: DTZ006 - compared with ps's local start time
+    return max(since, again) if since else again
+
+
 def started(pid: int) -> dt.datetime | None:
     found = processes().get(pid)
     return dt.datetime.strptime(found[1], STAMP) if found else None  # noqa: DTZ007 - ps prints local time
@@ -727,26 +799,32 @@ def outdated(
     return failed
 
 
-def verify(
+def verify(  # noqa: PLR0913 - one parameter per thing the stop or start learned about the session
     target: Target,
     mark: dt.datetime | None,
     read: Callable[[str], str],
     before: str | None = None,
     address: str | None = None,
+    *,
+    restarted: bool = False,
 ) -> SessionResult:
     """Back and current: running in its terminal (address: the one start resumed it in, else the graph's), current,
     a Claude session's resume prompt in its transcript (Codex and OpenCode are not checked), no trust or other
     dialog, in its folder, and its worktree's git status as roll:stop recorded it (before; None when it recorded
-    none)."""
+    none). A session /restart restarted in place (restarted) keeps its pid and gets no resume prompt: its record's
+    startedAt, sessionId and version, and --resume in its argv, stand in for them."""
     term = target[2]
     address = address or term.address
     pid = running(address, key_of(target), term.kind)
     if pid is None:
         return outcome(target, "failed-not-running", [], address)
-    since = started(pid)
-    failed = outdated(term, since, mark, address)
+    if restarted:
+        since, failed = again(term, pid)
+    else:
+        since, failed = started(pid), []
+    failed += outdated(term, since, mark, address)
     path = transcript(term.session) if term.kind is Kind.claude and term.session else None
-    if term.kind is Kind.claude and (path is None or not arrived(path, since)):
+    if term.kind is Kind.claude and not restarted and (path is None or not arrived(path, since)):
         failed.append("resume prompt not in the transcript")
     if before is not None and worktree(term.cwd) != before:
         failed.append("worktree git status changed across the restart")
@@ -756,6 +834,23 @@ def verify(
     if term.cwd and (now := cwd(pid)) and Path(now).resolve() != Path(term.cwd).resolve():
         failed.append(f"folder {now}, want {term.cwd}")
     return outcome(target, "failed-check" if failed else "ok", failed or [f"pid {pid}", f"status {state}"], address)
+
+
+def again(term: GraphTerminal, pid: int) -> tuple[dt.datetime | None, list[str]]:
+    """A session /restart restarted: when its record says it started (ps keeps the first start), and what is wrong."""
+    record, failed = claude_record(pid), []
+    stamp = field(record, "startedAt")
+    since = dt.datetime.fromtimestamp(stamp / 1000) if isinstance(stamp, int) else None  # noqa: DTZ006 - as ps
+    if since is None:
+        failed.append("no startedAt in its record")
+    if (found := field(record, "sessionId")) != term.session:
+        failed.append(f"session {found}, want {term.session}")
+    if (version := field(record, "version")) != (want := installed_claude()):
+        failed.append(f"record version {version}, installed {want}")
+    argv = processes().get(pid, (0, "", ""))[2]
+    if f"--resume {term.session}" not in argv:
+        failed.append(f"no --resume {term.session} in its argv")
+    return since, failed
 
 
 def arrived(path: Path, since: dt.datetime | None) -> bool:

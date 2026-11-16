@@ -15,7 +15,7 @@ from hometools.models import Background, GraphSpace, GraphTab, GraphTerminal, Ki
 from hometools.roll import live, session
 from hometools.roll.session import HANDSHAKE, Target, Timing
 
-from .roll_world import EMPTY, MARK_LINE, RULE, World, after, box, info, layout, out, replier, terminal
+from .roll_world import EMPTY, MARK_LINE, RULE, World, after, box, info, layout, out, replier, rewriter, terminal
 
 # Unique to this test process: the steps find a session's process by its id among every process on the Mac.
 SID = f"sid-{uuid.uuid4().hex}"
@@ -33,6 +33,9 @@ ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(TOKEN))
 AGAIN = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-2"))
 GET = ("hc", "get", "t3", "--json")
 READ = ("hc", "read", "t3")
+RESTART = ("hc", "send", "t3", "/restart")
+# A Claude session /restart can restart in place: Remote Control off and a name the user did not give it.
+IN_PLACE = {"bridgeSessionId": None, "nameSource": "derived", "name": "worker", "startedAt": 1000}
 ENTER, ESC = ("hc", "keys", "t3", "enter"), ("hc", "keys", "t3", "esc")
 
 
@@ -1138,3 +1141,152 @@ def test_a_session_its_record_shows_idle_is_asked(world: World) -> None:
     world.answer({ASK: {}})
     session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
     assert ASK in world.calls()
+
+
+def restartable(world: World, **fields: object) -> int:
+    """proj / worker, a session /restart can restart in place, ready at the handshake."""
+    pid = world.spawn("claude")
+    scene(world, pid)
+    world.claude_record(pid, SID, **(IN_PLACE | fields))
+    ready(world)
+    return pid
+
+
+@pytest.mark.parametrize(
+    ("fields", "want"),
+    [
+        ({}, ("planned-restart", ["handshake, then /restart", "status idle"])),
+        ({"bridgeSessionId": "session_1"}, ("planned", ["handshake, then /exit", "status idle"])),
+        ({"nameSource": "user"}, ("planned", ["handshake, then /exit", "status idle"])),
+        ({"startedAt": None}, ("planned", ["handshake, then /exit", "status idle"])),
+    ],
+)
+def test_only_a_session_with_remote_control_off_and_no_given_name_plans_a_restart(
+    world: World, fields: dict[str, object], want: tuple[str, list[str]]
+) -> None:
+    restartable(world, **fields)
+    result = session.stop(live.Live(), target(world), FAST, None, MARK)
+    assert (result.result, result.notes[:2]) == want
+
+
+def test_a_code_mode_session_restarts_in_place(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Code Mode's variable stays with the process /restart re-runs: no resume to lose it."""
+    monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_CODE_MODE", "1")
+    pid = restartable(world)
+    world.answer({RESTART: rewriter(world, pid, {"startedAt": 2000})})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    kept = world.root / RUN / f"background/proj--worker--{SID}.json"
+    assert (result.result, result.notes) == ("restarted", [f"background: {kept}"])
+    assert kept.exists()
+    assert RESTART in world.calls()
+    assert EXIT not in world.calls()
+
+
+@pytest.mark.parametrize(
+    ("fields", "want"),
+    [
+        ({"startedAt": 2000, "name": "other"}, "failed-name-lost"),
+        ({"startedAt": 2000, "sessionId": "sid-new"}, "failed-session-changed"),
+    ],
+)
+def test_a_restart_that_comes_back_as_another_session_or_name_fails(
+    world: World, fields: dict[str, object], want: str
+) -> None:
+    pid = restartable(world)
+    world.answer({RESTART: rewriter(world, pid, fields)})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert result.result == want
+    assert result.notes[0].startswith(f"session {SID} as worker, now ")
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        "Can't restart while Remote Control is connected. To use the installed version, exit and start again.",
+        "Can't switch to the new version from inside this session: it has restrictions a restart can't carry over.",
+    ],
+)
+def test_a_refused_restart_is_skipped_and_never_falls_back_to_exit(world: World, refusal: str) -> None:
+    restartable(world)
+    answered = f"READY-TO-RESTART {TOKEN}\n{refusal}\n"
+    world.answer({RESTART: {}, READ: after({"stdout": EMPTY}, (RESTART, {"stdout": answered + EMPTY}))})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-restart-refused", [refusal])
+    assert EXIT not in world.calls()
+
+
+OLD = "Can't switch to the new version from inside this session: it has restrictions a restart can't carry over."
+
+
+@pytest.mark.parametrize(
+    "shown",
+    [f"{OLD}\nREADY-TO-RESTART {TOKEN}\n", f"{OLD}\n"],
+    ids=["above-the-answer", "answer-scrolled-off"],
+)
+def test_a_refusal_already_on_the_screen_is_not_this_restarts(world: World, shown: str) -> None:
+    """An earlier attempt's refusal stays in the scrollback: only one below this handshake's answer skips."""
+    restartable(world)
+    world.answer({RESTART: {}, READ: {"stdout": shown + EMPTY}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert result.result == "failed-restart-timeout"
+
+
+def test_a_session_restarted_after_the_mark_is_current_on_the_next_roll(world: World) -> None:
+    """ps still shows its first start, before the plugins changed; its record's startedAt is after."""
+    restartable(world, startedAt=int((MARK + dt.timedelta(hours=1)).timestamp() * 1000))
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert result.result == "skipped-already-current"
+
+
+def test_a_restart_that_shows_nothing_times_out(world: World) -> None:
+    restartable(world)
+    world.answer({RESTART: {}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("failed-restart-timeout", ["startedAt still 1000"])
+
+
+def test_remote_control_connected_after_the_handshake_is_skipped(world: World) -> None:
+    pid = restartable(world)
+    path = world.home / f".claude/projects/-project/{SID}.jsonl"
+    world.answer(
+        {ASK: rewriter(world, pid, {"bridgeSessionId": "session_1"}, replier(world, path, "READY-TO-RESTART"))}
+    )
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-remote-control", ["Remote Control connected since the plan"])
+    assert RESTART not in world.calls()
+
+
+def restarted_session(world: World, *args: str, **fields: object) -> int:
+    """A Claude process /restart restarted: its record says when, and which session and version."""
+    pid = world.spawn("claude", *args, cwd=world.root / "proj")
+    versions(world, "2.1.10")
+    world.answer({GET: out(info("t3", pid, ["claude"], world.root, name="2.1.10"))})
+    now = int(time.time() * 1000)
+    world.claude_record(pid, SID, startedAt=now, version="2.1.10", **fields)
+    return pid
+
+
+def test_a_restarted_session_passes_without_a_resume_prompt(world: World) -> None:
+    """ps still shows the first start, long before the mark; the record's startedAt is after it."""
+    pid = restarted_session(world, "--resume", SID)
+    world.transcript(SID)
+    mark = dt.datetime.now() - dt.timedelta(minutes=1)  # noqa: DTZ005 - ps's local time
+    result = session.verify(target(world), mark, lambda _: "", restarted=True)
+    assert (result.result, result.notes) == ("ok", [f"pid {pid}", "status idle"])
+
+
+def test_every_way_a_restart_did_not_take_is_named(world: World) -> None:
+    pid = world.spawn("claude", SID, cwd=world.root / "proj")
+    versions(world, "2.1.10")
+    world.answer({GET: out(info("t3", pid, ["claude"], world.root, name="2.1.10"))})
+    world.claude_record(pid, "sid-other", version="2.1.9")
+    result = session.verify(target(world), None, lambda _: "", restarted=True)
+    assert (result.result, result.notes) == (
+        "failed-check",
+        [
+            "no startedAt in its record",
+            f"session sid-other, want {SID}",
+            "record version 2.1.9, installed 2.1.10",
+            f"no --resume {SID} in its argv",
+        ],
+    )

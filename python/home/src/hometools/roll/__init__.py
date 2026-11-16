@@ -335,9 +335,11 @@ def do_stop(step: Step) -> int:
     return failed(step)
 
 
-def stopped(step: Step) -> set[str]:
+def stopped(step: Step, result: str = "stopped") -> set[str]:
+    """The terminals of the sessions this run's stop left with result: stopped (roll:start resumes them) or restarted
+    (/restart restarted them in place)."""
     return {r.terminal for line in history() if line.run == step.args.run and line.step is RollStep.stop
-            for r in line.sessions if r.result == "stopped"}  # fmt: skip
+            for r in line.sessions if r.result == result}  # fmt: skip
 
 
 def saved_graph(step: Step) -> Graph:
@@ -361,7 +363,7 @@ def do_start(step: Step) -> int:
         return failed(step)
     picked, _ = targets(run_graph(step), step.args, me)
     done = stopped(step)
-    if step.args.apply and not done:
+    if step.args.apply and not done and not stopped(step, "restarted"):
         msg = f"roll:start: run {step.args.run} stopped no session; run roll:stop --apply first, or pass --run"
         raise RefusedError(msg)
     for target in picked:
@@ -406,17 +408,21 @@ def do_verify(step: Step) -> int:
     live = Live()
     if step.args.prompt == "reboot":
         picked, left = targets(saved_graph(step), step.args, live.me, recover=True)
-        left, done = [], set()
+        left, done, again = [], set(), set()
     else:
         picked, left = targets(run_graph(step), step.args, live.me)
-        done = stopped(step)
+        again = stopped(step, "restarted")
+        done = stopped(step) | again
     moved = resumed_in(step)
     for target in picked:
         if done and target[2].address not in done:
             continue
         address = moved.get(str(target[2].session))
         mark = codeset(target, apply=step.args.apply)
-        step.add(session.verify(target, mark, session.screen, before(step, target), address))
+        found = session.verify(
+            target, mark, session.screen, before(step, target), address, restarted=target[2].address in again
+        )
+        step.add(found)
     for target in excluded(left, step.args):
         step.add(session.untouched(target, live))
     links = dangling()
@@ -553,23 +559,28 @@ def one(
     stop, start, check = steps
     args = stop.args
     down = stop.add(session.stop(live, target, timing(args), stop.folder if args.apply else None, mark))
-    if down.result == "skipped-already-current":
+    if down.result in {"skipped-already-current", "planned-restart"}:
         return True
-    if down.result not in {"stopped", "planned"}:
+    restarted = down.result == "restarted"
+    if not restarted and down.result not in {"stopped", "planned"}:
         return False
-    up = start.add(session.start(target, timing(args), apply=args.apply, prompt=prompt))
+    # /restart restarted it in its own terminal: nothing to start.
+    up = None if restarted else start.add(session.start(target, timing(args), apply=args.apply, prompt=prompt))
     if not args.apply:
         return True
 
     # The resumed session takes a moment to load and take its prompt: look until it passes or settle ends.
-    was = before(stop, target)
+    was, address = before(stop, target), up.terminal if up else None
+
+    def look() -> SessionResult:
+        return session.verify(target, mark, session.screen, was, address, restarted=restarted)
 
     def passed() -> SessionResult | None:
-        found = session.verify(target, mark, session.screen, was, up.terminal)
+        found = look()
         return found if found.result == "ok" else None
 
-    last = poll(passed, args.settle, args.poll) or session.verify(target, mark, session.screen, was, up.terminal)
-    return check.add(last).result == "ok" and up.result == "started"
+    last = poll(passed, args.settle, args.poll) or look()
+    return check.add(last).result == "ok" and (up is None or up.result == "started")
 
 
 def main(argv: Sequence[str]) -> int:

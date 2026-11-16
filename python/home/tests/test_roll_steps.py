@@ -17,11 +17,26 @@ from hometools.cli import main
 from hometools.models import Background, Graph, GraphSpace, GraphTab, GraphTerminal, Kind, RollStep
 from hometools.roll import review, session
 
-from .roll_world import EMPTY, MARK_LINE, World, after, box, hometools, info, layout, lines, out, replier, terminal
+from .roll_world import (
+    EMPTY,
+    MARK_LINE,
+    World,
+    after,
+    box,
+    hometools,
+    info,
+    layout,
+    lines,
+    out,
+    replier,
+    rewriter,
+    terminal,
+)
 
 SID = f"sid-{uuid.uuid4().hex}"
 UPDATES = [("mise", "run", task) for task in roll.UPDATES]
 EXIT = ("hc", "send", "t3", "/exit")
+RESTART = ("hc", "send", "t3", "/restart")
 # One run id for every step a test runs: the handshake carries it.
 RUN = "run-t"
 ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-1"))
@@ -61,12 +76,12 @@ def resumed(world: World) -> dict[str, object]:
     return {"real": str(script)}
 
 
-def scene(world: World, chief_state: str = "idle") -> tuple[int, int]:
-    """chief-of-staff (t1), proj / worker (t3) and this task's own tab proj / roll (t9)."""
+def scene(world: World, chief_state: str = "idle", worker_args: tuple[str, ...] = ()) -> tuple[int, int]:
+    """chief-of-staff (t1), proj / worker (t3, started with worker_args) and this task's own tab proj / roll (t9)."""
     proj = world.root / "proj"
     chief = world.spawn("claude", cwd=world.root / "fix-herdr")
     world.claude_record(chief, f"chief-{SID}")
-    worker = world.spawn("claude", cwd=proj)
+    worker = world.spawn("claude", *worker_args, cwd=proj)
     world.claude_record(worker, SID)
     world.transcript(f"chief-{SID}")
     path = world.transcript(SID)
@@ -289,6 +304,32 @@ def test_a_session_rolls_back_in_place_while_the_rest_stay_untouched(
         ]
     )
     assert (world.wiki / "sessions/graph.json").exists()
+
+
+def test_a_session_with_remote_control_off_restarts_in_its_own_process(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """/restart, not /exit: nothing for start to resume, and verify checks the restart (its record), not a resume."""
+    _, worker = scene(world, worker_args=("--resume", SID))
+    in_place = {"bridgeSessionId": None, "nameSource": "derived", "name": "worker", "startedAt": 1000}
+    world.claude_record(worker, SID, **in_place)
+    # The record /restart leaves: started again after the mark (a minute ahead of ps's whole seconds).
+    world.answer({RESTART: rewriter(world, worker, {"startedAt": int(time.time() * 1000) + 60_000})})
+    roll.codeset(apply=True)
+    time.sleep(1.1)
+    args = ("all", "--apply", "--exclude", "chief-of-staff", "--wiki", str(world.wiki), *FAST)
+    code, got, err = hometools(capfd, *args)
+    assert code == 0, got + err
+    steps = {line.step: line for line in world.runs()}
+    assert [s.result for s in steps[RollStep.stop].sessions] == ["restarted"]
+    assert steps[RollStep.start].sessions == []
+    assert next((s.where, s.result) for s in steps[RollStep.verify].sessions) == ("proj / worker", "ok")
+    assert EXIT not in world.calls()
+    # Run alone, start has nothing to resume and is not refused; verify checks the restart again.
+    code, got, err = hometools(capfd, "start", "--apply", "--sessions", "proj", *FAST)
+    assert (code, lines(got)) == (0, []), got + err
+    code, got, _ = hometools(capfd, "verify", "--sessions", "proj", *FAST)
+    assert next((r.get("where"), r.get("result")) for r in lines(got)) == ("proj / worker", "ok")
 
 
 def test_a_stop_that_reads_no_box_anywhere_warns(world: World, capfd: pytest.CaptureFixture[str]) -> None:

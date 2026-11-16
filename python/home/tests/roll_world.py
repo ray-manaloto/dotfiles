@@ -109,7 +109,7 @@ class World:
                 os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
 
-    def claude_record(self, pid: int, session: str, **fields: str) -> None:
+    def claude_record(self, pid: int, session: str, **fields: object) -> None:
         """Claude Code's ~/.claude/sessions/<pid>.json (fields such as status), with the trailing data it can carry."""
         record = self.home / f".claude/sessions/{pid}.json"
         record.parent.mkdir(parents=True, exist_ok=True)
@@ -190,6 +190,23 @@ def lines(text: str) -> list[dict[str, object]]:
 def after(otherwise: dict[str, object], *pairs: tuple[Sequence[str], dict[str, object]]) -> dict[str, object]:
     """An answer that changes once a call is made: the last pair whose argv was called, else otherwise."""
     return {"after": [[list(argv), answer] for argv, answer in pairs], "else": otherwise}
+
+
+def rewriter(
+    world: World, pid: int, fields: dict[str, object], then: dict[str, object] | None = None
+) -> dict[str, object]:
+    """A call that updates pid's Claude session record with fields, as /restart rewrites it, then runs then's real
+    program with the call's arguments (a replier), if any."""
+    script = world.bin / f"rewrite-{len(list(world.bin.iterdir()))}"
+    record = world.home / f".claude/sessions/{pid}.json"
+    after_ = f"os.execv({then['real']!r}, [{then['real']!r}, *sys.argv[1:]])\n" if then else ""
+    script.write_text(
+        f"#!{sys.executable} -I\nimport json, os, sys\npath = {str(record)!r}\n"
+        "found, _ = json.JSONDecoder().raw_decode(open(path).read())\n"
+        f"open(path, 'w').write(json.dumps(found | {fields!r}))\n{after_}"
+    )
+    script.chmod(0o755)
+    return {"real": str(script)}
 
 
 def replier(world: World, path: Path, text: str) -> dict[str, object]:
