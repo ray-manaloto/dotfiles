@@ -883,6 +883,10 @@ class PcDoctorLine(BaseModel):
     """
     What failed, each named so it can be quoted: <kind>:<name> for a bootstrap entry.
     """
+    items: list[str] = []
+    """
+    What the check found that is not a failure, such as a waiting update: <source>:<name> <old> -> <new>.
+    """
 
 
 class BootstrapId(BaseModel):

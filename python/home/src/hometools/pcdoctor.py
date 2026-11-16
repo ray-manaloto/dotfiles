@@ -16,7 +16,9 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable
+from functools import partial
 
+from . import pcupdates
 from .models import BootstrapEntry, BootstrapPlanReport, BootstrapStatusReport, Failure, PcDoctorLine, Result
 
 HOST = "pc"  # the ssh alias (~/.ssh/config.d/tailnet.conf); its real name stays in Doppler
@@ -46,20 +48,23 @@ def limit() -> float:
     return seconds
 
 
-def remote(argv: tuple[str, ...], seconds: float) -> subprocess.CompletedProcess[str] | str:
-    """mise bootstrap argv run on the PC, or why it could not run; the PC's stderr goes to the doctor's."""
+def on_pc(argv: tuple[str, ...], seconds: float) -> subprocess.CompletedProcess[str] | str:
+    """argv run on the PC, or why it could not run; the PC's stderr goes to the doctor's."""
     try:
-        done = subprocess.run(
-            (*SSH, "mise", "bootstrap", *argv), capture_output=True, text=True, timeout=seconds, check=False
-        )
+        done = subprocess.run((*SSH, *argv), capture_output=True, text=True, timeout=seconds, check=False)
     except subprocess.TimeoutExpired:
-        return f"ssh {HOST} mise bootstrap {argv[0]} timed out after {seconds:g} s"
+        return f"ssh {HOST} {' '.join(argv)} timed out after {seconds:g} s"
     except OSError as failed:
         return f"ssh: {failed.strerror}"
     sys.stderr.write(done.stderr)
     if done.returncode == SSH_FAILED:
         return f"ssh {HOST} failed (exit {SSH_FAILED})"
     return done
+
+
+def remote(argv: tuple[str, ...], seconds: float) -> subprocess.CompletedProcess[str] | str:
+    """mise bootstrap argv run on the PC, or why it could not run."""
+    return on_pc(("mise", "bootstrap", *argv), seconds)
 
 
 def planned(stdout: str) -> list[BootstrapEntry]:
@@ -81,6 +86,8 @@ CHECKS = (
     ("bootstrap-status", ("status", "--missing", "--json"), {0, 1}, statuses),
     ("bootstrap-plan", ("plan", "--json", "--detailed-exitcode"), {0, 2}, planned),
 )
+# The checks beyond mise bootstrap, each in its own module: a function of the ssh runner that returns its line.
+LINES = (pcupdates.line,)
 
 
 def mine(entries: list[BootstrapEntry]) -> list[tuple[str | None, str]]:
@@ -132,13 +139,18 @@ def doctor() -> None:
     """One JSON line per check on stdout, and the exit code of the checks."""
     seconds = limit()
     lines = []
-    for check, argv, answers, read in CHECKS:
-        done = remote(argv, seconds)
-        if isinstance(done, str):
-            made = PcDoctorLine(check=check, result=Result.unknown, detail=done, culprits=[])
-        else:
-            made = judge(check, done, answers, read)
+
+    def emit(made: PcDoctorLine) -> None:
         sys.stdout.write(made.model_dump_json() + "\n")
         sys.stdout.flush()
         lines.append(made)
+
+    for check, argv, answers, read in CHECKS:
+        done = remote(argv, seconds)
+        if isinstance(done, str):
+            emit(PcDoctorLine(check=check, result=Result.unknown, detail=done, culprits=[]))
+        else:
+            emit(judge(check, done, answers, read))
+    for line in LINES:
+        emit(line(partial(on_pc, seconds=seconds)))
     raise SystemExit(code(lines))

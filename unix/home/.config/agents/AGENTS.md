@@ -67,6 +67,15 @@ ends in `.noindex`. Put clones for scans, build trees, caches you fill and other
 `~/dev/tmp.noindex/<task>` (mise bootstrap creates it). A `.metadata_never_index` file does nothing.
 `mise run spotlight:check` checks which tracked folders Spotlight still indexes.
 
+## Upgrading the PC
+
+`omarchy update -y` is the PC's one upgrade step. Never run `pacman -Syu` there (Omarchy's pacman hook refuses it),
+and never count on `mise bootstrap`: it installs and checks the PC's packages but never upgrades them. `-y` skips
+Omarchy's prompts and does not reboot by itself, but it still needs sudo authorization, so it runs only with the
+owner's OK. A command over SSH gets no `OMARCHY_PATH`, so set it to `/usr/share/omarchy` (what Omarchy's
+`default/bash/env-bootstrap` sets) in that command's environment. `mise run pc:doctor` lists the waiting updates for
+the official repositories and the AUR and applies nothing.
+
 ## Workflow
 
 Work follows the agent workflow at `~/.config/agents/workflow/index.md`: the eight steps in
