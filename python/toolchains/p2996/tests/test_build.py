@@ -150,3 +150,39 @@ async def test_include_what_you_use_is_configured_as_an_external_project(
     # Builtin headers from the installed prefix, not from the build tree the next commit reuses.
     assert "IWYU_RESOURCE_RELATIVE_TO:STRING=iwyu\n" in cache
     assert f"LLVM_EXTERNAL_IWYU_SOURCE_DIR:PATH={config.iwyu_checkout(cfg)}\n" in cache
+
+
+async def test_a_compile_sccache_failed_to_zip_runs_once_more_and_the_build_finishes(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    await recipe.source(upstream.release("v1", zip_failures=1))
+    await build.run(cfg, Build(), recipe.patches)
+    out, [retry] = events(recipe.logs)
+    assert (retry["level"], retry["event"]) == ("warning", "compile retry")
+    assert retry["code"] != 0
+    assert retry["reason"] == "failed to zip up compiler outputs"
+    assert out[-1]["event"] == "build done"
+    assert (config.build_tree(cfg) / "zip-failure.count").read_text() == "2\n"
+    # The log holds the newest run: the retry that passed, not the failure before it.
+    log_text = config.build_log(cfg).read_text()
+    assert "zip-failure" in log_text
+    assert "failed to zip up" not in log_text
+
+
+async def test_a_second_zip_failure_fails_the_build_after_one_retry(
+    cfg: Config, recipe: Recipe, upstream: Upstream
+) -> None:
+    head = upstream.release("v1", zip_failures=2)
+    await recipe.source(head)
+    with pytest.raises(P2996Error, match=f"{head} with include-what-you-use .* failed to compile"):
+        await build.run(cfg, Build(), recipe.patches)
+    assert [event["event"] for event in events(recipe.logs)[1]] == ["compile retry"]
+    assert (config.build_tree(cfg) / "zip-failure.count").read_text() == "2\n"
+    assert not config.last_build(cfg).exists()
+
+
+async def test_any_other_compile_failure_is_not_retried(cfg: Config, recipe: Recipe, upstream: Upstream) -> None:
+    await recipe.source(upstream.release("v1", fail=True))
+    with pytest.raises(P2996Error, match="failed to compile"):
+        await build.run(cfg, Build(), recipe.patches)
+    assert events(recipe.logs)[1] == []

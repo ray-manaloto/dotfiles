@@ -62,6 +62,19 @@ printf '#!/bin/sh\\necho "reflection value=@ANSWER@"\\n' > "$out"
 chmod +x "$out"
 """
 
+# Stands in for a compile that sccache fails after a dry run deleted its depfile (README, Nothing else runs ninja
+# in the build folder): that race cannot be timed in a test, so this prints sccache's message and exit code for
+# its first @RUNS@ runs, counted in the build tree, and succeeds after.
+ZIP_FAILURE = """\
+#!/bin/sh
+runs=$(cat zip-failure.count 2>/dev/null || echo 0)
+echo $((runs + 1)) > zip-failure.count
+if [ "$runs" -lt @RUNS@ ]; then
+  echo "sccache: error: failed to zip up compiler outputs" >&2
+  exit 254
+fi
+"""
+
 # What ROOT/bin shows for a toy release: link name -> the tool in the prefix's bin. The unsuffixed
 # clang and clang++ are kept for the runtimes sub-build (DL-760) and must not reach ROOT/bin.
 LINKS = {
@@ -149,8 +162,16 @@ class Upstream:
     def write(self, name: str, text: str) -> str:
         return self.commit({name: text})
 
-    def release(
-        self, version: str, *, answer: int = 43, skip: str = "", fail: bool = False, debugserver: int = 0
+    # Keyword-only switches of one toy release, each test sets one or two: a parameter object would only rename them.
+    def release(  # noqa: PLR0913
+        self,
+        version: str,
+        *,
+        answer: int = 43,
+        skip: str = "",
+        fail: bool = False,
+        debugserver: int = 0,
+        zip_failures: int = 0,
     ) -> str:
         """Commit a toy toolchain marked version; answer is what its compiled sample prints."""
         cmake = TOY_CMAKE
@@ -160,6 +181,8 @@ class Upstream:
             cmake += "install(FILES tools/libc++.txt DESTINATION lib)\n"
         if fail:
             cmake += "add_custom_target(broken ALL COMMAND false)\n"
+        if zip_failures:
+            cmake += "add_custom_target(zip-failure ALL COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tools/zip-failure)\n"
         mark = f"version={version}\n"
         compiler = COMPILER.replace("@VERSION@", version).replace("@ANSWER@", str(answer))
         return self.commit(
@@ -177,6 +200,7 @@ class Upstream:
                 "llvm/tools/debugserver": f"#!/bin/sh\necho debugserver {version}\nexit {debugserver}\n",
                 "llvm/tools/meta": f"// {mark}",
                 "llvm/tools/libc++.txt": mark,
+                "llvm/tools/zip-failure": ZIP_FAILURE.replace("@RUNS@", str(zip_failures)),
             }
         )
 
