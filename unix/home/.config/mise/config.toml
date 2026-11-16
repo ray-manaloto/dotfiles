@@ -672,6 +672,12 @@ run = [
 # monitrc is a managed file with mode 0600, not a linked dotfile.
 # Check: monit -c ~/.config/monit/monitrc status (over the 0600 unix socket; no password, `allow localhost`;
 # the socket path must stay under 104 bytes). chief-of-staff reads that and runs `lsof +L1` itself.
+# Spotlight skips every file under a folder named *.noindex, with no sudo (probed on macOS 27.2.1, 2026-11-16), so
+# bulky scratch goes here. ~/dev/github and ~/dev/tmp go in Search Privacy by hand once (Full Disk Access guards it):
+# mise run spotlight:check checks them (python/home/src/hometools/spotlight.py).
+[bootstrap.directories."~/dev/tmp.noindex"]
+os = "macos"
+
 [bootstrap.directories."~/.config/monit"]
 os = "macos"
 mode = "0700"

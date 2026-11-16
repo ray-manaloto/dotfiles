@@ -1,0 +1,35 @@
+#!/usr/bin/env -S python3 -I
+#MISE description="Check Spotlight skips ~/dev/github and ~/dev/tmp; open Search Privacy for any it still indexes"
+"""spotlight:check: hometools spotlight-check checks Spotlight skips the tracked folders (python/home/src/hometools/spotlight.py)."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash, #392): this launcher only finds the hometools
+# package in the checkout it is linked from and runs one command there. Run it after adding folders to System
+# Settings > Spotlight > Search Privacy, and after setting up a new Mac. It takes about two minutes: it waits for
+# Spotlight to index a control file.
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+# ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/spotlight/check.
+PACKAGE = Path(__file__).resolve().parents[6] / "python/home"
+
+# The package's environment is synced as its own step first, so a uv that fails or can't start there ends the
+# task with one JSON error naming it, as hometools' own steps do: uv sync's exit code, or 127 for no uv.
+# --inexact keeps packages the lock doesn't list, as uv run did: uv sync removes them by default
+# (uv 0.13.7 crates/uv-cli/src/settings.rs:851-855 for run, 2003-2007 for sync).
+try:
+    synced = subprocess.run(["uv", "sync", "--project", str(PACKAGE), "--locked", "--inexact"], check=False).returncode
+except OSError as failed:
+    synced, why = 127, f"uv: {failed.strerror}"
+else:
+    # A signal's death is -N here; the shell's status is 128 + N.
+    synced = synced if synced >= 0 else 128 - synced
+    why = f"uv sync exited {synced}"
+if synced:
+    error = f"spotlight:check: hometools could not start ({why})"
+    sys.stderr.write(json.dumps({"error": error}) + "\n")
+    raise SystemExit(synced)
+os.execvp("uv", ["uv", "run", "--project", str(PACKAGE), "--no-sync", "hometools", "spotlight-check"])
