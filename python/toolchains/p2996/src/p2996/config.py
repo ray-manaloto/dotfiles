@@ -65,6 +65,11 @@ def sccache_stats(cfg: Config) -> Path:
     return build_tree(cfg) / "p2996-sccache-stats.json"
 
 
+def build_log(cfg: Config) -> Path:
+    """The output of the newest compile run, ninja's [k/N] lines included."""
+    return build_tree(cfg) / "p2996-build.log"
+
+
 def last_build(cfg: Config) -> Path:
     """Link named for the id the build tree holds; it exists only after a successful build."""
     return build_dir(cfg) / "last"

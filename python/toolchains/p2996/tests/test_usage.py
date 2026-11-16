@@ -125,3 +125,5 @@ def test_a_pinned_build_task_prepares_and_builds_that_commit(cfg: Config, upstre
     [built] = [event for event in events if event["event"] == "build done"]
     assert (ready["commit"], built["commit"]) == (pinned, pinned)
     assert git(Path(ready["checkout"]), "rev-parse", "HEAD") == pinned
+    # The compile's own output still reaches the terminal through the tee: the toy build has nothing to compile.
+    assert "\nninja: no work to do.\n" in done.stdout

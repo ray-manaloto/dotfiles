@@ -15,6 +15,7 @@ from . import inputs, proc, source
 from .config import (
     BOOTSTRAP,
     PATCHES,
+    build_log,
     build_tree,
     checkout,
     configured_prefix,
@@ -28,6 +29,22 @@ from .log import P2996Error, log
 from .models import Build, Config, Source
 
 _CLEARED = ("CC", "CXX", "CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "SDKROOT")
+# sccache fails a compile whose depfile vanished before it stored the outputs (README, Nothing else runs ninja
+# in the build folder); ninja resumes, so a second run repeats only that step.
+SCCACHE_ZIP = b"failed to zip up compiler outputs"
+
+
+async def compile_(command: list[str], env: dict[str, str], copy: Path) -> None:
+    """Run the compile, once more when sccache lost a depfile; a second failure is the build's.
+
+    copy holds the output of the newest run, to watch the build without running ninja in its folder.
+    """
+    code, zip_failed = await proc.tee(*command, env=env, watch=SCCACHE_ZIP, copy=copy)
+    if code and zip_failed:
+        log.warning("compile retry", reason=SCCACHE_ZIP.decode(), code=code)
+        code, _ = await proc.tee(*command, env=env, watch=SCCACHE_ZIP, copy=copy)
+    if code:
+        raise subprocess.CalledProcessError(code, command)
 
 
 def python_libdir(libdir: Path, library: str, version: str) -> Path:
@@ -105,14 +122,14 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
         # cache, so the id counts it through P2996_IWYU_COMMIT.
         f"-DLLVM_EXTERNAL_IWYU_SOURCE_DIR:PATH={iwyu_checkout(cfg)}",
     ]
-    compile_ = ["cmake", "--build", str(built), "--parallel", env["P2996_JOBS"]]
+    command = ["cmake", "--build", str(built), "--parallel", env["P2996_JOBS"]]
     if args.dry_run:
         log.info(
             "build dry run",
             P2996_SDK=env["P2996_SDK"],
             LUA_DIR=env["LUA_DIR"],
             configure=shlex.join(configure),
-            compile=shlex.join(compile_),
+            compile=shlex.join(command),
         )
         return
     await require_codesign(cfg)
@@ -132,7 +149,7 @@ async def run(cfg: Config, args: Build, patches: Path = PATCHES, bootstrap: Path
         return
     await proc.run(launcher, "--zero-stats", env=env)
     try:
-        await proc.run(*compile_, env=env, capture=False)
+        await compile_(command, env, build_log(cfg))
     except subprocess.CalledProcessError as error:
         msg = (
             f"p2996 build: {commit} with include-what-you-use {cfg.iwyu_commit} failed to compile; the previous "

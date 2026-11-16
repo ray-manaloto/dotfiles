@@ -118,6 +118,24 @@ names itself, and keeps `clang++` and `clang-cpp` because the runtimes sub-build
 `build/bin/clang++` (DL-760); `install` links only the `-p2996` names into `ROOT/<id>/view/bin`, which
 `ROOT/bin` reaches through `ROOT/current`.
 
+## Nothing else runs ninja in the build folder
+
+While a build runs, nothing else may run `ninja` in `build/work` or its sub-builds, a dry run (`ninja -n`)
+included. A dry run still "finishes" each step it would run and reads that step's depfile (ninja v1.13.2
+`src/build.cc:889`), then deletes it unless `-d keepdepfile` (`src/build.cc:1037-1038`). When that hits a
+compile that has just written its `.o.d`, sccache can no longer open the file it stores with the object
+(sccache v0.19.0 `src/cache/cache_io.rs:236-262`) and fails the compile with `failed to zip up compiler
+outputs` (`src/compiler/compiler.rs:806-808`). `-d keepdepfile` is not enough: a dry run also writes each
+step's response file and deletes it again (`src/build.cc:860-863`, `955-957`), and creates its output folders.
+
+`p2996 build` runs the compile once more when its output holds that sccache message, logging a `compile
+retry` warning; ninja resumes, so only the failed step runs again. A second failure fails the build.
+
+To watch a build, read `build/work/p2996-build.log`: the compile's output (the newest run only, so a retry
+starts it again), with ninja's `[done/total seconds]` lines. The builtins and runtimes sub-builds print the
+same lines inside one outer step. Since the compile now writes to a pipe, ninja prints one line per step
+instead of updating one line, and compiler diagnostics may lose their colour.
+
 ## Prefix layout
 
 ```text
