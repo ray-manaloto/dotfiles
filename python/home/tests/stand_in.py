@@ -5,7 +5,8 @@
 # programs update:all's other leaves run (CODING_STANDARDS 2): a test links this file as `brew` and `mise` in a
 # folder ahead of the real ones on PATH, and as each leaf program where its task body names it. The link's name is
 # the call's first word. $STAND_IN/script.json maps a call, its argv as a JSON list, to {"stdout", "stderr",
-# "code", "signal"} (or a list of them, one per call in turn), where "signal" is one it then kills itself with;
+# "code", "signal", "sleep"} (or a list of them, one per call in turn), where "signal" is one it then kills itself
+# with and "sleep" the seconds it waits first, as a call that hangs (pc-doctor's time limit);
 # or to {"real": true}, the next program of
 # its name on PATH with the stand-ins off it, as brew list --pinned and mise run toolchain:verify run on the
 # scratch toolchain; or to {"real": "<path>"}, that program. A call it does not name fails with 127, as a
@@ -17,6 +18,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 folder = Path(os.environ["STAND_IN"])
@@ -50,6 +52,7 @@ if real:
         raise SystemExit(127)
     env = os.environ | {"PATH": rest}
     raise SystemExit(subprocess.run([program, *sys.argv[1:]], env=env, check=False).returncode)
+time.sleep(answer.get("sleep", 0))
 sys.stdout.write(answer.get("stdout", ""))
 sys.stderr.write(answer.get("stderr", ""))
 if "signal" in answer:

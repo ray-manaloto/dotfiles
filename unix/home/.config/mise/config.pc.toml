@@ -1,0 +1,40 @@
+# The PC's own bootstrap: loaded only where the `pc` config environment is selected (spec #633). The PC selects
+# it in its untracked ~/.config/mise/miserc.local.toml (env = ["pc"]); the Mac never does, so its plan has none of
+# this. Check from the Mac: mise run pc:doctor.
+#
+# Content is inline, not `source`: this file is a link in ~/.config/mise, and mise resolves a relative source
+# against the link's folder, not the checkout's (mise 2026.11.9, read in a scratch config folder).
+
+# The runner slot unit template, byte-equal to the copy installed by hand, so the first apply changes nothing.
+[bootstrap.files."/etc/systemd/system/gha-slot@.service"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+content = '''
+[Unit]
+Description=GitHub Actions one-job runner slot %i (fresh container per job)
+Documentation=file:///etc/gha-runner/README.md
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/gha-slot run %i
+Restart=always
+RestartSec=10
+# Room for the stop path (remove the job container, then mint a token and delete the idle runner at GitHub,
+# each call capped at 15 s, so up to about 30 s plus docker). This host sets DefaultTimeoutStopSec=5s, too
+# short for that. The stop path exits 143 (TERM) or 130 (INT), which systemd must count as a clean stop.
+TimeoutStopSec=45
+SuccessExitStatus=130 143
+SyslogIdentifier=gha-slot-%i
+# The loop only talks to GitHub and the Docker daemon; jobs themselves run inside the containers.
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
+'''
