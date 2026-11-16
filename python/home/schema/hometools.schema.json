@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert", "roll", "claude-doctor", "claude-code-mode"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert", "roll", "claude-doctor", "claude-code-mode", "spotlight-check"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -54,6 +54,26 @@
       "properties": {
         "folder": {"type": ["string", "null"], "description": "The new folder under disk-alerts; null when another snapshot held the lock."},
         "timed_out": {"type": "array", "items": {"type": "string"}, "description": "Roots whose dust run was stopped at its time limit; they have no totals."}
+      }
+    },
+    "SpotlightFolder": {
+      "description": "One folder spotlight-check expects Spotlight to skip, and what its probe found.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["folder", "excluded"],
+      "properties": {
+        "folder": {"type": "string", "minLength": 1, "description": "The folder as the tracked list writes it (~ for the home folder)."},
+        "excluded": {"type": ["boolean", "null"], "description": "true: not seen within the settle time after the control (evidence, not proof); false: indexed; null: not checked."}
+      }
+    },
+    "SpotlightCheck": {
+      "description": "spotlight-check's line: whether the control file was indexed, and each tracked folder's result.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_indexed", "folders"],
+      "properties": {
+        "control_indexed": {"type": "boolean", "description": "Whether Spotlight indexed the control file within the time limit; false proves nothing about the folders."},
+        "folders": {"type": "array", "items": {"$ref": "#/$defs/SpotlightFolder"}}
       }
     },
     "DiskGuard": {

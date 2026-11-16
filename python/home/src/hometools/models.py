@@ -34,6 +34,7 @@ class Command(StrEnum):
     roll = "roll"
     claude_doctor = "claude-doctor"
     claude_code_mode = "claude-code-mode"
+    spotlight_check = "spotlight-check"
 
 
 class Bootstrap(BaseModel):
@@ -134,6 +135,41 @@ class DiskSnapshot(BaseModel):
     """
     Roots whose dust run was stopped at its time limit; they have no totals.
     """
+
+
+class SpotlightFolder(BaseModel):
+    """
+    One folder spotlight-check expects Spotlight to skip, and what its probe found.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    folder: Annotated[str, Field(min_length=1)]
+    """
+    The folder as the tracked list writes it (~ for the home folder).
+    """
+    excluded: bool | None
+    """
+    true: not seen within the settle time after the control (evidence, not proof); false: indexed; null: not checked.
+    """
+
+
+class SpotlightCheck(BaseModel):
+    """
+    spotlight-check's line: whether the control file was indexed, and each tracked folder's result.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    control_indexed: bool
+    """
+    Whether Spotlight indexed the control file within the time limit; false proves nothing about the folders.
+    """
+    folders: list[SpotlightFolder]
 
 
 class DiskGuard(BaseModel):

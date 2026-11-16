@@ -4,7 +4,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import codemode, config, disk, herdr, monit, nativeclaude, opencode, roll, toolchain, update
+from . import codemode, config, disk, herdr, monit, nativeclaude, opencode, roll, spotlight, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
 # These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
@@ -19,6 +19,7 @@ UPDATES = {
     Command.disk_log: disk.run_log,
     Command.monit_alert: monit.run_alert,
     Command.claude_doctor: nativeclaude.main,
+    Command.spotlight_check: spotlight.run,
 }
 
 

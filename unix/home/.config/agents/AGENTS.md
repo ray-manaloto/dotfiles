@@ -60,6 +60,13 @@ deletes the plugin's data, which a reinstall does not bring back, so that needs 
 script. Check a plugin change with `claude plugin list --json` and a marketplace change with
 `claude plugin marketplace list --json`, and report each change with the command that undoes it.
 
+## Bulky scratch goes in a .noindex folder
+
+On a Mac, Spotlight indexes every new file in `~/dev/tmp` and `~/dev/github`, but nothing under a folder whose name
+ends in `.noindex`. Put clones for scans, build trees, caches you fill and other scratch of many files under
+`~/dev/tmp.noindex/<task>` (mise bootstrap creates it). A `.metadata_never_index` file does nothing.
+`mise run spotlight:check` checks which tracked folders Spotlight still indexes.
+
 ## Workflow
 
 Work follows the agent workflow at `~/.config/agents/workflow/index.md`: the eight steps in
