@@ -60,6 +60,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Research evidence across workspaces",
                 "Adding a Doppler secret",
                 "Plugin changes",
+                "Bulky scratch goes in a .noindex folder",
                 "Workflow",
                 "Commit and pull-request approval",
                 "Cross-review",
