@@ -1108,3 +1108,33 @@ def test_a_launch_flag_it_cannot_carry_over_keeps_the_session_running(world: Wor
     assert result.result == "skipped-unknown-flag"
     assert ASK not in world.calls()
     assert EXIT not in world.calls()
+
+
+@pytest.mark.parametrize(
+    ("fields", "why"),
+    [
+        ({"status": "busy"}, "claude: busy"),
+        ({"status": "shell"}, "claude: shell"),
+        ({"status": "waiting", "waitingFor": "permission prompt"}, "claude: waiting, waiting for permission prompt"),
+    ],
+)
+def test_a_session_its_record_shows_not_idle_is_skipped_unasked(world: World, fields: dict[str, str], why: str) -> None:
+    """hc get says idle, but Claude Code's own record of the session says otherwise: it decides."""
+    pid = world.spawn("claude")
+    scene(world, pid)
+    world.claude_record(pid, SID, **fields)
+    world.transcript(SID)
+    world.answer({ASK: {}})
+    result = session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert (result.result, result.notes) == ("skipped-busy", ["status idle", why])
+    assert ASK not in world.calls()
+
+
+def test_a_session_its_record_shows_idle_is_asked(world: World) -> None:
+    pid = world.spawn("claude")
+    scene(world, pid)
+    world.claude_record(pid, SID, status="idle")
+    world.transcript(SID)
+    world.answer({ASK: {}})
+    session.stop(live.Live(), target(world), FAST, world.root / RUN, MARK)
+    assert ASK in world.calls()

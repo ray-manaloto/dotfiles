@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from hometools.models import Background, GraphSpace, GraphTab, GraphTerminal, Kind, Role, SessionResult, Timing
 from hometools.roll import graph as snap
-from hometools.roll.graph import claude_session, codex_session, opencode_session
+from hometools.roll.graph import claude_record, claude_session, codex_session, opencode_session
 from hometools.roll.live import (
     COORDINATOR,
     PROGRAMS,
@@ -139,6 +139,17 @@ def status(address: str) -> tuple[str | None, str | None, list[str]]:
     state, kind, argv = field(info, "status", "state"), field(info, "status", "kind"), field(info, "foreground", "argv")
     words = [str(word) for word in argv] if isinstance(argv, list) else []
     return (state if isinstance(state, str) else None), (kind if isinstance(kind, str) else None), words
+
+
+def native(pid: int | None, kind: Kind) -> list[str]:
+    """Why Claude Code's own record of this session (graph.claude_record) says it is not idle: busy, running a shell
+    command, or waiting on a prompt or dialog. Empty when it is idle, or for a session with no record (or not Claude):
+    hc get's status still decides then."""
+    record = claude_record(pid) if pid and kind is Kind.claude else None
+    state, waiting = field(record, "status") or "idle", field(record, "waitingFor")
+    if state == "idle" and not waiting:
+        return []
+    return [f"claude: {state}" + (f", waiting for {waiting}" if waiting else "")]
 
 
 def screen(address: str) -> str:
@@ -418,6 +429,7 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         state, _, _ = status(term.address)
         busy = jobs(live, term.address, term.kind)
         need(state in IDLE and not busy, "skipped-busy", f"status {state}", *busy[:6])
+        need(not (held := native(pid, term.kind)), "skipped-busy", f"status {state}", *held)
         if keep is None:
             return outcome(target, "planned", ["handshake, then /exit", f"status {state}", *stale])
         path = kept(keep, target)

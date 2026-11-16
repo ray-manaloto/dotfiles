@@ -42,16 +42,23 @@ def default_wiki() -> Path:
     return Path.home() / "dev/tmp/fix-herdr/wiki"
 
 
+def claude_record(pid: int) -> object:
+    """Claude Code's ~/.claude/sessions/<pid>.json record of a live session (sessionId, status, ...); None when the pid
+    has none, or the record is being written. `claude agents --json` reads these, but running claude for it can spend
+    the OAuth refresh token (anthropics/claude-code#95822), so the roll reads the file."""
+    record = Path.home() / f".claude/sessions/{pid}.json"
+    try:
+        # The record can carry trailing data after the first JSON object; read only that object.
+        found, _ = json.JSONDecoder().raw_decode(record.read_text())
+    except OSError, ValueError:  # no record for this pid, or one being written
+        return None
+    return found
+
+
 def claude_session(pids: list[int]) -> str | None:
     """The sessionId of the first pid with a ~/.claude/sessions/<pid>.json record."""
     for pid in pids:
-        record = Path.home() / f".claude/sessions/{pid}.json"
-        try:
-            # The record can carry trailing data after the first JSON object; read only that object.
-            found, _ = json.JSONDecoder().raw_decode(record.read_text())
-        except OSError, ValueError:  # no record for this pid, or one being written
-            continue
-        session = field(found, "sessionId")
+        session = field(claude_record(pid), "sessionId")
         if isinstance(session, str):
             return session
     return None
