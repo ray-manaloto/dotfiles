@@ -50,6 +50,10 @@ description = "Install the last successful build, verify it, then make it active
 usage = 'flag "--keep-current" help="Assemble and verify the build but leave ROOT/current where it is; a later plain install activates it"'
 run = 'uv run --locked p2996 install ${usage_keep_current:+--keep-current}'
 
+[tasks.status]
+description = "Report each build tree's ninja progress from its own files, running no ninja"
+run = "uv run --locked p2996 status"
+
 [tasks.verify]
 description = "Compile and run reflection.cpp with clang++-p2996"
 run = "uv run --locked p2996 verify"
