@@ -4,7 +4,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import config, disk, herdr, monit, nativeclaude, opencode, roll, toolchain, update
+from . import codemode, config, disk, herdr, monit, nativeclaude, opencode, roll, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
 # These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
@@ -25,13 +25,15 @@ UPDATES = {
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="hometools")
     parser.add_argument("command", type=Command, choices=list(Command))
-    # Everything after the command, --help included, however the command was spelled (hometools -- roll ...): roll
-    # hands it to its own parser; every other command takes none.
+    # Everything after the command, --help included, however the command was spelled (hometools -- roll ...): roll and
+    # claude-code-mode hand it to their own parsers; every other command takes none.
     parser.add_argument("rest", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command
     if command is Command.roll:
         raise SystemExit(roll.main(args.rest))
+    if command is Command.claude_code_mode:
+        codemode.main(args.rest)  # replaces this process with claude, or exits with one Failure event
     if args.rest:
         parser.error(f"unrecognized arguments: {' '.join(args.rest)}")
     if command in UPDATES:

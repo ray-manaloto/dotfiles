@@ -19,6 +19,7 @@ from hometools.roll.live import (
     answer,
     bare_shell,
     call,
+    code_mode,
     entries,
     field,
     poll,
@@ -410,6 +411,8 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
         pid = current(live, term, f"skipped-foreground-not-{term.kind}")
         # A launch flag start can't carry over would leave the session down after /exit: skip it while it runs.
         resume_argv(target, ROLLING)
+        # Nor can it carry a Code Mode session's variable, and without it the session does not resume.
+        need(not (pid and code_mode(pid)), "skipped-code-mode", "started by claude:code-mode; restart it by hand")
         stale = outdated(term, started(pid) if pid else None, mark)
         need(stale, "skipped-already-current", "on the installed version, started after it changed")
         state, _, _ = status(term.address)
