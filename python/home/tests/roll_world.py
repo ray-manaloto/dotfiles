@@ -109,11 +109,11 @@ class World:
                 os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
 
-    def claude_record(self, pid: int, session: str) -> None:
-        """Claude Code's ~/.claude/sessions/<pid>.json, with the trailing data it can carry."""
+    def claude_record(self, pid: int, session: str, **fields: str) -> None:
+        """Claude Code's ~/.claude/sessions/<pid>.json (fields such as status), with the trailing data it can carry."""
         record = self.home / f".claude/sessions/{pid}.json"
         record.parent.mkdir(parents=True, exist_ok=True)
-        record.write_text(json.dumps({"sessionId": session, "cwd": "/"}) + "\ntrailing")
+        record.write_text(json.dumps({"sessionId": session, "cwd": "/"} | fields) + "\ntrailing")
 
     def transcript(self, session: str, *records: dict[str, object]) -> Path:
         path = self.home / f".claude/projects/-project/{session}.jsonl"
