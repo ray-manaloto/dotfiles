@@ -8,7 +8,7 @@
     "Command": {
       "description": "One hometools command, run by the global mise task of the same purpose.",
       "type": "string",
-      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert", "roll", "claude-doctor", "claude-code-mode", "spotlight-check"]
+      "enum": ["toolchain-verify", "bootstrap-toolchain", "update-brew", "update-check", "herdr-doctor", "opencode-jouet", "disk-snapshot", "disk-guard", "disk-log", "monit-alert", "roll", "claude-doctor", "claude-code-mode", "spotlight-check", "pc-doctor"]
     },
     "Bootstrap": {
       "description": "What bootstrap-toolchain reads: the [vars] versions of the brew packages it must find installed.",
@@ -123,7 +123,7 @@
       }
     },
     "Result": {
-      "description": "One herdr-doctor check: pass, fail, or unknown when an input it needs could not be read (unknown blocks green).",
+      "description": "One doctor check (herdr-doctor, pc-doctor): pass, fail (it saw the problem) or unknown (it could not look).",
       "type": "string",
       "enum": ["pass", "fail", "unknown"]
     },
@@ -377,6 +377,52 @@
         "triaged": {"type": "boolean", "description": "The model triage ran for at least one pair (never for a pair seen before)."},
         "gate": {"type": "boolean", "description": "BREAKING was flagged: roll:all pauses before roll:stop until rerun with --accept-review."},
         "flags": {"type": "array", "items": {"type": "string"}, "description": "Why the gate closed: the triage's BREAKING items, plus the grep's lines when an item went untriaged."}
+      }
+    },
+    "PcDoctorLine": {
+      "description": "One pc-doctor stdout line per check: the result contract every pc:doctor check shares (spec #729).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "result", "detail", "culprits"],
+      "properties": {
+        "check": {"type": "string", "minLength": 1, "description": "The check's name, such as bootstrap-plan."},
+        "result": {"$ref": "#/$defs/Result"},
+        "detail": {"type": "string", "description": "One sentence: what it saw, or why it could not look."},
+        "culprits": {"type": "array", "items": {"type": "string"}, "description": "What failed, each named so it can be quoted: <kind>:<name> for a bootstrap entry."}
+      }
+    },
+    "BootstrapId": {
+      "description": "What a bootstrap entry manages: its kind (file, service, ...) and name (a path, a unit).",
+      "type": "object",
+      "required": ["kind", "name"],
+      "properties": {"kind": {"type": "string"}, "name": {"type": "string"}}
+    },
+    "BootstrapOrigin": {
+      "description": "Where a bootstrap entry was declared: the config environments of its file.",
+      "type": "object",
+      "required": ["environment"],
+      "properties": {"environment": {"type": "array", "items": {"type": "string"}}}
+    },
+    "BootstrapPlanReport": {
+      "description": "What pc-doctor reads of mise bootstrap plan --json (mise 2026.11.8): every planned resource.",
+      "type": "object",
+      "required": ["resources"],
+      "properties": {"resources": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}}}
+    },
+    "BootstrapStatusReport": {
+      "description": "What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): files, the part pc declares.",
+      "type": "object",
+      "required": ["files"],
+      "properties": {"files": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}}}
+    },
+    "BootstrapEntry": {
+      "description": "The fields pc-doctor reads from one entry of mise bootstrap plan or status --json (mise 2026.11.8).",
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/BootstrapId"},
+        "action": {"type": ["string", "null"], "default": null, "description": "noop, create, update, remove or unknown."},
+        "origin": {"anyOf": [{"$ref": "#/$defs/BootstrapOrigin"}, {"type": "null"}], "default": null, "description": "Where it was declared; null for an entry no config file declares."}
       }
     },
     "MiseLinks": {

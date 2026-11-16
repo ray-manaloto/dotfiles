@@ -4,11 +4,11 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from . import codemode, config, disk, herdr, monit, nativeclaude, opencode, roll, spotlight, toolchain, update
+from . import codemode, config, disk, herdr, monit, nativeclaude, opencode, pcdoctor, roll, spotlight, toolchain, update
 from .models import Bootstrap, Command, Failure, Verify
 
-# These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor
-# reports each input it could not read as unknown in its own JSON line and exits with its checks' code.
+# These end a failure with one Failure event, as the rest do, and keep their shell tasks' exit codes; herdr-doctor and
+# pc-doctor report each input they could not read as unknown in their JSON lines and exit with their checks' code.
 UPDATES = {
     Command.update_brew: update.brew,
     Command.update_check: update.check,
@@ -20,6 +20,7 @@ UPDATES = {
     Command.monit_alert: monit.run_alert,
     Command.claude_doctor: nativeclaude.main,
     Command.spotlight_check: spotlight.run,
+    Command.pc_doctor: pcdoctor.doctor,
 }
 
 

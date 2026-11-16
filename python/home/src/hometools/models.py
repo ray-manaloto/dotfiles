@@ -35,6 +35,7 @@ class Command(StrEnum):
     claude_doctor = "claude-doctor"
     claude_code_mode = "claude-code-mode"
     spotlight_check = "spotlight-check"
+    pc_doctor = "pc-doctor"
 
 
 class Bootstrap(BaseModel):
@@ -274,7 +275,7 @@ class MonitAlert(BaseModel):
 
 class Result(StrEnum):
     """
-    One herdr-doctor check: pass, fail, or unknown when an input it needs could not be read (unknown blocks green).
+    One doctor check (herdr-doctor, pc-doctor): pass, fail (it saw the problem) or unknown (it could not look).
     """
 
     pass_ = "pass"
@@ -860,6 +861,72 @@ class ReviewReport(BaseModel):
     """
 
 
+class PcDoctorLine(BaseModel):
+    """
+    One pc-doctor stdout line per check: the result contract every pc:doctor check shares (spec #729).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    check: Annotated[str, Field(min_length=1)]
+    """
+    The check's name, such as bootstrap-plan.
+    """
+    result: Result
+    detail: str
+    """
+    One sentence: what it saw, or why it could not look.
+    """
+    culprits: list[str]
+    """
+    What failed, each named so it can be quoted: <kind>:<name> for a bootstrap entry.
+    """
+
+
+class BootstrapId(BaseModel):
+    """
+    What a bootstrap entry manages: its kind (file, service, ...) and name (a path, a unit).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    kind: str
+    name: str
+
+
+class BootstrapOrigin(BaseModel):
+    """
+    Where a bootstrap entry was declared: the config environments of its file.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    environment: list[str]
+
+
+class BootstrapEntry(BaseModel):
+    """
+    The fields pc-doctor reads from one entry of mise bootstrap plan or status --json (mise 2026.11.8).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    id: BootstrapId
+    action: str | None = None
+    """
+    noop, create, update, remove or unknown.
+    """
+    origin: BootstrapOrigin | None = None
+    """
+    Where it was declared; null for an entry no config file declares.
+    """
+
+
 class MiseLinks(BaseModel):
     """
     Links under mise's installs folder whose target is missing (reported, never removed).
@@ -915,3 +982,25 @@ class RollRun(BaseModel):
     <run folder>/<step>.log, its output.
     """
     sessions: list[SessionResult]
+
+
+class BootstrapPlanReport(BaseModel):
+    """
+    What pc-doctor reads of mise bootstrap plan --json (mise 2026.11.8): every planned resource.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    resources: list[BootstrapEntry]
+
+
+class BootstrapStatusReport(BaseModel):
+    """
+    What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): files, the part pc declares.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    files: list[BootstrapEntry]
