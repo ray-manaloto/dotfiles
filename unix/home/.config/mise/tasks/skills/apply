@@ -1,0 +1,57 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="In the main checkout on main: shell:apply, then mise dot apply every other [dotfiles] entry skills:doctor checks but the permission ones"
+"""skills:apply: hk's post-merge step that applies a merge's [dotfiles] entries to the home, before the doctor."""
+
+# A file task, so its run is not shell (AGENTS.md zero bash). The live files link into the checkout this file is
+# linked from (as tasks/skills/doctor finds it), so it applies only when the merge ran there with main checked out:
+# a linked worktree or another branch skips it. That is shell:apply's own worktree test (`.git` is a file in a
+# linked worktree, python/repo/src/repotools/shell.py apply) and main-guard's branch test (`git symbolic-ref HEAD`
+# is refs/heads/main, main_guard.py armed). mise starts a global task in the folder it was run from and keeps it
+# in MISE_ORIGINAL_CWD (mise v2026.11.9 src/task/task_executor.rs:3168-3176).
+#
+# The four permission entries (skills:doctor PERMISSIONS) are never applied here: the owner applies them by hand.
+# The zsh files go first, through shell:apply, which backs them up and checks a shell (AGENTS.md: before any bare
+# apply); it runs only when one of them is not applied. Then every other checked entry, never with --force or --prune: a real file in the way makes mise refuse
+# the whole file apply before it writes anything (crates/mise-system/src/files.rs:6096-6107), and that error is
+# what this step prints; skills:doctor then names the entry.
+
+import os
+import runpy
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve()
+CHECKOUT = HERE.parents[6]  # ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks
+
+
+def git(*args: str) -> str:
+    done = subprocess.run(["git", *args], cwd=ran_in, capture_output=True, text=True, check=False)
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+ran_in = Path(os.environ.get("MISE_ORIGINAL_CWD") or os.getcwd())
+top = git("rev-parse", "--show-toplevel")
+if not top or Path(top).resolve() != CHECKOUT or not (CHECKOUT / ".git").is_dir():
+    print(f"skills:apply: skipped, {ran_in} is not the checkout the home links to ({CHECKOUT})")
+    raise SystemExit(0)
+if git("symbolic-ref", "--quiet", "HEAD") != "refs/heads/main":
+    print("skills:apply: skipped, main is not checked out")
+    raise SystemExit(0)
+
+doctor = runpy.run_path(str(HERE.parent / "doctor"), run_name="skills_doctor")
+zsh = sorted(doctor["ZSH"])
+# The permission entries are the owner's to apply (owner ruling, 2026-11-17); skills:doctor names them.
+skip = {*zsh, *doctor["PERMISSIONS"]}
+steps = [["mise", "-C", str(CHECKOUT), "dot", "apply", *(e for e in doctor["checked"]() if e not in skip)]]
+# shell:apply only when a zsh link is not applied: it backs the files up whenever its own dry run prints anything,
+# which it does with nothing to change, so running it on every merge would add a backup each time.
+zsh_status = ["mise", "-C", str(CHECKOUT), "dot", "status", "--missing", *zsh]
+if subprocess.run(zsh_status, stdin=subprocess.DEVNULL, capture_output=True, check=False).returncode:
+    steps.insert(0, ["mise", "-C", str(CHECKOUT), "run", "shell:apply"])
+failed = False
+for argv in steps:
+    if subprocess.run(argv, stdin=subprocess.DEVNULL, check=False).returncode:
+        print(f"skills:apply: {' '.join(argv[:6])} ... failed; see its error above", file=sys.stderr)
+        failed = True
+raise SystemExit(1 if failed else 0)
