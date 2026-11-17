@@ -87,10 +87,10 @@ def test_a_missing_sysctl_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str
 
 
 def test_a_timeout_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "1")
+    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
     code, line, _ = kernel(ssh, capfd, sysctl() | {"sleep": 30})
     assert (code, line["result"]) == (3, "unknown")
-    assert "timed out after 1 s" in line["detail"]
+    assert "timed out after 5 s" in line["detail"]
 
 
 def test_an_ssh_failure_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:

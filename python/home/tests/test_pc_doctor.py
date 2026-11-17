@@ -196,13 +196,13 @@ def test_an_ssh_failure_is_unknown_and_exits_3(ssh: Path, capfd: pytest.CaptureF
 def test_a_timeout_is_unknown_never_a_pass(
     ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "1")
+    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
     hung = plan(entry("noop")) | {"sleep": 30}
     answer(ssh, {PLAN: hung, STATUS: status(entry("noop"))})
     code, lines, _ = doctor(capfd)
     assert code == 3
     assert results(lines) == {"bootstrap-status": "pass", "bootstrap-plan": "unknown"}
-    assert "timed out after 1 s" in lines[1].detail
+    assert "timed out after 5 s" in lines[1].detail
 
 
 def test_mixed_fail_and_unknown_exits_1(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
