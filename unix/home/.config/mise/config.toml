@@ -183,7 +183,7 @@ pixi = { version = "0.84.2", minimum_release_age = "0s" }
 uv = { version = "0.13.8", minimum_release_age = "0s" }
 chezmoi = { version = "2.74.1", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
-hk = { version = "2.12.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
+hk = { version = "2.13.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
 #fnox = { version = "1.40.0", asset_pattern = "*aarch64-apple-darwin.tar.gz", minimum_release_age = "0s" }
 # 1.48.0 streams proxy responses and survives a client disconnect (fnox #1113, #1112). Its macOS below 26
 # crash (fnox #1156) does not matter: those versions are not supported here (owner ruling 2026-11-11).
