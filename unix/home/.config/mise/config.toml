@@ -759,6 +759,11 @@ args = ["run", "nightly:check"]
 start_calendar_interval = { hour = 3, minute = 0 }
 process_type = "Background"
 nice = 10
+# launchd starts agents with PATH /usr/bin:/bin:/usr/sbin:/sbin, where the task's own `mise` calls (hk's steps,
+# `mise run test`, monit:alert) fail with "mise: command not found" (exit 127). mise writes this
+# table to the plist's EnvironmentVariables (crates/mise-system/src/launchd.rs:410-416) after rendering every string
+# in the entry, nested tables included (crates/mise-system/src/templating.rs:94-115; mise 2026.11.9).
+environment = { PATH = "{{ env.HOME }}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
 stdout_path = "~/.local/state/dotfiles/nightly/check.log"
 stderr_path = "~/.local/state/dotfiles/nightly/check.log"
 
