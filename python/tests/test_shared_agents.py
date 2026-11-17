@@ -58,6 +58,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Watched agents open as herdr-app tabs",
                 "Messages between agents",
                 "Research evidence across workspaces",
+                "OpenWiki search",
                 "Adding a Doppler secret",
                 "Plugin changes",
                 "Bulky scratch goes in a .noindex folder",
