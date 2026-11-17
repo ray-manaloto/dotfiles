@@ -12,6 +12,8 @@ import pytest
 from hometools.cli import main
 from hometools.models import PcDoctorLine
 
+from . import pc_gpu
+
 SSH = ["ssh", "-n", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "pc", "--", "mise", "bootstrap"]
 PLAN = json.dumps([*SSH, "plan", "--json", "--detailed-exitcode"])
 STATUS = json.dumps([*SSH, "status", "--missing", "--json"])
@@ -48,6 +50,8 @@ HEALTHY: dict[str, object] = {
     STATUS: status(entry("noop")),
     CHECKUPDATES: {"code": 2},
     YAY: {"code": 1},
+    # gpu-cdi (#732): its seven calls on a PC set up as dotfiles declares (tests/pc_gpu.py).
+    **pc_gpu.HEALTHY,
 }
 
 

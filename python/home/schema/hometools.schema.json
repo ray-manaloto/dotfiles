@@ -426,6 +426,37 @@
         "origin": {"anyOf": [{"$ref": "#/$defs/BootstrapOrigin"}, {"type": "null"}], "default": null, "description": "Where it was declared; null for an entry no config file declares."}
       }
     },
+    "CdiSpecDirs": {
+      "description": "docker info --format '{{json .CDISpecDirs}}': Docker's CDI folders (#732), absolute so none reads as a find expression.",
+      "type": "array",
+      "items": {"type": "string", "pattern": "^/"}
+    },
+    "CdiMount": {
+      "description": "One mount of a CDI spec's container edits; pc-doctor's gpu line reads only the host side.",
+      "type": "object",
+      "required": ["hostPath"],
+      "properties": {"hostPath": {"type": "string", "minLength": 1, "description": "The PC path bound into the container."}}
+    },
+    "CdiContainerEdits": {
+      "description": "The container edits of a CDI spec or of one device in it: the mounts are what pc-doctor reads.",
+      "type": "object",
+      "properties": {"mounts": {"type": ["array", "null"], "items": {"$ref": "#/$defs/CdiMount"}, "default": null}}
+    },
+    "CdiDevice": {
+      "description": "One device of a CDI spec, such as nvidia.com/gpu=all's \"all\".",
+      "type": "object",
+      "properties": {"containerEdits": {"anyOf": [{"$ref": "#/$defs/CdiContainerEdits"}, {"type": "null"}], "default": null}}
+    },
+    "CdiSpec": {
+      "description": "What pc-doctor's gpu line reads of a CDI spec file (cdiVersion 0.7.0, written by nvidia-ctk cdi generate).",
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"type": "string", "description": "The device kind, such as nvidia.com/gpu."},
+        "containerEdits": {"anyOf": [{"$ref": "#/$defs/CdiContainerEdits"}, {"type": "null"}], "default": null},
+        "devices": {"type": ["array", "null"], "items": {"$ref": "#/$defs/CdiDevice"}, "default": null}
+      }
+    },
     "MiseLinks": {
       "description": "Links under mise's installs folder whose target is missing (reported, never removed).",
       "type": "object",

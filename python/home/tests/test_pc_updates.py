@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from .test_pc_doctor import CHECKUPDATES, YAY, answer, doctor
+from .test_pc_doctor import CHECKUPDATES, HEALTHY, YAY, answer, doctor
 
 NONE_OFFICIAL = {"code": 2}
 NONE_AUR = {"code": 1}
@@ -177,8 +177,10 @@ def test_the_line_applies_nothing(ssh: Path, capfd: pytest.CaptureFixture[str]) 
     # Its only calls on the PC are the two queries: no pacman -Sy on the live database, no yay -Syu.
     answer(ssh, {CHECKUPDATES: OFFICIAL, YAY: AUR})
     updates(capfd)
-    calls = [json.loads(call) for call in (ssh / "calls.jsonl").read_text().splitlines()]
-    mine = [call[8:] for call in calls if call[8:10] != ["mise", "bootstrap"]]
+    # The other lines' calls are the ones HEALTHY answers for them; any call outside those stays in view.
+    others = HEALTHY.keys() - {CHECKUPDATES, YAY}
+    calls = [call for call in (ssh / "calls.jsonl").read_text().splitlines() if call not in others]
+    mine = [json.loads(call)[8:] for call in calls]
     assert mine == [["checkupdates"], ["yay", "-Qua"]]
 
 

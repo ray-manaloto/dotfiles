@@ -38,3 +38,27 @@ NoNewPrivileges=yes
 [Install]
 WantedBy=multi-user.target
 '''
+
+# GPU containers get the GPU through a CDI device (`docker run --device nvidia.com/gpu=all`, never --privileged), and
+# NVIDIA's own refresh units keep its spec current with the driver (#732): the path unit watches the kernel's modules
+# and nvidia-ctk, and the oneshot service runs `nvidia-ctk cdi generate` into /run/cdi/nvidia.yaml at boot and on each
+# change. Docker's daemon config is not managed. Check: the gpu-cdi line of mise run pc:doctor.
+[bootstrap.packages]
+"pacman:nvidia-container-toolkit" = "latest"
+
+[bootstrap.services."nvidia-cdi-refresh.path"]
+state = "running"
+enabled = true
+
+# A oneshot: inactive after a success, so `stopped` is its settled state (mise 2026.11.8 matches stopped to inactive
+# only; a failed run reads as a change). enabled runs it at boot, before docker.service (the toolkit's drop-in).
+[bootstrap.services."nvidia-cdi-refresh.service"]
+state = "stopped"
+enabled = true
+
+# The hand-made spec, a second source of nvidia.com/gpu beside the refresh units' one. mise applies files before
+# services, so on a PC that still has it apply in two steps: `mise bootstrap services apply`, check that
+# `nvidia-ctk cdi list --spec-dir /run/cdi` lists nvidia.com/gpu=all, then `mise bootstrap`.
+[bootstrap.files."/etc/cdi/nvidia.yaml"]
+os = "linux"
+state = "absent"
