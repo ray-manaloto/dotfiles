@@ -426,3 +426,46 @@ ENV MISE_DATA_DIR=/home/runner/.local/share/mise \
 USER runner
 WORKDIR /home/runner
 '''
+
+# The apt cache trial container, acu-trial (#735), started by systemd once the PC's tailnet address exists. Its port
+# is published on that address, and at boot Docker started the container before tailscaled had assigned it: the
+# start failed ("cannot assign requested address", exit 128), `unless-stopped` does not retry a failed network
+# setup, and the failed start left the container with no network attached. tailscale-online.target, which the
+# tailscale package ships, runs `tailscale wait` ("Wait for Tailscale interface/IPs to be ready for binding",
+# tailscale 1.104.2). The unit requires it and is ordered after it, so the container starts only once that wait
+# succeeded; if the wait fails, the unit fails with it instead of starting into the same bind error. The container
+# itself is still hand-made until #735 declares it; it must have Docker's restart policy "no"
+# (`docker update --restart=no acu-trial`), so that only this unit starts it at boot. This unit does not repair a
+# container that a failed start for some other reason left with no network: systemd then shows it active while port
+# 3142 does not answer. #735's pc:doctor line, which fails when the cache does not answer on 3142, is what catches
+# that; the repair is `docker network connect --ip <its fixed address> apt-cache acu-trial`.
+[bootstrap.files."/etc/systemd/system/acu-trial.service"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+# The unit file notifies the service: mise starts a unit it cannot find yet only when a file it manages provides it
+# (services.rs:270-280), and a changed unit restarts the cache, which is down for a few seconds.
+notify = ["acu-trial.service"]
+content = '''
+[Unit]
+Description=apt cache container (acu-trial), started once the tailnet address exists
+Documentation=https://github.com/ray-manaloto/dotfiles/issues/735
+After=docker.service tailscale-online.target
+Requires=docker.service tailscale-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/docker start -a acu-trial
+ExecStop=/usr/bin/docker stop acu-trial
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+'''
+
+[bootstrap.services."acu-trial.service"]
+state = "running"
+enabled = true
+on_change = "restart"
