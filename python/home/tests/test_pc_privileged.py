@@ -182,7 +182,7 @@ def test_a_vanished_container_with_any_exit_but_1_is_unknown(
 def test_a_timeout_is_unknown(
     hung: str, ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "1")
+    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
     web = found(container(WEB, "web", "example/web:1"))
     script = {LIST: listing(WEB), inspect(WEB): web}
     key = LIST if hung == "list" else inspect(WEB)
@@ -190,7 +190,7 @@ def test_a_timeout_is_unknown(
     answer(ssh, script)
     code, result, detail, _, _ = line(capfd)
     assert (code, result) == (3, "unknown")
-    assert detail.endswith("timed out after 1 s")
+    assert detail.endswith("timed out after 5 s")
 
 
 @pytest.mark.parametrize("failed", ["list", "inspect"])

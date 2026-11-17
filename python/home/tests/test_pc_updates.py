@@ -159,11 +159,11 @@ def test_a_missing_tool_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str])
 def test_a_timeout_is_unknown_never_none(
     ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "1")
+    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
     answer(ssh, {CHECKUPDATES: NONE_OFFICIAL | {"sleep": 30}, YAY: NONE_AUR})
     code, line, _ = updates(capfd)
     assert (code, line["result"], line["culprits"]) == (3, "unknown", ["official"])
-    assert "timed out after 1 s" in str(line["detail"])
+    assert "timed out after 5 s" in str(line["detail"])
 
 
 def test_an_ssh_failure_is_unknown_for_both(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
