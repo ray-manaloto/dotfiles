@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The global mise tasks' work: check and bootstrap the held Homebrew toolchain, update brew and check for drift (toolchain:verify, bootstrap:toolchain, update:brew, update:check)"
 requires-python = ">=3.15"
 # Uncapped: the latest of every dependency (DL-758).
-dependencies = ["pydantic"]
+dependencies = ["pydantic", "pyyaml"]
 
 [dependency-groups]
 dev = ["pytest", "pytest-cov", "pytest-xdist"]
@@ -23,8 +23,9 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 # S101: pytest checks with assert. PLR2004: tests compare against literal exit codes.
 "tests/**" = ["S101", "PLR2004"]
 # Generated (DL-762): datamodel-codegen orders its imports its own way; every other rule applies. S105: the
-# herdr-doctor Result enum's pass_ = "pass" is a check result, not a password.
-"src/hometools/models.py" = ["I001", "S105"]
+# herdr-doctor Result enum's pass_ = "pass" is a check result, not a password. N815: the CDI spec's own keys
+# (hostPath, containerEdits) stay its field names; codegen's snake-case-field would also rename herdr-doctor's fields V1 to V15.
+"src/hometools/models.py" = ["I001", "S105", "N815"]
 
 [tool.pytest.ini_options]
 # The integration tier runs the real toolchain on this Mac; //home:integration selects it, the last -m wins.

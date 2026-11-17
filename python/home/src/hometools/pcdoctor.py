@@ -13,12 +13,13 @@
 
 import math
 import os
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable
 from functools import partial
 
-from . import pcupdates
+from . import pcgpu, pcupdates
 from .models import BootstrapEntry, BootstrapPlanReport, BootstrapStatusReport, Failure, PcDoctorLine, Result
 
 HOST = "pc"  # the ssh alias (~/.ssh/config.d/tailnet.conf); its real name stays in Doppler
@@ -49,11 +50,14 @@ def limit() -> float:
 
 
 def on_pc(argv: tuple[str, ...], seconds: float) -> subprocess.CompletedProcess[str] | str:
-    """argv run on the PC, or why it could not run; the PC's stderr goes to the doctor's."""
+    """argv run on the PC, or why it could not run; the PC's stderr goes to the doctor's. ssh hands the PC's shell
+    one string, so each word is quoted for it: a docker --format template or a path from a CDI spec stays one word."""
     try:
-        done = subprocess.run((*SSH, *argv), capture_output=True, text=True, timeout=seconds, check=False)
+        done = subprocess.run(
+            (*SSH, *map(shlex.quote, argv)), capture_output=True, text=True, timeout=seconds, check=False
+        )
     except subprocess.TimeoutExpired:
-        return f"ssh {HOST} {' '.join(argv)} timed out after {seconds:g} s"
+        return f"ssh {HOST} {shlex.join(argv)} timed out after {seconds:g} s"
     except OSError as failed:
         return f"ssh: {failed.strerror}"
     sys.stderr.write(done.stderr)
@@ -87,7 +91,7 @@ CHECKS = (
     ("bootstrap-plan", ("plan", "--json", "--detailed-exitcode"), {0, 2}, planned),
 )
 # The checks beyond mise bootstrap, each in its own module: a function of the ssh runner that returns its line.
-LINES = (pcupdates.line,)
+LINES = (pcupdates.line, pcgpu.line)
 
 
 def mine(entries: list[BootstrapEntry]) -> list[tuple[str | None, str]]:

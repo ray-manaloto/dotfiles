@@ -931,6 +931,67 @@ class BootstrapEntry(BaseModel):
     """
 
 
+type CdiSpecDir = Annotated[str, Field(pattern="^/")]
+
+
+type CdiSpecDirs = list[CdiSpecDir]
+"""
+docker info --format '{{json .CDISpecDirs}}': Docker's CDI folders (#732), absolute so none reads as a find expression.
+"""
+
+
+class CdiMount(BaseModel):
+    """
+    One mount of a CDI spec's container edits; pc-doctor's gpu line reads only the host side.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    hostPath: Annotated[str, Field(min_length=1)]
+    """
+    The PC path bound into the container.
+    """
+
+
+class CdiContainerEdits(BaseModel):
+    """
+    The container edits of a CDI spec or of one device in it: the mounts are what pc-doctor reads.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    mounts: list[CdiMount] | None = None
+
+
+class CdiDevice(BaseModel):
+    """
+    One device of a CDI spec, such as nvidia.com/gpu=all's "all".
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    containerEdits: CdiContainerEdits | None = None
+
+
+class CdiSpec(BaseModel):
+    """
+    What pc-doctor's gpu line reads of a CDI spec file (cdiVersion 0.7.0, written by nvidia-ctk cdi generate).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    kind: str
+    """
+    The device kind, such as nvidia.com/gpu.
+    """
+    containerEdits: CdiContainerEdits | None = None
+    devices: list[CdiDevice] | None = None
+
+
 class MiseLinks(BaseModel):
     """
     Links under mise's installs folder whose target is missing (reported, never removed).
