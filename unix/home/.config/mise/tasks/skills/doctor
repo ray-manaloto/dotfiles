@@ -1,20 +1,177 @@
 #!/usr/bin/env -S python3 -I -B
-#MISE description="Check that every [dotfiles] skill link of the dotfiles checkout is in place"
-"""skills:doctor: `mise dot status --missing` on the checkout's skill entries; herdr:doctor checks the names."""
+#MISE description="Check the home against the dotfiles checkout: every [dotfiles] entry, and the skills the post-tools hook installs"
+"""skills:doctor: `mise dot status` on the checkout's [dotfiles] entries, then what the post-tools hook leaves."""
 
-# A file task, so its run is not shell (AGENTS.md zero bash). The skill links are [dotfiles] entries of the
-# checkout's own mise.toml, which mise reads only from inside the checkout, so this finds the checkout it is linked
-# from, as tasks/herdr/doctor does, and runs mise there on each entry whose target is a skills folder or a skill in
-# one. mise exits 1 when one is missing or differs, and 0 when all are applied (mise 2026.11.6 dot status --help).
+# A file task, so its run is not shell (AGENTS.md zero bash). The [dotfiles] entries are those of the checkout's
+# own mise.toml, which mise reads only from inside the checkout, so this finds the checkout it is linked from, as
+# tasks/herdr/doctor does. Each failed line names the command that fixes it, and the task exits 1 when any failed.
 
+import json
 import os
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 # ~/.config/mise/tasks links to <checkout>/unix/home/.config/mise/tasks; this file is tasks/skills/doctor.
 CHECKOUT = Path(__file__).resolve().parents[6]
+HOME = Path.home()
 
-entries = tomllib.loads((CHECKOUT / "mise.toml").read_text())["dotfiles"]
-targets = [target for target in entries if target.endswith("/skills") or "/skills/" in target]
-os.execvp("mise", ["mise", "-C", str(CHECKOUT), "dot", "status", "--missing", "--no-truncate", *targets, *sys.argv[1:]])
+# Templates that render only with bootstrap secrets (PC_HOST, CF_ACCOUNT_ID), which this task never reads.
+SECRET_TEMPLATES = {"~/.ssh/config.d/tailnet.conf", "~/.config/mise/conf.d/cloudflare.toml"}
+# The zsh files shell:apply links (python/repo/src/repotools/shell.py TARGETS): AGENTS.md says a bare
+# `mise dot apply` stops on them, so their fix is that task.
+ZSH = {
+    "~/.zshenv",
+    "~/.config/zsh/.zshenv",
+    "~/.config/zsh/.zprofile",
+    "~/.config/zsh/.zshrc",
+    "~/.config/zsh/.zshrc.d/10-zsh.zsh",
+    "~/.config/zsh/.zshrc.d/90-mise.zsh",
+    "~/.config/zsh/path.zsh",
+}
+# What agents may do on their own: the owner applies these by hand (owner ruling, 2026-11-17), so skills:apply
+# leaves them out and a failure here says so.
+PERMISSIONS = {
+    "~/.claude/settings.json/automode",
+    "~/.claude/settings.json/mcp-deny",
+    "~/.codex/rules/guards.rules",
+    "~/.gemini/policies/guards.toml",
+}
+# What the post-tools hook installs and removes (unix/home/.config/mise/config.toml [bootstrap.hooks.post-tools]),
+# and the command that runs it: `mise bootstrap --only tools` runs the tools part and then that hook.
+POST_TOOLS = "mise bootstrap --only tools --yes"
+HARNESSES = (".claude/skills", ".agents/skills")
+HERDR_CORE = "herdr-core"
+DESKTOP = ("agent-desktop", "agent-desktop-macos", "agent-desktop-ffi", "jev-desktop")
+DESKTOP_TOOL = "github:vercel-labs/agent-desktop"
+HERDR_REPO = "herdrdev/herdr"
+JOUET = ("<!-- jouet:start -->", "<!-- jouet:end -->")  # hometools/opencode.py START and END
+
+failed: list[str] = []
+
+
+def fail(what: str, fix: str) -> None:
+    failed.append(f"skills:doctor: {what}; run: {fix}")
+
+
+def run(*argv: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False)
+
+
+def checked() -> list[str]:
+    """Every [dotfiles] entry but the secret templates: what this checks and skills:apply applies."""
+    return [e for e in tomllib.loads((CHECKOUT / "mise.toml").read_text())["dotfiles"] if e not in SECRET_TEMPLATES]
+
+
+def dotfiles() -> None:
+    """Each checked entry, as `mise dot status --json` reports it."""
+    entries = checked()
+    done = run("mise", "-C", str(CHECKOUT), "dot", "status", "--json", *entries)
+    if done.returncode:
+        fail(f"mise dot status exited {done.returncode}: {done.stderr.strip()}", f"mise -C {CHECKOUT} dot status")
+        return
+    status = json.loads(done.stdout)
+    # An edit's [dotfiles] key is its file and its name: merge:automode on ~/.claude/settings.json is
+    # ~/.claude/settings.json/automode. "absent" is an absent entry's done state.
+    states = {f["target"]: f["state"] for f in status["files"]}
+    states |= {f"{e['path']}/{e['edit'].split(':', 1)[1]}": e["state"] for e in status["edits"]}
+    # An entry mise left out of its report is not known to be applied.
+    states |= dict.fromkeys(set(entries) - states.keys(), "not reported")
+    bad = {entry: state for entry, state in states.items() if state not in {"applied", "absent"}}
+    zsh = sorted(bad.keys() & ZSH)
+    if zsh:
+        fail(f"{', '.join(f'{e} {bad[e]}' for e in zsh)}", "mise run shell:apply (from the checkout)")
+    for entry in sorted(bad.keys() & PERMISSIONS):
+        failed.append(f"skills:doctor: permission entry differs; the owner runs: mise -C {CHECKOUT} dot apply '{entry}'")
+    rest = sorted(bad.keys() - ZSH - PERMISSIONS)
+    if rest:
+        targets = " ".join(f"'{e}'" for e in rest)
+        fail(f"{', '.join(f'{e} {bad[e]}' for e in rest)}", f"mise -C {CHECKOUT} dot apply {targets}")
+
+
+def lock() -> dict[str, dict[str, object]]:
+    """The skills CLI's lock, where herdr:doctor reads it (hometools/herdr.py skill_tag)."""
+    state = os.environ.get("XDG_STATE_HOME")
+    path = Path(state) / "skills/.skill-lock.json" if state else HOME / ".agents/.skill-lock.json"
+    try:
+        return json.loads(path.read_text()).get("skills", {})
+    except FileNotFoundError:
+        return {}
+
+
+def has_skill(name: str) -> bool:
+    return all((HOME / folder / name / "SKILL.md").is_file() for folder in HARNESSES)
+
+
+def herdr_core() -> None:
+    """herdr:doctor's observation of hc and the herdr-core ref; only that, since its V10 also fails on unrelated
+    skills. With no hc the hook skips herdr-core, so nothing is expected."""
+    done = run(str(CHECKOUT / "unix/home/.config/mise/tasks/herdr/doctor"))
+    try:
+        seen = json.loads(done.stdout)["observation"]
+    except (json.JSONDecodeError, KeyError):
+        fail(f"herdr:doctor printed no observation: {done.stderr.strip()}", "the fix in herdr:doctor's error")
+        return
+    if seen["hc"] is None:
+        return
+    if seen["skill_tag"] != f"v{seen['hc']}":
+        fail(f"herdr-core skill is at {seen['skill_tag']}, not hc's v{seen['hc']}", POST_TOOLS)
+    elif not has_skill(HERDR_CORE):
+        fail("herdr-core has no SKILL.md in ~/.claude/skills or ~/.agents/skills", POST_TOOLS)
+
+
+def agent_desktop(skills: dict[str, dict[str, object]]) -> None:
+    pin = run("mise", "current", DESKTOP_TOOL).stdout.strip()
+    if not pin:
+        fail(f"mise current printed no {DESKTOP_TOOL} pin", "mise install")
+        return
+    stale = [n for n in DESKTOP if (skills.get(n) or {}).get("ref") != f"v{pin}" or not has_skill(n)]
+    if stale:
+        fail(f"{', '.join(stale)} not at the pinned v{pin}", POST_TOOLS)
+
+
+def herdr_gone(skills: dict[str, dict[str, object]]) -> None:
+    left = sorted(n for n, entry in skills.items() if entry.get("source") == HERDR_REPO)
+    left += [f"~/{folder}/herdr" for folder in HARNESSES if os.path.lexists(HOME / folder / "herdr")]
+    if left:
+        fail(f"herdr's own skills are still installed: {', '.join(left)}", POST_TOOLS)
+
+
+def opencode_jouet() -> None:
+    config = os.environ.get("XDG_CONFIG_HOME") or HOME / ".config"
+    path = Path(config) / "opencode/AGENTS.md"
+    text = path.read_text() if path.is_file() else ""
+    if any(text.count(marker) != 1 for marker in JOUET):
+        fail(f"{path} has no single jouet block", POST_TOOLS)
+
+
+def jouet_claude() -> None:
+    """What `jouet setup claude --global` writes (its six Claude hooks in settings.json and the jouet-init skill),
+    judged by jouet itself: its dry run prints `unchanged <file>` for each file it would leave as it is."""
+    done = run("jouet", "setup", "claude", "--global", "--dry-run")
+    heads = [line for line in done.stdout.splitlines() if line and line[0] not in "+-@ \\"]  # its diff lines
+    changed = [line for line in heads if not line.startswith("unchanged ")]
+    if done.returncode or changed or not heads:
+        what = "; ".join(changed) or done.stderr.strip()
+        fail(f"jouet setup would change: {what}", "jouet setup claude --global")
+
+
+def main() -> None:
+    dotfiles()
+    jouet_claude()
+    skills = lock()
+    herdr_core()
+    agent_desktop(skills)
+    herdr_gone(skills)
+    opencode_jouet()
+    for line in failed:
+        print(line, file=sys.stderr)
+    if failed:
+        raise SystemExit(1)
+    print("skills:doctor: every [dotfiles] entry and the post-tools skills are in place")
+
+
+# skills:apply loads this file for checked() and ZSH, under another name, so nothing runs then.
+if __name__ == "__main__":
+    main()
