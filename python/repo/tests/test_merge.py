@@ -1,4 +1,4 @@
-"""repotools pr-merge through its command line: a real git checkout, reviewer rollout and hk, and a gh stand-in."""
+"""repotools pr-merge through its command line: a real git checkout and hk, and a gh stand-in."""
 
 import json
 import os
@@ -12,18 +12,9 @@ import pytest
 from repotools.cli import main
 from repotools.merge import BOT_CLOSE, BOT_OPEN, NOREPLY
 
+from . import test_gates
 from .test_gates import copy, mise, said
-from .test_pane_approval import (
-    SESSION,
-    approve,
-    commit,
-    origin,
-    pr,
-    pr_refusal_of,
-    repo,
-    turn,
-    write_log,
-)
+from .test_pr_create import commit, origin, pr, pr_refusal_of, repo
 
 __all__ = ["copy", "repo"]  # the fixtures, used by name
 HK_PKL = Path(__file__).resolve().parents[3] / "hk.pkl"
@@ -116,16 +107,9 @@ class World:
         return any(call[:2] == ["pr", "merge"] for call in self.calls())
 
 
-def approved(root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], step: str) -> World:
-    made = World(root, monkeypatch, step)
-    write_log(root, approve(root, capsys))
-    capsys.readouterr()
-    return made
-
-
 @pytest.fixture
-def world(repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> World:
-    return approved(repo, monkeypatch, capsys, HK_RAN)
+def world(repo: Path, monkeypatch: pytest.MonkeyPatch) -> World:
+    return World(repo, monkeypatch, HK_RAN)
 
 
 def merge_args() -> list[str]:
@@ -157,17 +141,17 @@ PR_REFUSALS = [
     ({"state": "MERGED"}, "is MERGED, not open"),
     ({"baseRefName": "dev"}, "goes into dev, not trunk"),
     ({"headRefOid": "beef"}, "head is beef, but this checkout's HEAD is"),
-    ({"title": "feat: edited"}, "title on GitHub is not the approved title"),
-    ({"body": "## Summary\n\nEdited.\n"}, "body on GitHub is not the approved body"),
-    ({"body": BODY + "\n\nAdded by hand."}, "body on GitHub is not the approved body"),
-    ({"body": BODY + NOTES + "\nAdded after the notes."}, "body on GitHub is not the approved body"),
-    ({"body": BODY + NOTES + NOTES}, "body on GitHub is not the approved body"),
-    ({"body": "Before.\n" + BODY + NOTES}, "body on GitHub is not the approved body"),
+    ({"title": "feat: edited"}, "title on GitHub is not the given title"),
+    ({"body": "## Summary\n\nEdited.\n"}, "body on GitHub is not the given body"),
+    ({"body": BODY + "\n\nAdded by hand."}, "body on GitHub is not the given body"),
+    ({"body": BODY + NOTES + "\nAdded after the notes."}, "body on GitHub is not the given body"),
+    ({"body": BODY + NOTES + NOTES}, "body on GitHub is not the given body"),
+    ({"body": "Before.\n" + BODY + NOTES}, "body on GitHub is not the given body"),
 ]
 
 
 @pytest.mark.parametrize(("change", "said"), PR_REFUSALS)
-def test_a_pull_request_unlike_the_approved_one_is_refused_before_hk(
+def test_a_pull_request_unlike_the_given_one_is_refused_before_hk(
     world: World, capsys: pytest.CaptureFixture[str], change: dict[str, str], said: str
 ) -> None:
     world.set(pr=world.pr() | change)
@@ -202,30 +186,15 @@ def test_a_default_branch_renamed_on_github_is_refused(world: World, capsys: pyt
 def test_a_checkout_changed_while_hk_ran_is_refused(
     repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], step: str, said: str
 ) -> None:
-    made = approved(repo, monkeypatch, capsys, step)
+    made = World(repo, monkeypatch, step)
     assert said in pr_refusal_of(capsys, "pr-merge", merge_args())
-    assert not made.merged()
-
-
-def test_an_approval_withdrawn_while_hk_ran_is_refused(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """The reviewer's later final answer, written into its rollout as hk runs, withdraws the approval."""
-    later = repo.parent / "later.jsonl"
-    later.write_text("".join(json.dumps(record) + "\n" for record in turn(repo, "t2", "One finding: fix it.")))
-    rollout = repo.parent / "codex" / "sessions" / "2026" / "11" / "02" / f"rollout-2026-11-02T19-55-16-{SESSION}.jsonl"
-    made = approved(
-        repo, monkeypatch, capsys, f"{HK_RAN} && cat {shlex.quote(str(later))} >> {shlex.quote(str(rollout))}"
-    )
-    assert "does not end with" in pr_refusal_of(capsys, "pr-merge", merge_args())
-    assert made.ran.exists()
     assert not made.merged()
 
 
 def test_a_failing_hk_check_all_stops_the_merge(
     repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    made = approved(repo, monkeypatch, capsys, "exit 3")
+    made = World(repo, monkeypatch, "exit 3")
     assert pr_refusal_of(capsys, "pr-merge", merge_args()) == f"hk check --all failed (exit 3) on {made.head}"
     assert not made.merged()
 
@@ -258,7 +227,7 @@ def test_the_task_runs_the_installed_repotools_with_hostile_text_as_inert_argume
     (where //repo:tools-install puts main's), never the branch venv's, and nothing in them runs.
 
     The pull request on the gh stand-in carries that very title and body, so repotools passes the title and body checks
-    only if both arrived intact, and stops at the next gate: no reviewer is pinned in the copy.
+    only if both arrived intact, and stops at the next gate: the copy's hk check --all exits 3.
     """
     tools = copy.parent / "tool-bin"
     tools.mkdir()
@@ -269,6 +238,7 @@ def test_the_task_runs_the_installed_repotools_with_hostile_text_as_inert_argume
     branch.parent.mkdir(parents=True)
     branch.write_text(f"#!{sys.executable}\nopen({str(copy.parent / 'pwned-branch')!r}, 'w')\n")
     branch.chmod(0o755)
+    (copy.parent / "bin").mkdir()
     gh = install_gh(copy.parent / "bin", copy.parent / "scenario.json", copy.parent / "calls.jsonl")
     # gh is a mise tool, which mise puts ahead of PATH in a task; the copy's own wrapper runs the stand-in instead.
     with (copy / "mise.local.toml").open("a") as local:
@@ -276,11 +246,14 @@ def test_the_task_runs_the_installed_repotools_with_hostile_text_as_inert_argume
     title = 'feat: it\'s "$(touch pwned)" `touch pwned2`; touch pwned3 && echo $HOME'
     body_file = "body; touch pwned4.md"  # beside the copy's files, and ignored by its allowlisted .gitignore
     (copy / body_file).write_text(BODY)
-    head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, check=True, text=True).stdout.strip()
+    for name in [name for name in os.environ if name.startswith("HK_")]:
+        monkeypatch.delenv(name)
+    (copy / "hk.pkl").write_text(hk_config("exit 3"))
+    head = test_gates.commit("hk exits 3")
     shown = {"headRefOid": head, "state": "OPEN", "baseRefName": "main", "title": title, "body": BODY}
     (copy.parent / "scenario.json").write_text(json.dumps({"pr": shown, "default": "main"}))
     done = mise("//repo:pr-merge", "7", title, body_file)
     assert done.returncode == 1
     (error,) = said(done, "{")  # mise adds its own task lines around repotools' one JSON error
-    assert "no reviewer session is pinned" in json.loads(error)["error"]
+    assert json.loads(error)["error"] == f"hk check --all failed (exit 3) on {head}"
     assert not list(copy.parent.rglob("pwned*"))

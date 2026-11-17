@@ -1,6 +1,6 @@
 ---
 name: to-spec
-description: "Use when the owner says /to-spec or asks to turn the current conversation into a spec: synthesize it into one spec issue on GitHub, published only after the home-path scan, the reviewer's leak check and the owner's approval of its exact text."
+description: "Use when the owner says /to-spec or asks to turn the current conversation into a spec: synthesize it into one spec issue on GitHub, published only after the home-path scan, the author's leak check and the owner's approval of its exact text."
 disable-model-invocation: false
 ---
 
@@ -12,7 +12,7 @@ the owner; just synthesize what you already know. It is step 2 of the agent work
 
 Adapted from mattpocock-skills 1.3.2 `to-spec` (MIT, `../LICENSE`).
 
-- The spec is published only after the home-path scan, the reviewer's leak check and the owner's approval of its
+- The spec is published only after the home-path scan, the author's leak check and the owner's approval of its
   exact text. Until then it stays a local file.
 - The tracker is GitHub Issues; another tracker stops the skill.
 - A new project runs `setup-matt-pocock-skills` first.
@@ -44,8 +44,8 @@ Stop, publishing nothing, and tell the owner why, when any of these fails:
 3. Write the title and the spec, using the template below, to a file outside every checkout. Then:
    1. **Home-path scan.** `repotools privacy-scan --patterns="$HOME" --files=<spec file>` must exit 0. A clean scan
       only means no home path; it is not the leak check.
-   2. **Leak check.** Ask the reviewer pane (`~/.config/agents/workflow/cross-review.md`) for a document review of
-      the file that includes the leak check. Fix what it finds and repeat from the scan.
+   2. **Leak check.** Read the file for private project content, claude.ai session links and home paths, and fix
+      what you find. A Codex document review (`~/.config/agents/workflow/cross-review.md`) is optional.
    3. **Approval.** Show the owner the exact title and file text with `git hash-object <spec file>`, and ask for
       approval of that text. Without an explicit yes, stop: the spec stays local.
    4. **Publish.** Check that `git hash-object <spec file>` still prints the approved hash; if not, start again at

@@ -81,27 +81,6 @@ run = "uv run --project python/repo --locked repotools scratch-env"
 [tasks.pre-commit]
 run = "hk run pre-commit"
 
-# Run after staging a Python unit; fix or answer every finding, then rerun until PASS. A full PASS
-# records a fingerprint of the staged python/ files, which the pre-commit hook compares. repotools
-# review-python does the work (python/repo/src/repotools/gates.py).
-# Pattern: jazzsequence/jazz-nextjs@9c427f84 .githooks/lib/approval.sh:48-64 (index fingerprint from
-# `git ls-files -s`, so a later `git add` voids the approval); Open-BFME/Open-BFME-1@5a6f78cf
-# .githooks/pre-commit:411,640 does it with `git write-tree`. Both were found by the review-gate-* saved
-# searches of the retired marketplace project.
-[tasks."review:python"]
-description = "A read-only Codex reviewer checks the uncommitted changes against CODING_STANDARDS.md"
-usage = '''
-arg "[path]" default="python" help="Directory whose uncommitted changes are reviewed"
-flag "--commit <sha>" help="Review this commit instead of the uncommitted changes"
-flag "--out <file>" help="Report file (default review-python.md in the git dir, never tracked)"
-'''
-# --option=value: a value that starts with - would otherwise be read by argparse as an option.
-run = 'uv run --project python/repo --locked repotools review-python --path="$usage_path" ${usage_commit:+--commit="$usage_commit"} ${usage_out:+--out="$usage_out"}'
-
-[tasks."review:python:approved"]
-description = "Refuse unless review:python passed on exactly the staged python/ files"
-run = "uv run --project python/repo --locked repotools review-python-approved"
-
 # Names that must not be public (machine names, addresses) live in Doppler, never in this repo
 # (docs/research/private-names.md). The global fnox file reads each one with env = "exec", so
 # `fnox exec -- mise dot apply ...` puts it in the environment for the templates that call secret().
@@ -162,8 +141,9 @@ run = "mkdir -p ~/.agents/skills"
 # tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
 # from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
-# Leads merge their own PRs after their Codex reviewer approves (owner ruling 2026-11-15). The auto-mode soft-deny
-# "Merge Without Review" wants a human approval, so the classifier blocked those merges. Auto mode reads prose
+# Leads merge their own PRs once hk check --all passes (owner rulings 2026-11-15 and 2026-11-17: no review is
+# required). The auto-mode soft-deny "Merge Without Review" wants a human approval, so the classifier blocked those
+# merges. Auto mode reads prose
 # exceptions from autoMode.allow in user settings only (https://code.claude.com/docs/en/auto-mode-config.md);
 # "$defaults" keeps the shipped list. Undo: remove this entry, then `claude auto-mode reset`.
 "~/.claude/settings.json/automode" = { source = "unix/home/.claude/settings.automode.json", merge = true }

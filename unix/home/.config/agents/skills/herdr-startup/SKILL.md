@@ -33,8 +33,7 @@ without `--apply` each prints its plan and changes nothing.
    session the start resumed from the saved graph runs, is current, waits on no trust or other dialog (Codex "Trust
    this folder": ask the owner first) and is in its folder; a Claude session also got its resume prompt (read from
    its transcript). Verify does not check the prompt for Codex and OpenCode: `hc read <t>` each one. Re-send the prompt
-   with `hc send` where it did not arrive. Codex reviewer panes: re-pin with `repotools pane-pin` if the session
-   id changed.
+   with `hc send` where it did not arrive.
 5. **Restore your own duties:** re-create the 30-minute check-in cron from
    `wiki/playbooks/restart-chief-of-staff.md`, confirm the mods loaded (side-notes log for your session), and
    update tab ids in the leads' briefs if they changed.

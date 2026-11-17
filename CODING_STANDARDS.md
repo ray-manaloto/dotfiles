@@ -1,6 +1,6 @@
 # Coding standards
 
-The reviewer reads this file; `mise run review:python` hands it to a read-only Codex reviewer.
+The author and any reviewer read this file.
 Rules that a tool can check live in that tool (ruff ALL, ty, coverage, `codegen --check`); this
 file holds the judgement calls. Each finding cites the rule number and `path:line`.
 

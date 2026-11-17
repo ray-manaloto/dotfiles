@@ -14,13 +14,13 @@ tags: [workflow]
 
 1. People do the thinking steps: grilling, spec sign-off, ticket approval and the merge. Agents do
    the mechanical steps: implementing, reviewing and drafting pull request text.
-2. Steps 1-3 share one attended session; every later step gets a fresh session. Reviews run in
-   the worktree's pinned reviewer pane, never in the author's session. One ticket per worker, one
+2. Steps 1-3 share one attended session; every later step gets a fresh session. An optional
+   Codex review runs in its own tab, never in the author's session. One ticket per worker, one
    git worktree per worker.
 3. State lives in GitHub: issues, labels, assignees and blocked-by links. The roadmap and the ticket
    plans mirror it and hold working notes.
-4. A review finding is a hypothesis to check against the diff, never an approval. The only approval
-   is the reviewer pane's `PANE-APPROVE <fingerprint>` (see [cross-review](cross-review.md)).
+4. A review finding is a hypothesis to check against the diff. No review is required (owner ruling,
+   2026-11-17); a lead may ask Codex for one by choice (see [cross-review](cross-review.md)).
 5. Every loop has a cap. No review runs "until clean": three rounds per review kind, then park.
 6. A mechanical mistake that recurs becomes a deterministic check; judgement calls stay in the
    repository's coding standards.
@@ -30,7 +30,7 @@ tags: [workflow]
    advisory; an external spend limit is set and verified before anything runs unattended.
 9. Text is checked for private content before it is published, not after. The home-path scan
    finds only the home-path strings it is configured with; a clean scan says nothing else about the
-   content. The guard for private content is the reviewer's leak check on the exact bytes.
+   content. The author reads the exact bytes for private content before publishing them.
 10. Merges stay human. No agent merges a pull request.
 11. Each step starts in a herdr-app tab: Codex as `codex-hc`, Claude through its launcher, both
     opened with `herdr-app do tab.new` and driven with `hc send`, `hc keys` and `hc read`. Inside
@@ -39,10 +39,9 @@ tags: [workflow]
     `codex review` or `hc run`. If `herdr-app ls` fails, stop and ask the owner. Close a tab when
     its step is done.
 12. Every public write (docs, a commit, a spec, a ticket, pull-request text, an edit or a comment)
-    is sent only after the home-path scan, the reviewer's leak check and an approval on the exact
-    bytes. Without approval the item stays local. A pull request's one approval covers its commits;
-    a commit needs no approval of its own, but no commit is pushed before that approval at the
-    branch head. The order is approve, push, open the pull request, merge.
+    is sent only after the home-path scan and the author's own read of the exact bytes for private
+    content, plus the owner's OK where a step asks for it. The order is push, open the pull
+    request, merge.
 13. A step is done on an observed result: the verify output, a passing test run, a finding checked
     against the diff. A read that failed is reported as unreadable, never as "nothing found".
 
@@ -53,12 +52,12 @@ Before the first ticket in a repository, `/work` runs setup once: `setup-matt-po
 
 | # | Step | Who starts it | Produces | Person's gate | Review |
 |---|------|---------------|----------|---------------|--------|
-| 1 | `/grill-with-docs` | The owner, in a fresh session | Shared understanding, glossary terms, ADRs | Confirms the summary | The pull request's review, if files changed |
-| 2 | `/to-spec` | The owner, same session | One spec issue | Signs off the spec | Document review of the local file before it is published |
+| 1 | `/grill-with-docs` | The owner, in a fresh session | Shared understanding, glossary terms, ADRs | Confirms the summary | None required |
+| 2 | `/to-spec` | The owner, same session | One spec issue | Signs off the spec | Optional document review of the local file before it is published |
 | 3 | `/to-tickets` | The owner, same session | Vertical-slice ticket issues, blockers first, each with seams and criteria that can fail | Approves the breakdown | Optional document review of the ticket bodies |
-| 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | None: commits need no approval | None of their own: the pull request's review covers them |
-| 5 | Branch review | The reviewer tab, after the ticket's commits | Findings against the acceptance criteria | None: findings are hypotheses | The pull request's one review: the base-branch diff with the criteria supplied |
-| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the head and the exact bytes | Home-path scan, then the same review reads the title and body, with the leak check over the diff and the text |
+| 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | None: commits need no approval | None required |
+| 5 | Branch review (optional) | A Codex tab, when the lead asks for one | Findings against the acceptance criteria | None: findings are hypotheses | Optional: the base-branch diff with the criteria supplied |
+| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | None | Home-path scan and the author's read of the diff and the text for private content |
 | 7 | Close-out | The coordinator, after the owner merges (or earlier on a shared branch, see [ship](ship.md)) | Issue closed, roadmap line ticked; worktree removed only after the merge | The merge, or a spec's early-close rule in [ship](ship.md) | None |
 | 8 | `/ticket-retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
 

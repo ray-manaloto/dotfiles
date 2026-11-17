@@ -40,12 +40,9 @@ then write.
    - Shipping: <how a change ships, e.g. a branch and a pull request into `<default branch>`, opened with
      `repotools pr-create`; the owner merges>.
    - Research: notes go in `<folder>`.
-   - Review approval: the pinned reviewer pane approves each pull request (`repotools pane-pin`,
-     `repotools pr-fingerprint`, see `~/.config/agents/workflow/cross-review.md`). `repotools pr-create`
-     refuses a pull request the pane has not approved. Commits need no approval.
-   - Content guard: the reviewer's leak check on the exact bytes, bound to the approval fingerprint. The
-     reviewer approves only bytes it has read and found free of private content. Any change to those bytes
-     changes the fingerprint and voids the approval. The home-path scan is not the content guard.
+   - Review: none required; a lead may ask Codex for one by choice (`~/.config/agents/workflow/cross-review.md`).
+   - Content guard: the author reads the exact bytes of public text for private content before publishing.
+     The home-path scan is not the content guard.
    ```
 
 5. **Trust the repository.** Run `repotools trust`. It trusts the repository's main checkout, found from a linked

@@ -1,4 +1,4 @@
-"""The commit gates: review:python, review:python:approved and privacy:scan."""
+"""The privacy:scan gate: this machine's private paths in tracked files, given files or outgoing commits."""
 
 # Ported from the shell runs in mise.toml and tasks/privacy/scan.sh (#388) with the same arguments and output.
 # Their report and refusal lines stay plain text, as hk and AGENTS.md show them, not JSON events.
@@ -10,100 +10,14 @@ import sys
 from pathlib import Path
 
 from .git import git
-from .models import PrivacyScan, ReviewApproved, ReviewPython
-from .pane_approval import hashed
+from .models import PrivacyScan
 
-PROMPT = Path("tasks/review/python.md")
-APPROVING = b"VERDICT: PASS"
-# The review lead and the 6 slice reviewers it runs at once (tasks/review/python.md).
-THREADS = 7
-REFUSAL = "review:python has not passed on the staged python/ files; stage them, then mise run review:python"
 HINT = "privacy:scan: replace each host path with ~ or a {{ env.HOME }} template"
 # Short values (a CI runner's HOME, say) would match ordinary text; only real paths are kept.
 SHORTEST = 8
 # The task always renders /Users/<user>/, 8 characters even for an empty user; a direct call may not.
 EMPTY = "privacy:scan: no patterns rendered"
 GITLINK = b"160000 "
-
-
-def staged_python() -> str:
-    return hashed(git("ls-files", "-s", "--", "python").encode())
-
-
-def approval_file() -> Path:
-    return Path(git("rev-parse", "--git-path", "review-python.approved").strip())
-
-
-def merged_in(path: str) -> list[str]:
-    """Files under path only main changed and the merge leaves as main has them; the rest stay in the review."""
-    # Not a merge, or one of a commit origin/main does not hold, exits non-zero: then nothing is left out.
-    reviewed = ["git", "merge-base", "--is-ancestor", "MERGE_HEAD", "origin/main"]
-    if subprocess.run(reviewed, capture_output=True, check=False).returncode:
-        return []
-    # The working tree, as the reviewer reads git diff HEAD. Quoted as git quotes a name in that diff, so a
-    # newline, quote or byte that is not ASCII is escaped and one name cannot pose as another Merged: line.
-    ours, main = (
-        set(git("-c", "core.quotePath=true", "diff", "--name-only", "--no-renames", side, "--", path).splitlines())
-        for side in ("HEAD", "MERGE_HEAD")
-    )
-    # A file the branch's own commits changed stays in, even resolved to main's side: dropping the branch's
-    # change is a decision of this merge (pre-commit/pre-commit pre_commit/git.py keeps conflicted files too).
-    # So does an earlier merge's: --diff-merges=separate lists its files against each parent, and --sparse keeps
-    # one that matches the branch parent, as when it rejected main's change (git revision.c, dense mode).
-    log = ["log", "--format=", "--name-only", "--no-renames", "--diff-merges=separate", "--sparse"]
-    log += ["HEAD", "^MERGE_HEAD", "--", path]
-    branch = set(git("-c", "core.quotePath=true", *log).splitlines())
-    return sorted(ours - main - branch)
-
-
-def review(options: ReviewPython) -> None:
-    """Codex reads the prompt and writes its report; a PASS on python/ as staged records that index."""
-    out = options.out or git("rev-parse", "--git-path", "review-python.md").strip()
-    # Taken before Codex reads, so anything staged during the review stays unapproved.
-    staged = staged_python()
-    prompt = PROMPT.read_bytes() + f"Path: {options.path}\nCommit: {options.commit or 'none'}\n".encode()
-    if options.commit is None:
-        prompt += "".join(f"Merged: {name}\n" for name in merged_in(options.path)).encode()
-    # One word, as codex's clap parser reads a separate value that starts with - as an option.
-    # multi_agent_v2 counts the lead in its thread total (default 4), and this override merges with a
-    # plain `multi_agent_v2 = true` in config.toml (codex-rs/config/src/merge.rs:63-98 at rust-v0.167.0).
-    command = [
-        "codex",
-        "exec",
-        "-C",
-        ".",
-        "-c",
-        'sandbox_mode="read-only"',
-        "-c",
-        'approval_policy="never"',
-        "-c",
-        f"features.multi_agent_v2.max_concurrent_threads_per_session={THREADS}",
-        f"--output-last-message={out}",
-        "-",
-    ]
-    done = subprocess.run(command, input=prompt, check=False)
-    if done.returncode:
-        raise SystemExit(done.returncode)
-    # Bytes, as tail -n 1 and grep -qx read it: a \\r stays in its line and the report need not be UTF-8.
-    lines = Path(out).read_bytes().removesuffix(b"\n").split(b"\n")
-    sys.stdout.flush()
-    sys.stdout.buffer.write(lines[-1] + b"\n")
-    sys.stdout.buffer.flush()
-    if APPROVING not in lines:
-        raise SystemExit(1)
-    # The reviewer also reads unstaged files, so a PASS approves the index only when they match it.
-    unstaged = subprocess.run(["git", "diff", "--quiet", "--", "python"], check=False).returncode
-    untracked = git("ls-files", "-o", "--exclude-standard", "--", "python")
-    if options.path == "python" and options.commit is None and unstaged == 0 and not untracked:
-        approval_file().write_text(staged + "\n")
-
-
-def approved() -> None:
-    path = approval_file()
-    # Bytes, as $(cat) read it: trailing newlines dropped, a \\r kept, so a CRLF stamp is refused.
-    if staged_python().encode() != (path.read_bytes().rstrip(b"\n") if path.exists() else b""):
-        sys.stderr.write(REFUSAL + "\n")
-        raise SystemExit(1)
 
 
 def leaks(data: bytes, patterns: list[bytes]) -> list[int]:
@@ -170,13 +84,3 @@ def privacy_scan(options: PrivacyScan) -> None:
         lines = [f"privacy:scan: {line}" for line in found] + [HINT]
         sys.stderr.buffer.write(b"".join(os.fsencode(line + "\n") for line in lines))
         raise SystemExit(1)
-
-
-def dispatch(options: ReviewPython | ReviewApproved | PrivacyScan) -> None:
-    match options:
-        case ReviewPython():
-            review(options)
-        case ReviewApproved():
-            approved()
-        case _:  # PrivacyScan
-            privacy_scan(options)

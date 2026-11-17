@@ -6,29 +6,9 @@
 _.python.venv = { path = ".venv" }
 
 # From the repository root: a hook exports GIT_DIR, and git then takes the current folder as the top.
-[tasks.pane-pin]
-description = "Name the reviewer for this checkout's pull requests: its Codex session, or with --subagent the fallback reviewer's transcript"
-usage = '''
-arg "[session]" help="The Codex session id, started in this checkout"
-flag "--subagent <transcript>" help="While Codex is depleted: the read-only Claude subagent's agent-<id>.jsonl"
-'''
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pane-pin ${usage_session:+--session "$usage_session"} ${usage_subagent:+--subagent "$usage_subagent"}'
-
-[tasks.pr-fingerprint]
-description = "Print the hash of HEAD and a pull request's title and body that the reviewer pane must approve"
-usage = '''
-arg "<title>" help="The pull request title"
-arg "<body>" help="The file holding the body, which the reviewer reads"
-'''
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pr-fingerprint --title "$usage_title" --body-file "$usage_body"'
-
-# The only way a pull request's text should reach GitHub: repotools reads the body once, checks it, and pipes it to gh.
+# repotools reads the body file and pipes its bytes to gh pr create, against origin's default branch.
 [tasks.pr-create]
-description = "Open a pull request against main once the pinned reviewer approved its title and body"
+description = "Open a pull request against main from its title and body file"
 usage = '''
 arg "<title>" help="The pull request title"
 arg "<body>" help="The file holding the body"
@@ -42,11 +22,11 @@ run = 'uv run --project python/repo --locked repotools pr-create --title "$usage
 # file activates puts the branch's own repotools first on PATH, and a pull request that changed the merge gates would
 # then judge itself by them.
 [tasks.pr-merge]
-description = "Merge a pull request whose head is this clean HEAD, once the reviewer approved it and hk check --all passes"
+description = "Merge a pull request whose head is this clean HEAD, once its text matches and hk check --all passes"
 usage = '''
 arg "<number>" help="The pull request number"
-arg "<title>" help="The title the reviewer approved"
-arg "<body>" help="The file holding the body the reviewer approved"
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the pull request body"
 '''
 dir = "{{ config_root }}/../.."
 run = '"$(uv tool dir --bin)/repotools" pr-merge --number "$usage_number" --title "$usage_title" --body-file "$usage_body"'

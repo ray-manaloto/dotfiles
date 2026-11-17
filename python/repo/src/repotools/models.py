@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Annotated, Any
+from typing import Annotated
 
 
 class Command(StrEnum):
@@ -10,14 +10,9 @@ class Command(StrEnum):
     The repotools subcommands, one per mise task.
     """
 
-    pane_pin = "pane-pin"
-    pr_fingerprint = "pr-fingerprint"
-    pr_approved = "pr-approved"
     pr_create = "pr-create"
     pr_merge = "pr-merge"
     zero_bash = "zero-bash"
-    review_python = "review-python"
-    review_python_approved = "review-python-approved"
     privacy_scan = "privacy-scan"
     main_guard = "main-guard"
     main_guard_install = "main-guard-install"
@@ -350,7 +345,7 @@ class Finding(BaseModel):
 
 class PrText(BaseModel):
     """
-    A pull request's title and body, which the reviewer reads and the approval covers with HEAD.
+    A pull request's title and body, which pr-create sends to gh.
     """
 
     model_config = ConfigDict(
@@ -369,7 +364,7 @@ class PrText(BaseModel):
 
 class PrMerge(BaseModel):
     """
-    A pull request to merge once its head is this clean HEAD, the reviewer approved it and hk check --all passes.
+    A pull request to merge once its head is this clean HEAD, its text is the given one and hk check --all passes.
     """
 
     model_config = ConfigDict(
@@ -382,11 +377,11 @@ class PrMerge(BaseModel):
     """
     title: Annotated[str, Field(pattern="^[^\\n]+$")]
     """
-    The title the reviewer approved, one line
+    The pull request title, one line
     """
     body_file: str
     """
-    The file holding the body the reviewer approved
+    The file holding the pull request body
     """
 
 
@@ -411,61 +406,6 @@ class Merged(BaseModel):
     """
     The merge commit's author email
     """
-
-
-class PanePin(BaseModel):
-    """
-    Name the reviewer whose approval this checkout accepts: a Codex session, or a fallback Claude subagent's transcript.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    session: Annotated[str | None, Field(pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")] = (
-        None
-    )
-    """
-    The Codex session id, as in the rollout file's name
-    """
-    subagent: Annotated[str | None, Field(pattern="(^|/)agent-[0-9a-z]+\\.jsonl$")] = None
-    """
-    The fallback reviewer's Claude subagent transcript, agent-<id>.jsonl, while the Codex quota is depleted
-    """
-
-
-class ReviewPython(BaseModel):
-    """
-    Have a read-only Codex reviewer check changes against CODING_STANDARDS.md.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    path: str = "python"
-    """
-    Directory whose uncommitted changes are reviewed
-    """
-    commit: str | None = None
-    """
-    Review this commit instead of the uncommitted changes
-    """
-    out: str | None = None
-    """
-    Report file (default review-python.md in the git dir)
-    """
-
-
-class ReviewApproved(BaseModel):
-    """
-    Refuse unless review:python passed on exactly the staged python/ files.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
 
 
 class PrivacyScan(BaseModel):
@@ -494,10 +434,7 @@ class PrivacyScan(BaseModel):
 type Options = (
     PrText
     | PrMerge
-    | PanePin
     | ZeroBash
-    | ReviewPython
-    | ReviewApproved
     | PrivacyScan
     | MainGuard
     | MainGuardInstall
@@ -513,289 +450,6 @@ type Options = (
 """
 What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.
 """
-
-
-class Fingerprint(BaseModel):
-    """
-    What an approval must name, printed as a JSON line.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    fingerprint: str
-    """
-    Hash of what is approved: HEAD with the index and message, or with a pull request's text
-    """
-
-
-class RolloutLine(BaseModel):
-    """
-    One line of a Codex session rollout; only the fields the check reads.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    session_meta, turn_context, response_item or event_msg
-    """
-    payload: dict[str, Any]
-    """
-    Depends on type
-    """
-
-
-class SessionMeta(BaseModel):
-    """
-    A rollout's session_meta payload.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    id: str
-    """
-    The session id
-    """
-    cwd: str
-    """
-    The folder the session started in
-    """
-    forked_from_id: str | None = None
-    """
-    Set on a forked session
-    """
-
-
-class SandboxPolicy(BaseModel):
-    """
-    A turn's legacy sandbox field.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    read-only when nothing may be written
-    """
-
-
-class FileAccess(BaseModel):
-    """
-    One filesystem permission entry.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    access: str
-    """
-    read when the entry only reads
-    """
-
-
-class FileSystem(BaseModel):
-    """
-    A turn's effective filesystem permissions.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    restricted when entries list everything allowed
-    """
-    entries: list[FileAccess]
-    """
-    What is allowed
-    """
-
-
-class PermissionProfile(BaseModel):
-    """
-    A turn's effective permissions; only a managed profile lists its filesystem access.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    managed, disabled (no sandbox) or external
-    """
-    file_system: FileSystem | None = None
-
-
-class TurnContext(BaseModel):
-    """
-    A rollout's turn_context payload.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    turn_id: str
-    """
-    The turn these settings apply to
-    """
-    cwd: str
-    """
-    The turn's working folder
-    """
-    approval_policy: str
-    """
-    never when no command can ask for more
-    """
-    sandbox_policy: SandboxPolicy
-    permission_profile: PermissionProfile
-
-
-class OutputText(BaseModel):
-    """
-    One content part of a message; an image part has no text.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    output_text for what the assistant wrote
-    """
-    text: str | None = None
-    """
-    The words
-    """
-
-
-class Message(BaseModel):
-    """
-    A rollout's response_item message payload.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    role: str
-    """
-    assistant, user or developer
-    """
-    phase: str | None = None
-    """
-    final_answer on a turn's answer
-    """
-    content: list[OutputText]
-    """
-    The parts
-    """
-
-
-class TaskEvent(BaseModel):
-    """
-    A rollout's task_started, task_complete or turn_aborted payload.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    turn_id: str
-    """
-    The turn
-    """
-    last_agent_message: str | None = None
-    """
-    The answer, on task_complete
-    """
-
-
-class AgentMeta(BaseModel):
-    """
-    A Claude Code subagent's agent-<id>.meta.json; only the fields the check reads.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    agent_type: Annotated[str, Field(alias="agentType")]
-    """
-    The agent type it ran as; reported, never trusted: the transcript's tool calls decide
-    """
-    finished: bool | None = None
-    """
-    true once the run ended; absent while it runs or after it was killed
-    """
-
-
-class AgentPart(BaseModel):
-    """
-    One content part of a subagent transcript's message.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    text, thinking, tool_use or tool_result
-    """
-    text: str | None = None
-    """
-    The words of a text part
-    """
-    name: str | None = None
-    """
-    The tool a tool_use part calls
-    """
-    input: dict[str, Any] | None = None
-    """
-    A tool_use part's arguments
-    """
-
-
-class AgentMessage(BaseModel):
-    """
-    The message of a user or assistant line; a prompt may be a plain string.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    role: str
-    content: str | list[AgentPart]
-    """
-    The text, or its parts
-    """
-
-
-class AgentLine(BaseModel):
-    """
-    One line of a Claude Code subagent transcript, agent-<id>.jsonl; only the fields the check reads.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-    )
-    type: str
-    """
-    user, assistant, attachment, api-request and others
-    """
-    agent_id: Annotated[str | None, Field(alias="agentId")] = None
-    """
-    The subagent's id, as in the file name
-    """
-    is_sidechain: Annotated[bool | None, Field(alias="isSidechain")] = None
-    """
-    true on every line of a subagent's own run
-    """
-    message: AgentMessage | None = None
-    """
-    On user and assistant lines
-    """
 
 
 class Failure(BaseModel):
@@ -827,10 +481,7 @@ class Repotools(BaseModel):
     pr_text: PrText | None = None
     pr_merge: PrMerge | None = None
     merged: Merged | None = None
-    pane_pin: PanePin | None = None
     zero_bash: ZeroBash | None = None
-    review_python: ReviewPython | None = None
-    review_approved: ReviewApproved | None = None
     privacy_scan: PrivacyScan | None = None
     main_guard: MainGuard | None = None
     main_guard_install: MainGuardInstall | None = None
@@ -854,11 +505,3 @@ class Repotools(BaseModel):
     finding: Finding | None = None
     fnox_refs: FnoxRefs | None = None
     fnox_finding: FnoxFinding | None = None
-    fingerprint: Fingerprint | None = None
-    rollout_line: RolloutLine | None = None
-    session_meta: SessionMeta | None = None
-    turn_context: TurnContext | None = None
-    message: Message | None = None
-    task_event: TaskEvent | None = None
-    agent_meta: AgentMeta | None = None
-    agent_line: AgentLine | None = None

@@ -15,7 +15,7 @@ Adapted from mattpocock's in-progress `chief-of-staff` skill (mattpocock-skills 
 
 ## Leads
 
-- One lead per lane, as a herdr tab or space. A lead owns its lane end to end: its subagents, its reviewer pane, its retro. Keep the lead count small; extra hops drop decisions.
+- One lead per lane, as a herdr tab or space. A lead owns its lane end to end: its subagents, any optional reviewer tab, its retro. Keep the lead count small; extra hops drop decisions.
 - Watched agents open as herdr-app tabs, never `hc run` popups: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '[...]'`. Always pass an explicit `--id` when closing. Check the foreground with `hc get <t> --json` before `hc send`, and send plain text only.
 - A lead brief names: the goal and done-state, the lane's wiki pages, the escalation rules, what is out of scope, and where to write its report.
 - Respect the one-lane-at-a-time ruling where it applies; check `wiki/lanes/` before starting a lane.
@@ -24,7 +24,7 @@ Adapted from mattpocock's in-progress `chief-of-staff` skill (mattpocock-skills 
 
 - Leads decide implementation questions themselves and report in one line.
 - Leads escalate only owner-level gates to the decision queue: merges, home or config changes outside the repo, public text (issues, PRs), scope changes, spending, and two failed attempts. Each item: lane, question, options, recommendation, evidence link.
-- Each PR needs one reviewer-pane approval per `~/.config/agents/AGENTS.md`; commits need none. Plugin changes follow its "Plugin changes" rule: no separate OK.
+- No review is required for a commit or a PR (`~/.config/agents/AGENTS.md`); a lead may ask Codex for one by choice. Plugin changes follow its "Plugin changes" rule: no separate OK.
 - You batch queue items to the owner interactively (AskUserQuestion), recommended option first labelled "(Recommended)", pros and cons on every option. Never end a message with a prose question. Relay the answers to leads.
 - Free review bots (CodeRabbit, Repowise) never block a merge.
 

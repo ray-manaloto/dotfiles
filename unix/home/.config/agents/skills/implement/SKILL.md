@@ -28,8 +28,7 @@ Check these in order. If one fails, stop: tell the owner which one and show the 
 4. Call the Skill tool with "code-review" to review the work. Fix what it finds that the diff confirms.
 5. Stage the changed files by name with `git add <path>...`; jouet denies `git add -A` and `git add .`. Write the proposed commit message to a file outside the repository.
 6. Stop and report: the staged files, the message file, the check result and anything left open. You do not
-   commit, push or write to GitHub; the commit goes through the reviewer pane
-   (`~/.config/agents/workflow/ship.md`).
+   commit, push or write to GitHub; the coordinator or owner commits (`~/.config/agents/workflow/ship.md`).
 
 ## Departures from upstream
 

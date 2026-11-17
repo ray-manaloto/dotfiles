@@ -6,15 +6,15 @@ How the work runs:
 - herdr (`hc`, `herdr-app`): every agent session is a herdr tab; a chief-of-staff session coordinates project
   leads, and each lead supervises child tabs. Sessions are resumed by id (`claude --resume`, `codex-hc resume`,
   `opencode -s`), so anything that changes resume, session ids, transcripts or `/exit` matters.
-- Claude Code writes the code; Codex reviews it in a pinned reviewer pane that must end with `PANE-APPROVE`.
-  Pull requests go through `repotools` fingerprints; commits need no approval. Subagents and worktrees are used heavily.
+- Claude Code writes the code; a lead may ask Codex to review it, but no review is required for commits or pull
+  requests. Subagents and worktrees are used heavily.
 - jouet hooks guard Claude's tool calls (tests, commits, edits); fnox injects secrets through `fnox proxy run`;
   mise runs every task and pins every tool; hk runs the checks. Python is uv-only, ruff and ty clean, 100% coverage.
 - Plugins come from several marketplaces at user scope; permission modes are `auto` for sessions.
 
 Owner rulings that a release can touch:
 - Never `pkill` by pattern, never `hc server stop`; always pass `--id` to `herdr-app do`.
-- Each PR needs the reviewer pane's approval of its whole diff and text; the repository is public, so nothing private is published.
+- No review is required for a PR; the repository is public, so the lead publishes nothing private.
 - Prefer native and jdx tools; `mise run test` stays under one minute.
 - Trust a project once for every coding agent; its worktrees must just work.
 - Plugin changes need no separate OK; uninstall only with `--keep-data`.
