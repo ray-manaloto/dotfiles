@@ -1169,6 +1169,44 @@ def test_only_a_session_with_remote_control_off_and_no_given_name_plans_a_restar
     assert (result.result, result.notes[:2]) == want
 
 
+HK = "tool hk 2.12.0 on PATH, pin 2.13.0"
+CODE_MODE = {"CLAUDE_CODE_EXPERIMENTAL_CODE_MODE": "1"}
+
+
+@pytest.mark.parametrize(
+    ("started_with", "mark", "want"),
+    [
+        ({}, None, ("planned", "handshake, then /exit", HK)),
+        (CODE_MODE, None, ("skipped-code-mode", "started by claude:code-mode; restart it by hand", HK)),
+        ({}, MARK, ("planned-restart", "handshake, then /restart", HK)),
+    ],
+    ids=["tools-only-exits", "tools-only-code-mode-skips", "with-plugins-still-restarts"],
+)
+def test_a_session_holding_an_old_mise_tool_on_its_path_is_stale(
+    world: World, monkeypatch: pytest.MonkeyPatch, started_with: dict[str, str], mark: dt.datetime | None, want: object
+) -> None:
+    """The PATH it started with holds hk 2.12.0 while mise resolves hk to 2.13.0 in its folder: /restart would keep
+    that PATH, so a session stale only on tools goes through /exit. jq's install on PATH is current under its other
+    name (aqua:jq), age's is not pinned there, and the old hk folder's other name (ubi:hk) is not pinned either."""
+    installs = world.root / "installs"
+    old, new, jq, age = installs / "hk-old", installs / "hk-new", installs / "jq-x", installs / "age-x"
+    monkeypatch.setenv("PATH", os.pathsep.join([os.environ["PATH"], str(old / ".mise-bins"), str(jq), str(age)]))
+    for name, value in started_with.items():
+        monkeypatch.setenv(name, value)
+    restartable(world)
+    hk = [
+        {"version": "2.12.0", "install_path": str(old)},
+        {"version": "2.13.0", "install_path": str(new), "active": True},
+    ]
+    jqs = [{"version": "1.8.1", "install_path": str(jq)}, {"version": "1.9", "install_path": "y", "active": True}]
+    listed = {"aqua:jq": [{"version": "1.8.1", "install_path": str(jq), "active": True}], "jq": jqs, "hk": hk}
+    listed["age"] = [{"version": "1.2", "install_path": str(age)}]
+    listed["ubi:hk"] = [{"version": "2.12.0", "install_path": str(old)}]
+    world.answer({("mise", "-C", str(world.root / "proj"), "ls", "--json"): out(listed)})
+    result = session.stop(live.Live(), target(world), FAST, None, mark)
+    assert (result.result, result.notes[0], result.notes[-1]) == want
+
+
 def test_a_code_mode_session_restarts_in_place(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
     """Code Mode's variable stays with the process /restart re-runs: no resume to lose it."""
     monkeypatch.setenv("CLAUDE_CODE_EXPERIMENTAL_CODE_MODE", "1")

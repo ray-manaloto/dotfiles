@@ -22,6 +22,7 @@ from hometools.roll.live import (
     code_mode,
     entries,
     field,
+    path_of,
     poll,
     processes,
     raw_env,
@@ -472,15 +473,19 @@ def stop(live: Live, target: Target, timing: Timing, keep: Path | None, mark: dt
     try:
         need(term.address != live.me, "skipped-self", "the tab running this step")
         pid = current(live, term, f"skipped-foreground-not-{term.kind}")
+        harness = outdated(term, began(pid, term.kind) if pid else None, mark)
+        drift = tools(pid, term.cwd) if pid else []
         # /restart re-runs the session in its own process, launch flags and environment kept: none of the checks below
-        # for a resume by roll:start applies to it.
-        restart = pid if pid and in_place(pid, term.kind) else None
+        # for a resume by roll:start applies to it. It keeps PATH too, so it loads a new harness or plugins but never
+        # a new tool: a session stale only on tools goes through /exit and a resume from a fresh shell.
+        restart = pid if pid and in_place(pid, term.kind) and (harness or not drift) else None
         if restart is None:
             # A launch flag start can't carry over would leave the session down after /exit: skip it while it runs.
             resume_argv(target, ROLLING)
             # Nor can it carry a Code Mode session's variable, and without it the session does not resume.
-            need(not (pid and code_mode(pid)), "skipped-code-mode", "started by claude:code-mode; restart it by hand")
-        stale = outdated(term, began(pid, term.kind) if pid else None, mark)
+            why = "started by claude:code-mode; restart it by hand"
+            need(not (pid and code_mode(pid)), "skipped-code-mode", why, *drift)
+        stale = harness + drift
         need(stale, "skipped-already-current", "on the installed version, started after it changed")
         state, _, _ = status(term.address)
         busy = jobs(live, term.address, term.kind)
@@ -799,6 +804,38 @@ def outdated(
     return failed
 
 
+def tools(pid: int, folder: str | None) -> list[str]:
+    """Each mise tool the process's PATH holds an install of that is not one mise resolves the tool to now in the
+    session's folder (global pins and the folder's own): the PATH a process started with stays, so a session opened
+    before a tool's bump keeps the old install. mise's own ls --json names each install folder's tool and version
+    (installs/<tool>-<hash> since mise's hashed layout, never parsed here). A tool mise no longer pins there, or a
+    mise that can't answer, adds nothing."""
+    try:
+        listed = json.loads(call("mise", "-C", folder or str(Path.home()), "ls", "--json") or "")
+    except json.JSONDecodeError:
+        return []
+    # Every (tool, version) mise lists an install folder under, and each tool's active (folder, version)s.
+    names: dict[str, list[tuple[str, str]]] = {}
+    pins: dict[str, list[tuple[str, str]]] = {}
+    for tool in listed if isinstance(listed, dict) else {}:
+        for row in rows(listed, tool):
+            place, version = str(row.get("install_path")), str(row.get("version"))
+            names.setdefault(place, []).append((tool, version))
+            if row.get("active") is True:
+                pins.setdefault(tool, []).append((place, version))
+    current = {place for found in pins.values() for place, _ in found}
+    notes: dict[str, str] = {}
+    for entry in path_of(pid):
+        place = next((p for p in (entry, *map(str, Path(entry).parents)) if p in names), "")
+        # One install folder can serve two names (aqua:betterleaks/betterleaks pinned globally, betterleaks by a
+        # project): active under either, it is current; else the first of its names pinned there names it.
+        held = [] if place in current else [(tool, version) for tool, version in names.get(place, []) if tool in pins]
+        for tool, version in held[:1]:
+            now = " ".join(version for _, version in pins[tool])
+            notes.setdefault(tool, f"tool {tool} {version} on PATH, pin {now}")
+    return list(notes.values())
+
+
 def verify(  # noqa: PLR0913 - one parameter per thing the stop or start learned about the session
     target: Target,
     mark: dt.datetime | None,
@@ -821,7 +858,8 @@ def verify(  # noqa: PLR0913 - one parameter per thing the stop or start learned
     if restarted:
         since, failed = again(term, pid)
     else:
-        since, failed = started(pid), []
+        # A resume from a shell that kept the old PATH would still hold the old tool: not current.
+        since, failed = started(pid), tools(pid, term.cwd)
     failed += outdated(term, since, mark, address)
     path = transcript(term.session) if term.kind is Kind.claude and term.session else None
     if term.kind is Kind.claude and not restarted and (path is None or not arrived(path, since)):
