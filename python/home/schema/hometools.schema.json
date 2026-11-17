@@ -470,6 +470,29 @@
         "devices": {"type": ["array", "null"], "items": {"$ref": "#/$defs/CdiDevice"}, "default": null}
       }
     },
+    "DockerContainer": {
+      "description": "The fields pc-doctor's privileged-containers line reads from one object of docker container inspect (Docker 29.9).",
+      "type": "object",
+      "required": ["Id", "Name", "Config", "HostConfig"],
+      "properties": {
+        "Id": {"type": "string", "description": "The full 64-hex id, as docker ps --no-trunc lists it."},
+        "Name": {"type": "string", "description": "The container's name with docker's leading slash, such as /web."},
+        "Config": {"$ref": "#/$defs/DockerConfig"},
+        "HostConfig": {"$ref": "#/$defs/DockerHostConfig"}
+      }
+    },
+    "DockerConfig": {
+      "description": "The part of a container's Config pc-doctor reads: the image it was started from.",
+      "type": "object",
+      "required": ["Image"],
+      "properties": {"Image": {"type": "string"}}
+    },
+    "DockerHostConfig": {
+      "description": "The part of a container's HostConfig pc-doctor reads: whether it was started with --privileged.",
+      "type": "object",
+      "required": ["Privileged"],
+      "properties": {"Privileged": {"type": "boolean"}}
+    },
     "MiseLinks": {
       "description": "Links under mise's installs folder whose target is missing (reported, never removed).",
       "type": "object",

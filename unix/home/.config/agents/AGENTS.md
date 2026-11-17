@@ -76,6 +76,16 @@ owner's OK. A command over SSH gets no `OMARCHY_PATH`, so set it to `/usr/share/
 `default/bash/env-bootstrap` sets) in that command's environment. `mise run pc:doctor` lists the waiting updates for
 the official repositories and the AUR and applies nothing.
 
+## No --privileged containers on the PC
+
+A job container on the PC never runs with `--privileged`: one that runs `apt` can apply its image's kernel settings to
+the PC itself. A job that needs a device or a capability gets that one thing: `--device <path>`, a CDI device such as
+`--device nvidia.com/gpu=all`, or `--cap-add <capability>`. A container that runs `apt` is also started with
+`-e container=docker`: procps' post-install script skips its `sysctl --system` when PID 1's environment has
+`container=` (Ubuntu 26.10's procps 2:4.0.6-3ubuntu1, `postinst` lines 14-19), so `docker exec -e` is too late. That
+covers procps only, which is why the rule against `--privileged` comes first. `mise run pc:doctor` fails while a
+privileged container is running, naming it and its image.
+
 ## Workflow
 
 Work follows the agent workflow at `~/.config/agents/workflow/index.md`: the eight steps in
