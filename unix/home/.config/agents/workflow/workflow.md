@@ -31,13 +31,16 @@ tags: [workflow]
 9. Text is checked for private content before it is published, not after. The home-path scan
    finds only the home-path strings it is configured with; a clean scan says nothing else about the
    content. The author reads the exact bytes for private content before publishing them.
-10. Merges stay human. No agent merges a pull request.
-11. Each step starts in a herdr-app tab: Codex as `codex-hc`, Claude through its launcher, both
-    opened with `herdr-app do tab.new` and driven with `hc send`, `hc keys` and `hc read`. Inside
-    that session, subagents and subagent teams are allowed (built-in `/simplify`, a fresh-context
-    review subagent). Never start a step with `claude -p`, `codex exec`, the non-interactive
-    `codex review` or `hc run`. If `herdr-app ls` fails, stop and ask the owner. Close a tab when
-    its step is done.
+10. A lead merges its own pull request with its repository's merge command (owner ruling,
+    2026-11-15); the owner merges anything else.
+11. Each agent step starts in a herdr-app tab: Codex as `codex-hc`, Claude through its launcher,
+    both opened with `herdr-app do tab.new` and driven with `hc send`, `hc keys` and `hc read`.
+    Inside that session, subagents and subagent teams are allowed (built-in `/simplify`, a
+    fresh-context review subagent). Never start an agent step with `claude -p`, `codex exec`, the
+    non-interactive `codex review` or `hc run`. A task (not an agent step) may make one one-shot
+    model call when it sets a spend cap, restricts the model's tools and has a fallback for when the
+    call fails (owner ruling, 2026-11-17). If `herdr-app ls` fails, stop and ask the owner. Close a
+    tab when its step is done.
 12. Every public write (docs, a commit, a spec, a ticket, pull-request text, an edit or a comment)
     is sent only after the home-path scan and the author's own read of the exact bytes for private
     content, plus the owner's OK where a step asks for it. The order is push, open the pull
@@ -58,7 +61,7 @@ Before the first ticket in a repository, `/work` runs setup once: `setup-matt-po
 | 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | None: commits need no approval | None required |
 | 5 | Branch review (optional) | A Codex tab, when the lead asks for one | Findings against the acceptance criteria | None: findings are hypotheses | Optional: the base-branch diff with the criteria supplied |
 | 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | None | Home-path scan and the author's read of the diff and the text for private content |
-| 7 | Close-out | The coordinator, after the owner merges (or earlier on a shared branch, see [ship](ship.md)) | Issue closed, roadmap line ticked; worktree removed only after the merge | The merge, or a spec's early-close rule in [ship](ship.md) | None |
+| 7 | Close-out | The coordinator, after the lead merges (or earlier on a shared branch, see [ship](ship.md)) | Issue closed, roadmap line ticked; worktree removed only after the merge | The merge, or a spec's early-close rule in [ship](ship.md) | None |
 | 8 | `/ticket-retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
 
 `/implement-spec` runs step 4 for every open ticket of a spec, frontier first. Off the chain:

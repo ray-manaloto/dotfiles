@@ -41,6 +41,13 @@ requests to each research host in the global fnox file's rules. `fnox exec`,
 secret. Respect a task's sole writer and do not edit another task's evidence
 index or native goal.
 
+## OpenWiki search
+
+For a question about a tool, library or agent harness, search OpenWiki with root `~/.openwiki` (the personal
+knowledge base, a member of every workspace) in workspace `infra-toolchains` first, then `all-knowledge`, before
+reading upstream source. A repository's own workspace alone misses most tool facts. For other topics, name the
+workspace that fits, such as `ai-agents-sdlc`.
+
 ## Adding a Doppler secret
 
 Never `fnox set` a secret on a doppler provider: fnox cannot write to Doppler, so it writes the value
