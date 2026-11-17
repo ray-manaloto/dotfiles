@@ -45,6 +45,10 @@ and the commit belong to the coordinator or the owner.
 After the merge: close the issue with a comment, tick the roadmap line, remove the
 worktree, and recompute the frontier (a GitHub blocked-by link only drops when its blocker closes).
 
+After a mise tool bump merges and local `main` fast-forwards, run `mise run roll:all`: sessions opened
+earlier keep the old install on their PATH, and its plan lists them as stale. `--apply` stops and
+resumes them so they load the new one; it stops other leads' sessions, so only the owner runs it.
+
 A spec may let its tickets close earlier, on a shared branch, so the frontier can move before the
 one pull request merges. Then a ticket closes only after its commits were pushed to the shared
 branch on the remote and seen there. The closing comment names each commit and says it is

@@ -200,9 +200,26 @@ def runs(kind: Kind, argv: list[str]) -> bool:
 
 def code_mode(pid: int) -> bool:
     """Whether the process started with Claude Code's Code Mode variable set (hometools claude-code-mode). Its argv
-    does not show it; ps -E adds the environment the process started with, for this user's own processes."""
-    started_with = (call("ps", "-E", "-o", "command=", "-p", str(pid)) or "").split()
-    return f"{codemode.VARIABLE}=1" in started_with
+    does not show it."""
+    return f"{codemode.VARIABLE}=1" in started_with(pid)
+
+
+def started_with(pid: int) -> list[str]:
+    """The words of the process's argv, then of the environment it started with: ps -E adds that for this user's
+    own processes, -ww keeps a long PATH whole. A word holding a space is split, as argv's are."""
+    return str.split(command(pid))
+
+
+def command(pid: int) -> str:
+    return call("ps", "-E", "-ww", "-o", "command=", "-p", str(pid)) or ""
+
+
+def path_of(pid: int) -> list[str]:
+    """The PATH the process started with, its folders in order: the last PATH= in ps -E's line (the environment
+    comes after the argv, which could hold one), up to the next NAME=, since a folder can hold a space
+    (~/Library/Application Support/...)."""
+    found = re.findall(r"(?:^| )PATH=(.*?)(?= \w+=|$)", command(pid).strip())
+    return "".join(found[-1:]).split(os.pathsep)
 
 
 def bare_shell(argv: list[str]) -> bool:
