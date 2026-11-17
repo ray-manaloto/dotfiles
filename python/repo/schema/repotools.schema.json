@@ -9,9 +9,7 @@
       "description": "The repotools subcommands, one per mise task.",
       "type": "string",
       "enum": [
-        "pane-fingerprint",
         "pane-pin",
-        "pane-approved",
         "pr-fingerprint",
         "pr-approved",
         "pr-create",
@@ -221,15 +219,6 @@
       "required": ["path", "rule", "detail"],
       "additionalProperties": false
     },
-    "CommitText": {
-      "description": "A commit's message, which the reviewer reads and the approval covers with HEAD and the index.",
-      "type": "object",
-      "properties": {
-        "message": { "type": "string", "description": "The commit message file" }
-      },
-      "required": ["message"],
-      "additionalProperties": false
-    },
     "PrText": {
       "description": "A pull request's title and body, which the reviewer reads and the approval covers with HEAD.",
       "type": "object",
@@ -314,7 +303,6 @@
     "Options": {
       "description": "What a repotools command parses from its arguments with CliApp; scratch-env parses its own by position.",
       "anyOf": [
-        { "$ref": "#/$defs/CommitText" },
         { "$ref": "#/$defs/PrText" },
         { "$ref": "#/$defs/PrMerge" },
         { "$ref": "#/$defs/PanePin" },
@@ -491,7 +479,6 @@
   "properties": {
     "failure": { "$ref": "#/$defs/Failure" },
     "command": { "$ref": "#/$defs/Command" },
-    "commit_text": { "$ref": "#/$defs/CommitText" },
     "pr_text": { "$ref": "#/$defs/PrText" },
     "pr_merge": { "$ref": "#/$defs/PrMerge" },
     "merged": { "$ref": "#/$defs/Merged" },

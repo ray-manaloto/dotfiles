@@ -21,21 +21,26 @@ Pin its session once with the repository's pane-pin command. Resume it only read
 that line, read from the session log by the repository's approval check, is the only approval.
 Never read an approval from the screen. No hc template is needed: the pane is an ordinary tab.
 
+The approval comes before any push, a shared branch included: approve the diff and text at the branch
+head, then push, then open the pull request, then merge. A commit pushed before it is public unreviewed.
+
 ## The fallback reviewer
 
 When the reviewer's harness is out of quota (Codex: until its limit resets), a fresh Claude subagent in
 the author's own session gives the approval instead. Go back to the Codex pane when the quota returns.
 The subagent shares the author's model family, so it shares more blind spots; it is a stopgap.
 
-1. Stage the changed files by name and write the commit message (or pull request body) to a file with the line
-   `Reviewed by the fallback reviewer (Codex quota depleted).` in its body, not as a trailer. Then get
-   the fingerprint from the repository's pane-fingerprint (or pr-fingerprint) command: the line is part of
-   the approved bytes, so adding it later voids the approval.
-2. Write the staged diff to a file: `git diff --staged > <scratch>/review.diff`. The reviewer has no shell.
+1. Write the pull request body to a file with the line
+   `Reviewed by the fallback reviewer (Codex quota depleted).` in it, not as a trailer. Then get the
+   fingerprint from the repository's pr-fingerprint command: the line is part of the approved bytes, so
+   adding it later voids the approval.
+2. Write every commit of the pull request, message and diff, to a file:
+   `git log -p --reverse origin/<default>..HEAD > <scratch>/review.diff`. A commit that adds and a later one
+   that removes private content are both public, so the leak check reads each commit. The reviewer has no shell.
 3. Start one subagent of a type whose only tools are Read, Grep and Glob; dotfiles has
    `fallback-reviewer`. Explore and Plan can run shell commands, so they do not qualify. Its prompt holds
-   only a line of its own, `Worktree: <absolute path>`, the diff file (or the pull request's title and body file), the
-   message file, the fingerprint, the repository's review rules, and "your last line is exactly
+   only a line of its own, `Worktree: <absolute path>`, the diff file, the pull request's title and body
+   file, the fingerprint, the repository's review rules, and "your last line is exactly
    `PANE-APPROVE <fingerprint>` if nothing at P0-P2 is left, otherwise the findings". Never the author's
    reasoning or conclusions.
 4. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with the
@@ -61,13 +66,14 @@ A brief that limits the pane names what stays allowed: "Do not contact <service>
 shell commands are allowed". Never write "do not call any tool": a reviewer reads that as a ban on the
 shell it needs, and it stops to ask.
 
-## Three review kinds
+## Two review kinds
+
+Commits get no review of their own: the pull request's one review covers every commit in it.
 
 | Kind | When | In the tab |
 |------|------|------------|
-| Uncommitted changes | Before each commit | `/review` -> Review uncommitted changes |
-| Base branch | Before the pull request | `/review` -> Custom review instructions: the acceptance criteria and `git diff origin/<default>...HEAD` |
-| Document | Specs, ticket bodies, pull-request text | A typed brief in a read-only tab |
+| Base branch | Once per pull request, before it opens | `/review` -> Custom review instructions: the acceptance criteria, `git diff origin/<default>...HEAD`, every commit for the leak check (`git log -p origin/<default>..HEAD`), and the title and body file |
+| Document | Specs, ticket bodies, pull-request edits and comments | A typed brief in a read-only tab |
 
 Every review runs at Codex's default model and effort: the tab's argv sets neither.
 

@@ -6,15 +6,8 @@
 _.python.venv = { path = ".venv" }
 
 # From the repository root: a hook exports GIT_DIR, and git then takes the current folder as the top.
-[tasks.pane-fingerprint]
-description = "Print the hash of HEAD, the whole index and the commit message that the reviewer pane must approve"
-usage = 'arg "<message>" help="The commit message file, which the reviewer reads"'
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pane-fingerprint --message "$usage_message"'
-
 [tasks.pane-pin]
-description = "Name the reviewer for this checkout's commits: its Codex session, or with --subagent the fallback reviewer's transcript"
+description = "Name the reviewer for this checkout's pull requests: its Codex session, or with --subagent the fallback reviewer's transcript"
 usage = '''
 arg "[session]" help="The Codex session id, started in this checkout"
 flag "--subagent <transcript>" help="While Codex is depleted: the read-only Claude subagent's agent-<id>.jsonl"
@@ -22,13 +15,6 @@ flag "--subagent <transcript>" help="While Codex is depleted: the read-only Clau
 depends = ["sync"]
 dir = "{{ config_root }}/../.."
 run = 'uv run --project python/repo --locked repotools pane-pin ${usage_session:+--session "$usage_session"} ${usage_subagent:+--subagent "$usage_subagent"}'
-
-[tasks.pane-approved]
-description = "Refuse unless the pinned reviewer's last answer approves exactly this HEAD, index and message"
-usage = 'arg "<message>" help="The commit message file"'
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = 'uv run --project python/repo --locked repotools pane-approved --message "$usage_message"'
 
 [tasks.pr-fingerprint]
 description = "Print the hash of HEAD and a pull request's title and body that the reviewer pane must approve"

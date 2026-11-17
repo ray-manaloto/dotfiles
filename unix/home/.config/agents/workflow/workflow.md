@@ -40,23 +40,25 @@ tags: [workflow]
     its step is done.
 12. Every public write (docs, a commit, a spec, a ticket, pull-request text, an edit or a comment)
     is sent only after the home-path scan, the reviewer's leak check and an approval on the exact
-    bytes. Without approval the item stays local.
+    bytes. Without approval the item stays local. A pull request's one approval covers its commits;
+    a commit needs no approval of its own, but no commit is pushed before that approval at the
+    branch head. The order is approve, push, open the pull request, merge.
 13. A step is done on an observed result: the verify output, a passing test run, a finding checked
     against the diff. A read that failed is reported as unreadable, never as "nothing found".
 
 ## The chain
 
 Before the first ticket in a repository, `/work` runs setup once: `setup-matt-pocock-skills`, then a
-`## Workflow facts` section and the approval hook (see [skills](skills.md)).
+`## Workflow facts` section (see [skills](skills.md)).
 
 | # | Step | Who starts it | Produces | Person's gate | Review |
 |---|------|---------------|----------|---------------|--------|
-| 1 | `/grill-with-docs` | The owner, in a fresh session | Shared understanding, glossary terms, ADRs | Confirms the summary | Uncommitted-changes review if files changed |
+| 1 | `/grill-with-docs` | The owner, in a fresh session | Shared understanding, glossary terms, ADRs | Confirms the summary | The pull request's review, if files changed |
 | 2 | `/to-spec` | The owner, same session | One spec issue | Signs off the spec | Document review of the local file before it is published |
 | 3 | `/to-tickets` | The owner, same session | Vertical-slice ticket issues, blockers first, each with seams and criteria that can fail | Approves the breakdown | Optional document review of the ticket bodies |
-| 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | Reviewer pane approves each commit | Uncommitted-changes review before each commit |
-| 5 | Branch review | The reviewer tab, after the ticket's commits | Findings against the acceptance criteria | None: findings are hypotheses | Base-branch review with the criteria supplied |
-| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the exact bytes | Home-path scan, then a document review with the leak check |
+| 4 | `/implement owner/repo#N` | The owner or coordinator, one worker tab per ticket | Changes in the worker's worktree, tests first at the agreed seams | None: commits need no approval | None of their own: the pull request's review covers them |
+| 5 | Branch review | The reviewer tab, after the ticket's commits | Findings against the acceptance criteria | None: findings are hypotheses | The pull request's one review: the base-branch diff with the criteria supplied |
+| 6 | `/pr` | The worker writes the body to a file | Title and body: summary, evidence, merge danger, blast radius | Reviewer pane approves the head and the exact bytes | Home-path scan, then the same review reads the title and body, with the leak check over the diff and the text |
 | 7 | Close-out | The coordinator, after the owner merges (or earlier on a shared branch, see [ship](ship.md)) | Issue closed, roadmap line ticked; worktree removed only after the merge | The merge, or a spec's early-close rule in [ship](ship.md) | None |
 | 8 | `/ticket-retro` | The owner | Lessons for the ticket plan; changes as normal pull requests | Approves any change | As any pull request |
 

@@ -10,9 +10,7 @@ class Command(StrEnum):
     The repotools subcommands, one per mise task.
     """
 
-    pane_fingerprint = "pane-fingerprint"
     pane_pin = "pane-pin"
-    pane_approved = "pane-approved"
     pr_fingerprint = "pr-fingerprint"
     pr_approved = "pr-approved"
     pr_create = "pr-create"
@@ -350,21 +348,6 @@ class Finding(BaseModel):
     """
 
 
-class CommitText(BaseModel):
-    """
-    A commit's message, which the reviewer reads and the approval covers with HEAD and the index.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-    )
-    message: str
-    """
-    The commit message file
-    """
-
-
 class PrText(BaseModel):
     """
     A pull request's title and body, which the reviewer reads and the approval covers with HEAD.
@@ -509,8 +492,7 @@ class PrivacyScan(BaseModel):
 
 
 type Options = (
-    CommitText
-    | PrText
+    PrText
     | PrMerge
     | PanePin
     | ZeroBash
@@ -842,7 +824,6 @@ class Repotools(BaseModel):
     )
     failure: Failure | None = None
     command: Command | None = None
-    commit_text: CommitText | None = None
     pr_text: PrText | None = None
     pr_merge: PrMerge | None = None
     merged: Merged | None = None

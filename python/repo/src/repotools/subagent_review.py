@@ -1,7 +1,7 @@
 """The fallback reviewer: a fresh read-only Claude subagent's answer, while the Codex reviewer's quota is depleted."""
 
-# Owner ruling of 2026-11-09 and its amendment of 2026-11-10 (AGENTS.md, "Commit and pull-request approval"): the
-# author writes the staged diff to a file and runs a subagent whose tools are only Read, Grep and Glob in its own
+# Owner ruling of 2026-11-09 and its amendment of 2026-11-10 (AGENTS.md, "Pull-request approval"): the
+# author writes the pull request diff to a file and runs a subagent whose tools are only Read, Grep and Glob in its own
 # session, with only the checkout, the diff file, the fingerprint and the review rules in its prompt, and pins its
 # transcript with pane-pin --subagent. Claude Code writes the transcript as
 # <project>/<session>/subagents/agent-<id>.jsonl, with agent-<id>.meta.json beside it. The shapes below were read

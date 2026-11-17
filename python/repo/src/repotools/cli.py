@@ -21,7 +21,6 @@ from . import (
 )
 from .models import (
     Command,
-    CommitText,
     Failure,
     Fingerprint,
     FnoxRefs,
@@ -46,9 +45,7 @@ from .models import (
 )
 
 OPTIONS: dict[Command, type[Options]] = {
-    Command.pane_fingerprint: CommitText,
     Command.pane_pin: PanePin,
-    Command.pane_approved: CommitText,
     Command.pr_fingerprint: PrText,
     Command.pr_approved: PrText,
     Command.pr_create: PrText,
@@ -68,7 +65,6 @@ OPTIONS: dict[Command, type[Options]] = {
     Command.trust: Trust,
     Command.fnox_refs: FnoxRefs,
 }
-APPROVED = {Command.pane_approved, Command.pr_approved}
 # The commands that take no options, by their model.
 NO_OPTIONS: dict[type[Options], Callable[[], None]] = {
     ToolsInstall: tools_install.run,
@@ -117,7 +113,7 @@ def run(command: Command, options: Options) -> None:
         pane_approval.create(options)
     elif isinstance(options, ToolsInstall | TestTimes | Trust | FnoxRefs):
         NO_OPTIONS[type(options)]()
-    elif command in APPROVED:
+    elif command is Command.pr_approved:
         pane_approval.check(options)
     else:
         sys.stdout.write(Fingerprint(fingerprint=pane_approval.fingerprint(options)).model_dump_json() + "\n")

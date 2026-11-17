@@ -92,35 +92,40 @@ Work follows the agent workflow at `~/.config/agents/workflow/index.md`: the eig
 `workflow.md`, shipping in `ship.md`, cross-review in `cross-review.md` and the skills in `skills.md`. A
 repository adds its own commands in a `## Workflow facts` section of its `AGENTS.md`.
 
-## Commit and pull-request approval
+## Pull-request approval
 
-Every commit needs the reviewer pane's own approval. Start the reviewer Codex in the worktree being
-committed and name its session once with `repotools pane-pin --session <session id>`; the pin belongs to that
-worktree. Stage the changed files by name (jouet denies `git add -A` and `git add .`), write the message to a file, run `repotools pane-fingerprint --message <message file>`
-and commit with `git commit -F <message file>`. The reviewer's last final answer must end with the line
-`PANE-APPROVE <fingerprint>`; any later final answer withdraws it, and a new commit, a changed index or a changed
-message voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`. Open a pull request only with
-`repotools pr-create --title <title> --body-file <body file>`, after the reviewer approved the output of
-`repotools pr-fingerprint --title <title> --body-file <body file>` the same way. `repotools` and
-`workflowtools` are uv tools that `mise run //repo:tools-install` installs from dotfiles. The pin and the
-session log are plain files, so this catches mistakes, not a forger.
+Commits need no approval. Each pull request gets one review of its whole diff (every commit in it) and its
+title and body. Start the reviewer Codex in the pull request's worktree and name its session once with
+`repotools pane-pin --session <session id>`; the pin belongs to that worktree. Stage the changed files by name
+(jouet denies `git add -A` and `git add .`). Write the body to a file and give the reviewer the output of
+`repotools pr-fingerprint --title <title> --body-file <body file>`. The reviewer's last final answer must end
+with the line `PANE-APPROVE <fingerprint>`; any later final answer withdraws it, and a new commit or a changed
+title or body voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`. The order is
+fixed: the reviewer approves the diff and text at the branch head before any push, a shared branch included;
+then push the branch, then open the pull request only with
+`repotools pr-create --title <title> --body-file <body file>`, then merge with the repository's merge command,
+which checks the approval again at the head. `repotools` and `workflowtools` are uv tools that
+`mise run //repo:tools-install` installs from dotfiles. The pin and the session log are plain files, so this
+catches mistakes, not a forger.
 
 While the reviewer's harness is out of quota, a fallback reviewer approves instead: a fresh Claude subagent in
 the author's own session, of an agent type whose only tools are Read, Grep and Glob (dotfiles has
-`fallback-reviewer`). Explore and Plan can run shell commands, so they do not qualify. Write the staged diff to a
-file first (`git diff --staged > <scratch>/review.diff`). The prompt holds only a line `Worktree: <absolute path>`, the
-diff file (or the pull request's title and body file), the message file, the fingerprint and the review rules; never the
-author's reasoning. Pin its transcript, `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with
+`fallback-reviewer`). Explore and Plan can run shell commands, so they do not qualify. Write every commit of the
+pull request, message and diff, to a file first
+(`git log -p --reverse origin/<default>..HEAD > <scratch>/review.diff`). The prompt holds only a line
+`Worktree: <absolute path>`, the diff file, the pull request's title and body file, the fingerprint and the
+review rules; never the author's reasoning. Pin its transcript,
+`~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with
 `repotools pane-pin --subagent <transcript>`. The check refuses any tool call other than Read, Grep or Glob. Its
-last line must be `PANE-APPROVE <fingerprint>`, and the commit message or pull request body carries, from before the
-fingerprint, the line `Reviewed by the fallback reviewer (Codex quota depleted).` Fix its findings and run a fresh
-subagent, at most one more round unless the change is risky. Go back to the Codex pane when its quota returns.
+last line must be `PANE-APPROVE <fingerprint>`, and the pull request body carries, from before the fingerprint,
+the line `Reviewed by the fallback reviewer (Codex quota depleted).` Fix its findings and run a fresh subagent,
+at most one more round unless the change is risky. Go back to the Codex pane when its quota returns.
 
 ## Cross-review
 
 Claude writes the change; Codex reviews it, so the reviewer is a different model family and never sees the author's transcript.
 Reviews run in the worktree's pinned reviewer pane, named with `repotools pane-pin`, never in the author's
-own session; a commit is approved only for the fingerprint `repotools pane-fingerprint` prints. While the
+own session; a pull request is approved only for the fingerprint `repotools pr-fingerprint` prints. While the
 reviewer's harness is out of quota, the fallback reviewer above takes its place until the quota returns. Details:
 `~/.config/agents/workflow/cross-review.md`.
 
