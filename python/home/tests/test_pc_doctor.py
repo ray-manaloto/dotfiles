@@ -37,9 +37,28 @@ def plan(*entries: dict[str, object], code: int = 0) -> dict[str, object]:
     return {"stdout": json.dumps({"resources": list(entries), "summary": {}}), "code": code}
 
 
-def status(*entries: dict[str, object], tools: tuple[dict[str, object], ...] = (), code: int = 0) -> dict[str, object]:
-    report = {"files": list(entries), "services": [], "dotfiles": {"files": [], "edits": []}, "tools": list(tools)}
+def status(
+    *entries: dict[str, object],
+    services: tuple[dict[str, object], ...] = (),
+    tools: tuple[dict[str, object], ...] = (),
+    code: int = 0,
+) -> dict[str, object]:
+    report = {
+        "files": list(entries),
+        "services": list(services),
+        "dotfiles": {"files": [], "edits": []},
+        "tools": list(tools),
+    }
     return {"stdout": json.dumps(report), "code": code}
+
+
+# The name as mise 2026.11.8 printed it on the PC for [bootstrap.services."gha-slot@glaze"] (no .service suffix).
+SLOT = "gha-slot@glaze"
+
+
+def slot(action: str) -> dict[str, object]:
+    """A runner slot instance as mise lists it under services (kind service, same origin as a file)."""
+    return entry(action, name=SLOT) | {"id": {"kind": "service", "name": SLOT}}
 
 
 # One of the Omarchy system config's lazy tools, missing as on the PC: not declared by the pc environment.
@@ -105,6 +124,28 @@ def test_a_drifted_file_fails_and_is_named(ssh: Path, capfd: pytest.CaptureFixtu
     assert code == 1
     assert results(lines) == {"bootstrap-status": "fail", "bootstrap-plan": "fail"}
     assert all(line.culprits == [CULPRIT] for line in bootstrap(lines))
+
+
+def test_a_stopped_slot_fails_the_status_line_and_is_named(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
+    # #636: the slot instances are services of the pc environment; mise's status lists them beside the files.
+    answer(
+        ssh,
+        {
+            PLAN: plan(entry("noop"), slot("update"), code=2),
+            STATUS: status(entry("noop"), services=(slot("update"),), code=1),
+        },
+    )
+    code, lines, _ = doctor(capfd)
+    assert code == 1
+    assert results(lines) == {"bootstrap-status": "fail", "bootstrap-plan": "fail"}
+    assert all(line.culprits == [f"service:{SLOT}"] for line in bootstrap(lines))
+
+
+def test_running_slots_pass_beside_the_files(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
+    answer(ssh, {PLAN: plan(entry("noop"), slot("noop")), STATUS: status(entry("noop"), services=(slot("noop"),))})
+    code, lines, _ = doctor(capfd)
+    assert (code, results(lines)) == (0, {"bootstrap-status": "pass", "bootstrap-plan": "pass"})
+    assert lines[0].detail == "2 pc entries match dotfiles"
 
 
 def test_a_hostile_culprit_name_comes_out_inert(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:

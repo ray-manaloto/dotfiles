@@ -1100,13 +1100,17 @@ class BootstrapPlanReport(BaseModel):
 
 class BootstrapStatusReport(BaseModel):
     """
-    What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): files, the part pc declares.
+    What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): its files and services parts.
     """
 
     model_config = ConfigDict(
         frozen=True,
     )
     files: list[BootstrapEntry]
+    services: list[BootstrapEntry]
+    """
+    System services, such as the runner slot instances (#636).
+    """
 
 
 class DockerContainer(BaseModel):

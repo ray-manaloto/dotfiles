@@ -424,10 +424,13 @@
       "properties": {"resources": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}}}
     },
     "BootstrapStatusReport": {
-      "description": "What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): files, the part pc declares.",
+      "description": "What pc-doctor reads of mise bootstrap status --json (mise 2026.11.8): its files and services parts.",
       "type": "object",
-      "required": ["files"],
-      "properties": {"files": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}}}
+      "required": ["files", "services"],
+      "properties": {
+        "files": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}},
+        "services": {"type": "array", "items": {"$ref": "#/$defs/BootstrapEntry"}, "description": "System services, such as the runner slot instances (#636)."}
+      }
     },
     "BootstrapEntry": {
       "description": "The fields pc-doctor reads from one entry of mise bootstrap plan or status --json (mise 2026.11.8).",
