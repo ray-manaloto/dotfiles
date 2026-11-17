@@ -166,12 +166,14 @@ WantedBy=multi-user.target
 #
 # First application, with the slots drained (the two-run pattern of #636): between jobs,
 #   sudo systemctl stop gha-slot@glaze gha-slot@cpp-utilities gha-slot@dotfiles
-#   mise bootstrap --skip services       (writes the files; restarts nothing: src/cli/bootstrap.rs:2183 and :2381)
+#   mise bootstrap --only files          (writes the files; restarts nothing: src/cli/bootstrap.rs:2183, :2381, :3182-3191)
 #   sudo systemctl daemon-reload
 #   sudo systemctl start gha-fence.service
 #   systemctl is-active gha-fence.service
 #   sudo iptables -t mangle -S && sudo ip6tables -t mangle -S INPUT    (each drop exactly once)
-#   mise bootstrap                       (enables the fence, starts the slots through their fence check)
+#   mise bootstrap --only services       (enables the fence, starts the slots through their fence check)
+# --only, not --skip services or a plain run: those also run the dotfiles part, whose templates (the repository's
+# mise.toml [dotfiles], reading [bootstrap.secrets]) need fnox secrets an ssh session to the PC doesn't have.
 #   mise run pc:doctor                   (from the Mac)
 [bootstrap.services."gha-fence.service"]
 state = "running"
@@ -199,8 +201,9 @@ enabled = true
 # running has no fence. Apply a fence change with the slots stopped until the new fence is checked. A plain mise
 # bootstrap is not enough: it applies services in this file's order, so it starts the slots before it restarts ufw
 # (mise 2026.11.8 crates/mise-system/src/services.rs:400-418 and :516-532). Instead, between jobs: stop the gha-slot@
-# instances, run mise bootstrap --skip services (it writes the files and restarts nothing: src/cli/bootstrap.rs:2183
-# and :2381), run sudo systemctl restart ufw, check the fence, then run mise bootstrap, which starts the slots.
+# instances, run mise bootstrap --only files (it writes the files and restarts nothing: src/cli/bootstrap.rs:2183,
+# :2381 and :3182-3191), run sudo systemctl restart ufw, check the fence, then run mise bootstrap --only services,
+# which starts the slots (--only for the reason given above gha-fence.service).
 [bootstrap.services.ufw]
 state = "running"
 enabled = true
