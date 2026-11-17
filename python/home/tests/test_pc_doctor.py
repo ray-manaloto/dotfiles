@@ -5,7 +5,6 @@
 # --json` (2026-11-16), with the paths in origin replaced by placeholders.
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -13,10 +12,12 @@ import pytest
 from hometools.cli import main
 from hometools.models import PcDoctorLine
 
-STAND_IN = Path(__file__).with_name("stand_in.py")
 SSH = ["ssh", "-n", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "pc", "--", "mise", "bootstrap"]
 PLAN = json.dumps([*SSH, "plan", "--json", "--detailed-exitcode"])
 STATUS = json.dumps([*SSH, "status", "--missing", "--json"])
+# Each later pc:doctor line's own calls (its cases are in tests/test_pc_<check>.py).
+CHECKUPDATES = json.dumps([*SSH[:-2], "checkupdates"])
+YAY = json.dumps([*SSH[:-2], "yay", "-Qua"])
 UNIT = "/etc/systemd/system/gha-slot@.service"
 CULPRIT = f"file:{UNIT}"
 
@@ -40,20 +41,18 @@ LAZY: dict[str, object] = {"tool": "amp", "requested_version": "latest", "state"
 SSH_FAILED = {"stderr": "ssh: connect to host pc port 22: Connection refused\n", "code": 255}
 
 
-@pytest.fixture
-def ssh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The stand-in's folder, ahead of the real ssh on PATH."""
-    folder = tmp_path / "stand-in"
-    folder.mkdir()
-    (folder / "ssh").symlink_to(STAND_IN)
-    monkeypatch.setenv("PATH", f"{folder}:{Path(sys.executable).parent}:/usr/bin:/bin")
-    monkeypatch.setenv("STAND_IN", str(folder))
-    monkeypatch.delenv("PC_DOCTOR_TIMEOUT", raising=False)
-    return folder
+# Every line answers healthy unless a test scripts its call: one entry per call, so a test of one line still reads
+# every other line as pass and the exit code stays that line's.
+HEALTHY: dict[str, object] = {
+    PLAN: plan(entry("noop")),
+    STATUS: status(entry("noop")),
+    CHECKUPDATES: {"code": 2},
+    YAY: {"code": 1},
+}
 
 
 def answer(folder: Path, script: dict[str, object]) -> None:
-    (folder / "script.json").write_text(json.dumps(script))
+    (folder / "script.json").write_text(json.dumps(HEALTHY | script))
 
 
 def doctor(capfd: pytest.CaptureFixture[str]) -> tuple[int, list[PcDoctorLine], str]:
@@ -67,8 +66,13 @@ def doctor(capfd: pytest.CaptureFixture[str]) -> tuple[int, list[PcDoctorLine], 
     return code, [PcDoctorLine.model_validate_json(line) for line in out.splitlines()], err
 
 
+def bootstrap(lines: list[PcDoctorLine]) -> list[PcDoctorLine]:
+    """The lines this file is about; the others answer healthy."""
+    return [line for line in lines if line.check.startswith("bootstrap-")]
+
+
 def results(lines: list[PcDoctorLine]) -> dict[str, str]:
-    return {line.check: line.result.value for line in lines}
+    return {line.check: line.result.value for line in bootstrap(lines)}
 
 
 def test_a_matching_pc_passes_every_line(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
@@ -76,7 +80,7 @@ def test_a_matching_pc_passes_every_line(ssh: Path, capfd: pytest.CaptureFixture
     code, lines, _ = doctor(capfd)
     assert code == 0
     assert results(lines) == {"bootstrap-status": "pass", "bootstrap-plan": "pass"}
-    assert all(line.culprits == [] for line in lines)
+    assert all(line.culprits == [] for line in bootstrap(lines))
 
 
 def test_a_drifted_file_fails_and_is_named(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
@@ -84,7 +88,7 @@ def test_a_drifted_file_fails_and_is_named(ssh: Path, capfd: pytest.CaptureFixtu
     code, lines, _ = doctor(capfd)
     assert code == 1
     assert results(lines) == {"bootstrap-status": "fail", "bootstrap-plan": "fail"}
-    assert all(line.culprits == [CULPRIT] for line in lines)
+    assert all(line.culprits == [CULPRIT] for line in bootstrap(lines))
 
 
 def test_a_hostile_culprit_name_comes_out_inert(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
@@ -93,7 +97,7 @@ def test_a_hostile_culprit_name_comes_out_inert(ssh: Path, capfd: pytest.Capture
     hostile = '/etc/a"b\\\\c\nd"},{"check":"forged","result":"pass'
     answer(ssh, {PLAN: plan(entry("update", name=hostile), code=2), STATUS: status(entry("noop"))})
     code, lines, _ = doctor(capfd)
-    assert (code, [line.check for line in lines]) == (1, ["bootstrap-status", "bootstrap-plan"])
+    assert (code, [line.check for line in bootstrap(lines)]) == (1, ["bootstrap-status", "bootstrap-plan"])
     assert lines[1].culprits == [f"file:{hostile}"]
 
 
@@ -113,7 +117,7 @@ def test_an_unselected_environment_fails_instead_of_reading_as_green(
     code, lines, _ = doctor(capfd)
     assert code == 1
     assert results(lines) == {"bootstrap-status": "fail", "bootstrap-plan": "fail"}
-    assert all("no entry from the pc environment" in line.detail for line in lines)
+    assert all("no entry from the pc environment" in line.detail for line in bootstrap(lines))
 
 
 def test_an_ssh_failure_is_unknown_and_exits_3(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
@@ -192,7 +196,7 @@ def test_a_missing_ssh_is_unknown(
     monkeypatch.setenv("PATH", str(ssh.parent))
     code, lines, _ = doctor(capfd)
     assert code == 3
-    assert all(line.result.value == "unknown" and line.detail.startswith("ssh: ") for line in lines)
+    assert all(line.result.value == "unknown" and line.detail.startswith("ssh: ") for line in bootstrap(lines))
 
 
 @pytest.mark.parametrize("limit", ["soon", "0", "-5", "nan", "inf", "1e999"])

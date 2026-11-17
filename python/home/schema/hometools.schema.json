@@ -388,7 +388,8 @@
         "check": {"type": "string", "minLength": 1, "description": "The check's name, such as bootstrap-plan."},
         "result": {"$ref": "#/$defs/Result"},
         "detail": {"type": "string", "description": "One sentence: what it saw, or why it could not look."},
-        "culprits": {"type": "array", "items": {"type": "string"}, "description": "What failed, each named so it can be quoted: <kind>:<name> for a bootstrap entry."}
+        "culprits": {"type": "array", "items": {"type": "string"}, "description": "What failed, each named so it can be quoted: <kind>:<name> for a bootstrap entry."},
+        "items": {"type": "array", "items": {"type": "string"}, "default": [], "description": "What the check found that is not a failure, such as a waiting update: <source>:<name> <old> -> <new>."}
       }
     },
     "BootstrapId": {

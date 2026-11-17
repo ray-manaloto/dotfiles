@@ -44,3 +44,16 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
     made = World(tmp_path, monkeypatch)
     yield made
     made.stop()
+
+
+@pytest.fixture
+def ssh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """pc-doctor's ssh: the stand-in's folder (tests/stand_in.py), ahead of the real ssh on PATH; shared by every
+    tests/test_pc_*.py."""
+    folder = tmp_path / "stand-in"
+    folder.mkdir()
+    (folder / "ssh").symlink_to(Path(__file__).with_name("stand_in.py"))
+    monkeypatch.setenv("PATH", f"{folder}:{Path(sys.executable).parent}:/usr/bin:/bin")
+    monkeypatch.setenv("STAND_IN", str(folder))
+    monkeypatch.delenv("PC_DOCTOR_TIMEOUT", raising=False)
+    return folder

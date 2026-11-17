@@ -61,6 +61,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Adding a Doppler secret",
                 "Plugin changes",
                 "Bulky scratch goes in a .noindex folder",
+                "Upgrading the PC",
                 "Workflow",
                 "Commit and pull-request approval",
                 "Cross-review",
