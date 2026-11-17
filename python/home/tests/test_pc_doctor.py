@@ -24,6 +24,8 @@ KERNEL_KEYS = ("kernel.kptr_restrict", "kernel.sysrq", "kernel.printk", "kernel.
 KERNEL = json.dumps([*SSH[:-2], "sysctl", *KERNEL_KEYS])
 DOCKER = [*SSH[:-2], "docker", "--host", "unix:///var/run/docker.sock"]
 LIST = json.dumps([*DOCKER, "ps", "--quiet", "--no-trunc"])
+FENCE4 = json.dumps([*SSH[:-2], "sudo", "-n", "iptables", "-t", "mangle", "-S"])
+FENCE6 = json.dumps([*SSH[:-2], "sudo", "-n", "ip6tables", "-t", "mangle", "-S"])
 UNIT = "/etc/systemd/system/gha-slot@.service"
 CULPRIT = f"file:{UNIT}"
 
@@ -83,6 +85,12 @@ HEALTHY: dict[str, object] = {
     },
     # privileged-containers (#731): docker ps with nothing running, so no inspect follows.
     LIST: {"stdout": ""},
+    # fence-drops (#741): each mangle listing with its fence drops once.
+    FENCE4: {
+        "stdout": "-P INPUT ACCEPT\n-P FORWARD ACCEPT\n-A INPUT -i br-gha -m conntrack --ctstate NEW -j DROP\n"
+        "-A FORWARD -i br-gha -o tailscale0 -j DROP\n"
+    },
+    FENCE6: {"stdout": "-P INPUT ACCEPT\n-A INPUT -i br-gha ! -p ipv6-icmp -m conntrack --ctstate NEW -j DROP\n"},
 }
 
 
