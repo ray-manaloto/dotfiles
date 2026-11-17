@@ -112,7 +112,7 @@ While the reviewer's harness is out of quota, a fallback reviewer approves inste
 the author's own session, of an agent type whose only tools are Read, Grep and Glob (dotfiles has
 `fallback-reviewer`). Explore and Plan can run shell commands, so they do not qualify. Write every commit of the
 pull request, message and diff, to a file first
-(`git log -p --reverse origin/<default>..HEAD > <scratch>/review.diff`). The prompt holds only a line
+(`git log -p --diff-merges=separate --reverse origin/<default>..HEAD > <scratch>/review.diff`). The prompt holds only a line
 `Worktree: <absolute path>`, the diff file, the pull request's title and body file, the fingerprint and the
 review rules; never the author's reasoning. Pin its transcript,
 `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl`, with

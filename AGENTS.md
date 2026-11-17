@@ -49,7 +49,7 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   catches mistakes, not a forger.
 - While Codex is out of quota, the fallback reviewer approves instead
   (`~/.config/agents/workflow/cross-review.md`): write every commit of the PR, message and diff, to a
-  file (`git log -p --reverse origin/main..HEAD`), run a fresh `fallback-reviewer` subagent (Read,
+  file (`git log -p --diff-merges=separate --reverse origin/main..HEAD`), run a fresh `fallback-reviewer` subagent (Read,
   Grep and Glob only; `.claude/agents/fallback-reviewer.md`) and pin its transcript with
   `mise run //repo:pane-pin --subagent <agent-*.jsonl>`. The PR body carries, from before the
   fingerprint, the line `Reviewed by the fallback reviewer (Codex quota depleted).` Go back to the

@@ -35,7 +35,7 @@ The subagent shares the author's model family, so it shares more blind spots; it
    fingerprint from the repository's pr-fingerprint command: the line is part of the approved bytes, so
    adding it later voids the approval.
 2. Write every commit of the pull request, message and diff, to a file:
-   `git log -p --reverse origin/<default>..HEAD > <scratch>/review.diff`. A commit that adds and a later one
+   `git log -p --diff-merges=separate --reverse origin/<default>..HEAD > <scratch>/review.diff`. A commit that adds and a later one
    that removes private content are both public, so the leak check reads each commit. The reviewer has no shell.
 3. Start one subagent of a type whose only tools are Read, Grep and Glob; dotfiles has
    `fallback-reviewer`. Explore and Plan can run shell commands, so they do not qualify. Its prompt holds
@@ -72,7 +72,7 @@ Commits get no review of their own: the pull request's one review covers every c
 
 | Kind | When | In the tab |
 |------|------|------------|
-| Base branch | Once per pull request, before it opens | `/review` -> Custom review instructions: the acceptance criteria, `git diff origin/<default>...HEAD`, every commit for the leak check (`git log -p origin/<default>..HEAD`), and the title and body file |
+| Base branch | Once per pull request, before it opens | `/review` -> Custom review instructions: the acceptance criteria, `git diff origin/<default>...HEAD`, every commit for the leak check (`git log -p --diff-merges=separate origin/<default>..HEAD`), and the title and body file |
 | Document | Specs, ticket bodies, pull-request edits and comments | A typed brief in a read-only tab |
 
 Every review runs at Codex's default model and effort: the tab's argv sets neither.
