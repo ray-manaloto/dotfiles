@@ -87,7 +87,7 @@ def test_add_pins_locks_and_turns_the_plugin_on(world: World, lsp: Lsp, typescri
 def test_update_bumps_and_locks_and_leaves_the_plugin(world: World, lsp: Lsp, typescript: Typescript) -> None:
     _, worktree = checkout(world.root)
     (worktree / CONFIG).write_text(f'[settings]\npin = true\n\n[tools]\n"npm:typescript" = "{typescript.version}"\n')
-    world.stand_in(
+    calls = world.stand_in(
         {
             ("upgrade", "--bump", "npm:typescript"): {"real": True},
             ("lock", "--global", "npm:typescript"): {"real": True},
@@ -96,9 +96,12 @@ def test_update_bumps_and_locks_and_leaves_the_plugin(world: World, lsp: Lsp, ty
     with contextlib.chdir(worktree):
         result = lsp("update", "typescript")
     assert result.code == 0, result.out
+    # Each step's own result, not mise's wording: offline (MISE_OFFLINE=1), mise says all tools are up to date or
+    # that it could not check one, and either is a successful upgrade.
     upgrade, lock, plugin_line = result.out.splitlines()[1:]
-    assert upgrade == "  ok  mise upgrade --bump: npm:typescript: mise All tools are up to date"
+    assert upgrade.startswith("  ok  mise upgrade --bump: npm:typescript: ")
     assert lock.startswith("  ok  mise lock --global: npm:typescript: ")
+    assert [json.loads(line)[1] for line in calls.read_text().splitlines()] == ["upgrade", "lock"]
     assert plugin_line == f"  ok  plugin: {PLUGIN} unchanged"
 
 
