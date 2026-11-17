@@ -28,12 +28,10 @@ ignore = ["D", "CPY001", "TC001", "TC002", "TC003", "COM812", "S603", "S607"]
 "src/hometools/models.py" = ["I001", "S105", "N815"]
 
 [tool.pytest.ini_options]
-# The integration tier runs the real toolchain on this Mac; //home:integration selects it, the last -m wins. The fence
-# tier (#741) starts Docker, so no commit runs it: only the opt-in //home:fence-integration selects it.
-addopts = "--strict-markers -m 'not integration and not fence' --cov=hometools --cov-branch --cov-report=term-missing --cov-fail-under=100"
+# The integration tier runs the real toolchain on this Mac; //home:integration selects it, the last -m wins.
+addopts = "--strict-markers -m 'not integration' --cov=hometools --cov-branch --cov-report=term-missing --cov-fail-under=100"
 markers = [
   "integration: real mise, Homebrew and compilers on this Mac, read-only (//home:integration)",
-  "fence: the PC fence on real iptables in a throwaway Docker container, opt-in only (//home:fence-integration)",
 ]
 testpaths = ["tests"]
 

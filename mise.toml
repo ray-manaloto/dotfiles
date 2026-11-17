@@ -119,10 +119,6 @@ run = "mkdir -p ~/.agents/skills"
 [dotfiles]
 "~/.config/mise/config.toml" = { source = "unix/home/.config/mise/config.toml", mode = "symlink" }
 "~/.config/mise/miserc.toml" = { source = "unix/home/.config/mise/miserc.toml", mode = "symlink" }
-# The PC's own bootstrap (spec #633). Linked on every machine, loaded only where the `pc` config environment is
-# selected: the PC has env = ["pc"] in its untracked ~/.config/mise/miserc.local.toml, the Mac nothing. Check: mise
-# run pc:doctor.
-"~/.config/mise/config.pc.toml" = { source = "unix/home/.config/mise/config.pc.toml", mode = "symlink" }
 "~/.config/mise/locks" = { source = "unix/home/.config/mise/locks", mode = "symlink" }
 "~/.config/mise/apple-bin" = { source = "unix/home/.config/mise/apple-bin", mode = "symlink" }
 "~/.config/mise/mise.lock" = { source = "unix/home/.config/mise/mise.lock", mode = "symlink" }
