@@ -392,6 +392,19 @@
         "items": {"type": "array", "items": {"type": "string"}, "default": [], "description": "What the check found that is not a failure, such as a waiting update: <source>:<name> <old> -> <new>."}
       }
     },
+    "PcKernelBaseline": {
+      "description": "The boot values of the five PC kernel settings spec #729 guards, by sysctl name (data/pc-kernel.json).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kernel.kptr_restrict", "kernel.sysrq", "kernel.printk", "kernel.core_pattern", "fs.protected_regular"],
+      "properties": {
+        "kernel.kptr_restrict": {"type": "string"},
+        "kernel.sysrq": {"type": "string"},
+        "kernel.printk": {"type": "string"},
+        "kernel.core_pattern": {"type": "string"},
+        "fs.protected_regular": {"type": "string"}
+      }
+    },
     "BootstrapId": {
       "description": "What a bootstrap entry manages: its kind (file, service, ...) and name (a path, a unit).",
       "type": "object",

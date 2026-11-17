@@ -889,6 +889,22 @@ class PcDoctorLine(BaseModel):
     """
 
 
+class PcKernelBaseline(BaseModel):
+    """
+    The boot values of the five PC kernel settings spec #729 guards, by sysctl name (data/pc-kernel.json).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+    )
+    kernel_kptr_restrict: Annotated[str, Field(alias="kernel.kptr_restrict")]
+    kernel_sysrq: Annotated[str, Field(alias="kernel.sysrq")]
+    kernel_printk: Annotated[str, Field(alias="kernel.printk")]
+    kernel_core_pattern: Annotated[str, Field(alias="kernel.core_pattern")]
+    fs_protected_regular: Annotated[str, Field(alias="fs.protected_regular")]
+
+
 class BootstrapId(BaseModel):
     """
     What a bootstrap entry manages: its kind (file, service, ...) and name (a path, a unit).

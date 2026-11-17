@@ -20,6 +20,8 @@ STATUS = json.dumps([*SSH, "status", "--missing", "--json"])
 # Each later pc:doctor line's own calls (its cases are in tests/test_pc_<check>.py).
 CHECKUPDATES = json.dumps([*SSH[:-2], "checkupdates"])
 YAY = json.dumps([*SSH[:-2], "yay", "-Qua"])
+KERNEL_KEYS = ("kernel.kptr_restrict", "kernel.sysrq", "kernel.printk", "kernel.core_pattern", "fs.protected_regular")
+KERNEL = json.dumps([*SSH[:-2], "sysctl", *KERNEL_KEYS])
 UNIT = "/etc/systemd/system/gha-slot@.service"
 CULPRIT = f"file:{UNIT}"
 
@@ -52,6 +54,12 @@ HEALTHY: dict[str, object] = {
     YAY: {"code": 1},
     # gpu-cdi (#732): its seven calls on a PC set up as dotfiles declares (tests/pc_gpu.py).
     **pc_gpu.HEALTHY,
+    # kernel-settings (#730): sysctl with the PC's boot values (procps-ng 4.0.7; kernel.printk tab-separated).
+    KERNEL: {
+        "stdout": "kernel.kptr_restrict = 0\nkernel.sysrq = 16\nkernel.printk = 0\t4\t1\t4\n"
+        "kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F %I\n"
+        "fs.protected_regular = 1\n"
+    },
 }
 
 

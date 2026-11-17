@@ -1,0 +1,7 @@
+{
+  "kernel.kptr_restrict": "0",
+  "kernel.sysrq": "16",
+  "kernel.printk": "0\t4\t1\t4",
+  "kernel.core_pattern": "|/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F %I",
+  "fs.protected_regular": "1"
+}
