@@ -77,9 +77,10 @@ def planned(stdout: str) -> list[BootstrapEntry]:
 
 
 def statuses(stdout: str) -> list[BootstrapEntry]:
-    """The files part of mise bootstrap status --json, the one part pc declares (a ticket adding a part reads its
-    list here too); ValueError if it is not that report."""
-    return BootstrapStatusReport.model_validate_json(stdout).files
+    """The files and services parts of mise bootstrap status --json (a ticket judging another part reads its list
+    here too); ValueError if it is not that report."""
+    report = BootstrapStatusReport.model_validate_json(stdout)
+    return [*report.files, *report.services]
 
 
 # Each check: its name, its mise bootstrap arguments, the exit codes that are an answer, not an error, and the reader
@@ -107,8 +108,9 @@ def judge(
     try:
         named = mine(read(done.stdout))
     except ValueError as failed:
-        # A report that is not mise's: no JSON, not an object, no files or resources list (such as {}), or an entry
-        # without an id: pydantic's ValidationError, a ValueError, for each. Only a valid empty report is unselected.
+        # A report that is not mise's: no JSON, not an object, no files, services or resources list (such as {}), or
+        # an entry without an id: pydantic's ValidationError, a ValueError, for each. Only a valid empty
+        # report is unselected.
         named, why = None, f"mise's output did not parse: {type(failed).__name__} (exit {done.returncode})"
     # An entry with no action is one mise did not judge: unknown, never drift.
     drift = [name for action, name in named or () if action not in {"noop", "unknown", None}]

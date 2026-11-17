@@ -62,3 +62,257 @@ enabled = true
 [bootstrap.files."/etc/cdi/nvidia.yaml"]
 os = "linux"
 state = "absent"
+
+# The runner's folder on the PC. app.pem (the GitHub App key, the one secret at rest) and runner.json's backups sit in
+# it unmanaged: bootstrap never reads or writes them.
+[bootstrap.directories."/etc/gha-runner"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0755"
+
+# One slot per repository, each an instance of the template above. mise accepts the name@instance form for system
+# services (crates/mise-system/src/services.rs:381 and :677, mise 2026.11.8). Adding a repository is one more entry.
+# No file notifies them, so a later edit of the unit template never restarts a slot in the middle of a job.
+[bootstrap.services."gha-slot@glaze"]
+state = "running"
+enabled = true
+
+[bootstrap.services."gha-slot@cpp-utilities"]
+state = "running"
+enabled = true
+
+[bootstrap.services."gha-slot@dotfiles"]
+state = "running"
+enabled = true
+
+# The job fence's rules files notify ufw. ufw.service is a oneshot with no reload command (CanReload=no), so the
+# hook restarts it: ufw-init stop, then start. `ufw reload` does the same (ufw_reload in
+# /usr/lib/ufw/ufw-init-functions stops, then starts), so neither is atomic: between the two, a job that is already
+# running has no fence. Apply a fence change with the slots stopped until the new fence is checked. A plain mise
+# bootstrap is not enough: it applies services in this file's order, so it starts the slots before it restarts ufw
+# (mise 2026.11.8 crates/mise-system/src/services.rs:400-418 and :516-532). Instead, between jobs: stop the gha-slot@
+# instances, run mise bootstrap --skip services (it writes the files and restarts nothing: src/cli/bootstrap.rs:2183
+# and :2381), run sudo systemctl restart ufw, check the fence, then run mise bootstrap, which starts the slots.
+[bootstrap.services.ufw]
+state = "running"
+enabled = true
+on_change = "restart"
+
+# The job fence, part 1: CI job containers on the gha-jobs bridge (br-gha) may not open connections to the PC itself.
+# The whole file is managed: ufw's stock before.rules plus the two gha-jobs lines. The tailnet drop (mangle FORWARD)
+# is the launcher's, which re-adds it at run time; mise's firewall part has no forward or mangle rules.
+[bootstrap.files."/etc/ufw/before.rules"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["ufw"]
+content = '''
+#
+# rules.before
+#
+# Rules that should be run before the ufw command line added rules. Custom
+# rules should be added to one of these chains:
+#   ufw-before-input
+#   ufw-before-output
+#   ufw-before-forward
+#
+
+# Don't delete these required lines, otherwise there will be errors
+*filter
+:ufw-before-input - [0:0]
+:ufw-before-output - [0:0]
+:ufw-before-forward - [0:0]
+:ufw-not-local - [0:0]
+# End required lines
+
+
+# allow all on loopback
+-A ufw-before-input -i lo -j ACCEPT
+# gha-jobs: runner job containers may not open connections to this host
+-A ufw-before-input -i br-gha -m conntrack --ctstate NEW -j DROP
+-A ufw-before-output -o lo -j ACCEPT
+
+# quickly process packets for which we already have a connection
+-A ufw-before-input -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A ufw-before-output -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+-A ufw-before-forward -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+
+# drop INVALID packets (logs these in loglevel medium and higher)
+-A ufw-before-input -m conntrack --ctstate INVALID -j ufw-logging-deny
+-A ufw-before-input -m conntrack --ctstate INVALID -j DROP
+
+# ok icmp codes for INPUT
+-A ufw-before-input -p icmp --icmp-type destination-unreachable -j ACCEPT
+-A ufw-before-input -p icmp --icmp-type time-exceeded -j ACCEPT
+-A ufw-before-input -p icmp --icmp-type parameter-problem -j ACCEPT
+-A ufw-before-input -p icmp --icmp-type echo-request -j ACCEPT
+
+# ok icmp code for FORWARD
+-A ufw-before-forward -p icmp --icmp-type destination-unreachable -j ACCEPT
+-A ufw-before-forward -p icmp --icmp-type time-exceeded -j ACCEPT
+-A ufw-before-forward -p icmp --icmp-type parameter-problem -j ACCEPT
+-A ufw-before-forward -p icmp --icmp-type echo-request -j ACCEPT
+
+# allow dhcp client to work
+-A ufw-before-input -p udp --sport 67 --dport 68 -j ACCEPT
+
+#
+# ufw-not-local
+#
+-A ufw-before-input -j ufw-not-local
+
+# if LOCAL, RETURN
+-A ufw-not-local -m addrtype --dst-type LOCAL -j RETURN
+
+# if MULTICAST, RETURN
+-A ufw-not-local -m addrtype --dst-type MULTICAST -j RETURN
+
+# if BROADCAST, RETURN
+-A ufw-not-local -m addrtype --dst-type BROADCAST -j RETURN
+
+# all other non-local packets are dropped
+-A ufw-not-local -m limit --limit 3/min --limit-burst 10 -j ufw-logging-deny
+-A ufw-not-local -j DROP
+
+# allow MULTICAST mDNS for service discovery (be sure the MULTICAST line above
+# is uncommented)
+-A ufw-before-input -p udp -d 224.0.0.251 --dport 5353 -j ACCEPT
+
+# allow MULTICAST UPnP for service discovery (be sure the MULTICAST line above
+# is uncommented)
+-A ufw-before-input -p udp -d 239.255.255.250 --dport 1900 -j ACCEPT
+
+# don't delete the 'COMMIT' line or these rules won't be processed
+COMMIT
+'''
+
+# The job fence, part 2: the six DOCKER-USER drops that keep gha-jobs containers off private, tailnet, link-local and
+# multicast ranges, inside the ufw-docker block. The whole file is managed. #735's apt-cache exceptions are ufw route
+# rules (user.rules), which DOCKER-USER reaches first through ufw-user-forward; this file neither declares nor removes
+# them.
+[bootstrap.files."/etc/ufw/after.rules"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["ufw"]
+content = '''
+#
+# rules.input-after
+#
+# Rules that should be run after the ufw command line added rules. Custom
+# rules should be added to one of these chains:
+#   ufw-after-input
+#   ufw-after-output
+#   ufw-after-forward
+#
+
+# Don't delete these required lines, otherwise there will be errors
+*filter
+:ufw-after-input - [0:0]
+:ufw-after-output - [0:0]
+:ufw-after-forward - [0:0]
+# End required lines
+
+# don't log noisy services by default
+-A ufw-after-input -p udp --dport 137 -j ufw-skip-to-policy-input
+-A ufw-after-input -p udp --dport 138 -j ufw-skip-to-policy-input
+-A ufw-after-input -p tcp --dport 139 -j ufw-skip-to-policy-input
+-A ufw-after-input -p tcp --dport 445 -j ufw-skip-to-policy-input
+-A ufw-after-input -p udp --dport 67 -j ufw-skip-to-policy-input
+-A ufw-after-input -p udp --dport 68 -j ufw-skip-to-policy-input
+
+# don't log noisy broadcast
+-A ufw-after-input -m addrtype --dst-type BROADCAST -j ufw-skip-to-policy-input
+
+# don't delete the 'COMMIT' line or these rules won't be processed
+COMMIT
+# BEGIN UFW AND DOCKER
+*filter
+:ufw-user-forward - [0:0]
+:ufw-docker-logging-deny - [0:0]
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -j ufw-user-forward
+
+-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A DOCKER-USER -m conntrack --ctstate INVALID -j DROP
+# gha-jobs (PC runner): one-job containers may reach the internet only, never LAN, tailnet or link-local
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 10.0.0.0/8 -j ufw-docker-logging-deny
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 172.16.0.0/12 -j ufw-docker-logging-deny
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 192.168.0.0/16 -j ufw-docker-logging-deny
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 100.64.0.0/10 -j ufw-docker-logging-deny
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 169.254.0.0/16 -j ufw-docker-logging-deny
+-A DOCKER-USER -i br-gha -m conntrack --ctstate NEW -d 224.0.0.0/4 -j ufw-docker-logging-deny
+-A DOCKER-USER -i docker0 -o docker0 -j ACCEPT
+
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
+-A DOCKER-USER -j ufw-docker-logging-deny -m conntrack --ctstate NEW -d 10.0.0.0/8
+-A DOCKER-USER -j ufw-docker-logging-deny -m conntrack --ctstate NEW -d 172.16.0.0/12
+-A DOCKER-USER -j ufw-docker-logging-deny -m conntrack --ctstate NEW -d 192.168.0.0/16
+
+-A DOCKER-USER -j RETURN
+
+-A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
+-A ufw-docker-logging-deny -j DROP
+
+COMMIT
+# END UFW AND DOCKER
+'''
+
+# The runner image, built on the PC by the launcher (gha-slot build). Bootstrap only keeps the file; a change here is
+# rebuilt by hand, and no running slot is restarted. runner.json holds private App ids and waits for #637's secrets.
+[bootstrap.files."/etc/gha-runner/Dockerfile"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+content = '''
+# Runner image for the PC's one-job container slots (public repos: glaze, cpp-utilities, dotfiles).
+# Base: GitHub's official runner image (Ubuntu 24.04, user `runner`, uid 1001). Toolchains are mise-first: the
+# image carries mise and sccache; each repo's own tools are installed by `gha-slot warm` (a trusted step, from the
+# repo's default branch) into the slot's tools volume, which jobs see read-only at /cache/mise.
+# Build on the PC: gha-slot build  (bump the versions below, then rebuild).
+ARG RUNNER_VERSION=2.338.2
+ARG MISE_VERSION=2026.11.5
+FROM jdxcode/mise:${MISE_VERSION} AS mise
+FROM ghcr.io/actions/actions-runner:${RUNNER_VERSION}
+ARG SCCACHE_VERSION=0.19.0
+ARG UV_VERSION=0.13.7
+
+USER root
+# Only what mise and typical C/C++ jobs need from the OS; compilers come from mise per repo.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates curl git xz-utils zstd unzip jq build-essential pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+COPY --from=mise /usr/local/bin/mise /usr/local/bin/mise
+# sccache and uv are baked into the image (installed by mise at build time). uv is what mise's pipx: backend
+# uses when pipx itself is absent (repos pin Python tools as pipx:<pkg>, e.g. cpp-utilities' check-jsonschema).
+RUN export MISE_DATA_DIR=/tmp/m MISE_CACHE_DIR=/tmp/c MISE_STATE_DIR=/tmp/s \
+ && mise install-into "sccache@${SCCACHE_VERSION}" /opt/sccache && mise install-into "uv@${UV_VERSION}" /opt/uv \
+ && ln -s /opt/sccache/*/sccache /usr/local/bin/sccache \
+ && for b in uv uvx; do ln -s "$(find /opt/uv -name "$b" -type f | head -1)" /usr/local/bin/$b; done \
+ && rm -rf /tmp/m /tmp/c /tmp/s && sccache --version && uv --version
+
+# The job user may not regain root: drop the image's sudo rights and docker group membership.
+RUN rm -f /etc/sudoers.d/* && gpasswd -d runner sudo && gpasswd -d runner docker || true
+
+# /cache/mise = tools volume (read-only in jobs, written only by `gha-slot warm` with MISE_DATA_DIR=/cache/mise),
+# /cache/sccache = compiler cache volume (writable). In jobs mise's data dir is the job's home, and the tools
+# volume is a shared install dir that mise only reads: tools from the default branch come from there, and a tool a
+# branch adds installs into the job's home and is thrown away with the container.
+ENV MISE_DATA_DIR=/home/runner/.local/share/mise \
+    MISE_SHARED_INSTALL_DIRS=/cache/mise/installs \
+    MISE_CACHE_DIR=/home/runner/.cache/mise \
+    MISE_STATE_DIR=/home/runner/.local/state/mise \
+    MISE_YES=1 \
+    SCCACHE_DIR=/cache/sccache \
+    PATH=/home/runner/.local/share/mise/shims:$PATH
+
+USER runner
+WORKDIR /home/runner
+'''
