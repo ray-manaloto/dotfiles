@@ -45,6 +45,14 @@ description = "The real toolchain:verify on this Mac through this checkout's fil
 depends = ["sync"]
 run = "uv run --locked pytest -m integration --no-cov"
 
+# The PC job fence (#741) on real iptables 1.8.13 in a throwaway Arch Linux container: the rules files and the slot
+# checks from config.pc.toml. It starts Docker on this Mac, so it runs only on request, in chief-of-staff's Docker
+# slot; no hk step and no other task depends on it.
+[tasks.fence-integration]
+description = "The PC job fence's rules files and slot checks on real iptables in a throwaway Docker container (opt-in)"
+depends = ["sync"]
+run = "uv run --locked pytest -m fence --no-cov tests/test_pc_fence.py"
+
 # The floor under the heavy test tasks (//python:test and //p2996:test, and so hk check --all): exits 1,
 # naming the free space and the floor, when the data volume has under 100 GiB free (hometools.disk).
 [tasks.disk-guard]

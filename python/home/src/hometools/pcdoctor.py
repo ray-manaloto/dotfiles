@@ -19,7 +19,7 @@ import sys
 from collections.abc import Callable
 from functools import partial
 
-from . import pcgpu, pckernel, pcprivileged, pcupdates
+from . import pcfence, pcgpu, pckernel, pcprivileged, pcupdates
 from .models import BootstrapEntry, BootstrapPlanReport, BootstrapStatusReport, Failure, PcDoctorLine, Result
 
 HOST = "pc"  # the ssh alias (~/.ssh/config.d/tailnet.conf); its real name stays in Doppler
@@ -92,7 +92,7 @@ CHECKS = (
     ("bootstrap-plan", ("plan", "--json", "--detailed-exitcode"), {0, 2}, planned),
 )
 # The checks beyond mise bootstrap, each in its own module: a function of the ssh runner that returns its line.
-LINES = (pcupdates.line, pcgpu.line, pckernel.line, pcprivileged.line)
+LINES = (pcupdates.line, pcgpu.line, pckernel.line, pcprivileged.line, pcfence.line)
 
 
 def mine(entries: list[BootstrapEntry]) -> list[tuple[str | None, str]]:

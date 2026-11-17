@@ -5,7 +5,17 @@
 # Content is inline, not `source`: this file is a link in ~/.config/mise, and mise resolves a relative source
 # against the link's folder, not the checkout's (mise 2026.11.9, read in a scratch config folder).
 
-# The runner slot unit template, byte-equal to the copy installed by hand, so the first apply changes nothing.
+# The runner slot unit template. No file notifies the slots, so a change here never restarts one: mise runs
+# daemon-reload and a `start`, a no-op for a running slot (mise 2026.11.8 crates/mise-system/src/services.rs:577).
+#
+# A slot starts only while gha-fence.service is active and its three drops are in place (#741). The check is four
+# ExecStartPre commands, not a unit dependency: Requires= and Requisite= give the fence the reverse dependency
+# (RequiredBy=, RequisiteOf=), which carries UNIT_ATOM_PROPAGATE_STOP, so a fence stop or restart would stop or
+# restart every slot (systemd v262 src/core/unit-dependency-atom.c:43-52, src/core/transaction.c:1199-1214). After=
+# and Wants= carry no propagate atom (:26-29, :54-55, :83-84): they only order a slot behind a fence start and pull
+# the fence in. A refused start is an ExecStartPre exit code, which Restart=always retries every RestartSec
+# (src/core/service.c:2455-2456); the PC's start limit (5 in 10 s) is never reached at one start per 10 s. The rule
+# lines are the ones the fence's rules files add, spelled as iptables -S prints them.
 [bootstrap.files."/etc/systemd/system/gha-slot@.service"]
 os = "linux"
 owner = "root"
@@ -15,12 +25,17 @@ content = '''
 [Unit]
 Description=GitHub Actions one-job runner slot %i (fresh container per job)
 Documentation=file:///etc/gha-runner/README.md
-After=network-online.target docker.service
-Wants=network-online.target
+After=network-online.target docker.service gha-fence.service
+Wants=network-online.target gha-fence.service
 Requires=docker.service
 
 [Service]
 Type=simple
+# The job fence (gha-fence.service): no slot starts without it, and its restarts never touch a running slot.
+ExecStartPre=/usr/bin/systemctl is-active --quiet gha-fence.service
+ExecStartPre=/usr/bin/iptables -t mangle -C INPUT -i br-gha -m conntrack --ctstate NEW -j DROP
+ExecStartPre=/usr/bin/iptables -t mangle -C FORWARD -i br-gha -o tailscale0 -j DROP
+ExecStartPre=/usr/bin/ip6tables -t mangle -C INPUT -i br-gha ! -p ipv6-icmp -m conntrack --ctstate NEW -j DROP
 ExecStart=/usr/local/sbin/gha-slot run %i
 Restart=always
 RestartSec=10
@@ -71,6 +86,98 @@ owner = "root"
 group = "root"
 mode = "0755"
 
+# The job fence, part 3 (#741): mangle drops for the gha-jobs bridge, set at boot by gha-fence.service.
+# - mangle INPUT, both families: tailscaled's ts-input chain accepts UDP 41641 on any interface and runs ahead of
+#   ufw-before-input in filter INPUT, so ufw's br-gha host-input drop (part 1) never sees those packets. mangle INPUT
+#   runs first, and tailscaled, ufw and Docker leave it alone (tailscaled's CONNMARK rules are in mangle PREROUTING
+#   and OUTPUT). ICMPv6 stays allowed for neighbour discovery.
+# - mangle FORWARD, IPv4: tailscaled's ts-forward accepts anything routed out tailscale0 before DOCKER-USER runs, so
+#   the tailnet drop sits here. The launcher's netguard checks it with -C before each job and inserts it only when
+#   missing, so the rule stays in the built-in chain, spelled as it checks it.
+#
+# Each file is one iptables-restore transaction: -F empties the chain and -A puts the one drop back, so a start or
+# restart leaves exactly one copy of each drop, however many there were, and the drop is never absent. With
+# --noflush the restore flushes no table, and a chain line for a built-in chain only sets its policy (iptables
+# v1.8.13 iptables/xtables-restore.c:134-138 and :168-186), so the -F lines name the chains this unit owns. Every
+# line up to COMMIT goes to the kernel as one nf_tables batch (:93-102, iptables/nft.c:3269-3395 and :3669-3674),
+# which the kernel applies whole or not at all. The unit owns these three chains whole (owner's decision,
+# 2026-11-17): any other rule in mangle INPUT (IPv4 and IPv6) or mangle FORWARD (IPv4) is removed at the next start or
+# restart. Today nothing else uses them; tailscaled's CONNMARK rules are in PREROUTING and OUTPUT.
+[bootstrap.files."/etc/gha-runner/fence.rules"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["gha-fence.service"]
+content = '''
+# gha-fence.service (dotfiles #741): the job fence's IPv4 mangle drops, applied with iptables-restore --noflush.
+*mangle
+-F INPUT
+-F FORWARD
+-A INPUT -i br-gha -m conntrack --ctstate NEW -j DROP
+-A FORWARD -i br-gha -o tailscale0 -j DROP
+COMMIT
+'''
+
+[bootstrap.files."/etc/gha-runner/fence6.rules"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["gha-fence.service"]
+content = '''
+# gha-fence.service (dotfiles #741): the job fence's IPv6 mangle drop, applied with ip6tables-restore --noflush.
+*mangle
+-F INPUT
+-A INPUT -i br-gha ! -p ipv6-icmp -m conntrack --ctstate NEW -j DROP
+COMMIT
+'''
+
+# A oneshot that stays active (RemainAfterExit). It has no ExecStop, so a stop or restart never removes a drop: a
+# restart only runs the two restores again. Ordered like ufw.service (DefaultDependencies=no, before sysinit.target),
+# so the drops are in place before Docker and any slot. The unit file notifies the service too: mise starts a unit
+# it cannot find yet only when a file it manages provides it (services.rs:270-280).
+[bootstrap.files."/etc/systemd/system/gha-fence.service"]
+os = "linux"
+owner = "root"
+group = "root"
+mode = "0644"
+notify = ["gha-fence.service"]
+content = '''
+[Unit]
+Description=Job fence: mangle drops for the gha-jobs bridge (br-gha)
+Documentation=file:///etc/gha-runner/README.md
+DefaultDependencies=no
+After=systemd-sysctl.service
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/iptables-restore --noflush /etc/gha-runner/fence.rules
+ExecStart=/usr/bin/ip6tables-restore --noflush /etc/gha-runner/fence6.rules
+
+[Install]
+WantedBy=multi-user.target
+'''
+
+# Declared before the slots: mise applies services in this file's order (services.rs:400-418). A changed rules file
+# restarts the unit, which reapplies the drops without a gap and stops no slot.
+#
+# First application, with the slots drained (the two-run pattern of #636): between jobs,
+#   sudo systemctl stop gha-slot@glaze gha-slot@cpp-utilities gha-slot@dotfiles
+#   mise bootstrap --skip services       (writes the files; restarts nothing: src/cli/bootstrap.rs:2183 and :2381)
+#   sudo systemctl daemon-reload
+#   sudo systemctl start gha-fence.service
+#   systemctl is-active gha-fence.service
+#   sudo iptables -t mangle -S && sudo ip6tables -t mangle -S INPUT    (each drop exactly once)
+#   mise bootstrap                       (enables the fence, starts the slots through their fence check)
+#   mise run pc:doctor                   (from the Mac)
+[bootstrap.services."gha-fence.service"]
+state = "running"
+enabled = true
+on_change = "restart"
+
 # One slot per repository, each an instance of the template above. mise accepts the name@instance form for system
 # services (crates/mise-system/src/services.rs:381 and :677, mise 2026.11.8). Adding a repository is one more entry.
 # No file notifies them, so a later edit of the unit template never restarts a slot in the middle of a job.
@@ -100,8 +207,8 @@ enabled = true
 on_change = "restart"
 
 # The job fence, part 1: CI job containers on the gha-jobs bridge (br-gha) may not open connections to the PC itself.
-# The whole file is managed: ufw's stock before.rules plus the two gha-jobs lines. The tailnet drop (mangle FORWARD)
-# is the launcher's, which re-adds it at run time; mise's firewall part has no forward or mangle rules.
+# The whole file is managed: ufw's stock before.rules plus the two gha-jobs lines. tailscaled's ts-input runs ahead of
+# this drop for UDP 41641, and the tailnet drop is in mangle FORWARD: gha-fence.service (part 3) sets both.
 [bootstrap.files."/etc/ufw/before.rules"]
 os = "linux"
 owner = "root"
