@@ -27,14 +27,15 @@ async def running() -> dict[str, int]:
             pid = line[1:]
         elif line.startswith("n"):
             folders[pid] = line[1:]
-    if not folders:
-        return {}
-    # A ninja that ended since lsof saw it is missing here; ps then exits 1 and lists the others.
+    # Every process, kept when lsof saw it: no special case when no ninja runs, and a ninja that ended since
+    # lsof saw it is simply not listed.
     env = os.environ | {"LC_ALL": "C", "TZ": "UTC"}
-    listed = await proc.run("ps", "-o", "pid=,lstart=", "-p", ",".join(folders), env=env, check=False)
+    listed = await proc.run("ps", "-A", "-o", "pid=,lstart=", env=env)
     starts: dict[str, int] = {}
     for line in listed.stdout.decode().splitlines():
         pid, lstart = line.split(maxsplit=1)
+        if pid not in folders:
+            continue
         lstart = lstart.strip()  # ps pads the column.
         # Whole seconds: the floor of when that ninja started, so before its run's clock started.
         at = calendar.timegm(time.strptime(lstart, "%a %b %d %H:%M:%S %Y")) * 1000 * MS
