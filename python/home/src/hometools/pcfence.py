@@ -1,9 +1,10 @@
 """pc-doctor's fence-drops line: the job fence's three mangle drops on the PC, each present exactly once."""
 
-# Ticket #741. gha-fence.service (config.pc.toml) sets them at boot: the IPv4 and IPv6 mangle INPUT drops that keep
-# job containers off the host's tailscaled (UDP 41641, which tailscaled's ts-input accepts ahead of ufw), and the
-# IPv4 mangle FORWARD drop to tailscale0. A missing drop is a hole in the fence; a second copy means something other
-# than the unit added it (the launcher's check-then-insert, racing in several slots), so both fail and are named.
+# Ticket #741. gha-fence.service (cpp-standard's mise.pc.toml) sets them at boot: the IPv4 and IPv6 mangle INPUT
+# drops that keep job containers off the host's tailscaled (UDP 41641, which tailscaled's ts-input accepts ahead of
+# ufw), and the IPv4 mangle FORWARD drop to tailscale0. A missing drop is a hole in the fence; a second copy means
+# something other than the unit added it (the launcher's check-then-insert, racing in several slots), so both fail and
+# are named.
 #
 # iptables -S needs root, so each listing runs as `sudo -n`: it never waits for a password, and a sudo that wants one
 # exits 1, which is unknown. iptables v1.8.13 prints each rule in its own canonical order (the IPv6 rule's
