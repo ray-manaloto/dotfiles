@@ -62,6 +62,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Plugin changes",
                 "Bulky scratch goes in a .noindex folder",
                 "Upgrading the PC",
+                "No --privileged containers on the PC",
                 "Workflow",
                 "Commit and pull-request approval",
                 "Cross-review",

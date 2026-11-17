@@ -22,6 +22,8 @@ CHECKUPDATES = json.dumps([*SSH[:-2], "checkupdates"])
 YAY = json.dumps([*SSH[:-2], "yay", "-Qua"])
 KERNEL_KEYS = ("kernel.kptr_restrict", "kernel.sysrq", "kernel.printk", "kernel.core_pattern", "fs.protected_regular")
 KERNEL = json.dumps([*SSH[:-2], "sysctl", *KERNEL_KEYS])
+DOCKER = [*SSH[:-2], "docker", "--host", "unix:///var/run/docker.sock"]
+LIST = json.dumps([*DOCKER, "ps", "--quiet", "--no-trunc"])
 UNIT = "/etc/systemd/system/gha-slot@.service"
 CULPRIT = f"file:{UNIT}"
 
@@ -60,6 +62,8 @@ HEALTHY: dict[str, object] = {
         "kernel.core_pattern = |/usr/lib/systemd/systemd-coredump %P %u %g %s %t %c %h %d %F %I\n"
         "fs.protected_regular = 1\n"
     },
+    # privileged-containers (#731): docker ps with nothing running, so no inspect follows.
+    LIST: {"stdout": ""},
 }
 
 

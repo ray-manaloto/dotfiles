@@ -1008,6 +1008,28 @@ class CdiSpec(BaseModel):
     devices: list[CdiDevice] | None = None
 
 
+class DockerConfig(BaseModel):
+    """
+    The part of a container's Config pc-doctor reads: the image it was started from.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    Image: str
+
+
+class DockerHostConfig(BaseModel):
+    """
+    The part of a container's HostConfig pc-doctor reads: whether it was started with --privileged.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    Privileged: bool
+
+
 class MiseLinks(BaseModel):
     """
     Links under mise's installs folder whose target is missing (reported, never removed).
@@ -1085,3 +1107,23 @@ class BootstrapStatusReport(BaseModel):
         frozen=True,
     )
     files: list[BootstrapEntry]
+
+
+class DockerContainer(BaseModel):
+    """
+    The fields pc-doctor's privileged-containers line reads from one object of docker container inspect (Docker 29.9).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+    )
+    Id: str
+    """
+    The full 64-hex id, as docker ps --no-trunc lists it.
+    """
+    Name: str
+    """
+    The container's name with docker's leading slash, such as /web.
+    """
+    Config: DockerConfig
+    HostConfig: DockerHostConfig
