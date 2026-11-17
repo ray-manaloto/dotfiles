@@ -14,12 +14,11 @@ from repotools.merge import BOT_CLOSE, BOT_OPEN, NOREPLY
 
 from .test_gates import copy, mise, said
 from .test_pane_approval import (
-    HK_PKL,
     SESSION,
+    approve,
     commit,
     origin,
     pr,
-    pr_approve,
     pr_refusal_of,
     repo,
     turn,
@@ -27,6 +26,7 @@ from .test_pane_approval import (
 )
 
 __all__ = ["copy", "repo"]  # the fixtures, used by name
+HK_PKL = Path(__file__).resolve().parents[3] / "hk.pkl"
 
 # A gh that answers from a scenario file and logs every call; it reaches no network. Once hk's step has left the
 # file ../hk-ran, the scenario's "after" entries replace its own: GitHub as it is after the minutes hk takes.
@@ -118,7 +118,7 @@ class World:
 
 def approved(root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], step: str) -> World:
     made = World(root, monkeypatch, step)
-    write_log(root, pr_approve(root, capsys))
+    write_log(root, approve(root, capsys))
     capsys.readouterr()
     return made
 

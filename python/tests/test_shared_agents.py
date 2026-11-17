@@ -64,7 +64,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Upgrading the PC",
                 "No --privileged containers on the PC",
                 "Workflow",
-                "Commit and pull-request approval",
+                "Pull-request approval",
                 "Cross-review",
                 "Large reviews fan out",
                 "context7 snapshot",
@@ -110,13 +110,12 @@ class SharedAgentsTest(unittest.TestCase):
         section = self.section("Cross-review")
         self.assertIn(" ".join(rule.splitlines()), section)
         self.assertIn("repotools pane-pin", section)
-        self.assertIn("repotools pane-fingerprint", section)
+        self.assertIn("repotools pr-fingerprint", section)
 
     def test_the_approval_rule_uses_the_installed_commands(self) -> None:
-        section = self.section("Commit and pull-request approval")
+        section = self.section("Pull-request approval")
         for command in (
             "repotools pane-pin --session",
-            "repotools pane-fingerprint --message",
             "repotools pr-create --title",
             "repotools pr-fingerprint --title",
             "mise run //repo:tools-install",

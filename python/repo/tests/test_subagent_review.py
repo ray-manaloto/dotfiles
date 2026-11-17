@@ -1,4 +1,4 @@
-"""The fallback reviewer: pane-pin --subagent, then pane-approved and pr-* on Claude-shaped subagent transcripts."""
+"""The fallback reviewer: pane-pin --subagent, then pr-* on Claude-shaped subagent transcripts."""
 
 # The shapes are those of real transcripts Claude Code 2.1.319 wrote: agent-<id>.jsonl, one JSON record a line, with
 # agent-<id>.meta.json beside it.
@@ -17,7 +17,6 @@ from tests import clean_git_env
 from tests.test_pane_approval import GH_URL, fake_gh, origin
 
 AGENT = "a62dcae6fa8d26e95"
-MESSAGE = f"feat: one\n\nWhy it changes.\n\n{FALLBACK_LINE}\n"
 BODY = f"## Summary\n\nOne change.\n\n{FALLBACK_LINE}\n"
 META = {"agentType": "fallback-reviewer", "requestShape": "background", "finished": True}
 
@@ -25,7 +24,6 @@ META = {"agentType": "fallback-reviewer", "requestShape": "background", "finishe
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     clean_git_env(monkeypatch)
-    (tmp_path / "message").write_text(MESSAGE)
     (tmp_path / "body.md").write_text(BODY)
     root = tmp_path / "repo"
     root.mkdir()
@@ -35,10 +33,6 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     subprocess.run(["git", "add", "."], check=True)
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "c"], check=True)
     return root.resolve()
-
-
-def commit_text(root: Path) -> list[str]:
-    return ["--message", str(root.parent / "message")]
 
 
 def pr_text(root: Path) -> list[str]:
@@ -59,8 +53,8 @@ def line(kind: str, content: object, **fields: object) -> dict[str, Any]:
 
 def prompt(root: Path, shown: str) -> dict[str, Any]:
     words = (
-        f"You are the fallback commit reviewer.\nWorktree: {root}\n"
-        f"Review the staged diff in {root.parent}/review.diff. Fingerprint: {shown}.\n\n"
+        f"You are the fallback pull request reviewer.\nWorktree: {root}\n"
+        f"Review the pull request diff in {root.parent}/review.diff. Fingerprint: {shown}.\n\n"
         f"Your last line must be exactly `PANE-APPROVE {shown}` if there are no findings."
     )
     return line("user", words)
@@ -80,7 +74,7 @@ def result() -> dict[str, Any]:
 
 def review(root: Path, shown: str, *, answer: str | None = None) -> list[dict[str, Any]]:
     """A review as a foreground subagent writes it: the prompt, the diff file read, then its closing text."""
-    closing = f"Reviewed the staged diff.\nPANE-APPROVE {shown}" if answer is None else answer
+    closing = f"Reviewed the pull request diff.\nPANE-APPROVE {shown}" if answer is None else answer
     attachment = {"type": "attachment", "agentId": AGENT, "attachment": {"type": "hook_success"}}
     return [
         prompt(root, shown),
@@ -107,7 +101,7 @@ def pin(transcript: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
 def approved(root: Path, capsys: pytest.CaptureFixture[str], records: list[dict[str, Any]], **meta: object) -> None:
     pin(write(root, records, **meta), capsys)
-    main(["pane-approved", *commit_text(root)])
+    main(["pr-approved", *pr_text(root)])
 
 
 def refusal(capsys: pytest.CaptureFixture[str], command: str, options: list[str]) -> str:
@@ -120,15 +114,15 @@ def refusal(capsys: pytest.CaptureFixture[str], command: str, options: list[str]
 
 def refused(root: Path, capsys: pytest.CaptureFixture[str], records: list[dict[str, Any]], **meta: object) -> str:
     pin(write(root, records, **meta), capsys)
-    return refusal(capsys, "pane-approved", commit_text(root))
+    return refusal(capsys, "pr-approved", pr_text(root))
 
 
-def test_a_finished_read_only_review_approves_the_commit(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    approved(repo, capsys, review(repo, printed(capsys, "pane-fingerprint", commit_text(repo))))
+def test_a_finished_read_only_review_approves_the_pull_request(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    approved(repo, capsys, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo))))
 
 
 def test_a_background_review_answers_through_its_handback(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     handback = tool("SubagentHandback", message=f"No findings.\nPANE-APPROVE {shown}\n")
     # Its closing text before the handback never reached the caller; the handback is the answer.
     records = [*review(repo, shown, answer="Done."), handback, result()]
@@ -136,7 +130,7 @@ def test_a_background_review_answers_through_its_handback(repo: Path, capsys: py
 
 
 def test_grep_and_glob_and_a_prompt_in_parts_count(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     records = review(repo, shown)
     words = records[0]["message"]["content"]
     records[0] = line("user", [{"type": "text", "text": words}, {"type": "image"}])
@@ -148,13 +142,13 @@ def test_the_pin_is_absolute_and_replaces_a_codex_pin(
     repo: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     main(["pane-pin", "--session", SESSION])
-    transcript = write(repo, review(repo, printed(capsys, "pane-fingerprint", commit_text(repo))))
+    transcript = write(repo, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo))))
     (repo / "sub").mkdir()
     monkeypatch.chdir(repo / "sub")
     # Pinned from a subfolder by a relative path; the hook later runs from the root.
     main(["pane-pin", "--subagent", os.path.relpath(transcript)])
     monkeypatch.chdir(repo)
-    main(["pane-approved", *commit_text(repo)])
+    main(["pr-approved", *pr_text(repo)])
 
 
 def test_a_missing_transcript_cannot_be_pinned(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -174,10 +168,11 @@ def test_a_file_that_is_no_subagent_transcript_cannot_be_pinned(repo: Path, caps
     assert "subagent" in refusal(capsys, "pane-pin", ["--subagent", str(repo / "a.py")])
 
 
-def test_a_staged_change_voids_it(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+def test_a_new_commit_voids_it(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     (repo / "b.py").write_text("x\n")
     subprocess.run(["git", "add", "b.py"], check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", "commit", "-qm", "c"], check=True)
     # The new fingerprint is not in the prompt, so the run is not a review of this text.
     assert "was not asked to review" in refused(repo, capsys, records)
 
@@ -185,28 +180,28 @@ def test_a_staged_change_voids_it(repo: Path, capsys: pytest.CaptureFixture[str]
 def test_an_answer_that_does_not_end_with_the_approval_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     answer = f"PANE-APPROVE {shown}\nFindings: P2 a.py:1 breaks."
     records = review(repo, shown, answer=answer)
     assert "fallback reviewer's last answer does not end with" in refused(repo, capsys, records)
 
 
-def test_a_message_without_the_fallback_line_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    (repo.parent / "message").write_text(f"feat: one\n\nWhy it changes. {FALLBACK_LINE}\n")
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+def test_a_body_without_the_fallback_line_on_its_own_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (repo.parent / "body.md").write_text(f"## Summary\n\nOne change. {FALLBACK_LINE}\n")
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert FALLBACK_LINE in refused(repo, capsys, records)
 
 
 @pytest.mark.parametrize("meta", [{"finished": None}, {"finished": False}])
 def test_an_unfinished_run_is_refused(repo: Path, capsys: pytest.CaptureFixture[str], meta: dict[str, Any]) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "has not finished" in refused(repo, capsys, records, **meta)
 
 
 @pytest.mark.parametrize("kind", ["Explore", "general-purpose"])
 def test_the_agent_type_does_not_decide(repo: Path, capsys: pytest.CaptureFixture[str], kind: str) -> None:
     """Any type that called only Read, Grep and Glob passes; Explore's Bash is refused below, not its type."""
-    approved(repo, capsys, review(repo, printed(capsys, "pane-fingerprint", commit_text(repo))), agentType=kind)
+    approved(repo, capsys, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo))), agentType=kind)
 
 
 NOT_OWN = [{"agentId": "a0"}, {"isSidechain": False}, {"isSidechain": None}, {"message": None}]
@@ -216,13 +211,13 @@ NOT_OWN = [{"agentId": "a0"}, {"isSidechain": False}, {"isSidechain": None}, {"m
 def test_a_turn_that_is_not_the_subagents_own_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], fields: dict[str, Any]
 ) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     records[2] = {**records[2], **fields}
     assert "not subagent" in refused(repo, capsys, records)
 
 
 def test_a_fork_that_starts_from_the_parents_context_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "was not asked to review" in refused(repo, capsys, [said("Earlier context."), *records])
 
 
@@ -231,7 +226,7 @@ def test_a_transcript_with_no_turns_is_refused(repo: Path, capsys: pytest.Captur
 
 
 def test_a_prompt_for_another_checkout_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    records = review(repo.parent / "other", printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo.parent / "other", printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "was not asked to review" in refused(repo, capsys, records)
 
 
@@ -243,7 +238,7 @@ def test_a_worktree_line_that_is_not_exactly_the_checkout_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], other: str
 ) -> None:
     """The Worktree line is compared whole: a nested, longer or trailing-slash path is another checkout."""
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     records = review(repo, shown)
     records[0] = line("user", f"Worktree: {other.format(root=repo)}\nFingerprint: {shown}")
     assert "was not asked to review" in refused(repo, capsys, records)
@@ -262,7 +257,7 @@ def test_a_prompt_without_one_whole_worktree_line_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], words: str
 ) -> None:
     """The path somewhere in the text is not enough: the prompt needs one line that is only Worktree and the path."""
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     records = review(repo, shown)
     records[0] = line("user", words.format(root=repo, shown=shown))
     assert "was not asked to review" in refused(repo, capsys, records)
@@ -272,9 +267,9 @@ def test_a_prompt_without_one_whole_worktree_line_is_refused(
 def test_the_worktree_line_may_quote_the_path_in_backticks(
     repo: Path, capsys: pytest.CaptureFixture[str], named: str
 ) -> None:
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     records = review(repo, shown)
-    records[0] = line("user", f"Review the staged diff.\n{named.format(root=repo)}\nFingerprint: {shown}")
+    records[0] = line("user", f"Review the pull request diff.\n{named.format(root=repo)}\nFingerprint: {shown}")
     approved(repo, capsys, records)
 
 
@@ -286,18 +281,18 @@ def test_a_tool_other_than_read_grep_and_glob_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], name: str
 ) -> None:
     """Bash included: Explore and Plan may run it, and a shell command can write. A handback only ends the run."""
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     records.insert(2, tool(name, command="git diff --cached > review.diff", message="x"))
     assert f"(fallback-reviewer) used tools other than Read, Grep and Glob: {name}" in refused(repo, capsys, records)
 
 
 def test_a_last_step_that_calls_a_writing_tool_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "Read, Grep and Glob: Bash" in refused(repo, capsys, [*records, tool("Bash", command="touch x")])
 
 
 def test_a_run_that_never_answered_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "never answered" in refused(repo, capsys, records[:1])
 
 
@@ -306,7 +301,7 @@ def test_an_empty_last_turn_voids_an_earlier_approval(
     repo: Path, capsys: pytest.CaptureFixture[str], content: str | list[Any]
 ) -> None:
     """The approval line sits in the turn before; the last turn says nothing, so there is no answer."""
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "never answered" in refused(repo, capsys, [*records, line("assistant", content)])
 
 
@@ -324,43 +319,27 @@ def test_an_empty_last_turn_voids_an_earlier_approval(
 def test_a_last_step_with_no_answer_is_refused(
     repo: Path, capsys: pytest.CaptureFixture[str], last: dict[str, Any]
 ) -> None:
-    records = review(repo, printed(capsys, "pane-fingerprint", commit_text(repo)))
+    records = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
     assert "neither text nor a SubagentHandback" in refused(repo, capsys, [*records, last])
 
 
 def test_an_assistant_turn_as_one_string_counts(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    shown = printed(capsys, "pane-fingerprint", commit_text(repo))
+    shown = printed(capsys, "pr-fingerprint", pr_text(repo))
     approved(repo, capsys, [*review(repo, shown)[:-1], line("assistant", f"No findings.\nPANE-APPROVE {shown}")])
 
 
 def test_a_cut_off_transcript_is_refused(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    transcript = write(repo, review(repo, printed(capsys, "pane-fingerprint", commit_text(repo))))
+    transcript = write(repo, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo))))
     transcript.write_text(transcript.read_text() + '{"type": "assistant", "message": {"ro\n')
     pin(transcript, capsys)
-    assert "Invalid JSON" in refusal(capsys, "pane-approved", commit_text(repo))
+    assert "Invalid JSON" in refusal(capsys, "pr-approved", pr_text(repo))
 
 
 def test_a_missing_meta_file_is_a_named_failure(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    transcript = write(repo, review(repo, printed(capsys, "pane-fingerprint", commit_text(repo))))
+    transcript = write(repo, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo))))
     transcript.with_name(f"agent-{AGENT}.meta.json").unlink()
     pin(transcript, capsys)
-    assert f"agent-{AGENT}.meta.json" in refusal(capsys, "pane-approved", commit_text(repo))
-
-
-def test_an_approved_pull_request_text_passes(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    approved_pr = review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))
-    pin(write(repo, approved_pr), capsys)
-    main(["pr-approved", *pr_text(repo)])
-    # The commit gate does not take a pull request's approval.
-    assert "was not asked to review" in refusal(capsys, "pane-approved", commit_text(repo))
-
-
-def test_a_pull_request_body_without_the_fallback_line_is_refused(
-    repo: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (repo.parent / "body.md").write_text("## Summary\n\nOne change.\n")
-    pin(write(repo, review(repo, printed(capsys, "pr-fingerprint", pr_text(repo)))), capsys)
-    assert FALLBACK_LINE in refusal(capsys, "pr-approved", pr_text(repo))
+    assert f"agent-{AGENT}.meta.json" in refusal(capsys, "pr-approved", pr_text(repo))
 
 
 def test_pr_create_sends_a_fallback_approved_text_with_crlf_lines(

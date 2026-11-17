@@ -37,28 +37,30 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 - Large Codex reviews fan out: a read-only lead splits the change into slices of about 1,000 lines,
   one subagent per slice works every (file, rule) row, and the lead verifies and merges, as
   `tasks/review/python.md` does.
-- Every commit, not only one under `python/`, needs the reviewer pane's own approval: start the
-  reviewer Codex in the checkout being committed and name its session once with
-  `mise run //repo:pane-pin <session id>`. Stage the changed files by name (jouet denies `git add -A`), write the message to a file, run
-  `mise run //repo:pane-fingerprint <message file>` and commit with `git commit -F <message file>`.
-  The reviewer's last final answer must end with the line `PANE-APPROVE <fingerprint>`. Any later
-  final answer withdraws it, so ask for nothing after it. A new commit, a changed index or a changed
-  message voids it. Resume the reviewer with `codex resume <id> -a never -s read-only`: a plain
-  resume runs under the global config, full access here, and only a last turn under policy `never`
-  and read-only approves. This is a local record: the pin and Codex's session log are plain files
-  that anyone running as this user can edit, so it catches mistakes, not a forger.
+- Commits need no approval. Each pull request gets one Codex review of its whole diff (every commit in
+  it) and its title and body: start the reviewer Codex in the PR's checkout and name its session once
+  with `mise run //repo:pane-pin <session id>`. Write the body to a file and give the reviewer the
+  output of `mise run //repo:pr-fingerprint <title> <body file>`. The reviewer's last final answer
+  must end with the line `PANE-APPROVE <fingerprint>`. Any later final answer withdraws it, so ask
+  for nothing after it. A new commit or a changed title or body voids it. Resume the reviewer with
+  `codex resume <id> -a never -s read-only`: a plain resume runs under the global config, full access
+  here, and only a last turn under policy `never` and read-only approves. This is a local record: the
+  pin and Codex's session log are plain files that anyone running as this user can edit, so it
+  catches mistakes, not a forger.
 - While Codex is out of quota, the fallback reviewer approves instead
-  (`~/.config/agents/workflow/cross-review.md`): write the staged diff to a file, run a fresh
-  `fallback-reviewer` subagent (Read, Grep and Glob only; `.claude/agents/fallback-reviewer.md`) and pin
-  its transcript with `mise run //repo:pane-pin --subagent <agent-*.jsonl>`. The commit message or PR
-  body carries, from before the fingerprint, the line
-  `Reviewed by the fallback reviewer (Codex quota depleted).` Go back to the Codex pane when quota returns.
-- Open a pull request only with `mise run //repo:pr-create <title> <body file>`, after the reviewer
-  approved `mise run //repo:pr-fingerprint <title> <body file>` the same way. The task sends the
-  bytes it checked. Edit a PR's title or body, or comment, only after the same approval of the new
-  text. This is a rule, not a lock: `.claude/settings.json` makes Claude ask the owner before
-  `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can still
-  publish anything. `gh pr merge` is not on that list: the lead merges its own pull request (owner
+  (`~/.config/agents/workflow/cross-review.md`): write every commit of the PR, message and diff, to a
+  file (`git log -p --diff-merges=separate --reverse origin/main..HEAD`), run a fresh `fallback-reviewer` subagent (Read,
+  Grep and Glob only; `.claude/agents/fallback-reviewer.md`) and pin its transcript with
+  `mise run //repo:pane-pin --subagent <agent-*.jsonl>`. The PR body carries, from before the
+  fingerprint, the line `Reviewed by the fallback reviewer (Codex quota depleted).` Go back to the
+  Codex pane when quota returns.
+- The order is fixed (owner ruling, 2026-11-17): the reviewer approves the PR diff and text at the
+  branch head before any push, then push the branch, then `mise run //repo:pr-create <title> <body file>`,
+  then `pr-merge`. Nothing of the branch reaches GitHub before that approval. Open a pull request
+  only with `pr-create`; the task sends the bytes it checked. Edit a PR's title or body, or comment,
+  only after the same approval of the new text. This is a rule, not a lock: `.claude/settings.json`
+  makes Claude ask the owner before `pr-create` and `gh pr` and `gh issue` writes, but the web UI
+  and other clients can still publish anything. `gh pr merge` is not on that list: the lead merges its own pull request (owner
   ruling, 2026-11-15) with `mise run //repo:pr-merge <number> <title> <body file>` from the PR's clean
   checkout. It refuses unless HEAD is the PR head, the reviewer's last answer approves the PR text at
   that HEAD and `hk check --all` passes; then it runs `gh pr merge N --merge --match-head-commit
@@ -67,9 +69,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   It runs the repotools that `mise run //repo:tools-install` installed from `main`, never the branch's
   own code; rerun that install on `main` after a merge that changes repotools.
   Hosted checks from free apps are advisory, and no paid CI is added.
-- This repo is public and the approval is its leak check. Before approving, the reviewer reads the
-  whole staged diff and the commit message, or the PR title and body, for content from a private
-  project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
+- This repo is public and the PR approval is its leak check. Before approving, the reviewer reads the
+  whole PR diff, every commit in it with its message, and the PR title and body for content from a
+  private project: challenge names, C++ solution code, benchmark numbers, harness paths or challenge
   research. If any is there it does not approve. Never commit with `--no-verify` or `HK=0`.
 - No public text carries a claude.ai session link: commit messages, PR titles and bodies, issues and
   comments have no `https://claude.ai/code/session_…` URL and no `Claude-Session:` trailer, even when
@@ -121,10 +123,10 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents
   (it wraps `repotools pr-create`); the lead merges it with `mise run //repo:pr-merge`, and local `main` only fast-forwards
   to `origin/main`.
 - Research: notes go in `docs/research/`.
-- Review approval: the pinned reviewer pane approves each commit (`repotools pane-pin`,
-  `repotools pane-fingerprint`, through `mise run //repo:pane-pin` and `//repo:pane-fingerprint`;
-  see `~/.config/agents/workflow/cross-review.md`). The hk `commit-msg` step `pane-approval` runs
-  `mise run //repo:pane-approved` and refuses a commit the pane has not approved.
+- Review approval: the pinned reviewer pane approves each pull request (`repotools pane-pin`,
+  `repotools pr-fingerprint`, through `mise run //repo:pane-pin` and `//repo:pr-fingerprint`;
+  see `~/.config/agents/workflow/cross-review.md`). `pr-create` and `pr-merge` refuse a pull request
+  the pane has not approved at its head. Commits need no approval.
 - Content guard: the reviewer's leak check on the exact bytes, bound to the approval fingerprint. The
   reviewer approves only bytes it has read and found free of private content. Any change to those bytes
   changes the fingerprint and voids the approval. The home-path scan is not the content guard.

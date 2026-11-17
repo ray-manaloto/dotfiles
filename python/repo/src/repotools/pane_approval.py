@@ -1,11 +1,7 @@
-"""A commit needs the reviewer pane's approval of HEAD, the whole index and the message; a pull request, of its text."""
+"""A pull request needs the reviewer pane's approval of HEAD and its title and body; commits need none."""
 
-# The approval is read from Codex's own session log. This repository is public, and the reviewer is its leak check.
-# Precedent for gating a commit on what is staged: onlygian/G-Forge@5ed9839b hooks/pre-commit:150-155 and
-# CEDRIC-code1982/Mivro@715fa888 scripts/review-gate.sh:20,37 compare git write-tree. This hashes ls-files
-# instead: write-tree writes objects, and the read-only reviewer must be able to compute the same value.
-# Gerrit's commit-msg hook, as vendored in TYPO3/typo3@d389f860 Build/git-hooks/commit-msg:34-46,175-188, hashes
-# the message from $1 after git stripspace with the tree and parent; the message is hashed the same way here.
+# The approval is read from Codex's own session log. This repository is public, and the reviewer is its leak check:
+# it reads the whole pull request diff, every commit in it, and the text before it approves.
 # A pull request's title and body are hashed as they are sent: GitHub stores and renders the body as given.
 # A local record: anyone running as this user can edit the log or the pin. See AGENTS.md.
 
@@ -17,10 +13,10 @@ from typing import Any, cast
 
 from . import process, subagent_review
 from .git import git
-from .models import CommitText, Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
+from .models import Message, PanePin, PrText, RolloutLine, SessionMeta, TaskEvent, TurnContext
 
 APPROVAL = "PANE-APPROVE"
-# The body line a commit message or pull request carries when the fallback reviewer approved it (AGENTS.md). A body
+# The body line a pull request carries when the fallback reviewer approved it (AGENTS.md). A body
 # line, not a trailer: the repository allows only the Co-Authored-By trailer.
 FALLBACK_LINE = "Reviewed by the fallback reviewer (Codex quota depleted)."
 CITATION_OPEN = "<oai-mem-citation>"
@@ -58,33 +54,18 @@ def base() -> str:
     return done.stdout.strip().removeprefix("origin/")
 
 
-def stripped(path: str) -> str:
-    # git commit cleans the message the same way before it is stored, so a trailing blank line changes nothing.
-    # Git 2.56.0 builtin/stripspace.c:61-70, read offline: reads to EOF before output; fingerprints stay read-only.
-    # ast-grep-ignore: no-captured-stdin
-    return subprocess.run(
-        ["git", "stripspace"], input=Path(path).read_text(), capture_output=True, check=True, text=True
-    ).stdout
-
-
-def fingerprint(text: CommitText | PrText, body: bytes | None = None) -> str:
+def fingerprint(text: PrText, body: bytes | None = None) -> str:
     """What the reviewer approves. From the root, its own command gives these bytes:
 
-    { git rev-parse --verify -q HEAD || echo unborn; git ls-files -s; echo; git stripspace < MESSAGE; } |
-      git hash-object --stdin
     { echo "pull request"; git rev-parse --verify -q HEAD || echo unborn; echo "$TITLE"; echo; cat BODY; } |
       git hash-object --stdin
 
-    Run them in the checkout: outside one, git fails and this command reports it instead of hashing "unborn".
+    Run it in the checkout: outside one, git fails and this command reports it instead of hashing "unborn".
 
     body, when given, is the body file as already read, so what is checked is what is sent.
     """
-    if isinstance(text, PrText):
-        sent = Path(text.body_file).read_bytes() if body is None else body
-        return hashed(f"pull request\n{head()}{text.title}\n\n".encode() + sent)
-    # :/ and --full-name keep the whole index when run from a subfolder, where ls-files lists only that folder.
-    listing = git("ls-files", "-s", "--full-name", ":/")
-    return hashed(f"{head()}{listing}\n{stripped(text.message)}".encode())
+    sent = Path(text.body_file).read_bytes() if body is None else body
+    return hashed(f"pull request\n{head()}{text.title}\n\n".encode() + sent)
 
 
 def pin_file() -> Path:
@@ -97,7 +78,7 @@ def pin(chosen: PanePin) -> None:
         msg = "pin one reviewer: --session <Codex session id> or --subagent <agent-*.jsonl>"
         raise ValueError(msg)
     if chosen.subagent is not None:
-        # Absolute now: the hook runs from the checkout's root, the author maybe from elsewhere.
+        # Absolute now: the approval check runs from the checkout's root, the author maybe from elsewhere.
         transcript = Path(chosen.subagent).resolve(strict=True)
         pin_file().write_text(f"{transcript}\n")
     else:
@@ -254,16 +235,13 @@ def read_only(context: TurnContext) -> bool:
     )
 
 
-def stated(text: CommitText | PrText, body: bytes | None) -> bool:
-    """Whether the commit message or the pull request body says, on a line of its own, that the fallback approved it."""
-    if isinstance(text, PrText):
-        words = (Path(text.body_file).read_bytes() if body is None else body).decode(errors="replace")
-    else:
-        words = stripped(text.message)
+def stated(text: PrText, body: bytes | None) -> bool:
+    """Whether the pull request body says, on a line of its own, that the fallback approved it."""
+    words = (Path(text.body_file).read_bytes() if body is None else body).decode(errors="replace")
     return FALLBACK_LINE in (line.rstrip("\r") for line in words.split("\n"))
 
 
-def check_subagent(transcript: str, text: CommitText | PrText, body: bytes | None) -> None:
+def check_subagent(transcript: str, text: PrText, body: bytes | None) -> None:
     root = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
     printed = fingerprint(text, body)
     answer = subagent_review.answer(Path(transcript), root, printed)
@@ -272,11 +250,11 @@ def check_subagent(transcript: str, text: CommitText | PrText, body: bytes | Non
         msg = f"the fallback reviewer's last answer does not end with: {wanted}"
         raise ValueError(msg)
     if not stated(text, body):
-        msg = f"a fallback approval needs this line in the commit message or pull request body: {FALLBACK_LINE}"
+        msg = f"a fallback approval needs this line in the pull request body: {FALLBACK_LINE}"
         raise ValueError(msg)
 
 
-def check(text: CommitText | PrText, body: bytes | None = None) -> None:
+def check(text: PrText, body: bytes | None = None) -> None:
     chosen = pinned()
     if chosen.subagent is not None:
         check_subagent(chosen.subagent, text, body)
