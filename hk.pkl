@@ -188,11 +188,6 @@ hooks {
                 )
                 check = "mise run //home:integration"
             }
-            // AGENTS.md: review:python must pass first. Only compares a fingerprint, so no Codex run here.
-            ["python-review"] {
-                glob = List("python/**")
-                check = "mise run review:python:approved"
-            }
         }
     }
     // The package checks for the files the push changes. The private-paths scan covers every commit a push would

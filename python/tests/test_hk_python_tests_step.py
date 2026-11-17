@@ -51,7 +51,7 @@ class PythonTestsStepTest(unittest.TestCase):
                 root = Path(tmp)
                 git = ["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@e"]
                 subprocess.run([*git, "init", "-q"], check=True)
-                steps = f'["{STEP}"] {{\n        glob = new Listing {{ {" ".join(json.dumps(g) for g in glob)} }}\n'
+                steps = f'["{STEP}"] {{\n        glob = List({", ".join(json.dumps(g) for g in glob)})\n'
                 steps += '        check = "echo STEP-RAN"\n    }\n'
                 (root / "hk.pkl").write_text(
                     f'{first_line}\n\nhooks {{\n    ["check"] {{\n        steps {{\n    {steps}}}\n    }}\n}}\n'

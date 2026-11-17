@@ -99,7 +99,7 @@ def remove() -> None:
 
 
 def armed() -> bool:
-    """Whether hk's post-merge step has nothing to install. Only origin/main's reviewed code is ever installed:
+    """Whether hk's post-merge step has nothing to install. Only origin/main's merged code is ever installed:
     main checked out at origin/main's commit, with no local change under python/repo."""
     head = subprocess.run(["git", "symbolic-ref", "--quiet", "HEAD"], capture_output=True, check=False, text=True)
     reviewed = head.stdout.strip() == MAIN and resolve("HEAD") == resolve(f"{ORIGIN}^{{commit}}")

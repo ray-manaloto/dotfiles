@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: "Use when the owner says /to-tickets or asks to split a spec issue into tickets: tracer-bullet GitHub issues, blockers first, each published only after the home-path scan, the reviewer's leak check and the owner's approval of its exact text, then given its plan and roadmap line."
+description: "Use when the owner says /to-tickets or asks to split a spec issue into tickets: tracer-bullet GitHub issues, blockers first, each published only after the home-path scan, the author's leak check and the owner's approval of its exact text, then given its plan and roadmap line."
 disable-model-invocation: false
 ---
 
@@ -14,7 +14,7 @@ Break a spec issue into a set of **tickets**: tracer-bullet vertical slices, eac
 Adapted from mattpocock-skills 1.3.2 `to-tickets` (MIT, `../LICENSE`).
 
 - Tickets are GitHub issues, sub-issues of the spec, with native blocked-by links. There is no local-files form.
-- Each ticket is published only after the home-path scan, the reviewer's leak check and the owner's approval of
+- Each ticket is published only after the home-path scan, the author's leak check and the owner's approval of
   its exact text. Until then it stays a local file.
 - The coordinator creates each ticket's plan in the sibling plans folder and is the only writer of the roadmap in
   the main checkout.
@@ -85,8 +85,8 @@ a `.title` file beside it. Steps 1-4 cover both files of every ticket. Then, for
 
 1. **Home-path scan.** `repotools privacy-scan --patterns="$HOME" --files="<ticket file> <title file>"` must exit 0.
    A clean scan only means no home path; it is not the leak check.
-2. **Leak check.** Ask the reviewer pane (`~/.config/agents/workflow/cross-review.md`) for a document review of the
-   files that includes the leak check. Fix what it finds and repeat from the scan.
+2. **Leak check.** Read the files for private project content, claude.ai session links and home paths, and fix
+   what you find. A Codex document review (`~/.config/agents/workflow/cross-review.md`) is optional.
 3. **Approval.** Show the owner each exact title and body with `git hash-object <title file> <ticket file>`, and ask for
    approval of that text. Without an explicit yes, stop: the tickets stay local.
 4. **Publish** in dependency order, blockers first, so each blocked-by can name a real issue number. Before each

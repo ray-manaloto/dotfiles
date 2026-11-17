@@ -64,7 +64,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "Upgrading the PC",
                 "No --privileged containers on the PC",
                 "Workflow",
-                "Pull-request approval",
+                "Pull requests",
                 "Cross-review",
                 "Large reviews fan out",
                 "context7 snapshot",
@@ -104,25 +104,10 @@ class SharedAgentsTest(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertEqual(hashlib.sha256(text.encode()).hexdigest(), expected)
 
-    def test_the_cross_review_rule_names_the_pane_commands(self) -> None:
+    def test_the_cross_review_rule_matches_its_workflow_file(self) -> None:
         source = (WORKFLOW / "cross-review.md").read_text()
         rule = source.split("# Cross-review\n\n", 1)[1].split("\n\n", 1)[0]
-        section = self.section("Cross-review")
-        self.assertIn(" ".join(rule.splitlines()), section)
-        self.assertIn("repotools pane-pin", section)
-        self.assertIn("repotools pr-fingerprint", section)
-
-    def test_the_approval_rule_uses_the_installed_commands(self) -> None:
-        section = self.section("Pull-request approval")
-        for command in (
-            "repotools pane-pin --session",
-            "repotools pr-create --title",
-            "repotools pr-fingerprint --title",
-            "mise run //repo:tools-install",
-        ):
-            with self.subTest(command=command):
-                self.assertIn(command, section)
-        self.assertNotIn("mise run //repo:pane", section)
+        self.assertIn(" ".join(rule.splitlines()), self.section("Cross-review"))
 
     def test_no_machine_path_or_five_stage_text(self) -> None:
         for forbidden in ("/Users/", "/home/", "five-stage", "Five-stage"):

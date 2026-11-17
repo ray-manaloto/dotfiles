@@ -118,8 +118,8 @@ agents and permissions reviewed in a diff before anything live moves.
   hook loads in it, the review refuses to run (`review_unqualified`), so no upgrade reaches prepare.
 - **The committed upgrade report is an allowlisted public projection.** It uses symbolic path labels and links
   by hash to a full private report in the local state folder. Its free text (release notes, review output, the
-  owner's public reasons) still passes the repository's leak checks: hk `private-paths` and the reviewer pane's
-  reading of the whole diff before it approves the commit.
+  owner's public reasons) still passes the repository's leak checks: hk `private-paths` and the author's
+  reading of the whole diff before it is published.
 - **The tested executable is bound to the locked release.** The trial's `mise lock` step writes the
   host-platform entry into a lockfile. This repository's root `mise.toml` sets
   `[monorepo].lockfile = true`, so a package config's entries go to the tracked root `mise.lock` (mise

@@ -158,7 +158,7 @@ _Avoid_: Process docs, playbook
 
 **Workflow facts**:
 The few facts about one repository that the workflow docs leave open: its check, how a change
-ships, where research goes and how a review is approved. Each repository states them in its own
+ships and where research goes. Each repository states them in its own
 AGENTS.md, after it has been set up for the workflow skills.
 _Avoid_: Repo config, project settings
 
@@ -186,7 +186,7 @@ _Avoid_: Dead edge
 ### Agent sessions
 
 **Reviewer**:
-The read-only Codex session that reviews a change and gives the owner's approval line for it. It
+The read-only Codex session that reviews a change when a lead asks for one; no review is required. It
 reads and judges; it never changes the files it reviews.
 _Avoid_: Approvals reviewer, guardian, checker
 

@@ -27,7 +27,7 @@ Check these in order. If one fails, stop: tell the owner which one and show the 
    Workers need both before they start; you do not create either.
 3. Start each worker as the workflow says: a herdr-app tab in its worktree, with its `PLAN_ID` set, running
    `/implement <owner/repo>#<number>`. Communicate through pointers: the spec, the ticket, the plan folder.
-4. When a worker hands back staged changes, its commit goes through that worktree's reviewer pane
+4. When a worker hands back staged changes, the coordinator or owner commits them
    (`~/.config/agents/workflow/ship.md`). You do not commit, merge or write to GitHub.
 5. When the coordinator reports the frontier changed, start workers for the new tickets.
 6. Stop and report: each ticket, its worktree, what it handed back, and what is still blocked. Close every tab
@@ -41,7 +41,7 @@ Adapted from mattpocock-skills 1.3.2 `implement-spec` (MIT, see `../LICENSE`).
   background subagents.
 - Pinned to an existing plan by `PLAN_ID`; the coordinator creates every plan and worktree.
 - Never writes the roadmap; the coordinator is its only writer.
-- Never commits or merges: workers stage and hand back, and commits go through the reviewer pane. Upstream
+- Never commits or merges: workers stage and hand back, and the coordinator or owner commits. Upstream
   merges each ticket into the integration branch and opens a pull request.
 - Model-invocable (`disable-model-invocation: false`); upstream is user-only.
 - Stops when a prerequisite is missing: no worktree, no `PLAN_ID`, no plan.

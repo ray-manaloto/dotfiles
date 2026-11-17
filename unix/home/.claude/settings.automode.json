@@ -2,7 +2,7 @@
   "autoMode": {
     "allow": [
       "$defaults",
-      "Lead Self-Merge: on the owner's ray-manaloto repositories, the owner ruled (2026-11-15) that a project lead merges its own pull request once its local hk checks passed and its Codex reviewer approved that exact head; that Codex approval is the review, so Merge Without Review does not block `gh pr merge N --merge --match-head-commit <sha> --author-email 1428022+sortakool@users.noreply.github.com`, optionally with `-R ray-manaloto/<repo>`, nor `mise run //repo:pr-merge <number> <title> <body file>` in the dotfiles repository, which checks those gates itself and then runs that same command. Only those forms: never `--admin`, `--auto`, `--squash` or `--rebase`, and never another owner's repository."
+      "Lead Self-Merge: on the owner's ray-manaloto repositories, the owner ruled (2026-11-15, and 2026-11-17: no review is required) that a project lead merges its own pull request once its local hk checks passed on that exact head, so Merge Without Review does not block `gh pr merge N --merge --match-head-commit <sha> --author-email 1428022+sortakool@users.noreply.github.com`, optionally with `-R ray-manaloto/<repo>`, nor `mise run //repo:pr-merge <number> <title> <body file>` in the dotfiles repository, which checks those gates itself and then runs that same command. Only those forms: never `--admin`, `--auto`, `--squash` or `--rebase`, and never another owner's repository."
     ]
   }
 }

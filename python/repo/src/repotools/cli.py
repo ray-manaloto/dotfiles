@@ -11,7 +11,6 @@ from . import (
     gates,
     main_guard,
     merge,
-    pane_approval,
     scratch_env,
     shell,
     test_times,
@@ -22,19 +21,15 @@ from . import (
 from .models import (
     Command,
     Failure,
-    Fingerprint,
     FnoxRefs,
     MainGuard,
     MainGuardArmed,
     MainGuardInstall,
     MainGuardRemove,
     Options,
-    PanePin,
     PrivacyScan,
     PrMerge,
     PrText,
-    ReviewApproved,
-    ReviewPython,
     ScratchEnv,
     ShellApply,
     ShellRollback,
@@ -45,14 +40,9 @@ from .models import (
 )
 
 OPTIONS: dict[Command, type[Options]] = {
-    Command.pane_pin: PanePin,
-    Command.pr_fingerprint: PrText,
-    Command.pr_approved: PrText,
     Command.pr_create: PrText,
     Command.pr_merge: PrMerge,
     Command.zero_bash: ZeroBash,
-    Command.review_python: ReviewPython,
-    Command.review_python_approved: ReviewApproved,
     Command.privacy_scan: PrivacyScan,
     Command.main_guard: MainGuard,
     Command.main_guard_install: MainGuardInstall,
@@ -74,7 +64,7 @@ NO_OPTIONS: dict[type[Options], Callable[[], None]] = {
 }
 
 
-def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
+def parse(argv: Sequence[str]) -> Options | ScratchEnv:
     if not argv or argv[0] not in set(Command):
         msg = f"repotools: the first argument is one of {', '.join(Command)}"
         raise ValueError(msg)
@@ -83,7 +73,7 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
     # annotation carries CliPositionalArg (pydantic-settings 2.16.2 sources/providers/cli.py:352,955), which
     # datamodel-codegen cannot write into the generated model, so the schema's model validates them here.
     if command is Command.scratch_env:
-        return command, ScratchEnv.model_validate({"folder": argv[1] if argv[1:] else "", "command": argv[2:]})
+        return ScratchEnv.model_validate({"folder": argv[1] if argv[1:] else "", "command": argv[2:]})
     model = OPTIONS[command]
     cli = CliSettingsSource(
         # CliApp.run documents BaseModel input; CliSettingsSource's annotation says BaseSettings only.
@@ -93,39 +83,33 @@ def parse(argv: Sequence[str]) -> tuple[Command, Options | ScratchEnv]:
         cli_implicit_flags=True,
         cli_exit_on_error=False,
     )
-    return command, CliApp.run(model, cli_args=list(argv[1:]), cli_settings_source=cli)
+    return CliApp.run(model, cli_args=list(argv[1:]), cli_settings_source=cli)
 
 
-def run(command: Command, options: Options) -> None:
+def run(options: Options) -> None:
     if isinstance(options, ZeroBash):
         zero_bash.report(options)
-    elif isinstance(options, ReviewPython | ReviewApproved | PrivacyScan):
-        gates.dispatch(options)
+    elif isinstance(options, PrivacyScan):
+        gates.privacy_scan(options)
     elif isinstance(options, MainGuard | MainGuardInstall | MainGuardRemove | MainGuardArmed):
         main_guard.dispatch(options)
     elif isinstance(options, ShellApply | ShellRollback):
         shell.dispatch(options)
-    elif isinstance(options, PanePin):
-        pane_approval.pin(options)
     elif isinstance(options, PrMerge):
         merge.merge(options)
-    elif isinstance(options, PrText) and command is Command.pr_create:
-        pane_approval.create(options)
-    elif isinstance(options, ToolsInstall | TestTimes | Trust | FnoxRefs):
-        NO_OPTIONS[type(options)]()
-    elif command is Command.pr_approved:
-        pane_approval.check(options)
+    elif isinstance(options, PrText):
+        merge.create(options)
     else:
-        sys.stdout.write(Fingerprint(fingerprint=pane_approval.fingerprint(options)).model_dump_json() + "\n")
+        NO_OPTIONS[type(options)]()
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     try:
-        command, options = parse(sys.argv[1:] if argv is None else argv)
+        options = parse(sys.argv[1:] if argv is None else argv)
         if isinstance(options, ScratchEnv):  # parsed by position, so it stays out of run()
             scratch_env.run(options)
         else:
-            run(command, options)
+            run(options)
     except subprocess.CalledProcessError as error:
         stderr = error.stderr.decode(errors="replace") if isinstance(error.stderr, bytes) else error.stderr
         sys.stderr.write(Failure(error=f"{error.cmd[0]} failed: {stderr}").model_dump_json() + "\n")
