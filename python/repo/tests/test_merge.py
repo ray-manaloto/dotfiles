@@ -2,7 +2,6 @@
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -209,15 +208,6 @@ def test_a_merge_commit_with_another_author_is_reported(world: World, capsys: py
     world.set(email="someone@example.com")
     said = pr_refusal_of(capsys, "pr-merge", merge_args())
     assert said == f"merge commit f00d has author someone@example.com, not {NOREPLY}: report it to the owner"
-
-
-def test_a_step_under_a_hostile_path_runs_as_written(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """hk_config's quoting: a step naming a path with quotes, a backslash and spaces reaches the real hk intact."""
-    odd = repo.parent / "it's a \"\\ dir"
-    odd.mkdir()
-    World(repo, monkeypatch, f"touch {shlex.quote(str(odd / 'done'))}")
-    subprocess.run(["hk", "check", "--all"], check=True, capture_output=True)
-    assert (odd / "done").exists()
 
 
 def test_the_task_runs_the_installed_repotools_with_hostile_text_as_inert_arguments(

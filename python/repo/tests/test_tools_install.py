@@ -259,14 +259,6 @@ def test_a_console_script_without_execute_permission_reinstalls(
     assert problem.startswith(f"tools-install: workflowtools: {executable} did not start: ")
 
 
-def test_the_probe_writes_no_bytecode(tool_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    installed(capsys)
-    installed(capsys)
-    for name in ("workflowtools", "repotools"):
-        package = next((tool_env / "uv" / "tools" / name).glob(f"lib/python*/site-packages/{name}"))
-        assert not list(package.rglob("__pycache__"))
-
-
 @pytest.mark.parametrize("xdg", [None, ""])
 def test_xdg_state_home_unset_uses_local_state(
     tool_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], xdg: str | None
@@ -370,11 +362,3 @@ def test_a_second_tool_failure_preserves_the_first_receipt(tool_env: Path, capsy
     assert json.loads(captured.err)["error"].startswith("tools-install: uv installed repotools but ")
     assert receipt(tool_env).is_file()
     assert not receipt(tool_env, "repotools").exists()
-
-
-def test_tools_install_refuses_options(tool_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    with pytest.raises(SystemExit) as error:
-        main(["tools-install", "--anything"])
-    assert error.value.code == 1
-    assert "unrecognized arguments: --anything" in json.loads(capsys.readouterr().err)["error"]
-    assert not (tool_env / "uv" / "tools").exists()

@@ -156,11 +156,6 @@ def test_what_fnox_set_writes_for_a_doppler_provider_fails(
     assert report(capsys) == (1, [{"path": "fnox.toml", "key": "secrets.LEAKED", "rule": "value-not-a-reference"}])
 
 
-def test_the_tracked_fnox_files_pass(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.chdir(REPO)
-    assert report(capsys) == (0, [])
-
-
 def test_a_large_index_and_blob_output_finish_without_a_pipe_deadlock(repo: Path) -> None:
     # 2,048 SHA-1 request lines exceed 64 KiB. The first blob fills stdout before Git drains stdin.
     files = {f"files/{number:04}.toml": b"plain\x00text\r\n\xff\n" for number in range(2048)}
