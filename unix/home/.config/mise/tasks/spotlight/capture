@@ -12,8 +12,9 @@ The capture covers the last 3 minutes of the unified log and goes to
 MONIT_DESCRIPTION, null by hand); mds_stores' CPU; per-minute counts of mds_stores' "query nodes count" lines (one
 per query step); the processes that logged "Starting query" (subsystem com.apple.metadata), by name and pid, each
 with its command line and, when it runs in a herdr tab, that tab; the line counts of the indexers mdbulkimport,
-corespotlightd and mdworker_shared; the top 5 processes by CPU; and the load averages. `log show` runs under nice
-and taskpolicy -b. `mise run spotlight:spikes` prints one line per capture.
+corespotlightd, mdworker_shared, mdworker, spotlightknowledged and mediaanalysisd; corespotlightd's query lines by
+client bundle (lines and query nodes), its donations by bundle ID, and its 10 most frequent messages; the top 5
+processes by CPU; and the load averages. `log show` runs under nice and taskpolicy -b. `mise run spotlight:spikes` prints one line per capture.
 
 The herdr tab comes from HC_TERMINAL_ID in the client's environment, or its nearest ancestor's (ps -E reads the
 same user's processes, but not a platform binary's such as mdfind), and one `hc ls --json` through hc-safe, which
@@ -36,7 +37,13 @@ SPIKES = HOME / ".local/state/dotfiles/spotlight/spikes"
 HC_SAFE = HOME / ".local/bin/hc-safe"
 HC_SOCKET = HOME / ".local/state/herdr-core/default/default.sock"  # hc's default path (docs/agents/herdr-core.md)
 STORE = "mds_stores"
-INDEXERS = ("mdbulkimport", "corespotlightd", "mdworker_shared")
+INDEXERS = ("mdbulkimport", "corespotlightd", "mdworker_shared", "mdworker", "spotlightknowledged", "mediaanalysisd")
+# Core Spotlight (CSSearchQuery, app donations) runs in corespotlightd and logs no "Starting query" under
+# com.apple.metadata; its query lines name the asking app: "client bundle: <id>, query nodes count <n>" (<private>
+# when the app keeps it hidden), and a donation names "bundleID:<id>".
+BUNDLE = re.compile(r"client bundle: (\S+?), query nodes count (\d+)")
+DONOR = re.compile(r"bundleID:(\S+?)[ ,)]")
+SHAPES = 10  # corespotlightd's most frequent messages, numbers as N
 WINDOW = timedelta(minutes=3)
 # `log show --style compact` lines: date, time, type, process[pid:tid], then the message.
 COMPACT = re.compile(r"^(\S+) (\d\d:\d\d):\S+ +\S+ +(.+?)\[(\d+):\S+\] (.*)$")
@@ -135,8 +142,20 @@ def capture() -> Path:
         queries[(m.group(3), m.group(4))] += 1
     indexers: Counter[str] = Counter(dict.fromkeys(INDEXERS, 0))
     names = ", ".join(f'"{name}"' for name in INDEXERS)
+    bundles: dict[str, dict[str, int]] = defaultdict(lambda: {"lines": 0, "nodes": 0})
+    donors: Counter[str] = Counter()
+    shapes: Counter[str] = Counter()
     for m in log_lines(start, end, f"process IN {{{names}}}"):
         indexers[m.group(3)] += 1
+        if m.group(3) != "corespotlightd":
+            continue
+        message = m.group(5)
+        if asked := BUNDLE.search(message):
+            bundles[asked.group(1)]["lines"] += 1
+            bundles[asked.group(1)]["nodes"] += int(asked.group(2))
+        if donated := DONOR.search(message):
+            donors[donated.group(1)] += 1
+        shapes[re.sub(r"\d+", "N", re.sub(r"0x[0-9a-f]+", "N", message))[:120]] += 1
     where = tabs() if queries else {}
     clients = [
         {"process": name, "pid": int(pid), "queries": count, **client(pid, where)}
@@ -150,6 +169,9 @@ def capture() -> Path:
         "query_nodes_per_minute": dict(sorted(per_minute.items())),
         "starting_query_clients": clients,
         "indexer_lines": dict(indexers),
+        "corespotlight_clients": dict(sorted(bundles.items(), key=lambda item: -item[1]["nodes"])),
+        "corespotlight_donors": dict(donors.most_common()),
+        "corespotlight_messages": dict(shapes.most_common(SHAPES)),
         "top_cpu": top_cpu(),
         "loadavg": list(os.getloadavg()),
     }
