@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import shlex
 import signal
 import sys
@@ -40,7 +41,7 @@ RESTART = ("hc", "send", "t3", "/restart")
 # One run id for every step a test runs: the handshake carries it.
 RUN = "run-t"
 ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-1"))
-FAST = ("--wait", "5", "--settle", "3", "--poll", "0.05", "--run", RUN)
+FAST = ("--wait", "5", "--settle", "3", "--poll", "0.05", "--busy-wait", "0.3", "--run", RUN)
 
 
 def foreground(world: World) -> dict[str, object]:
@@ -76,10 +77,13 @@ def resumed(world: World) -> dict[str, object]:
     return {"real": str(script)}
 
 
-def scene(world: World, chief_state: str = "idle", worker_args: tuple[str, ...] = ()) -> tuple[int, int]:
-    """chief-of-staff (t1), proj / worker (t3, started with worker_args) and this task's own tab proj / roll (t9)."""
+def scene(
+    world: World, chief_state: str = "idle", worker_args: tuple[str, ...] = (), chief_args: tuple[str, ...] = ()
+) -> tuple[int, int]:
+    """chief-of-staff (t1, started with chief_args), proj / worker (t3, started with worker_args) and this task's own
+    tab proj / roll (t9)."""
     proj = world.root / "proj"
-    chief = world.spawn("claude", cwd=world.root / "fix-herdr")
+    chief = world.spawn("claude", *chief_args, cwd=world.root / "fix-herdr")
     world.claude_record(chief, f"chief-{SID}")
     worker = world.spawn("claude", *worker_args, cwd=proj)
     world.claude_record(worker, SID)
@@ -256,10 +260,64 @@ def test_a_chief_of_staff_that_does_not_stop_holds_every_space(world: World, cap
     code, _, _ = hometools(capfd, "all", "--apply", "--accept-review", "--wiki", str(world.wiki), *FAST)
     assert code == 1
     steps = {line.step: line for line in world.runs()}
-    assert [s.result for s in steps[RollStep.stop].sessions] == ["skipped-busy"]
+    # Still busy after --busy-wait: one stop result, with how long it waited.
+    [busy] = steps[RollStep.stop].sessions
+    assert busy.result == "skipped-busy"
+    assert busy.notes[0] == "status working"
+    assert re.fullmatch(r"waited \d+s while busy \(\d+ looks\)", busy.notes[-1])
     assert steps[RollStep.start].sessions == []
     assert ASK not in world.calls()
     assert EXIT not in world.calls()
+
+
+def test_a_busy_chief_of_staff_that_goes_idle_within_the_wait_is_stopped(
+    world: World, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Busy for its first looks, then idle: the stop waits, restarts it, and the run goes on to verify it."""
+    # Both resumes: running() finds the chief of staff by name, and verify's restart check wants --resume <its id>.
+    chief, _ = scene(world, chief_args=("--resume", "chief-of-staff", "--resume", f"chief-{SID}"))
+    in_place = {"bridgeSessionId": None, "nameSource": "derived", "name": "chief-of-staff", "startedAt": 1000}
+    world.claude_record(chief, f"chief-{SID}", **in_place)
+    fix = world.root / "fix-herdr"
+    path = world.home / f".claude/projects/-project/chief-{SID}.jsonl"
+    busy, idle = (out(info("t1", chief, ["claude"], fix, state=state)) for state in ("working", "idle"))
+    world.answer(
+        {
+            # The graph and the update read t1 too: the stop's first looks still find it busy.
+            ("hc", "get", "t1", "--json"): [busy] * 8 + [idle],
+            ("hc", "send", "--wait", "--timeout", "5", "t1", session.request(f"{RUN}-1")): replier(
+                world, path, "READY-TO-RESTART"
+            ),
+            ("hc", "send", "t1", "/restart"): rewriter(world, chief, {"startedAt": int(time.time() * 1000) + 60_000}),
+        }
+    )
+    roll.codeset(apply=True)
+    time.sleep(1.1)
+    args = ("all", "--apply", "--sessions", "chief-of-staff", "--wiki", str(world.wiki), *FAST, "--busy-wait", "30")
+    code, got, err = hometools(capfd, *args)
+    assert code == 0, got + err
+    steps = {line.step: line for line in world.runs()}
+    [down] = steps[RollStep.stop].sessions
+    assert down.result == "restarted"
+    assert re.fullmatch(r"waited \d+s while busy \(\d+ looks\)", down.notes[-1])
+    assert [(s.where, s.result) for s in steps[RollStep.verify].sessions] == [("chief-of-staff / chief-of-staff", "ok")]
+
+
+def test_a_busy_child_is_not_waited_on(world: World, capfd: pytest.CaptureFixture[str]) -> None:
+    """Only the chief of staff is waited on: a busy worker is listed to retry later at once, and fails nothing."""
+    _, worker = scene(world)
+    world.answer(
+        {("hc", "get", "t3", "--json"): out(info("t3", worker, ["claude"], world.root / "proj", state="working"))}
+    )
+    args = ("all", "--apply", "--exclude", "chief-of-staff", "--wiki", str(world.wiki), *FAST, "--busy-wait", "60")
+    began = time.monotonic()
+    code, got, err = hometools(capfd, *args)
+    assert time.monotonic() - began < 30
+    assert code == 0, got + err
+    steps = {line.step: line for line in world.runs()}
+    [skipped] = steps[RollStep.stop].sessions
+    assert (skipped.result, skipped.notes) == ("skipped-busy", ["status working"])
+    assert ASK not in world.calls()
 
 
 def test_a_session_rolls_back_in_place_while_the_rest_stay_untouched(
