@@ -117,6 +117,10 @@ run = "mkdir -p ~/.agents/skills"
 # (packages/core/src/config/variable.ts:25-28 at v2.2.7), so `fnox proxy run` can swap the placeholder for the real
 # key. This owns only those headers; the old literal "${CONTEXT7_API_KEY}" header is not removed by a merge.
 "~/.config/opencode/opencode.json/mcp-keys" = { source = "unix/home/.config/opencode/mcp-keys.json", merge = true }
+# OpenCode 2.3.1 writes the compaction summary in the background by default (v2.3.1
+# packages/schema/src/config/compaction.ts:18-20), which spends tokens on a summary a session may never reach; the
+# owner accepted 2.3.1 and asked for the config fixed (2026-11-18). This owns only compaction.background.
+"~/.config/opencode/opencode.json/compaction" = { source = "unix/home/.config/opencode/compaction.json", merge = true }
 # Claude's apify MCP server gets its key from `fnox get` at each connect (headersHelper,
 # https://code.claude.com/docs/en/mcp; 10 s limit), with an explicit PATH as 1natsu172/dotfiles
 # bin/claude-utils/mcp-auth-header.sh:22,35 and fapont/dotfiles modules/agents/claude/mcp.json:6 do. A missing key

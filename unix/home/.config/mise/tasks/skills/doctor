@@ -39,6 +39,22 @@ PERMISSIONS = {
     "~/.codex/rules/guards.rules",
     "~/.gemini/policies/guards.toml",
 }
+# The allow entry owns the whole permissions.allow list (mise.toml): an "always allow" the owner clicks later is a rule
+# the checkout lacks, which re-applying the entry would drop, so its failure names those rules first.
+ALLOW = "~/.claude/settings.json/allow"
+
+
+def unlisted() -> list[str]:
+    """The allow rules in ~/.claude/settings.json that the checkout's allow entry does not list."""
+    source = CHECKOUT / "unix/home/.claude/settings.allow.json"
+    want = json.loads(source.read_text())["permissions"]["allow"]
+    try:
+        have = json.loads((HOME / ".claude/settings.json").read_text()).get("permissions", {}).get("allow", [])
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+    return [rule for rule in have if rule not in want]
+
+
 # What the post-tools hook installs and removes (unix/home/.config/mise/config.toml [bootstrap.hooks.post-tools]),
 # and the command that runs it: `mise bootstrap --only tools` runs the tools part and then that hook.
 POST_TOOLS = "mise bootstrap --only tools --yes"
@@ -84,6 +100,13 @@ def dotfiles() -> None:
     if zsh:
         fail(f"{', '.join(f'{e} {bad[e]}' for e in zsh)}", "mise run shell:apply (from the checkout)")
     for entry in sorted(bad.keys() & PERMISSIONS):
+        if entry == ALLOW and (extra := unlisted()):
+            rules = ", ".join(extra)
+            source = CHECKOUT / "unix/home/.claude/settings.allow.json"
+            drop = f"mise -C {CHECKOUT} dot apply '{ALLOW}'"
+            failed.append(f"skills:doctor: {ALLOW} has rules the checkout lacks ({rules}): add them to {source}, "
+                          f"or the owner drops them with: {drop}")  # fmt: skip
+            continue
         failed.append(f"skills:doctor: permission entry differs; the owner runs: mise -C {CHECKOUT} dot apply '{entry}'")
     rest = sorted(bad.keys() - ZSH - PERMISSIONS)
     if rest:
