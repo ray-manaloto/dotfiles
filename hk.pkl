@@ -177,7 +177,16 @@ local checkSuites: Mapping<String, Step> = suites.toMap()
     .mapValues((name, s) -> if (name == "secret-doctor") s else (s) { glob = (s.glob as List<String>) + shared })
     .toMapping()
 
-local linters: Mapping<String, Step> = (fast.toMap() + checkSuites.toMap()).toMapping()
+// Names the fallback in hk check's output (pr-merge's log): it runs only when a shared file is among the checked
+// files, and says which. Without this line, hk's "Fetching files between origin/main and HEAD" shows the --pr mode.
+local fallbackNote = new Mapping<String, Step> {
+    ["shared-files"] {
+        glob = shared
+        check = "echo 'every suite runs: shared files changed: {{files}}'"
+    }
+}
+
+local linters: Mapping<String, Step> = (fast.toMap() + checkSuites.toMap() + fallbackNote.toMap()).toMapping()
 
 // At most two steps at a time; root mise.toml caps pytest -n auto at 4 workers (PYTEST_XDIST_AUTO_NUM_WORKERS).
 jobs = 2
