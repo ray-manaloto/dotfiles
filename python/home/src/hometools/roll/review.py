@@ -4,7 +4,9 @@ The collector is deterministic: roll:snapshot records each harness's version, ea
 marketplace's HEAD in <run>/versions.json; after roll:update the same reads give the new side, and
 ~/.config/mise/.update-claude.json's updates[] adds the plugin pairs update:claude reported. Notes per changed item:
 Claude Code's CHANGELOG sections between the two versions, the GitHub releases between the two tags for Codex and
-OpenCode, a plugin's CHANGELOG.md or its git log, a marketplace's git log. agy has no release source we could verify.
+OpenCode, a plugin's CHANGELOG.md or its git log, a marketplace's git log. agy's are the GitHub releases of
+google-antigravity/antigravity-cli, the repository whose CHANGELOG.md the agy binary itself reads (1.5.11); its
+tags are bare versions.
 
 One `claude -p --model sonnet` call with a budget cap and read-only tools triages only the pairs it has never seen
 (cache: <state>/<CACHE>). <run>/review.md is the source of truth; /herdr-startup rolling reads it and sends the
@@ -27,7 +29,11 @@ from hometools.models import Marketplace, ReviewReport, Versions
 from hometools.roll.live import call, field, rows
 
 CHANGELOG = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
-RELEASES = {"codex": ("openai/codex", "rust-v"), "opencode": ("anomalyco/opencode", "v")}
+RELEASES = {
+    "codex": ("openai/codex", "rust-v"),
+    "opencode": ("anomalyco/opencode", "v"),
+    "agy": ("google-antigravity/antigravity-cli", ""),
+}
 HARNESSES = {
     "claude": ".local/bin/claude",
     "codex": ".local/bin/codex",
@@ -220,8 +226,6 @@ def notes(tool: str, old: str, new: str, after: Versions) -> str:
         return sections(call("curl", "-fsSL", "--max-time", "30", CHANGELOG) or "", old, new)
     if tool in RELEASES:
         return releases(tool, old, new)
-    if tool == "agy":
-        return ""  # no verified release source for agy (Antigravity CLI): no notes, so it stays not reviewed
     if tool.startswith("marketplace "):
         name = tool.removeprefix("marketplace ")
         location = field(load(Path.home() / ".claude/plugins/known_marketplaces.json"), name, "installLocation")
