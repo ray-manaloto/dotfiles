@@ -6,7 +6,7 @@ dotfiles.
 
 ## Watched agents open as herdr-app tabs
 
-Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: plain `codex` has no keys and no `--no-daemon`. `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
+Any agent the user may watch (a reviewer pane, a peer Claude or Codex) opens as a tab in the current herdr-app space, never as an `hc run` popup: `herdr-app do tab.new --space <id> --name <name> --folder <dir> --argv '["codex-hc", "<task>"]'`. The current space is the one whose tabs list `$HC_TERMINAL_ID` in `herdr-app ls`. Start Codex as `codex-hc`: a tab's PATH has no mise wrappers, so plain `codex` runs without the fnox proxy, the daemon off and the HC_* variables (the [wrappers.codex] comment in the global mise config). `hc run` is only for short helpers nobody watches. If `herdr-app ls` fails, stop and ask the user; do not fall back to `hc run`. Close a tab you opened when you are done with it: `herdr-app do tab.close --id <tab id>`.
 
 Each agent step starts in its own herdr-app tab session; subagents and subagent teams inside that session
 are allowed.

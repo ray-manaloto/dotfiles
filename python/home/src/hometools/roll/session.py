@@ -568,8 +568,9 @@ def resume_argv(target: Target, prompt: str) -> list[str]:
 
 # What a Codex session ran with that its resume keeps (codex-rs/utils/cli/src/shared_options.rs and
 # tui/src/cli.rs at rust-v0.169.0, accepted after `codex resume <id>`): the approval and sandbox policies, model and
-# profile. codex-hc adds its own -c shell_environment_policy.set.HC_* overrides for the new terminal, so the old
-# ones are dropped; other -c overrides are kept.
+# profile. HC_* -c overrides that an older codex-hc added name the old terminal, so they are dropped; the mise
+# [wrappers.codex] that codex-hc now runs passes the new terminal's HC_* through its include_only policy. Other -c
+# overrides are kept.
 CODEX_PAIRS = frozenset({"-a", "--ask-for-approval", "-s", "--sandbox", "-m", "--model", "-p", "--profile", "-c"})
 CODEX_ALONE = frozenset({"--dangerously-bypass-approvals-and-sandbox", "--yolo", "--approve-for-me", "--not-so-yolo"})
 HC_OVERRIDE = "shell_environment_policy.set.HC_"
