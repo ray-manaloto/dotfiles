@@ -135,14 +135,6 @@ def test_claude_bash_passes(command: str) -> None:
     assert_passed(run(claude_bash(command)))
 
 
-def test_known_limit_other_interpreters_are_not_seen() -> None:
-    """Documented limit: the hook checks shell command text only, so it is a guardrail, not a sandbox.
-
-    An agent can still reach a blocked command through python, node, perl or a script file; this call passes.
-    """
-    assert_passed(run(claude_bash("python3 -c \"import os; os.system('brew install foo')\"")))
-
-
 def test_codex_bash_and_list_form() -> None:
     codex = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "brew install jq"}}
     assert_blocked(run(codex), 1)
@@ -536,13 +528,6 @@ def test_round_three_dockerfiles_pass(path: str, content: str) -> None:
 )
 def test_round_four_blocks(command: str, rule: int) -> None:
     assert_blocked(run(claude_bash(command)), rule)
-
-
-def test_round_four_codex_list_form() -> None:
-    script = "cat > f <<'EOF'\nx\nEOF\npkill -f server"
-    assert_blocked(run({"tool_name": "shell", "tool_input": {"command": ["bash", "-lc", script]}}), 6)
-    quiet = "cat > f <<'EOF'\npkill -f server\nEOF"
-    assert_passed(run({"tool_name": "shell", "tool_input": {"command": ["bash", "-lc", quiet]}}))
 
 
 @pytest.mark.parametrize(

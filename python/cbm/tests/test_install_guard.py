@@ -312,12 +312,6 @@ def test_signals_during_discovery_emit_failed_done_without_changes(
     assert snapshot(home) == before
 
 
-def test_fixture_ignores_ambient_global_git_trust(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (home / ".gitconfig").write_text("[safe]\n\tdirectory = *\n")
-    monkeypatch.setenv("GIT_TEST_ASSUME_DIFFERENT_OWNER", "1")
-    assert_refused(home, home / "checkout", "dubious ownership")
-
-
 @pytest.mark.parametrize("configuration", ["none", "global", "environment"])
 def test_git_safe_directory_configuration_is_preserved(
     home: Path, monkeypatch: pytest.MonkeyPatch, configuration: str

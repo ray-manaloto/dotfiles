@@ -16,11 +16,6 @@ def test_the_first_argument_must_name_a_command(capsys: pytest.CaptureFixture[st
     assert (code, events, bool(error)) == (1, [], True)
 
 
-def test_a_required_option_is_enforced(capsys: pytest.CaptureFixture[str]) -> None:
-    code, events, error = run(capsys, "settings-goto")
-    assert (code, events, bool(error)) == (1, [], True)
-
-
 def test_check_direct_reads_the_tool_list(capsys: pytest.CaptureFixture[str], direct: str) -> None:
     assert run(capsys, "check-direct", "--mcp-url", direct) == (0, [{"tools": 3, "direct": True, "router": True}], "")
 

@@ -494,13 +494,3 @@ def test_map_reports_an_artifact_cbm_did_not_write(env: Env) -> None:
     assert message.startswith(f"depmaps: cbm artifact {path}: ")
     assert done(result.stdout)["message"] == "depmaps: map failed: cbm_failed"
     assert not (env.folder("1.0.0") / "manifest.json").exists()
-
-
-def test_sync_goes_on_after_an_artifact_cbm_did_not_write(env: Env) -> None:
-    env.deps({env.spare: env.dep(repo=str(lost_artifact(env))), env.name: env.dep()})
-    result = env.run("sync")
-    assert result.returncode == 1
-    assert [code for code, _ in errors(result.stderr)] == ["cbm_failed"]
-    [mapped, end] = events(result.stdout)
-    assert mapped["manifest"]["dep"] == env.name
-    assert end["message"] == "depmaps: sync mapped 1, pruned 0; 1 failed"

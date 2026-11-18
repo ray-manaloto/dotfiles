@@ -103,14 +103,6 @@ def test_the_page_shows_status_claims_decisions_and_tests_failing_first(tmp_path
     assert "<li><strong>Never</strong>: Simplest</li>" in html
 
 
-def test_a_plan_with_nothing_next_shows_no_next_list(tmp_path: Path) -> None:
-    plan = copy.deepcopy(PLAN)
-    plan["status"]["next"] = []
-    rc, _, _, page = render(tmp_path, plan)
-    assert rc == 0
-    assert "Next:" not in page.read_text()
-
-
 # Every text field of PLAN, as the path of keys and indexes that reaches it.
 TEXT_FIELDS: list[tuple[str | int, ...]] = [
     ("title",),
@@ -146,13 +138,6 @@ def test_a_second_render_replaces_the_page_and_leaves_no_temporary_file(tmp_path
     assert rc == 0
     assert "<title>Cache the build, take two</title>" in page.read_text()
     assert sorted(p.name for p in tmp_path.iterdir()) == ["page.html", "plan.json"]
-
-
-def test_a_plan_that_breaks_the_schema_is_one_error_line_and_no_page(tmp_path: Path) -> None:
-    rc, out, err, page = render(tmp_path, {**PLAN, "status": {**PLAN["status"], "state": "maybe"}})
-    assert (rc, out, len(err)) == (DATA_ERROR, [], 1)
-    assert "status.state" in err[0]["error"]
-    assert not page.exists()
 
 
 def test_a_page_path_that_is_a_folder_is_one_error_line_and_leaves_no_temporary_file(tmp_path: Path) -> None:

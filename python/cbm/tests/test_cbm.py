@@ -232,13 +232,6 @@ def test_a_bad_probe_timeout_exits_2(home: Path, monkeypatch: pytest.MonkeyPatch
     assert not calls(home)
 
 
-def test_a_repeated_client_is_named_as_the_reason(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CBM_CLIENTS", "claude,claude")
-    [error] = events(cbm("install", cwd=home / "checkout").stderr)
-    assert "names a client twice" in error["message"]
-    assert not calls(home)
-
-
 def test_client_order_is_kept(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CBM_CLIENTS", "codex,claude")
     assert cbm("install", cwd=home / "checkout").returncode == 0

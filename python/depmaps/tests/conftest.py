@@ -108,7 +108,7 @@ class Env:
 
     def __init__(self, root: Path, repo: Path) -> None:
         self.root, self.repo = root, repo
-        self.name, self.spare = (f"dmtest-{uuid.uuid4().hex[:8]}" for _ in range(2))
+        self.name = f"dmtest-{uuid.uuid4().hex[:8]}"
         self.registry, self.lock, self.store = root / "deps.json", root / "mise.lock", root / "store"
 
     def deps(self, deps: dict[str, dict[str, Any]]) -> None:

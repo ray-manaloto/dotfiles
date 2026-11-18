@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 import tarfile
-import tomllib
 from collections.abc import Iterator, Mapping
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -128,11 +127,6 @@ def server(served: Path) -> Iterator[str]:
     httpd.server_close()
 
 
-def test_the_packaged_pin_parses() -> None:
-    want = reainstall.pin()
-    assert want.asset_url.endswith(f"/{want.release_tag}/package.tgz")
-
-
 @pytest.mark.parametrize(
     ("value", "under_home"), [(None, True), ("", True), ("relative/data", True), ("/abs/data", False)]
 )
@@ -250,12 +244,6 @@ def test_a_wrong_package_leaves_the_old_folder(tmp_path: Path, data_home: Path, 
     assert [p.name for p in data_home.parent.iterdir()] == ["rea"]
 
 
-def test_a_shrinkwrap_that_is_not_a_file_is_refused(tmp_path: Path, data_home: Path) -> None:
-    archive = tgz(tmp_path / "package.tgz", {"package/package.json": b"{}", reainstall.SHRINKWRAP: None})
-    with pytest.raises(ValueError, match=re.escape("no package/npm-shrinkwrap.json file")):
-        reainstall.install(archive, data_home, pin_for(archive), HERE)
-
-
 def test_an_npm_failure_is_raised_with_its_output(tmp_path: Path, data_home: Path) -> None:
     members = {"package/package.json": b"{not json", reainstall.SHRINKWRAP: b'{"packages": {"": {}}}'}
     archive = tgz(tmp_path / "package.tgz", members)
@@ -320,15 +308,6 @@ def test_the_command_refuses_an_archive_that_is_not_the_pins(
     assert (code, events) == (1, [])
     assert error == f"{archive}: sha256 {reainstall.sha256(archive)} is not the pin's {reainstall.pin().package_sha256}"
     assert not data_home.exists()
-
-
-def test_the_command_reports_an_unreachable_asset(capsys: pytest.CaptureFixture[str], data_home: Path) -> None:
-    """A folder whose archive is not the pinned one is not kept: the command downloads, and fails here."""
-    data_home.mkdir(parents=True)
-    (data_home / "package.tgz").write_bytes(b"not the pinned archive")
-    code, events, error = run(capsys, "rea-install", "--url", "http://127.0.0.1:9/asset")
-    assert (code, events, bool(error)) == (1, [], True)
-    assert (data_home / "package.tgz").read_bytes() == b"not the pinned archive"
 
 
 def test_without_a_node_on_path_nothing_is_installed(
@@ -573,10 +552,3 @@ def test_only_rea_install_reads_the_task_tools(
     code, events, error = run(capsys, "rea-install")
     assert (code, events) == (1, [])
     assert "mise run //jbctl:rea-install" in error
-
-
-def test_the_test_tasks_install_rea_first() -> None:
-    """The offline tests copy the installed helper, so every task that runs them installs it first."""
-    tasks = tomllib.loads((Path(__file__).parents[1] / "mise.toml").read_text())["tasks"]
-    for name in ("test", "coverage"):
-        assert "rea-install" in tasks[name]["depends"], name

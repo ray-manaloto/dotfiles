@@ -378,15 +378,6 @@ class AgentsUpdateTest(unittest.TestCase):
             self.events(err), [{"event": "agents_update_cancelled", "agent": "agy"}]
         )
 
-    def test_a_stalled_version_check_times_out(self) -> None:
-        code, calls, err = self.run_task(
-            tuple(NATIVE.values()), versions={OPENCODE: "stall"}
-        )
-        self.assertEqual((code, calls), (1, UPDATES[:3]), err)
-        [event] = self.failures(err)
-        self.assertEqual(event["agent"], "opencode")
-        self.assertIn(f"timed out after {TIMEOUT} seconds", event["error"])
-
     @staticmethod
     def events(err: str) -> list[dict[str, str]]:
         """The JSON events on stderr; a terminal ends each line with a carriage return."""

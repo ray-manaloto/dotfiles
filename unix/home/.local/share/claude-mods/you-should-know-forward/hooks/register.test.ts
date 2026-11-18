@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine, Plugin } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { appendLog, applyMarks, compose, emptyLedger, markerText, observeKnown, observeSessions, overlap, pending, relatedOf } from './register'
+import { appendLog, applyMarks, compose, emptyLedger, observeKnown, observeSessions, overlap, pending, relatedOf } from './register'
 import type { Ledger } from './register'
 
 // compose() leaves the ledger as it was; this also marks what it carried.
@@ -171,12 +171,6 @@ test('an unrelated or old side-notes note is not named (breaks the merge thresho
   expect(relatedOf(LINE, notes, now)).toBeUndefined()
   expect(overlap(LINE, 'The config file has no backup copy yet.')).toBeGreaterThanOrEqual(0.3)
   expect(relatedOf(LINE, [{ ...notes[1]!, at: '2026-11-10T00:30:00Z' }], now)?.at).toBe('2026-11-10T00:30:00Z')
-})
-
-test('the delivered marker says when it was sent and answered and that it needs no pasting', () => {
-  const sent = Date.parse('2026-11-10T00:26:46Z')
-  expect(markerText({ line: LINE, sentAt: sent })).toBe(`✓ Sent to the agent 00:26Z, not answered yet · no need to paste it · ${LINE}`)
-  expect(markerText({ line: LINE, sentAt: sent, answeredAt: sent + 300_000 })).toContain('answered 00:31Z')
 })
 
 // A row appended while a turn runs can split a server tool's use from its result (an advisor

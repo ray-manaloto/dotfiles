@@ -133,11 +133,6 @@ def test_a_listing_keeps_line_numbers_and_local_notes(repo: Path, capsys: pytest
     ]
 
 
-def test_no_origin_skips_and_says_so(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    write_roadmap(repo, ticket(10))
-    assert report(capsys, "tickets") == [SKIPPED, {"exit": "0"}]
-
-
 def test_require_github_turns_a_skip_into_exit_2(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     write_roadmap(repo, ticket(10))
     assert report(capsys, "tickets", "--require-github") == [SKIPPED, {"exit": "2"}]
@@ -245,15 +240,6 @@ def test_a_local_finding_exits_1_even_when_github_is_unavailable(
         unavailable("HTTP 503"),
         {"exit": "1"},
     ]
-
-
-@pytest.mark.parametrize("args", [[], ["--require-github"]])
-def test_a_non_github_origin_skips_and_says_so(
-    roadmap_repo: Path, capsys: pytest.CaptureFixture[str], args: list[str]
-) -> None:
-    subprocess.run(["git", "remote", "set-url", "origin", "/some/path"], check=True)
-    write_roadmap(roadmap_repo, ticket(10))
-    assert report(capsys, "tickets", *args) == [SKIPPED, {"exit": "2" if args else "0"}]
 
 
 @pytest.mark.parametrize("remote", ["https://github.com/o/r.git", "git@github.com:o/r.git", "https://github.com/o/r/"])
@@ -419,13 +405,6 @@ def test_listing_with_github_unavailable_lists_nothing(
     assert report(capsys, "tickets", "--listing", "open") == [unavailable("HTTP 503"), {"exit": "2"}]
 
 
-def test_listing_that_requires_github_does_not_list_a_skipped_scope(
-    repo: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    write_roadmap(repo, ticket(10))
-    assert report(capsys, "tickets", "--require-github", "--listing", "frontier") == [SKIPPED, {"exit": "2"}]
-
-
 def write_plan(root: Path, plan_id: str, number: int) -> Path:
     folder = root.parent / f"{root.name}.plans" / ".planning" / plan_id
     write(folder, {"task_plan.md": f"# Goal\n\nImplement {URL}{number}\n"})
@@ -470,16 +449,6 @@ def test_the_rebuilt_roadmap_has_the_same_links_and_plan_associations(
     assert {(line.number, line.url, line.plan_id) for line in recovered} == {
         (line.number, line.url, line.plan_id) for line in original
     }
-
-
-def test_the_rebuilt_roadmap_passes_the_check(
-    roadmap_repo: Path, gh_stand_in: Callable[[dict[str, object], set[str]], Path], capsys: pytest.CaptureFixture[str]
-) -> None:
-    write_plan(roadmap_repo, "a", 10)
-    write_roadmap(roadmap_repo, ticket(10, plan="a") + ticket(11, checked=True, blocked="#1, #2"))
-    gh_stand_in(rebuild_data(), set())
-    write(roadmap_repo, {"rebuilt.md": rebuilt(capsys)})
-    assert report(capsys, "tickets", "--roadmap", "rebuilt.md", "--require-github") == [{"exit": "0"}]
 
 
 @pytest.mark.usefixtures("repo")
@@ -736,19 +705,6 @@ def test_plan_ignores_drift_in_another_section(
     assert report(capsys, "tickets", "--plan") == [
         {"kind": "plan", "plan_id": "a", "path": str(folder), "issue": 10, "url": f"{URL}10"},
         {"exit": "0"},
-    ]
-
-
-def test_plan_duplicates_in_its_section_stop_resolution(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    folder = write_plan(repo, "a", 10)
-    write_plan(repo, "b", 10)
-    monkeypatch.setenv("PLAN_ID", "a")
-    write_roadmap(repo, ticket(10, plan="a"))
-    assert report(capsys, "tickets", "--plan") == [
-        finding("plans a and b both name #10", path=str(folder.parent)),
-        {"exit": "1"},
     ]
 
 

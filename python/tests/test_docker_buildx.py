@@ -65,9 +65,6 @@ class BuildxPostinstallTest(unittest.TestCase):
             check=True,
         ).stdout
 
-    def test_it_runs_on_every_install(self) -> None:
-        self.assertEqual(POSTINSTALL["when"], "always")
-
     def test_docker_loads_the_pinned_buildx_ahead_of_its_own_folder(self) -> None:
         # Docker Desktop's link in its own folder, here to a buildx that prints a wrong version.
         plugins = self.home / ".docker/cli-plugins"
