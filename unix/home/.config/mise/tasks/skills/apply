@@ -9,7 +9,7 @@
 # is refs/heads/main, main_guard.py armed). mise starts a global task in the folder it was run from and keeps it
 # in MISE_ORIGINAL_CWD (mise v2026.11.9 src/task/task_executor.rs:3168-3176).
 #
-# The four permission entries (skills:doctor PERMISSIONS) are never applied here: the owner applies them by hand.
+# The five permission entries (skills:doctor PERMISSIONS) are never applied here: the owner applies them by hand.
 # The zsh files go first, through shell:apply, which backs them up and checks a shell (AGENTS.md: before any bare
 # apply); it runs only when one of them is not applied. Then every other checked entry, never with --force or --prune: a real file in the way makes mise refuse
 # the whole file apply before it writes anything (crates/mise-system/src/files.rs:6096-6107), and that error is

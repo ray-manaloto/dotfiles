@@ -216,7 +216,7 @@ hooks {
             }
             // A merge into main in the checkout the home links to applies its [dotfiles] entries; anywhere else it
             // skips (tasks/skills/apply). Never --force or --prune: a real file in the way fails with mise's error. The
-            // four permission entries are left to the owner (skills:doctor PERMISSIONS names them).
+            // five permission entries are left to the owner (skills:doctor PERMISSIONS names them).
             ["dot-apply"] {
                 depends = "mise-untrack-worktrees"
                 check = "mise run skills:apply"

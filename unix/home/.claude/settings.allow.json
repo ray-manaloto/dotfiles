@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh pr *)",
+      "Bash(cd *)",
+      "Bash(git push *)",
+      "Bash(herdr-app do *)",
+      "Bash(gh api *)",
+      "Bash(hc read *)",
+      "Bash(gh issue *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(python3 -)",
+      "Artifact",
+      "ArtifactComments",
+      "ArtifactData"
+    ]
+  }
+}
