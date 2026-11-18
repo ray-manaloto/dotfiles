@@ -54,8 +54,8 @@ def test_claude_starts_in_code_mode_in_the_folder_with_the_prompt(tmp_path: Path
     path = os.pathsep.join([str(VENV_BIN), str(stand_in), "/usr/bin", "/bin"])
     done, seen = launch(tmp_path, path, "--folder", str(work), "fix the tests")
     assert done.returncode == 0, done.stderr
-    settings = '{"remoteControlAtStartup":false,"env":{"CLAUDE_CODE_PLUGIN_DIRS":""},'
-    settings += '"enabledPlugins":{"code-modernization@claude-plugins-official":false}}'
+    # Remote Control off only: mods and plugins stay on (Code Mode starts with them since 2.1.327).
+    settings = '{"remoteControlAtStartup":false}'
     assert seen["argv"] == ["--settings", settings, "--", "fix the tests"]
     assert Path(seen["cwd"]).resolve() == work.resolve()
     env = seen["env"]

@@ -1,11 +1,11 @@
 """claude-code-mode: one interactive Claude session in Code Mode, every override given for this launch only."""
 
 # Code Mode is opt-in per launch (owner, 2026-11-15): ~/.claude/settings.json stays as it is. In the live trial
-# (Claude Code 2.1.325, chief-of-staff's research notes, section 9) it turned on only with the shell variable below
-# and all three of: Remote Control off, no mod folders (the side-note mods hook tool.call), and the
-# code-modernization plugin off (its mod hooks tool.call too); with any of them left, startup said Code Mode "doesn't
-# yet work with an installed mod (a plugin with JavaScript hooks) that checks tool calls". A Code Mode session
-# resumes only with the variable set, which roll:stop knows (roll/session.py code_mode).
+# (Claude Code 2.1.325, chief-of-staff's research notes, section 9) it turned on only with the shell variable below,
+# Remote Control off, and no mod that hooks tool calls (the side-note mods, code-modernization). 2.1.327 "Changed Code
+# Mode to no longer refuse to start when an installed mod hooks tool calls", so the session keeps its mods and
+# plugins; Remote Control stays off. A Code Mode session resumes only with the variable set, which roll:stop knows
+# (roll/session.py code_mode).
 
 import argparse
 import json
@@ -19,19 +19,14 @@ from . import nativeclaude
 from .models import Failure
 
 VARIABLE = "CLAUDE_CODE_EXPERIMENTAL_CODE_MODE"
-SETTINGS = {
-    "remoteControlAtStartup": False,
-    "env": {"CLAUDE_CODE_PLUGIN_DIRS": ""},
-    "enabledPlugins": {"code-modernization@claude-plugins-official": False},
-}
+SETTINGS = {"remoteControlAtStartup": False}
 # What a session started from another Claude session (a herdr tab opened by an agent) inherits and must not keep:
 # CLAUDE_CODE_CHILD_SESSION turns its transcript off, so it could never be resumed; the rest name the parent's
-# session, socket and plugin data. CLAUDE_CODE_PLUGIN_DIRS would load the mods that keep Code Mode off.
+# session, socket and plugin data.
 INHERITED = frozenset({
     "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_BRIDGE_SESSION_ID",
     "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_EXECPATH",
     "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "CLAUDE_PLUGIN_DATA",
-    "CLAUDE_CODE_PLUGIN_DIRS",
 })  # fmt: skip
 UV_RUN = frozenset({"VIRTUAL_ENV", "UV_RUN_RECURSION_DEPTH"})
 
