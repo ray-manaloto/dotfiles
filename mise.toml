@@ -2,7 +2,7 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["typescript", "python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/lsp", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
+config_roots = ["python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/lsp", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
@@ -33,7 +33,7 @@ task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//typescript:test", "//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//lsp:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
+depends = ["//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//lsp:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 [tasks."test:times"]

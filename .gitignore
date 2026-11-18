@@ -18,7 +18,6 @@
 !/python/
 !/swift/
 !/tests/
-!/typescript/
 !/unix/
 # The dotfiles Claude Code marketplace and its plugins (typescript-native-lsp).
 !/.claude-plugin/
@@ -50,7 +49,6 @@
 /python/visualplan/.venv/
 /python/jbctl/.venv/
 /python/guards/.venv/
-/typescript/node_modules/
 __pycache__/
 .coverage
 # A subprocess writes its own .coverage.<host>.pid<n>.<random> until pytest-cov combines them.
