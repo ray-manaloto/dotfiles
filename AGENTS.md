@@ -34,8 +34,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   to review a change by choice (`~/.config/agents/workflow/cross-review.md`); nothing waits on it.
 - Push the branch, then open the pull request with `mise run //repo:pr-create <title> <body file>`,
   which pipes the body file's bytes to `gh pr create`. `.claude/settings.json` makes Claude ask the
-  owner before `pr-create` and `gh pr` and `gh issue` writes, but the web UI and other clients can
-  still publish anything. `gh pr merge` is not on that list: the lead merges its own pull request (owner
+  owner before `gh pr` and `gh issue` writes, but the web UI and other clients can still publish
+  anything. `pr-create` and `gh pr merge` are not on that list (pr-create: owner, 2026-11-18; the lead
+  still reads the PR text for private content before it runs): the lead merges its own pull request (owner
   ruling, 2026-11-15) with `mise run //repo:pr-merge <number> <title> <body file>` from the PR's clean
   checkout. It refuses unless HEAD is the PR head, the PR's title and body on GitHub are the given ones
   and `hk check --pr` passes: the checks for the pull request's changed files, and every suite when it
