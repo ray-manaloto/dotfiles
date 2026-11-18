@@ -73,13 +73,21 @@ so it survives chief-of-staff's exit):
 `herdr-app do tab.new --space <space id> --name roll --folder ~ --argv '["env","MISE_TASK_TIMINGS=1","MISE_TASK_OUTPUT=prefix","mise","run","roll:all","--apply"]'`.
 `roll:all --apply` refuses to run anywhere else.
 
+Then end your turn and start no watch: the roll stops and resumes you, and a watch still running when `roll:stop`
+reaches you keeps you busy, so the roll waits on you (up to `--busy-wait`). Watch the run only in `/herdr-startup
+rolling`, after your own restart. A run that fails or pauses before `roll:stop` never restarts you: `roll:all` then
+raises `monit:alert` (service `roll`), which reaches you and the owner.
+
 ### `/herdr-startup rolling`: chief-of-staff after its restart
 
 1. Read the newest `~/.local/state/dotfiles/roll/<run-id>/review.md` and send the owner its BREAKING and REVISIT
    items.
 2. Read `<run-id>/background/chief-of-staff--chief-of-staff--<session>.json` and re-arm what it lists (crons, loops,
    monitors), with the playbook `wiki/playbooks/restart-chief-of-staff.md`.
-3. Watch the `roll` tab (`hc read`) until `roll:all` ends, then report its `failed-*` and `skipped-*` sessions.
+3. Watch `~/.local/state/dotfiles/roll/runs.jsonl`, not the `roll` tab: the tab's screen still shows an older run's
+   "Finished" line, which twice ended a watch early (2026-11-17). Each step appends one JSON line when it ends; the run
+   is over at the line with your run id and `"step":"verify"`, or at its first line with a non-zero `rc`. Then report
+   that run's `failed-*` and `skipped-*` sessions from those lines.
 
 Found 2026-11-11: a session-only cron **survives `claude --resume` of the same session**. The chief-of-staff's
 old check-in cron fired again after its rolling restart. After a resume, run CronList before re-creating a cron,
