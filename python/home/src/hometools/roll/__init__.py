@@ -21,6 +21,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
@@ -82,6 +83,7 @@ def parser() -> argparse.ArgumentParser:
     found.add_argument("--wait", type=float, default=900, help="seconds to wait for a stop-point answer")
     found.add_argument("--settle", type=float, default=90, help="seconds to wait for an exit or a start")
     found.add_argument("--poll", type=float, default=1, help="seconds between looks while waiting")
+    found.add_argument("--busy-wait", type=float, default=600, help="seconds roll:all waits for a busy chief of staff")
     return found
 
 
@@ -534,8 +536,8 @@ def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:
     try:
         for target in picked:
             coordinator = role(target[0].name, target[1].name) is Role.coordinator
-            # Nothing else moves until the chief of staff is back and verified. A skipped child or lead is listed
-            # to retry later; it fails nothing.
+            # Nothing else moves until the chief of staff is back and verified: its stop waits while it is busy (up to
+            # --busy-wait). A skipped child or lead is listed to retry later; it fails nothing.
             mark = codeset(target, apply=args.apply)
             if not one(target, (stop, start, check), live, mark, prompt) and coordinator and args.apply:
                 rc = FAILED
@@ -558,7 +560,8 @@ def one(
     """stop, start and verify one session; True when it is back and current (or, on a dry run, planned)."""
     stop, start, check = steps
     args = stop.args
-    down = stop.add(session.stop(live, target, timing(args), stop.folder if args.apply else None, mark))
+    wait = args.apply and role(target[0].name, target[1].name) is Role.coordinator
+    down = stop.add(stopping(stop, live, target, mark, wait=wait))
     if down.result in {"skipped-already-current", "planned-restart"}:
         return True
     restarted = down.result == "restarted"
@@ -581,6 +584,27 @@ def one(
 
     last = poll(passed, args.settle, args.poll) or look()
     return check.add(last).result == "ok" and (up is None or up.result == "started")
+
+
+def stopping(stop: Step, live: Live, target: session.Target, mark: dt.datetime | None, *, wait: bool) -> SessionResult:
+    """session.stop; with wait (the chief of staff, which is rarely idle while it relays), a skipped-busy session is
+    asked again about 60 times over --busy-wait (never more often than --poll). A busy attempt changes nothing, so
+    only the last one is recorded, with how long it waited. Each attempt reads the processes fresh: a background job
+    may have ended."""
+    args = stop.args
+    keep = stop.folder if args.apply else None
+    began, seen = time.monotonic(), list[SessionResult]()
+
+    def free() -> SessionResult | None:
+        seen.append(session.stop(Live() if seen else live, target, timing(args), keep, mark))
+        return None if wait and seen[-1].result == "skipped-busy" else seen[-1]
+
+    # About 60 looks over the bound (10 s apart at the default 600 s): each look reads hc and the process table.
+    last = poll(free, args.busy_wait if wait else 0, max(args.poll, args.busy_wait / 60)) or seen[-1]
+    if seen[0].result != "skipped-busy" or not wait:
+        return last
+    waited = f"waited {time.monotonic() - began:.0f}s while busy ({len(seen)} looks)"
+    return last.model_copy(update={"notes": [*last.notes, waited]})
 
 
 def main(argv: Sequence[str]) -> int:

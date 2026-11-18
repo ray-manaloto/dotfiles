@@ -9,6 +9,7 @@
 #USAGE flag "--wait <seconds>" help="Seconds to wait for a stop-point answer (default 900)"
 #USAGE flag "--settle <seconds>" help="Seconds to wait for an exit or a start (default 90)"
 #USAGE flag "--poll <seconds>" help="Seconds between looks while waiting (default 1)"
+#USAGE flag "--busy-wait <seconds>" help="Seconds to wait for a busy chief of staff to go idle before the run fails (default 600)"
 #USAGE flag "--accept-review" help="Go past a closed review gate (read the run's review.md first); a paused run goes on from roll:stop"
 """roll:all: hometools roll all (python/home/src/hometools/roll/)."""
 

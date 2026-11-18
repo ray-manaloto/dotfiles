@@ -201,7 +201,12 @@ def test_the_roots_and_output_follow_home_and_xdg_state(tmp_path: Path, monkeypa
 def test_the_command_writes_under_the_state_folder(
     capfd: pytest.CaptureFixture[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The real command, with the real roots and data volume; the limit keeps it short."""
+    """The real command with the real dust, ps, lsof and data volume, over one small root: the real roots include
+    TMPDIR and /private/tmp, and dust over those took 500% CPU per run (2026-11-18)."""
+    root = tmp_path / "root"
+    (root / "a").mkdir(parents=True)
+    (root / "a/file").write_bytes(b"x" * 4096)
+    monkeypatch.setattr(disk, "roots", lambda: [root])
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("DISK_SNAPSHOT_SECONDS", "5")
