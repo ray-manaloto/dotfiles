@@ -195,7 +195,7 @@ def test_a_failing_hk_check_all_stops_the_merge(
     repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     made = World(repo, monkeypatch, "exit 3")
-    assert pr_refusal_of(capsys, "pr-merge", merge_args()) == f"hk check --all failed (exit 3) on {made.head}"
+    assert pr_refusal_of(capsys, "pr-merge", merge_args()) == f"hk check --pr failed (exit 3) on {made.head}"
     assert not made.merged()
 
 
@@ -255,5 +255,5 @@ def test_the_task_runs_the_installed_repotools_with_hostile_text_as_inert_argume
     done = mise("//repo:pr-merge", "7", title, body_file)
     assert done.returncode == 1
     (error,) = said(done, "{")  # mise adds its own task lines around repotools' one JSON error
-    assert json.loads(error)["error"] == f"hk check --all failed (exit 3) on {head}"
+    assert json.loads(error)["error"] == f"hk check --pr failed (exit 3) on {head}"
     assert not list(copy.parent.rglob("pwned*"))

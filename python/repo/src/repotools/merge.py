@@ -1,6 +1,6 @@
 """pr-create opens a pull request; pr-merge is a lead's self-merge, done only once every gate holds, in one form."""
 
-# The gates are the owner's self-merge ruling's (2026-11-15): local hk check --all passes on the exact head, then
+# The gates are the owner's self-merge ruling's (2026-11-15): local hk check --pr passes on the exact head, then
 # `gh pr merge --merge --match-head-commit <sha>` with the account's noreply address as the merge author. No review
 # is required (owner ruling, 2026-11-17).
 
@@ -66,7 +66,7 @@ def gates(options: PrMerge, head: str) -> None:
     """Every gate but hk: a clean checkout at head, and an open pull request into GitHub's default branch whose head
     is head, whose title and body are the given ones."""
     if git("status", "--porcelain"):
-        msg = "the checkout has changes or untracked files, so hk check --all would not test the head alone"
+        msg = "the checkout has changes or untracked files, so hk check --pr would not test the head alone"
         raise ValueError(msg)
     if git("rev-parse", "HEAD").strip() != head:
         msg = f"this checkout's HEAD moved from {head} while pr-merge ran"
@@ -92,9 +92,9 @@ def merge(options: PrMerge) -> None:
     head = git("rev-parse", "HEAD").strip()
     gates(options, head)
     # hk's own output passes through: a failure shows the step that failed.
-    checked = subprocess.run(["hk", "check", "--all"], check=False).returncode
+    checked = subprocess.run(["hk", "check", "--pr"], check=False).returncode
     if checked != 0:
-        msg = f"hk check --all failed (exit {checked}) on {head}"
+        msg = f"hk check --pr failed (exit {checked}) on {head}"
         raise ValueError(msg)
     # hk runs for minutes: the checkout or the pull request may have changed meanwhile, so every gate is
     # checked again. What is left between this and the merge is GitHub's to hold: --match-head-commit refuses a moved

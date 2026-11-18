@@ -151,7 +151,7 @@ run = "mkdir -p ~/.agents/skills"
 # tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
 # from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
 "~/.claude/settings.json/prompt-suggestions" = { source = "unix/home/.claude/settings.prompt-suggestions.json", merge = true }
-# Leads merge their own PRs once hk check --all passes (owner rulings 2026-11-15 and 2026-11-17: no review is
+# Leads merge their own PRs once local hk checks pass (owner rulings 2026-11-15 and 2026-11-17: no review is
 # required). The auto-mode soft-deny "Merge Without Review" wants a human approval, so the classifier blocked those
 # merges. Auto mode reads prose
 # exceptions from autoMode.allow in user settings only (https://code.claude.com/docs/en/auto-mode-config.md);

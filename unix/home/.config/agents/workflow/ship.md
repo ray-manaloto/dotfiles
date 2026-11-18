@@ -34,8 +34,8 @@ and the commit belong to the coordinator or the owner.
    that check.
 3. A Codex review is optional: a lead may ask for one by choice (see [cross-review](cross-review.md)).
 4. Push the branch, then open the pull request with the repository's create command.
-5. The lead merges its own pull request (owner ruling, 2026-11-15) once local `hk check --all` passes on
-   the exact head. Hosted checks from free apps are advisory, and no paid CI is added. The merge is
+5. The lead merges its own pull request (owner ruling, 2026-11-15) once local hk checks pass on the exact
+   head: `hk check --all`, or `hk check --pr` where hk.pkl runs every suite for a shared file (dotfiles). Hosted checks from free apps are advisory, and no paid CI is added. The merge is
    `gh pr merge N --merge --match-head-commit <sha> --author-email 1428022+sortakool@users.noreply.github.com`,
    so the merge commit carries the account's noreply address, not a personal email. A repository can
    check these gates in one task: dotfiles has `mise run //repo:pr-merge`.
