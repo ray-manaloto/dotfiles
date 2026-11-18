@@ -23,12 +23,14 @@ def summary(path: Path) -> str:
             for q in c["starting_query_clients"][:5]
         )
         nodes = " ".join(str(n) for n in c["query_nodes_per_minute"].values())
-        indexers = " ".join(f"{name}={count}" for name, count in c["indexer_lines"].items())
+        indexers = " ".join(f"{name}={count}" for name, count in c["indexer_lines"].items() if count)
+        # Older captures have no corespotlight_clients; the three biggest by query nodes.
+        core = ", ".join(f"{b}:{n['nodes']}" for b, n in list(c.get("corespotlight_clients", {}).items())[:3])
     except (OSError, ValueError, KeyError, TypeError) as failed:
         return f"{path.name}: unreadable ({failed})"
     return (
         f"{c['time']} cpu={c['mds_stores_cpu']}% nodes/min=[{nodes}] clients=[{clients or 'none'}] "
-        f"{indexers} {path.name}"
+        f"corespotlight=[{core or 'none'}] {indexers} {path.name}"
     )
 
 
