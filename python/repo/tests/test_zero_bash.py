@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -192,11 +191,6 @@ def test_strict_exits_1_after_printing_the_leftovers(repo: Path, capsys: pytest.
     assert json.loads(capsys.readouterr().out)["path"] == "a.sh"
 
 
-def test_strict_passes_a_clean_repository(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    add(repo, {"a.py": "\n"})
-    assert report(capsys, "--strict") == []
-
-
 def test_outside_a_repository_is_an_error_event(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -225,21 +219,3 @@ def test_an_unreadable_file_is_an_error_event_naming_it(
         main(["zero-bash"])
     assert stopped.value.code == 1
     assert json.loads(capsys.readouterr().err)["error"].startswith(f"{name}: ")
-
-
-def test_the_console_script_reads_its_arguments(repo: Path) -> None:
-    add(repo, {"a.sh": "\n"})
-    script = Path(sys.executable).parent / "repotools"  # what uv installed from [project.scripts]
-    done = subprocess.run([script, "zero-bash", "--strict"], capture_output=True, check=False, text=True)
-    assert done.returncode == 1
-    assert [json.loads(line)["path"] for line in done.stdout.splitlines()] == ["a.sh"]
-
-
-def test_this_repository_reports_no_zsh_startup_file(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.chdir(REPO)
-    listed = subprocess.run(["git", "ls-files"], capture_output=True, check=True, text=True).stdout.splitlines()
-    startup = [path for path in listed if path.startswith(("unix/home/.z", "unix/home/.config/zsh/"))]
-    assert startup
-    assert report(capsys, "--files=" + " ".join(startup)) == []

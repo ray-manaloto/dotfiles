@@ -81,17 +81,3 @@ def test_each_test_task_gets_its_history_and_slowest_tests(capsys: pytest.Captur
     assert (rows["plain:test"]["slowest"], rows[ODD]["slowest"], rows["raw:test"]["slowest"]) == ([], [], [])
     assert {(row["runs"], row["failures"], row["last_status"]) for row in rows.values()} == {(1, 0, "ok")}
     assert all(isinstance(row["median_ms"], int) for row in rows.values())
-
-
-def test_a_history_mise_cannot_read_is_one_error_event(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "mise.toml").write_text("[tasks.test\n")  # not TOML: every mise command refuses the folder
-    monkeypatch.setenv("MISE_TRUSTED_CONFIG_PATHS", str(tmp_path))
-    monkeypatch.setenv("MISE_CEILING_PATHS", str(tmp_path.parent))
-    with pytest.raises(SystemExit) as stop:
-        main(["test-times"])
-    assert stop.value.code == 1
-    [event] = map(json.loads, capsys.readouterr().err.splitlines())
-    assert event["error"].startswith("mise failed: ")

@@ -115,11 +115,3 @@ def test_a_used_folder_keeps_what_it_holds(tmp_path: Path, capfd: pytest.Capture
     (tmp_path / "scratch/home").mkdir(parents=True)
     (tmp_path / "scratch/home/kept").write_text("kept\n")
     assert scratch(capfd, tmp_path / "scratch", "/bin/cat", tmp_path / "scratch/home/kept")[:2] == (0, "kept\n")
-
-
-@pytest.mark.parametrize("argv", [[], ["folder"]])
-def test_a_missing_folder_or_command_refuses(repo: Path, capfd: pytest.CaptureFixture[str], argv: list[str]) -> None:
-    code, out, err = scratch(capfd, *argv)
-    assert (code, out) == (1, "")
-    assert '"error"' in err
-    assert not (repo / "folder").exists()

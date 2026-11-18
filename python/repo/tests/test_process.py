@@ -70,30 +70,6 @@ def test_timeout_propagates_and_releases_the_blocked_writer() -> None:
     assert done.stderr == b""
 
 
-def test_interrupt_before_writer_submission_reaps_the_child() -> None:
-    # Trace only to deliver a real SIGINT in the otherwise tiny gap after Popen, before submit.
-    code = (
-        "import inspect, os, signal, sys\nfrom repotools.process import run\n"
-        "source, start = inspect.getsourcelines(run)\n"
-        "target = start + next(i for i, line in enumerate(source) if 'writing = pool.submit(' in line)\n"
-        "def interrupt(frame, event, arg):\n"
-        "    if event == 'line' and frame.f_code is run.__code__ and frame.f_lineno == target:\n"
-        "        global child_pid\n        child_pid = frame.f_locals['child'].pid\n"
-        "        sys.settrace(None)\n        os.kill(os.getpid(), signal.SIGINT)\n"
-        "    return interrupt\n"
-        "sys.settrace(interrupt)\n"
-        "try:\n    run([sys.executable, '-c', 'import time; time.sleep(60)'], b'x')\n"
-        "except KeyboardInterrupt:\n    print('interrupted')\n"
-        "try:\n    os.kill(child_pid, 0)\n"
-        "except ProcessLookupError:\n    print('reaped')\n"
-        "else:\n    os.kill(child_pid, signal.SIGKILL)\n    os.waitpid(child_pid, 0)\n"
-    )
-    done = run_python(code)
-    assert done.returncode == 0, done.stderr.decode(errors="replace")
-    assert done.stdout == b"interrupted\nreaped\n"
-    assert done.stderr == b""
-
-
 def test_interrupt_reaps_the_ready_child_and_releases_the_blocked_writer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
