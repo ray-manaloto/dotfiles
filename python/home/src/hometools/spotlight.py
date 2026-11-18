@@ -1,5 +1,8 @@
 """spotlight-check: check that Spotlight skips the tracked folders, and say how to add the ones it doesn't."""
 
+# The global AGENTS.md rule "Bulky scratch and Spotlight" says Spotlight skips ~/dev (owner, 2026-11-17: ~/dev is in
+# Search Privacy); this check is what keeps that rule true, failing while either folder is indexed.
+#
 # Probed on macOS 27.2.1 (2026-11-16, dotfiles-lead): Spotlight indexed a new file in ~/dev/tmp or ~/dev/github within
 # about two minutes; it skipped every file under a folder named *.noindex, including one written through a symlink into
 # it; a .metadata_never_index file in a folder changed nothing; and new files under a hidden folder such as
@@ -96,7 +99,10 @@ def run() -> None:
         sys.stderr.write(
             "spotlight-check: Spotlight still indexes "
             + ", ".join(missing)
-            + ". Drag each into System Settings > Spotlight > Search Privacy (opening it now), then run this again.\n"
+            + ". The agent rules (AGENTS.md, Bulky scratch and Spotlight) say ~/dev is skipped: drag ~/dev into System"
+            " Settings > Spotlight > Search Privacy and run this again, or change that rule.\n"
         )
-        subprocess.run(["open", SETTINGS], check=False)
+        # The daily run (spotlight:daily, from launchd) sets SPOTLIGHT_NO_OPEN: it alerts instead of opening a window.
+        if not os.environ.get("SPOTLIGHT_NO_OPEN"):
+            subprocess.run(["open", SETTINGS], check=False)
         raise SystemExit(1)

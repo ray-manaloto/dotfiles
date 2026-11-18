@@ -67,12 +67,14 @@ deletes the plugin's data, which a reinstall does not bring back, so that needs 
 script. Check a plugin change with `claude plugin list --json` and a marketplace change with
 `claude plugin marketplace list --json`, and report each change with the command that undoes it.
 
-## Bulky scratch goes in a .noindex folder
+## Bulky scratch and Spotlight
 
-On a Mac, Spotlight indexes every new file in `~/dev/tmp` and `~/dev/github`, but nothing under a folder whose name
-ends in `.noindex`. Put clones for scans, build trees, caches you fill and other scratch of many files under
-`~/dev/tmp.noindex/<task>` (mise bootstrap creates it). A `.metadata_never_index` file does nothing.
-`mise run spotlight:check` checks which tracked folders Spotlight still indexes.
+On a Mac, Spotlight skips everything under `~/dev`: the owner added it to System Settings > Spotlight > Search
+Privacy (2026-11-17), so scratch in `~/dev/tmp/<task>` costs no indexing. Outside `~/dev`, Spotlight indexes every new
+file except under a folder whose name ends in `.noindex`: put clones, build trees, caches you fill and other scratch of
+many files there in such a folder. A `.metadata_never_index` file does nothing. `mise run spotlight:check` probes
+`~/dev/github` and `~/dev/tmp` and fails while Spotlight indexes either, so this rule and the Mac never disagree
+unnoticed: re-add `~/dev` to Search Privacy, or change this rule.
 
 ## Upgrading the PC
 

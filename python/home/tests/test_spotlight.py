@@ -88,8 +88,19 @@ def test_an_indexed_folder_fails_and_says_where_to_add_it(
     code, line, err = run(capsys)
     assert code == 1
     assert line["folders"][1] == {"folder": "~/dev/tmp", "excluded": False}
-    assert "Spotlight still indexes ~/dev/tmp." in err
+    assert "Spotlight still indexes ~/dev/tmp. The agent rules (AGENTS.md, Bulky scratch and Spotlight)" in err
     assert (home.parent / "opened").read_text() == spotlight.SETTINGS
+
+
+def test_the_daily_run_opens_no_window(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    indexed(monkeypatch, home, "Documents", "dev/tmp")
+    monkeypatch.setenv("SPOTLIGHT_NO_OPEN", "1")
+    code, _, err = run(capsys)
+    assert code == 1
+    assert "Spotlight still indexes ~/dev/tmp." in err
+    assert not (home.parent / "opened").exists()
 
 
 def test_without_the_control_indexed_nothing_is_proved(

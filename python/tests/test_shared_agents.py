@@ -63,7 +63,7 @@ class SharedAgentsTest(unittest.TestCase):
                 "OpenWiki search",
                 "Adding a Doppler secret",
                 "Plugin changes",
-                "Bulky scratch goes in a .noindex folder",
+                "Bulky scratch and Spotlight",
                 "Upgrading the PC",
                 "No --privileged containers on the PC",
                 "Workflow",
