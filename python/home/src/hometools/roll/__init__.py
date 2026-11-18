@@ -500,7 +500,7 @@ def do_all(args: argparse.Namespace, argv: Sequence[str]) -> int:
     for kind in (RollStep.snapshot, RollStep.update, RollStep.review):
         step = Step(args, argv, kind)
         if rc := step.end(STEPS[kind](step)):
-            return rc
+            return alert(rc, f"roll:all {args.run} failed at roll:{kind}, before roll:stop") if args.apply else rc
     gate = state() / args.run / "review.md"
     if args.apply and not args.accept_review and "Gate: CLOSED" in gate.read_text():
         snap.write(paused, f"{args.run}\n")
@@ -520,8 +520,19 @@ def pause(gate: Path) -> int:
     # The way out of a paused run the owner will not finish (its graph is from its snapshot) is named with it.
     why = (f"roll:all paused before roll:stop: read {gate}, then rerun with --accept-review; to drop this run "
            f"instead, delete {state() / 'paused'} and rerun")  # fmt: skip
+    # The alert first, so the pause stays the last line on stderr whatever monit:alert prints.
+    alert(PAUSED, why)
     sys.stderr.write(Failure(error=why).model_dump_json() + "\n")
     return PAUSED
+
+
+def alert(rc: int, why: str) -> int:
+    """A run that ends before roll:stop never restarts the chief of staff, which ended its turn after starting it and
+    watches nothing (a watch would keep it busy at its own stop): monit:alert tells it and the owner. Returns rc."""
+    event = {"MONIT_SERVICE": "roll", "MONIT_EVENT": "Roll ended before roll:stop", "MONIT_DESCRIPTION": why}
+    env = {**os.environ, **event}
+    subprocess.run(["mise", "run", "monit:alert"], env=env, stdin=subprocess.DEVNULL, check=False)
+    return rc
 
 
 def roll(args: argparse.Namespace, argv: Sequence[str]) -> int:

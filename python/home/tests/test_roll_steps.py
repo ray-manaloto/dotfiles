@@ -41,6 +41,7 @@ RESTART = ("hc", "send", "t3", "/restart")
 # One run id for every step a test runs: the handshake carries it.
 RUN = "run-t"
 ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-1"))
+ALERT = ("mise", "run", "monit:alert")
 FAST = ("--wait", "5", "--settle", "3", "--poll", "0.05", "--busy-wait", "0.3", "--run", RUN)
 
 
@@ -218,12 +219,14 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
     assert "updated" in got
     assert "$ mise run update:claude" in got
     assert ASK not in world.calls()
+    assert world.calls().count(ALERT) == 1
     # A rerun without --accept-review stays paused on the same gate: a new snapshot would take the updated versions
     # as its baseline, find nothing changed and open the gate.
     code, _, err = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST[:-2])
     assert code == 3
     assert json.loads(err.splitlines()[-1])["error"].startswith(f"roll:all paused before roll:stop: read {gate}")
     assert [line.step for line in world.runs()] == ["snapshot", "update", "review"]
+    assert world.calls().count(ALERT) == 2
     # --accept-review continues the paused run from roll:stop, with no second snapshot or update.
     try:
         args = ("all", "--apply", "--accept-review", "--exclude", "chief-of-staff", "--wiki", str(world.wiki))
@@ -234,6 +237,7 @@ def test_a_breaking_update_pauses_before_any_session_stops(world: World, capfd: 
     assert [s.result for s in world.runs()[3].sessions] == ["stopped"]
     assert world.calls().count(("mise", "run", "update:claude")) == 1
     assert "Gate: CLOSED" in gate.read_text()
+    assert world.calls().count(ALERT) == 2  # a run that reaches roll:stop raises none
 
 
 @pytest.mark.parametrize("marker", ["\n", "../other\n", "gone\n"], ids=["empty", "not-a-name", "no-run-folder"])
@@ -614,6 +618,8 @@ def test_a_failed_update_ends_the_roll_before_review(world: World, capfd: pytest
     code, _, _ = hometools(capfd, "all", "--apply", "--wiki", str(world.wiki), *FAST)
     assert code == 1
     assert [line.step for line in world.runs()] == ["snapshot", "update"]
+    # The chief of staff ended its turn after starting the roll and watches nothing; monit:alert tells it.
+    assert ALERT in world.calls()
 
 
 @pytest.mark.parametrize("flag", ["--sessions", "--exclude"])
