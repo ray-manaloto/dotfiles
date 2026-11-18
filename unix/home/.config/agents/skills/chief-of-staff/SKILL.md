@@ -53,11 +53,12 @@ Adapted from mattpocock's in-progress `chief-of-staff` skill (mattpocock-skills 
 
 Suggest, with the owner's OK: a morning digest of the queue, lane status and stalled leads; a weekly wiki lint; a weekly retro pick.
 
-Each check-in reads `~/.local/state/dotfiles/monit/alert.json`, the last alert monit raised (agents read it themselves:
-alerts never reach agent tabs, owner ruling 2026-11-13). When it is a `nightly-check` alert newer than the last one
-you passed on, read the `✗` lines of that run in `~/.local/state/dotfiles/nightly/check.log` (after its last `date`
-line) and send the dotfiles lead the failing suites, so a red nightly is fixed before the day's work (owner,
-2026-11-18).
+Each check-in reads the newest run in `~/.local/state/dotfiles/nightly/check.log`, from its last `date` line on
+(alerts never reach agent tabs, owner ruling 2026-11-13). It ends `nightly:check passed`, `nightly:check skipped`, or
+`[nightly:check] ERROR task failed`. On a failed run you have not passed on yet, send the dotfiles lead its `✗` lines
+(the failing suites), so a red nightly is fixed before the day's work (owner, 2026-11-18). Do not go by
+`monit/alert.json` alone: it keeps only the latest alert, and the 2026-11-18 nightly failure was replaced there 16
+minutes later by another alert.
 
 ## Do not
 
