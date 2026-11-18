@@ -205,14 +205,15 @@ def test_start_by_product_refuses_several_installs(capsys: pytest.CaptureFixture
 
 
 @pytest.mark.parametrize(
-    ("extra", "reason"),
+    ("extra", "reason", "timeout"),
     [
-        ([], "no IDE came up from {app} in time"),
-        (["--no-about", "--die"], "ended before it was ready"),
+        ([], "no IDE came up from {app} in time", "0.5"),
+        # The stand-in runs 2 s before it ends (--die), so the deadline must outlast it.
+        (["--no-about", "--die"], "ended before it was ready", "3"),
     ],
 )
 def test_start_reports_an_ide_that_does_not_come_up(
-    capsys: pytest.CaptureFixture[str], toolbox: Path, extra: list[str], reason: str
+    capsys: pytest.CaptureFixture[str], toolbox: Path, extra: list[str], reason: str, timeout: str
 ) -> None:
     """Nothing runs afterwards, so the outcome is a refusal."""
     app = toolbox / "fake.app"
@@ -220,7 +221,7 @@ def test_start_reports_an_ide_that_does_not_come_up(
         flags(app, *extra)
     else:  # a launcher that starts nothing
         (app / "Contents/MacOS/fake").write_text("#!/bin/sh\nexit 0\n")
-    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "3")
+    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", timeout)
     assert (code, event["lifecycle"]["action"]) == (1, "refused")
     assert reason.format(app=app) in event["lifecycle"]["reason"]
 
@@ -339,11 +340,11 @@ def test_another_jbctl_holds_the_ide(capsys: pytest.CaptureFixture[str], toolbox
 @needs_jbax
 def test_stop_without_force_never_kills(capsys: pytest.CaptureFixture[str], start: Start) -> None:
     ide = start("--stubborn")
-    code, [event], _ = run(capsys, "stop", "--ide", "fake", "--timeout", "1")
+    code, [event], _ = run(capsys, "stop", "--ide", "fake", "--timeout", "0.5")
     assert (code, event["lifecycle"]["action"], ide.process.poll()) == (1, "refused", None)
     assert event["lifecycle"]["reason"].endswith("answer it in the IDE or wait. Nothing was killed.")
     stopped = {"script": "fake", "action": "stopped", "pid": ide.process.pid}
-    assert run(capsys, "stop", "--ide", "fake", "--timeout", "5", "--force") == (0, [{"lifecycle": stopped}], "")
+    assert run(capsys, "stop", "--ide", "fake", "--timeout", "2", "--force") == (0, [{"lifecycle": stopped}], "")
 
 
 @needs_jbax
@@ -352,7 +353,7 @@ def test_stop_reports_an_ide_that_will_not_quit(
     capsys: pytest.CaptureFixture[str], start: Start, flag: str, reason: str
 ) -> None:
     ide = start(flag)
-    code, [event], _ = run(capsys, "stop", "--ide", "fake", "--timeout", "1", "--force")
+    code, [event], _ = run(capsys, "stop", "--ide", "fake", "--timeout", "0.5", "--force")
     assert (code, reason in event["lifecycle"]["reason"], ide.process.poll()) == (1, True, None)
 
 
@@ -408,7 +409,7 @@ def test_restart_refuses_while_another_install_runs(
 @needs_jbax
 def test_restart_reports_an_ide_that_does_not_quit(capsys: pytest.CaptureFixture[str], start: Start) -> None:
     start("--deaf")
-    code, [event], _ = run(capsys, "restart", "--foreground", "--ide", "fake", "--timeout", "1")
+    code, [event], _ = run(capsys, "restart", "--foreground", "--ide", "fake", "--timeout", "0.5")
     assert (code, event["lifecycle"]["reason"].endswith("Nothing was killed.")) == (1, True)
 
 
