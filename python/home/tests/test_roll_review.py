@@ -113,6 +113,13 @@ def setup(world: World) -> tuple[Path, Versions]:
         {
             CURL: {"stdout": CHANGELOG},
             CODEX: out(releases),
+            # agy's tags are bare versions.
+            ("gh", "api", "repos/google-antigravity/antigravity-cli/releases?per_page=100&page=1"): out(
+                [
+                    {"tag_name": "1.5.9", "prerelease": False, "body": "- Fixed plugin validate"},
+                    {"tag_name": "1.5.8", "prerelease": False, "body": "agy 1.5.8 notes"},
+                ]
+            ),
             # c1 is a marketplace commit outside plugins/remote, so GitHub's path list leaves it out; c0 is older
             # than r1, so the compare leaves it out. remote's note is c2 alone.
             ("gh", "api", "repos/o/gh/compare/r1...r2", "--jq", ".commits[].sha"): {"stdout": "c1\nc2\n"},
@@ -171,8 +178,9 @@ def test_a_review_pairs_every_change_with_its_notes_triages_once_and_closes_the_
     assert "## rust-v0.169.0" in text
     assert "alpha" not in text
     assert "already had" not in text
-    # agy has no verified release source: no notes, so no triage, and it stays not reviewed.
-    assert "## agy 1.5.8 -> 1.5.9\n\n```text\nno notes found\n```" in text
+    # agy: its own GitHub releases, bare tags, only those after the old version.
+    assert "## 1.5.9\n- Fixed plugin validate" in text
+    assert "agy 1.5.8 notes" not in text
     assert "- Changed the hook\n## 1.1" in text
     assert "remote fix" in text
     assert "older than r1" not in text
@@ -190,7 +198,7 @@ def test_a_review_pairs_every_change_with_its_notes_triages_once_and_closes_the_
     assert "### codex 0.168.0 -> 0.169.0\n\n## BREAKING\n- none\n" in review_md
     asked = [call for call in world.calls() if call == review.TRIAGE]
     assert len(asked) == 1
-    assert "Not reviewed, no notes:\n- agy 1.5.8 -> 1.5.9\n- late@m 1.0-a -> 1.0-b\n" in review_md
+    assert "Not reviewed, no notes:\n- late@m 1.0-a -> 1.0-b\n" in review_md
     page = next((world.wiki / "updates").iterdir()).read_text()
     assert page.startswith(f"## run-1\n\n- Review: {run / 'review.md'}\n- Changed: 8 item(s): claude")
     assert (world.home / ".config/mise/update-evidence/roll-run-1.md").read_text() == page.split("\n\n", 1)[1].rstrip(
