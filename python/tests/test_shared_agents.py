@@ -36,8 +36,9 @@ ENTRIES = (
     "~/.claude/skills/implement-spec",
     "~/.agents/skills/implement-spec",
 )
-# Frozen from the live source ranges in #449's brief before writing the shared file.
-TABS_SHA256 = "01ac699d9ef173bcb243c4ca126fb3b4ea41e4f317907a18a354503a0b1cc5b9"
+# Frozen from the live source ranges in #449's brief before writing the shared file; the codex-hc reason updated when
+# codex-hc started running the mise [wrappers.codex] shim (fnox 1.50 tab outage).
+TABS_SHA256 = "56e6d04adc65bbcf1b2e435922d3e653fa86afaa368c5bcac41dfc5393864a9f"
 # The research rule as #614 rewrote it for fnox proxy run.
 RESEARCH_SHA256 = "6b7fe6dd7a6754c24da04a0b5e0236270d9875dc83030e52ef2c37942e1615aa"
 # The plugin rule as the owner relaxed it on 2026-11-13: plugin changes need no separate OK.

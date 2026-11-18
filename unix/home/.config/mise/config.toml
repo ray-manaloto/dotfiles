@@ -565,7 +565,18 @@ codex-update = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.l
 # src/toolset/toolset_paths.rs:183-195) and, while a wrapper runs, sends its command and everything it starts to the
 # real tool (src/cli/shim.rs:241-249), so fnox finds the real codex. Claude needs no wrapper: its apify key comes
 # from a headersHelper. A Doppler error starts the harness with placeholders that the proxy refuses until Doppler is
-# back. Shells only: herdr argv launches skip [wrappers] (codex-hc covers Codex).
+# back. herdr argv launches find no wrappers dir on PATH, so codex-hc runs this wrapper's shim by path (the shim,
+# unlike `mise x`, does not install a checkout's own mise tools). `--config` loads only the global fnox file: a
+# fnox.toml in the working folder would otherwise replace a provider of the same name (fnox config.rs merge_configs).
+# Codex settings every launch needs (Codex rust-v0.170.0):
+# - `--disable daemon_auto_start`: a shared app-server daemon keeps the environment it started with, so a second
+#   client would get another terminal's HC_* and keys (app-server-daemon/README.md:22-24); the feature is the
+#   config form of --no-daemon (features/src/lib.rs:1141, tui/src/startup_orchestration.rs:571-575).
+# - shell_environment_policy inherit = "all" narrowed by include_only to the 11 core names (protocol/src/
+#   shell_environment.rs:177-181), HC_* (hc reads HC_TERMINAL_SOCKET, HC_TERMINAL_ID, HC_SCOPE, HC_SESSION in the
+#   commands Codex runs) and, by exact name, the keys `[shell_environment_policy.set]` in ~/.codex/config.toml sets:
+#   include_only runs after set and drops whatever it does not match (shell_environment.rs:153-163). Add a name here
+#   when you add a set key there. Prefixes such as CLAUDE_CODE_* would let a parent's tokens through.
 # OpenCode runs --standalone: its background service (`opencode serve --service`) makes the MCP calls otherwise,
 # outside the proxy (owner ruling 2026-11-11; packages/cli/src/services/server-connection.ts at v2.2.7).
 # Bypass, no keys: run the real binary by path (`~/.local/bin/codex`, `~/.opencode/bin/opencode`);
@@ -579,12 +590,16 @@ codex-update = "PATH=\"$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin\" $HOME/.l
 # To see the audit lines while checking a client, run fnox by hand without RUST_LOG.
 [wrappers.codex]
 command = "fnox"
-args = ["--non-interactive", "proxy", "run", "--", "env", "-u", "RUST_LOG", "codex"]
+args = [
+  "--non-interactive", "--config", "{{env.HOME}}/.config/fnox/config.toml", "proxy", "run", "--", "env", "-u", "RUST_LOG",
+  "codex", "--disable", "daemon_auto_start", "-c", 'shell_environment_policy.inherit="all"',
+  "-c", 'shell_environment_policy.include_only=["PATH","SHELL","TMPDIR","TEMP","TMP","HOME","LANG","LC_ALL","LC_CTYPE","LOGNAME","USER","HC_*","CLAUDE_CODE_BRIEF","CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS","CLAUDE_CODE_FORK_SUBAGENT","CLAUDE_CODE_NEW_INIT","CLAUDE_CODE_NO_FLICKER","ENABLE_CLAUDEAI_MCP_SERVERS","ENABLE_TOOL_SEARCH","NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S","OTEL_LOG_RAW_API_BODIES"]',
+]
 env = { RUST_LOG = "info,fnox::proxy=warn" }
 
 [wrappers.opencode]
 command = "fnox"
-args = ["--non-interactive", "proxy", "run", "--", "env", "-u", "RUST_LOG", "opencode", "--standalone"]
+args = ["--non-interactive", "--config", "{{env.HOME}}/.config/fnox/config.toml", "proxy", "run", "--", "env", "-u", "RUST_LOG", "opencode", "--standalone"]
 env = { RUST_LOG = "info,fnox::proxy=warn" }
 
 [vars]

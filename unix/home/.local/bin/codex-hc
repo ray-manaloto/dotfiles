@@ -1,20 +1,7 @@
 #!/bin/sh
-# Codex for herdr tabs and `hc run`, which start programs without a shell and so skip the mise [wrappers].
-# fnox proxy run gives it placeholders and adds the real keys to its requests, as for every harness.
-# hc needs --no-daemon to keep Codex's commands in hc.
-# Inside an hc terminal, also passes hc's variables through shell_environment_policy.set, because
-# inherit = "core" in ~/.codex/config.toml drops them from the commands Codex runs, and hc send then looks
-# for the wrong socket. -c adds to the set table in config.toml. hc reads HC_SOCKET for its client socket,
-# not HC_TERMINAL_SOCKET.
-# Usage: hc run --bg --name fix codex-hc "task"
-if [ -n "${HC_TERMINAL_ID:-}" ] && [ -n "${HC_TERMINAL_SOCKET:-}" ]; then
-  set -- \
-    -c "shell_environment_policy.set.HC_TERMINAL_SOCKET=\"$HC_TERMINAL_SOCKET\"" \
-    -c "shell_environment_policy.set.HC_TERMINAL_ID=\"$HC_TERMINAL_ID\"" \
-    ${HC_SCOPE:+-c "shell_environment_policy.set.HC_SCOPE=\"$HC_SCOPE\""} \
-    ${HC_SESSION:+-c "shell_environment_policy.set.HC_SESSION=\"$HC_SESSION\""} \
-    "$@"
-fi
-# RUST_LOG for fnox alone keeps its per-request audit lines out of Codex's screen; env -u starts Codex without it
-# (the [wrappers.codex] comment in ~/.config/mise/config.toml says why).
-RUST_LOG='info,fnox::proxy=warn' exec fnox --non-interactive proxy run -- env -u RUST_LOG codex --no-daemon "$@"
+# Codex for herdr tabs and `hc run`, which start programs without a shell, so PATH has no mise wrappers dir. This
+# runs the [wrappers.codex] shim by path, which starts Codex under `fnox --config <global file> proxy run` with the
+# daemon off and the HC_* variables passed to the commands Codex runs: every setting and its reason is in that
+# wrapper's comment in ~/.config/mise/config.toml. Kept as a name so tab argv, roll and the docs stay short.
+# Usage: herdr-app do tab.new ... --argv '["codex-hc", "task"]'
+exec "$HOME/.local/share/mise/command-wrappers/bin/codex" "$@"
