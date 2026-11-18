@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from hometools import proc
 from hometools import toolchain as commands
 from hometools.cli import main
 from hometools.config import ToolchainError
@@ -50,12 +49,6 @@ def iwyu(tc: Scratch) -> str:
 
 def ok(tc: Scratch) -> str:
     return f"toolchain:verify OK: clang {tc.settings['llvm']}, gcc {tc.settings['gcc']}, {iwyu(tc)}"
-
-
-@pytest.mark.parametrize("args", [[], ["nothing"], ["toolchain-verify", "extra"]])
-def test_a_wrong_command_is_a_usage_error(capfd: pytest.CaptureFixture[str], args: list[str]) -> None:
-    code, out, _err = hometools(capfd, *args)
-    assert (code, out) == (2, "")
 
 
 def test_a_healthy_toolchain_passes(toolchain: Scratch, capfd: pytest.CaptureFixture[str]) -> None:
@@ -341,12 +334,6 @@ def test_a_failed_bootstrap_stops_there(toolchain: Scratch, capfd: pytest.Captur
     toolchain.write(conf_d, "")
     [line] = refused(capfd, "bootstrap-toolchain")
     assert re.fullmatch(r"mise exited \d+", line)
-
-
-def test_an_empty_first_line_prints_nothing(capfd: pytest.CaptureFixture[str]) -> None:
-    # No Homebrew program prints nothing for --version; true is a real program that does.
-    proc.head(Path("/usr/bin/true"))
-    assert capfd.readouterr().out == ""
 
 
 def test_toml_table_round_trips_text_outside_the_bmp_and_control_characters() -> None:

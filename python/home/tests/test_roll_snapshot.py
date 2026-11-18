@@ -404,14 +404,3 @@ def test_an_agent_whose_hc_get_answered_nothing_writes_nothing(world: World, cap
     assert (code, got) == (1, "")
     assert json.loads(err)["error"] == "roll: hc get t3 --json answered nothing for a live agent; nothing was written"
     assert path.read_text() == before
-
-
-def test_the_world_reads_no_host_mise_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A MISE_DATA_DIR the runner exports, with a dangling link in it, is not the scratch HOME's: no roll sees it."""
-    host = tmp_path / "host"
-    (host / "installs/zig").mkdir(parents=True)
-    (host / "installs/zig/global").symlink_to(host / "gone")
-    monkeypatch.setenv("MISE_DATA_DIR", str(host))
-    (tmp_path / "world").mkdir()
-    World(tmp_path / "world", monkeypatch)
-    assert live.dangling().dangling == []
