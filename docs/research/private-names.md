@@ -132,7 +132,8 @@ Save it under a scratch folder with mode 0600.
   - Web search failed with `CERTIFICATE_VERIFY_FAILED ... Missing Authority Key Identifier`. Cause, reproduced:
     fnox 1.48.0's proxy signs its own certificate for each host in its rules (here Serper), and that certificate
     lacks the Authority Key Identifier that Python 3.13+ requires in its default strict mode. A host outside the
-    rules passes. Fixed upstream in jdx/fnox PR #1162 (issue #1160), not yet released; rerun after the fnox bump.
+    rules passes. Fixed in fnox 1.49.0 (jdx/fnox PR #1162, issue #1160): on 2026-11-18 a Python 3.15 request through
+    the proxy failed this way on 1.48.0 and returned 200 on 1.50.0, so no TLS shim is needed. This search was not rerun.
   - Reddit answered `HTTP 403: Blocked`: Reddit refuses the scripted request.
 - Not verified: whether fnox's doppler provider uses Doppler's offline fallback; which pattern is most common
   (a handful of repos, no survey).
