@@ -963,11 +963,13 @@ description = "Drop mise's tracked-config records of dotfiles worktree copies of
 run = 'n=0; for l in "${MISE_STATE_DIR:-$HOME/.local/state/mise}"/tracked-configs/*; do t=$(readlink "$l") || continue; case "$t" in */dotfiles.worktrees/*/unix/home/.config/mise/config.toml | */pytest-of-*/*) rm "$l" && n=$((n + 1));; esac; done; echo "mise:untrack-worktrees: dropped $n records"'
 
 # Every hk check and every root's tests in the checkout this config links into (the launchd agent nightly-check
-# runs it at 03:00). hk runs 2 steps at a time (hk.pkl jobs) and --jobs 2 caps the test tasks, each pytest at 4
-# workers (the checkout's PYTEST_XDIST_AUTO_NUM_WORKERS). A pass touches nightly/passed, which monit watches (3 days
+# runs it at 03:00). hk check --all already runs every Python and Swift suite (hk.pkl suites), so only the roots it
+# has no step for follow, one at a time: typescript, visualplan and cpp (`mise run test` ran every suite a second
+# time, ~1 h at load 13 on 2026-11-18). hk runs 2 steps at a time (hk.pkl jobs), each pytest at 4 workers (the
+# checkout's PYTEST_XDIST_AUTO_NUM_WORKERS). A pass touches nightly/passed, which monit watches (3 days
 # without one alert); a failure raises monit:alert and exits 1. This Mac sleeps
 # when nothing holds it awake, and launchd then starts a missed 03:00 run on waking, when the owner sits down: a
 # run that starts after 05:59, or with the 5-minute load average above the core count, says so and skips.
 [tasks."nightly:check"]
-description = "Run hk check --all and mise run test in the dotfiles checkout; a failure raises a monit alert"
-run = 'date && h=$(date +%H) && l=$(sysctl -n vm.loadavg | cut -d" " -f3 | cut -d. -f1) && { [ "$h" -lt 6 ] && [ "$l" -lt "$(sysctl -n hw.ncpu)" ] || { echo "nightly:check skipped: hour $h, 5-minute load $l"; exit 0; }; } && cd "$(git -C "$(dirname "$(realpath ~/.config/mise/config.toml)")" rev-parse --show-toplevel)" && git log -1 --oneline && { hk check --all && mise run --jobs 2 test && touch ~/.local/state/dotfiles/nightly/passed && echo nightly:check passed; } || { MONIT_SERVICE=nightly-check MONIT_EVENT="Check failed" MONIT_DESCRIPTION="hk check --all or mise run test failed; see ~/.local/state/dotfiles/nightly/check.log" mise run monit:alert; exit 1; }'
+description = "Run hk check --all, then the tests of the roots hk has no step for, in the dotfiles checkout; a failure raises a monit alert"
+run = 'date && h=$(date +%H) && l=$(sysctl -n vm.loadavg | cut -d" " -f3 | cut -d. -f1) && { [ "$h" -lt 6 ] && [ "$l" -lt "$(sysctl -n hw.ncpu)" ] || { echo "nightly:check skipped: hour $h, 5-minute load $l"; exit 0; }; } && cd "$(git -C "$(dirname "$(realpath ~/.config/mise/config.toml)")" rev-parse --show-toplevel)" && git log -1 --oneline && { hk check --all && mise run --jobs 1 //typescript:test ::: //visualplan:test ::: //cpp:test && touch ~/.local/state/dotfiles/nightly/passed && echo nightly:check passed; } || { MONIT_SERVICE=nightly-check MONIT_EVENT="Check failed" MONIT_DESCRIPTION="hk check --all or the tests of typescript, visualplan or cpp failed; see ~/.local/state/dotfiles/nightly/check.log" mise run monit:alert; exit 1; }'
