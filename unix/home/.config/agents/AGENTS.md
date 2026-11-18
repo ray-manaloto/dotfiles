@@ -106,8 +106,9 @@ repository adds its own commands in a `## Workflow facts` section of its `AGENTS
 No review is required for commits or pull requests (owner ruling, 2026-11-17). Stage the changed files by name
 (jouet denies `git add -A` and `git add .`). Write the body to a file, push the branch, open the pull request
 with `repotools pr-create --title <title> --body-file <body file>`, then merge with the repository's merge
-command. `repotools` and `workflowtools` are uv tools that `mise run //repo:tools-install` installs from
-dotfiles. Each repository's own checks still run (in dotfiles, hk with betterleaks and private-paths). The author keeps
+command. `repotools` and `workflowtools` are uv tools that
+`mise -C ~/dev/github/ray-manaloto/cpp-standard run //repo:tools-install` installs from cpp-standard's `main`.
+Each repository's own checks still run (in dotfiles, hk with betterleaks and private-paths). The author keeps
 public text (commits, pull request titles and bodies, issues and comments) free of private project content,
 claude.ai session links and home paths.
 

@@ -43,8 +43,8 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   changes a file in hk.pkl's `shared` list (`mise.lock`, `hk.pkl`, ...); the nightly still runs `--all`.
   Then it runs `gh pr merge N --merge --match-head-commit <HEAD> --author-email 1428022+sortakool@users.noreply.github.com` (the merging account's noreply
   address, never a personal email) and checks the merge commit's author. If it refuses, fix the cause.
-  It runs the repotools that `mise run //repo:tools-install` installed from `main`, never the branch's
-  own code; rerun that install on `main` after a merge that changes repotools.
+  It runs the repotools that `mise run //repo:tools-install` installed from cpp-standard's `main` (the
+  task points there; the tools moved), never the branch's own code; rerun it after a merge there that changes them.
   Hosted checks from free apps are advisory, and no paid CI is added.
 - This repo is public. hk's checks still run, betterleaks and private-paths among them. Before any push
   or public write, the lead reads the whole PR diff, every commit in it with its message, and the PR

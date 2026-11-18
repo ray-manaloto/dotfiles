@@ -108,16 +108,13 @@ def record(root: Path) -> Path:
     return next(tool.glob("lib/python*/site-packages/workflowtools-*.dist-info/RECORD"))
 
 
-def test_a_second_run_changes_nothing(tool_env: Path) -> None:
-    first = subprocess.run(["mise", "run", "//repo:tools-install"], capture_output=True, check=True, text=True)
-    assert [event.action for event in events(first.stdout)] == ["installed", "installed"]
-    assert first.stderr.count('{"error"') == 0
-    # Not all of state/: mise keeps its own task history there (task.history, mise 2026.11.3) on every run.
+def test_a_second_run_changes_nothing(tool_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # The subcommand, not `mise run //repo:tools-install`: that task now points at cpp-standard's main checkout
+    # (cpp-standard #156), whose copy of this test runs the task there.
+    assert [event.action for event in installed(capsys)] == ["installed", "installed"]
     roots = (tool_env / "uv" / "tools", tool_env / "uv" / "bin", tool_env / "state" / "dotfiles")
     before = snapshot(*roots)
-    second = subprocess.run(["mise", "run", "//repo:tools-install"], capture_output=True, check=True, text=True)
-    assert [event.action for event in events(second.stdout)] == ["unchanged", "unchanged"]
-    assert second.stderr.count('{"error"') == 0
+    assert [event.action for event in installed(capsys)] == ["unchanged", "unchanged"]
     assert snapshot(*roots) == before
 
 

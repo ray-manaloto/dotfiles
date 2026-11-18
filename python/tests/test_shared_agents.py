@@ -13,27 +13,23 @@ REPO = Path(__file__).resolve().parents[2]
 SHARED = REPO / "unix/home/.config/agents/AGENTS.md"
 WORKFLOW = REPO / "unix/home/.config/agents/workflow"
 SKILLS = REPO / "unix/home/.config/agents/skills"
+# Moved to cpp-standard (its #156): the links resolve into its main checkout, at this path below the home.
+CPP_STANDARD = "dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents"
+MOVED = ("ticket-retro", "session-retro")
+STAYED = ("work", "to-spec", "to-tickets", "implement", "implement-spec", "chief-of-staff", "lsp-server", "secrets")
+STAYED += ("herdr-startup", "herdr-shutdown")
 ENTRIES = (
     "~/.config/agents/AGENTS.md",
     "~/.codex/AGENTS.md",
     "~/.gemini/GEMINI.md",
     "~/.claude/CLAUDE.md/agents",
     "~/.config/agents/workflow",
-    "~/.config/agents/skills",
-    "~/.claude/skills/ticket-retro",
-    "~/.agents/skills/ticket-retro",
-    "~/.claude/skills/session-retro",
-    "~/.agents/skills/session-retro",
-    "~/.claude/skills/work",
-    "~/.agents/skills/work",
-    "~/.claude/skills/to-spec",
-    "~/.agents/skills/to-spec",
-    "~/.claude/skills/to-tickets",
-    "~/.agents/skills/to-tickets",
-    "~/.claude/skills/implement",
-    "~/.agents/skills/implement",
-    "~/.claude/skills/implement-spec",
-    "~/.agents/skills/implement-spec",
+    "~/.config/agents/skills/LICENSE",
+    *(
+        f"~/{folder}/{skill}"
+        for skill in (*MOVED, *STAYED)
+        for folder in (".config/agents/skills", ".claude/skills", ".agents/skills")
+    ),
 )
 CBM_SHA256 = "b91b037c7a0f857cb633c32abd7ab288b5ff3d18431b86e902d635c0e4683485"
 CONTEXT7_SHA256 = "9fc34f2cc057e3175d8b49c622d4732745102f0b9ffdefe2ca739d994396f37b"
@@ -73,6 +69,11 @@ class SharedAgentsInstallTest(unittest.TestCase):
         cls.root = Path(tempfile.mkdtemp()).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.root)
         cls.home = cls.root / "home"
+        # The moved files, as cpp-standard's main checkout holds them: byte-equal copies of this tree's.
+        cls.moved = cls.home / CPP_STANDARD
+        shutil.copytree(WORKFLOW, cls.moved / "workflow")
+        for skill in MOVED:
+            shutil.copytree(SKILLS / skill, cls.moved / "skills" / skill)
         done = cls.scratch("mise", "dot", "apply", *ENTRIES)
         if done.returncode != 0:
             raise AssertionError((done.returncode, done.stdout, done.stderr))
@@ -115,13 +116,16 @@ class SharedAgentsInstallTest(unittest.TestCase):
                 self.assertTrue((self.home / path.removeprefix("~/")).exists())
 
     def test_the_skills_folder_resolves(self) -> None:
-        self.assertTrue((self.home / ".config/agents/skills/LICENSE").is_file())
-        for skill in ("ticket-retro", "session-retro", "work", "to-spec", "to-tickets", "implement", "implement-spec"):
-            for scope in (".claude", ".agents"):
-                with self.subTest(skill=skill, scope=scope):
-                    path = self.home / scope / "skills" / skill
+        folder = self.home / ".config/agents/skills"
+        self.assertFalse(folder.is_symlink())
+        self.assertEqual((folder / "LICENSE").resolve(), SKILLS / "LICENSE")
+        self.assertEqual((self.home / ".config/agents/workflow").resolve(), self.moved / "workflow")
+        for skill in (*MOVED, *STAYED):
+            source = self.moved / "skills" / skill if skill in MOVED else SKILLS / skill
+            for path in (folder / skill, *(self.home / scope / "skills" / skill for scope in (".claude", ".agents"))):
+                with self.subTest(path=path):
                     self.assertTrue(path.is_symlink())
-                    self.assertEqual(path.resolve(), SKILLS / skill)
+                    self.assertEqual(path.resolve(), source)
 
     def test_each_skill_has_a_loadable_frontmatter(self) -> None:
         for skill in sorted(SKILLS.glob("*/SKILL.md")):
