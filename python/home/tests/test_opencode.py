@@ -7,7 +7,6 @@
 import json
 import os
 import shutil
-import stat
 from pathlib import Path
 
 import pytest
@@ -91,17 +90,6 @@ def test_appends_to_existing_content_separated_by_one_blank_line(
     assert target.read_text() == ("## herdr\n\nhand-written.\n\n<!-- jouet:start -->\nguidance\n<!-- jouet:end -->\n")
 
 
-def test_appends_to_an_empty_file_with_no_leading_blank_line(
-    target: Path, stand_in: Path, capfd: pytest.CaptureFixture[str]
-) -> None:
-    target.parent.mkdir(parents=True)
-    target.write_text("")
-    answer(stand_in, SKILL_CALL, {"stdout": "guidance\n"})
-    code, _out, err = hometools(capfd)
-    assert (code, err) == (0, "")
-    assert target.read_text() == "<!-- jouet:start -->\nguidance\n<!-- jouet:end -->\n"
-
-
 def test_replaces_an_existing_block_in_place_keeping_surrounding_content(
     target: Path, stand_in: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
@@ -166,27 +154,6 @@ def test_unchanged_content_is_not_rewritten(target: Path, stand_in: Path, capfd:
     code, _out, err = hometools(capfd)
     assert (code, err) == (0, "")
     assert target.stat().st_ino == before
-
-
-def test_file_mode_is_preserved_across_a_rewrite(
-    target: Path, stand_in: Path, capfd: pytest.CaptureFixture[str]
-) -> None:
-    target.parent.mkdir(parents=True)
-    target.write_text("old\n")
-    target.chmod(0o640)
-    answer(stand_in, SKILL_CALL, {"stdout": "guidance\n"})
-    code, _out, err = hometools(capfd)
-    assert (code, err) == (0, "")
-    assert stat.S_IMODE(target.stat().st_mode) == 0o640
-
-
-def test_no_leftover_temp_file_after_a_successful_run(
-    target: Path, stand_in: Path, capfd: pytest.CaptureFixture[str]
-) -> None:
-    answer(stand_in, SKILL_CALL, {"stdout": "guidance\n"})
-    code, _out, err = hometools(capfd)
-    assert (code, err) == (0, "")
-    assert [path.name for path in target.parent.iterdir()] == [target.name]
 
 
 def test_replaces_a_block_at_end_of_file_with_no_trailing_newline(

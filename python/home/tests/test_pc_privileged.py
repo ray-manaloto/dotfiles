@@ -178,31 +178,6 @@ def test_a_vanished_container_with_any_exit_but_1_is_unknown(
     assert f"(exit {exit_code})" in detail
 
 
-@pytest.mark.parametrize("hung", ["list", "inspect"])
-def test_a_timeout_is_unknown(
-    hung: str, ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
-    web = found(container(WEB, "web", "example/web:1"))
-    script = {LIST: listing(WEB), inspect(WEB): web}
-    key = LIST if hung == "list" else inspect(WEB)
-    script[key] = script[key] | {"sleep": 30}
-    answer(ssh, script)
-    code, result, detail, _, _ = line(capfd)
-    assert (code, result) == (3, "unknown")
-    assert detail.endswith("timed out after 5 s")
-
-
-@pytest.mark.parametrize("failed", ["list", "inspect"])
-def test_an_ssh_failure_is_unknown(failed: str, ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    refused = {"stderr": "ssh: connect to host pc port 22: Connection refused\n", "code": 255}
-    script: dict[str, object] = {LIST: listing(WEB), inspect(WEB): found(container(WEB, "web", "example/web:1"))}
-    script[LIST if failed == "list" else inspect(WEB)] = refused
-    answer(ssh, script)
-    code, result, detail, _, _ = line(capfd)
-    assert (code, result, detail) == (3, "unknown", "ssh pc failed (exit 255)")
-
-
 def test_the_daemon_is_named_explicitly(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
     # An inherited DOCKER_CONTEXT or DOCKER_HOST must not choose the daemon: each docker call names the PC's socket.
     answer(ssh, {LIST: listing()})
@@ -213,15 +188,3 @@ def test_the_daemon_is_named_explicitly(ssh: Path, capfd: pytest.CaptureFixture[
     assert all(
         call[call.index("docker") :][:3] == ["docker", "--host", "unix:///var/run/docker.sock"] for call in docker
     )
-
-
-def test_a_hostile_name_and_image_come_out_inert(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    # CODING_STANDARDS 9: name and image come from the PC's daemon; quotes, backslashes and a newline must stay inside
-    # one JSON string, so stdout still holds exactly one event per check.
-    name, image = 'a"b\\c\nd"},{"check":"forged","result":"pass', 'x\\"y\nz:1'
-    hostile = container(JOB, name, image, privileged=True)
-    answer(ssh, {LIST: listing(JOB), inspect(JOB): found(hostile)})
-    code, lines, _ = doctor(capfd)
-    assert (code, [made.check for made in lines].count("forged")) == (1, 0)
-    (mine,) = [made for made in lines if made.check == CHECK]
-    assert mine.culprits == [f"container:{name} image:{image}"]

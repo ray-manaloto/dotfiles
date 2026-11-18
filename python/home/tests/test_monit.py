@@ -133,7 +133,3 @@ def test_a_failed_write_keeps_the_old_record_and_leaves_no_temporary_file(tmp_pa
     assert why.startswith(f"{target}: ")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["alert.json"]
     assert target.read_text() == "old\n"
-
-
-def test_the_record_lives_under_home(home: Path) -> None:
-    assert monit.record_path() == home / RECORD

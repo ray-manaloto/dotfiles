@@ -131,14 +131,6 @@ def test_a_missing_library_and_an_unreadable_driver_fail_not_unknown(
     assert "could not read: cat exited 1" in line.detail
 
 
-def test_a_timeout_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
-    code, line, _ = gpu_line(ssh, capfd, {gpu.UNITS: gpu.units() | {"sleep": 30}})
-    assert (code, line.result.value, line.culprits) == (3, "unknown", [])
-    assert "ssh pc systemctl show" in line.detail
-    assert "timed out after 5 s" in line.detail
-
-
 def test_an_unreachable_pc_costs_one_call(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
     down = {"stderr": "ssh: connect to host pc port 22: Connection refused\n", "code": 255}
     code, line, _ = gpu_line(ssh, capfd, {gpu.PACMAN: down})

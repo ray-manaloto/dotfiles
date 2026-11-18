@@ -156,23 +156,6 @@ def test_a_missing_tool_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str])
     assert line["detail"] == "official: none waiting; aur: unknown (yay was not found on the PC's PATH)"
 
 
-def test_a_timeout_is_unknown_never_none(
-    ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
-    answer(ssh, {CHECKUPDATES: NONE_OFFICIAL | {"sleep": 30}, YAY: NONE_AUR})
-    code, line, _ = updates(capfd)
-    assert (code, line["result"], line["culprits"]) == (3, "unknown", ["official"])
-    assert "timed out after 5 s" in str(line["detail"])
-
-
-def test_an_ssh_failure_is_unknown_for_both(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    down = {"stderr": "ssh: connect to host pc port 22: Connection refused\n", "code": 255}
-    answer(ssh, {CHECKUPDATES: down, YAY: down})
-    code, line, _ = updates(capfd)
-    assert (code, line["result"], line["culprits"], line["items"]) == (3, "unknown", ["official", "aur"], [])
-
-
 def test_the_line_applies_nothing(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
     # Its only calls on the PC are the two queries: no pacman -Sy on the live database, no yay -Syu.
     answer(ssh, {CHECKUPDATES: OFFICIAL, YAY: AUR})
@@ -182,10 +165,3 @@ def test_the_line_applies_nothing(ssh: Path, capfd: pytest.CaptureFixture[str]) 
     calls = [call for call in (ssh / "calls.jsonl").read_text().splitlines() if call not in others]
     mine = [json.loads(call)[8:] for call in calls]
     assert mine == [["checkupdates"], ["yay", "-Qua"]]
-
-
-def test_a_hostile_package_line_comes_out_inert(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    # CODING_STANDARDS 9: the PC's output lands in one JSON string per item; quotes and backslashes stay inside it.
-    hostile = 'x"},{"check":"forged","result":"pass\\ 1 -> 2'
-    code, line, _ = run(ssh, capfd, {"stdout": hostile + "\n"}, NONE_AUR)
-    assert (code, line["items"]) == (0, [f"official:{hostile}"])

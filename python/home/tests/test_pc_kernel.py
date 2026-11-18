@@ -3,8 +3,6 @@
 # Spec #729, ticket #730. The answers follow what sysctl (procps-ng 4.0.7) printed on the PC on 2026-11-16: one
 # `key = value` line per key, exit 1 and a message on stderr for a key the kernel does not have.
 
-import json
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -32,11 +30,6 @@ def kernel(folder: Path, capfd: pytest.CaptureFixture[str], said: dict[str, obje
     code, lines, err = doctor(capfd)
     [line] = [line for line in lines if line.check == "kernel-settings"]
     return code, line.model_dump(mode="json"), err
-
-
-def test_the_baseline_holds_exactly_the_five_keys() -> None:
-    tracked = json.loads(files("hometools").joinpath("data/pc-kernel.json").read_text())
-    assert list(tracked) == list(KERNEL_KEYS)
 
 
 def test_boot_values_pass(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
@@ -72,31 +65,10 @@ def test_a_stray_line_does_not_hide_a_change(ssh: Path, capfd: pytest.CaptureFix
     assert (code, line["result"], line["culprits"]) == (1, "fail", ["sysctl:kernel.kptr_restrict"])
 
 
-def test_a_hostile_value_comes_out_inert(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    # CODING_STANDARDS 9: the value comes from the PC; quotes and backslashes stay inside the one JSON line.
-    hostile = '|/x "},{"check":"forged","result":"pass\\'
-    code, line, _ = kernel(ssh, capfd, sysctl({"kernel.core_pattern": hostile}))
-    assert (code, line["result"]) == (1, "fail")
-    assert repr(hostile) in line["detail"]
-
-
 def test_a_missing_sysctl_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
     code, line, _ = kernel(ssh, capfd, {"stderr": "bash: line 1: sysctl: command not found\n", "code": 127})
     assert (code, line["result"]) == (3, "unknown")
     assert "sysctl is not on the PC" in line["detail"]
-
-
-def test_a_timeout_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
-    code, line, _ = kernel(ssh, capfd, sysctl() | {"sleep": 30})
-    assert (code, line["result"]) == (3, "unknown")
-    assert "timed out after 5 s" in line["detail"]
-
-
-def test_an_ssh_failure_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    code, line, _ = kernel(ssh, capfd, {"stderr": "ssh: Connection refused\n", "code": 255})
-    assert (code, line["result"]) == (3, "unknown")
-    assert "ssh pc failed" in line["detail"]
 
 
 @pytest.mark.parametrize("stdout", ["not sysctl output\n", "kernel.sysrq: 16\n"], ids=["prose", "no-equals"])

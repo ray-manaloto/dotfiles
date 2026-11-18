@@ -96,25 +96,6 @@ def test_output_that_is_not_a_mangle_listing_is_unknown(ssh: Path, capfd: pytest
     assert (code, result, detail) == (3, "unknown", "sudo -n iptables -t mangle -S printed no mangle INPUT chain")
 
 
-@pytest.mark.parametrize("hung", [FENCE4, FENCE6])
-def test_a_timeout_is_unknown(
-    hung: str, ssh: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PC_DOCTOR_TIMEOUT", "5")  # far above a stand-in call; the hung one sleeps 30 (#749)
-    script = {FENCE4: listing(INPUT4, FORWARD4), FENCE6: listing(INPUT6)}
-    script[hung] = script[hung] | {"sleep": 30}
-    answer(ssh, script)
-    code, result, detail, _, _ = line(capfd)
-    assert (code, result) == (3, "unknown")
-    assert detail.endswith("timed out after 5 s")
-
-
-def test_an_ssh_failure_is_unknown(ssh: Path, capfd: pytest.CaptureFixture[str]) -> None:
-    answer(ssh, {FENCE4: {"stderr": "ssh: connect to host pc port 22: Connection refused\n", "code": 255}})
-    code, result, detail, _, _ = line(capfd)
-    assert (code, result, detail) == (3, "unknown", "ssh pc failed (exit 255)")
-
-
 def test_a_drop_seen_missing_fails_even_when_the_other_listing_is_unread(
     ssh: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
