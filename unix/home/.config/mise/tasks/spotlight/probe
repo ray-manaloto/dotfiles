@@ -1,0 +1,50 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Exit 1 while Spotlight spikes: over 4,000 mds_stores query steps in 65 s or over 100% CPU"
+"""spotlight:probe: monit's spotlight-spike check program (the monitrc entry in unix/home/.config/mise/config.toml).
+
+Every 60 s cycle monit runs this and, when it exits 1, runs spotlight:capture (again every 5 cycles while it lasts).
+It prints one line, `query_nodes=<n> cpu=<percent>`, which monit puts in MONIT_DESCRIPTION, and exits 1 when either:
+
+- mds_stores logged more than SPOTLIGHT_NODES_LIMIT (default 4000) "query nodes count" lines in the last 65 s (one
+  line per query step; 65 s so a 60 s cycle leaves no gap). The baseline on this Mac is 50 to 1,500 a minute and
+  the bursts that stall it 7,000 to 18,000 (chief-of-staff's counts, 2026-11-17), so 4,000 is well above the
+  busiest normal minute and well below the smallest burst. A count catches a 20-30 s burst that a 60 s CPU
+  average misses;
+- one `ps` sample of mds_stores' %CPU is over SPOTLIGHT_CPU_LIMIT (default 100). Not monit's own `if cpu`: that
+  divides by the thread count and averages over the cycle.
+
+`log show` runs under nice and taskpolicy -b. A file task outside hometools (no unit tests, owner 2026-11-17).
+SPOTLIGHT_NODES_LIMIT and SPOTLIGHT_CPU_LIMIT override the limits for one run, e.g. to test the failing path.
+"""
+
+import os
+import subprocess
+import sys
+
+PS, LOG, NICE, TASKPOLICY = "/bin/ps", "/usr/bin/log", "/usr/bin/nice", "/usr/sbin/taskpolicy"
+NODES_LIMIT = int(os.environ.get("SPOTLIGHT_NODES_LIMIT", "4000"))
+CPU_LIMIT = float(os.environ.get("SPOTLIGHT_CPU_LIMIT", "100"))
+PREDICATE = 'process == "mds_stores" AND eventMessage CONTAINS "query nodes count"'
+
+if sys.platform != "darwin":
+    sys.exit("spotlight:probe: macOS only")
+shown = subprocess.run(
+    [NICE, "-n", "10", TASKPOLICY, "-b", LOG, "show", "--last", "65s", "--style", "compact", "--predicate", PREDICATE],
+    stdin=subprocess.DEVNULL,
+    capture_output=True,
+    text=True,
+    check=False,
+)
+if shown.returncode:
+    # A probe that can't read the log is not a spike: say so and pass, so monit captures nothing on a broken read.
+    sys.stdout.write(f"spotlight:probe: log show exited {shown.returncode}: {shown.stderr.strip()[:200]}\n")
+    raise SystemExit(0)
+nodes = sum(1 for line in shown.stdout.splitlines() if "query nodes count" in line)
+listing = subprocess.run([PS, "-A", "-o", "pcpu=,comm="], capture_output=True, text=True, check=False).stdout
+cpu = sum(
+    float(cpu)
+    for cpu, _, command in (line.strip().partition(" ") for line in listing.splitlines())
+    if command.strip().rsplit("/", 1)[-1] == "mds_stores"
+)
+sys.stdout.write(f"query_nodes={nodes} cpu={cpu:g}\n")
+raise SystemExit(1 if nodes > NODES_LIMIT or cpu > CPU_LIMIT else 0)
