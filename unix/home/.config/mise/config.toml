@@ -180,7 +180,7 @@ node = { version = "26.13.1", minimum_release_age = "0s" }
 go = { version = "1.27.4", minimum_release_age = "0s" }
 rust = { version = "1.100.0", minimum_release_age = "0s" }
 pixi = { version = "0.84.2", minimum_release_age = "0s" }
-uv = { version = "0.13.8", minimum_release_age = "0s" }
+uv = { version = "0.13.9", minimum_release_age = "0s" }
 chezmoi = { version = "2.74.1", minimum_release_age = "0s" }
 pkl = { version = "0.33.0", minimum_release_age = "0s" }
 hk = { version = "2.13.0", workflow = "release.yml", minimum_release_age = "0s" }  # registry name (backend packslip:github.com/jdx/hk first) so `mise x hk` in the global git hooks resolves this pin; was "packslip:github.com/jdx/hk", changed 2026-10-14
@@ -205,7 +205,7 @@ delta = { version = "0.20.1", minimum_release_age = "0s" }
 hyperfine = { version = "2.0.0", minimum_release_age = "0s" }
 glow = { version = "3.0.0", minimum_release_age = "0s" }
 atuin = { version = "18.24.6", minimum_release_age = "0s" }
-"github:ast-grep/ast-grep" = { version = "0.51.2", minimum_release_age = "0s" }
+"github:ast-grep/ast-grep" = { version = "0.51.3", minimum_release_age = "0s" }
 "aqua:FiloSottile/age" = { version = "1.3.2", minimum_release_age = "0s" }
 sops = { version = "3.13.3", minimum_release_age = "0s" }
 #github:DopplerHQ/cli" = { version = "3.77.0", exe = "doppler", asset_pattern = "*macOS_arm64.tar.gz", minimum_release_age = "0s" }
@@ -227,7 +227,7 @@ lychee = { version = "0.24.2", minimum_release_age = "0s" }
 aws-cli = { version = "2.40.2", symlink_bins = "true", minimum_release_age = "0s" }
 #azure-cli = { version = "2.91.0", dependency_prereleases = "allow", with = [], python = "3.14.8", install_env = { UV_NO_BUILD = "1" }, minimum_release_age = "0s", expose = [] }
 "aqua:aws/session-manager-plugin" = { version = "1.2.896.0", minimum_release_age = "0s" }
-github-cli = { version = "2.104.0", minimum_release_age = "0s" }
+github-cli = { version = "2.105.0", minimum_release_age = "0s" }
 cloudflared = { version = "2026.11.0", minimum_release_age = "0s" }
 pandoc = { version = "3.14", minimum_release_age = "0s" }
 tmux = { version = "3.8", minimum_release_age = "0s" }
@@ -257,7 +257,7 @@ gemini = { version = "0.68.0", allow_builds = ["@github/keytar", "node-pty"], mi
 "npm:@mermaid-js/mermaid-cli" = { version = "12.2.0", minimum_release_age = "0s", trust_policy_excludes = ["chromium-bidi@157.0.8090-0"], allow_builds = ["puppeteer"] }
 "npm:jscpd" = { version = "5.4.3", minimum_release_age = "0s" }
 "npm:@fission-ai/openspec" = { version = "1.17.0", minimum_release_age = "0s" }
-biome = { version = "2.6.7", minimum_release_age = "0s" }
+biome = { version = "2.6.8", minimum_release_age = "0s" }
 yt-dlp = { version = "2026.10.26", rename_exe = "yt-dlp", minimum_release_age = "0s" }
 rtk = { version = "1.2.0", minimum_release_age = "0s" }
 "pipx:notebooklm-py" = { version = "0.8.6", extras = ["all"], python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
@@ -282,7 +282,7 @@ kubectl = { version = "1.37.2", minimum_release_age = "0s" }
 "npm:ajv-cli" = { version = "5.0.0", minimum_release_age = "0s" }
 #"pipx:check-jsonschema" = { version = "0.38.2", minimum_release_age = "0s" }
 "gitlab:graphviz/graphviz" = { version = "16.1.1", minimum_release_age = "0s" }
-"aqua:betterleaks/betterleaks" = { version = "1.10.0", minimum_release_age = "0s" }
+"aqua:betterleaks/betterleaks" = { version = "1.10.1", minimum_release_age = "0s" }
 "npm:@ralph-orchestrator/ralph-cli" = { version = "2.10.1", minimum_release_age = "0s" }
 aube = { version = "2.10.1", workflow = ["release-plz.yml@refs/heads/main", "release.yml@refs/heads/main"], minimum_release_age = "0s" }
 shfmt = { version = "3.14.1", minimum_release_age = "0s" }
@@ -290,7 +290,7 @@ sqlite = { version = "3.54.1", minimum_release_age = "0s" }
 micromamba = { version = "2.10.0-0", minimum_release_age = "0s" }
 "pipx:datamodel-code-generator" = { version = "0.89.0", python = "3.14.8", minimum_release_age = "0s", install_env = { UV_NO_BUILD = "1" } }
 "npm:defuddle" = { version = "0.19.6", minimum_release_age = "0s" }
-rumdl = { version = "0.3.3", minimum_release_age = "0s" }
+rumdl = { version = "0.3.4", minimum_release_age = "0s" }
 "github:asciimoo/hister" = { version = "0.21.0", minimum_release_age = "0s" }
 llmfit = { version = "1.1.20", minimum_release_age = "0s" }
 # Research pilot (owner, 2026-11-11). hyperresearch needs Python <3.15 (pyproject requires-python) and pulls
@@ -332,7 +332,7 @@ lua = { version = "5.5.1", minimum_release_age = "0s" }
 "conda:zstd-static" = { version = "1.5.7", minimum_release_age = "0s" }
 "github:ocaml/opam" = { version = "2.6.1", minimum_release_age = "0s" }
 ruff = { version = "0.17.5", minimum_release_age = "0s" }
-ty = { version = "0.0.102", minimum_release_age = "0s" }
+ty = { version = "0.0.106", minimum_release_age = "0s" }
 # swift/ (jbax): hk's swiftlint builtin; macOS only, like jbax. Formatting is the toolchain's own `swift format`.
 swiftlint = { version = "0.65.1", minimum_release_age = "0s", os = ["macos"] }
 
@@ -410,7 +410,7 @@ jouet = { version = "0.0.5", workflow = "release.yml@refs/heads/main", minimum_r
 # hk; its release assets carry sha256 files and a build-provenance attestation (release.yml:167). cclint covers
 # Claude files only and reports without failing; it ships no release binaries, so mise builds it with the Go above.
 "github:agent-sh/agnix" = { version = "0.61.0", minimum_release_age = "0s" }
-"go:github.com/dotcommander/cclint" = { version = "0.63.0", minimum_release_age = "0s" }
+"go:github.com/dotcommander/cclint" = { version = "0.64.0", minimum_release_age = "0s" }
 # GitHub Actions linters (owner rule, 2026-11-13): jactionlint, jdx's maintained actionlint fork, never actionlint;
 # zizmor beside it as the security checker. hk runs both as builtins on .github/workflows (hk.pkl). From aqua, which
 # verifies their release attestations.
