@@ -16,7 +16,7 @@ from typing import Any, NamedTuple
 import psutil
 import pytest
 
-from jbctl import rea
+from jbctl import lifecycle, rea
 from jbctl.cli import main
 from jbctl.mcp import ROUTER
 
@@ -187,6 +187,9 @@ def toolbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
     # A run killed before this teardown (SIGTERM from hk aborting a step) skips the loop below; each stand-in also
     # ends on its own once this process is gone (standin.watch).
     monkeypatch.setenv("STANDIN_OWNER", str(os.getpid()))
+    # A stand-in answers at once and has no request limit, so the waits between checks and asks are shortened.
+    monkeypatch.setattr(lifecycle, "POLL", 0.05)
+    monkeypatch.setattr(lifecycle, "ASK", 0.5)
     yield tmp_path
     shutil.rmtree(station)
     # Stand-in IDEs that jbctl started or restarted run in their own session until /exit; end any left over.
