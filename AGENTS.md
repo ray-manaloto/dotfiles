@@ -38,8 +38,9 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   still publish anything. `gh pr merge` is not on that list: the lead merges its own pull request (owner
   ruling, 2026-11-15) with `mise run //repo:pr-merge <number> <title> <body file>` from the PR's clean
   checkout. It refuses unless HEAD is the PR head, the PR's title and body on GitHub are the given ones
-  and `hk check --all` passes; then it runs `gh pr merge N --merge --match-head-commit
-  <HEAD> --author-email 1428022+sortakool@users.noreply.github.com` (the merging account's noreply
+  and `hk check --pr` passes: the checks for the pull request's changed files, and every suite when it
+  changes a file in hk.pkl's `shared` list (`mise.lock`, `hk.pkl`, ...); the nightly still runs `--all`.
+  Then it runs `gh pr merge N --merge --match-head-commit <HEAD> --author-email 1428022+sortakool@users.noreply.github.com` (the merging account's noreply
   address, never a personal email) and checks the merge commit's author. If it refuses, fix the cause.
   It runs the repotools that `mise run //repo:tools-install` installed from `main`, never the branch's
   own code; rerun that install on `main` after a merge that changes repotools.

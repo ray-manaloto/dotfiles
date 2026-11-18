@@ -162,7 +162,22 @@ local suites = new Mapping<String, Step> {
     }
 }
 
-local linters: Mapping<String, Step> = (fast.toMap() + suites.toMap()).toMapping()
+// Files every package's checks read. `hk check` (pr-merge runs `hk check --pr`, the pull request's changed files)
+// runs every suite when one of these changes; pre-push keeps the suites' own globs, so a lock bump pushes fast.
+// secret-doctor stays on its own files: it calls the Keychain and Doppler.
+local shared = List(
+    "mise.toml",
+    "mise.lock",
+    "hk.pkl",
+    ".github/workflows/**",
+    "unix/home/.config/mise/config.toml",
+    "python/repo/**"
+)
+local checkSuites: Mapping<String, Step> = suites.toMap()
+    .mapValues((name, s) -> if (name == "secret-doctor") s else (s) { glob = (s.glob as List<String>) + shared })
+    .toMapping()
+
+local linters: Mapping<String, Step> = (fast.toMap() + checkSuites.toMap()).toMapping()
 
 // At most two steps at a time; root mise.toml caps pytest -n auto at 4 workers (PYTEST_XDIST_AUTO_NUM_WORKERS).
 jobs = 2
