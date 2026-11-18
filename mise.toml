@@ -224,6 +224,10 @@ run = "mkdir -p ~/.agents/skills"
 # ticket-retro (#453): the user-scope skill, one folder for both agents; the LICENSE sits beside it in the source.
 "~/.claude/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
 "~/.agents/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+# session-retro (owner, 2026-11-18): mattpocock's retro, model-invocable, for a retro after any round of work; user
+# scope only, like ticket-retro.
+"~/.claude/skills/session-retro" = { source = "unix/home/.config/agents/skills/session-retro", mode = "symlink" }
+"~/.agents/skills/session-retro" = { source = "unix/home/.config/agents/skills/session-retro", mode = "symlink" }
 # work (#455): sets a repository up on first use; user scope only, like ticket-retro.
 "~/.claude/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
 "~/.agents/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }

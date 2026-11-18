@@ -23,6 +23,8 @@ ENTRIES = (
     "~/.config/agents/skills",
     "~/.claude/skills/ticket-retro",
     "~/.agents/skills/ticket-retro",
+    "~/.claude/skills/session-retro",
+    "~/.agents/skills/session-retro",
     "~/.claude/skills/work",
     "~/.agents/skills/work",
     "~/.claude/skills/to-spec",
@@ -165,7 +167,7 @@ class SharedAgentsInstallTest(unittest.TestCase):
 
     def test_the_skills_folder_resolves(self) -> None:
         self.assertTrue((self.home / ".config/agents/skills/LICENSE").is_file())
-        for skill in ("ticket-retro", "work", "to-spec", "to-tickets", "implement", "implement-spec"):
+        for skill in ("ticket-retro", "session-retro", "work", "to-spec", "to-tickets", "implement", "implement-spec"):
             for scope in (".claude", ".agents"):
                 with self.subTest(skill=skill, scope=scope):
                     path = self.home / scope / "skills" / skill
