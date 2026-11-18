@@ -13,8 +13,10 @@ MONIT_DESCRIPTION, null by hand); mds_stores' CPU; per-minute counts of mds_stor
 per query step); the processes that logged "Starting query" (subsystem com.apple.metadata), by name and pid, each
 with its command line and, when it runs in a herdr tab, that tab; the line counts of the indexers mdbulkimport,
 corespotlightd, mdworker_shared, mdworker, spotlightknowledged and mediaanalysisd; corespotlightd's query lines by
-client bundle (lines and query nodes), its donations by bundle ID, and its 10 most frequent messages; the top 5
-processes by CPU; and the load averages. `log show` runs under nice and taskpolicy -b. `mise run spotlight:spikes` prints one line per capture.
+client bundle (lines and query nodes), its donations by bundle ID, and its 10 most frequent messages; every Spotlight
+subsystem line by logging process, and by process and category (top 10); how many Computer Use helpers
+(SkyComputerUseService, SkyComputerUseClient) run; the top 5 processes by CPU; and the load averages. `log show`
+runs under nice and taskpolicy -b. `mise run spotlight:spikes` prints one line per capture.
 
 The herdr tab comes from HC_TERMINAL_ID in the client's environment, or its nearest ancestor's (ps -E reads the
 same user's processes, but not a platform binary's such as mdfind), and one `hc ls --json` through hc-safe, which
@@ -44,6 +46,13 @@ INDEXERS = ("mdbulkimport", "corespotlightd", "mdworker_shared", "mdworker", "sp
 BUNDLE = re.compile(r"client bundle: (\S+?), query nodes count (\d+)")
 DONOR = re.compile(r"bundleID:(\S+?)[ ,)]")
 SHAPES = 10  # corespotlightd's most frequent messages, numbers as N
+# The client bundle is often <private>, but the process that logs is not: on macOS 27.2.1 the <private> Core Spotlight
+# client was spotlightknowledged.updater (Apple Intelligence), in bursts every 5-6 minutes
+# (patrickostertag.ch/spotlight.html). So every Spotlight subsystem line is also counted by process and category.
+SPOTLIGHT = 'subsystem BEGINSWITH "com.apple.spotlight" OR subsystem BEGINSWITH "com.apple.corespotlight"'
+CATEGORY = re.compile(r"^\[([^\]]+)\]")
+# Computer Use helpers that query Spotlight for installed apps (openai/codex#38929: ChatGPT.app's Computer Use spikes).
+COMPUTER_USE = ("SkyComputerUseService", "SkyComputerUseClient")
 WINDOW = timedelta(minutes=3)
 # `log show --style compact` lines: date, time, type, process[pid:tid], then the message.
 COMPACT = re.compile(r"^(\S+) (\d\d:\d\d):\S+ +\S+ +(.+?)\[(\d+):\S+\] (.*)$")
@@ -122,6 +131,12 @@ def client(pid: str, where: dict[str, str]) -> dict[str, str | None]:
     return {"command": command, "terminal": terminal, "tab": where.get(terminal) if terminal else None}
 
 
+def computer_use() -> dict[str, int]:
+    """How many of each Computer Use helper run, by executable name."""
+    names = [line.strip().rsplit("/", 1)[-1] for line in run(PS, "-A", "-o", "comm=").splitlines()]
+    return {name: names.count(name) for name in COMPUTER_USE}
+
+
 def top_cpu() -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for line in run(PS, "-A", "-r", "-o", "pid=,pcpu=,comm=").splitlines()[:5]:
@@ -156,6 +171,12 @@ def capture() -> Path:
         if donated := DONOR.search(message):
             donors[donated.group(1)] += 1
         shapes[re.sub(r"\d+", "N", re.sub(r"0x[0-9a-f]+", "N", message))[:120]] += 1
+    loggers: Counter[str] = Counter()
+    categories: Counter[str] = Counter()
+    for m in log_lines(start, end, SPOTLIGHT):
+        loggers[m.group(3)] += 1
+        category = CATEGORY.match(m.group(5))
+        categories[f"{m.group(3)} {category.group(1) if category else '-'}"] += 1
     where = tabs() if queries else {}
     clients = [
         {"process": name, "pid": int(pid), "queries": count, **client(pid, where)}
@@ -172,6 +193,9 @@ def capture() -> Path:
         "corespotlight_clients": dict(sorted(bundles.items(), key=lambda item: -item[1]["nodes"])),
         "corespotlight_donors": dict(donors.most_common()),
         "corespotlight_messages": dict(shapes.most_common(SHAPES)),
+        "spotlight_processes": dict(loggers.most_common()),
+        "spotlight_categories": dict(categories.most_common(SHAPES)),
+        "computer_use_processes": computer_use(),
         "top_cpu": top_cpu(),
         "loadavg": list(os.getloadavg()),
     }
