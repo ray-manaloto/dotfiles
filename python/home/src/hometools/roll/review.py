@@ -193,13 +193,26 @@ def plugin_notes(tool: str, old: str, new: str, after: Versions) -> str:
     ):
         return log
     repo = after.marketplaces.get(market)
-    return compare(repo.repo if repo else None, old_sha, new_sha)
+    return compare(repo.repo if repo else None, old_sha, new_sha, f"plugins/{name}")
 
 
-def compare(repo: str | None, old: str, new: str) -> str:
+def compare(repo: str | None, old: str, new: str, path: str | None = None) -> str:
+    """The messages of the commits after old up to new; with path, only those that touch it (as the git log above).
+    A marketplace commit that changes no file of the plugin is not the plugin's change: unfiltered, one such
+    subject paused a roll as a plugin's BREAKING item. The path's list is GitHub's newest 100."""
     if not repo:
         return ""
-    return call("gh", "api", f"repos/{repo}/compare/{old}...{new}", "--jq", ".commits[].commit.message") or ""
+    if path is None:
+        return call("gh", "api", f"repos/{repo}/compare/{old}...{new}", "--jq", ".commits[].commit.message") or ""
+    between = call("gh", "api", f"repos/{repo}/compare/{old}...{new}", "--jq", ".commits[].sha")
+    touching = call(
+        "gh", "api", f"repos/{repo}/commits?sha={new}&path={path}&per_page=100", "--jq", ".[] | [.sha, .commit.message]"
+    )
+    if between is None or touching is None:
+        return ""
+    shas = set(between.split())
+    rows = [json.loads(line) for line in touching.splitlines() if line.strip()]
+    return "\n".join(str(message) for sha, message in rows if sha in shas)
 
 
 def notes(tool: str, old: str, new: str, after: Versions) -> str:

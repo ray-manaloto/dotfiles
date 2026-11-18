@@ -113,9 +113,16 @@ def setup(world: World) -> tuple[Path, Versions]:
         {
             CURL: {"stdout": CHANGELOG},
             CODEX: out(releases),
-            ("gh", "api", "repos/o/gh/compare/r1...r2", "--jq", ".commits[].commit.message"): {
-                "stdout": "remote fix\n"
-            },
+            # c1 is a marketplace commit outside plugins/remote, so GitHub's path list leaves it out; c0 is older
+            # than r1, so the compare leaves it out. remote's note is c2 alone.
+            ("gh", "api", "repos/o/gh/compare/r1...r2", "--jq", ".commits[].sha"): {"stdout": "c1\nc2\n"},
+            (
+                "gh",
+                "api",
+                "repos/o/gh/commits?sha=r2&path=plugins/remote&per_page=100",
+                "--jq",
+                ".[] | [.sha, .commit.message]",
+            ): {"stdout": '["c2","remote fix"]\n["c0","older than r1"]\n'},
             ("gh", "api", "repos/o/m/compare/a...b", "--jq", ".commits[].commit.message"): {"code": 1},
             review.TRIAGE: {"stdout": TRIAGED},
         }
@@ -168,6 +175,7 @@ def test_a_review_pairs_every_change_with_its_notes_triages_once_and_closes_the_
     assert "## agy 1.5.8 -> 1.5.9\n\n```text\nno notes found\n```" in text
     assert "- Changed the hook\n## 1.1" in text
     assert "remote fix" in text
+    assert "older than r1" not in text
     assert "## late@m 1.0-a -> 1.0-b\n\n```text\nno notes found\n```" in text
     review_md = (run / "review.md").read_text()
     assert review_md.startswith("# Update review (run-1)\n\nChanged:\n- claude 2.1.9 -> 2.1.10\n")
@@ -286,8 +294,21 @@ def test_breaking_lists_only_real_items() -> None:
 
 def test_a_plugin_whose_notes_have_no_source_has_none(world: World) -> None:
     plugins(world, {}, {})
-    after = Versions(harnesses={}, plugins={}, marketplaces={"m": Marketplace(repo=None, head=None)})
+    after = Versions(
+        harnesses={},
+        plugins={},
+        marketplaces={"m": Marketplace(repo=None, head=None), "f": Marketplace(repo="o/f", head=None)},
+    )
     assert review.notes("x@m", "1-a", "2-b", after) == ""
+    # GitHub's compare failed: no notes, so the item stays not reviewed.
+    world.answer(
+        {
+            ("gh", "api", "repos/o/f/compare/a...b", "--jq", ".commits[].sha"): {"code": 1},
+            ("gh", "api", "repos/o/f/compare/a...b", "--jq", ".commits[].commit.message"): {"code": 1},
+        }
+    )
+    assert review.notes("x@f", "1-a", "2-b", after) == ""
+    assert review.notes("marketplace f", "a", "b", after) == ""
     assert review.notes("x@n", "1-a", "2-b", after) == ""
     assert review.notes("marketplace q", "a", "b", after) == ""
     assert review.releases("opencode", "2.2.0", "2.3.0") == ""
