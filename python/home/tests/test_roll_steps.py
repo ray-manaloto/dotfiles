@@ -40,9 +40,9 @@ EXIT = ("hc", "send", "t3", "/exit")
 RESTART = ("hc", "send", "t3", "/restart")
 # One run id for every step a test runs: the handshake carries it.
 RUN = "run-t"
-ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-1"))
+ASK = ("hc", "send", "--wait", "--timeout", "2", "t3", session.request(f"{RUN}-1"))
 ALERT = ("mise", "run", "monit:alert")
-FAST = ("--wait", "5", "--settle", "3", "--poll", "0.05", "--busy-wait", "0.3", "--run", RUN)
+FAST = ("--wait", "2", "--settle", "3", "--poll", "0.05", "--busy-wait", "0.3", "--run", RUN)
 
 
 def foreground(world: World) -> dict[str, object]:
@@ -289,7 +289,7 @@ def test_a_busy_chief_of_staff_that_goes_idle_within_the_wait_is_stopped(
         {
             # The graph and the update read t1 too: the stop's first looks still find it busy.
             ("hc", "get", "t1", "--json"): [busy] * 8 + [idle],
-            ("hc", "send", "--wait", "--timeout", "5", "t1", session.request(f"{RUN}-1")): replier(
+            ("hc", "send", "--wait", "--timeout", "2", "t1", session.request(f"{RUN}-1")): replier(
                 world, path, "READY-TO-RESTART"
             ),
             ("hc", "send", "t1", "/restart"): rewriter(world, chief, {"startedAt": int(time.time() * 1000) + 60_000}),
@@ -644,7 +644,7 @@ def test_a_failed_stop_fails_the_roll_and_is_logged(world: World, capfd: pytest.
     # The worker never leaves: /exit is sent, but its foreground stays claude.
     world.answer({("hc", "get", "t3", "--json"): out(info("t3", worker, ["claude"], world.root / "proj"))})
     args = ("all", "--apply", "--accept-review", "--sessions", "proj", "--wiki", str(world.wiki))
-    code, _, _ = hometools(capfd, *args, "--wait", "5", "--settle", "0.3", "--poll", "0.05", "--run", RUN)
+    code, _, _ = hometools(capfd, *args, "--wait", "2", "--settle", "0.3", "--poll", "0.05", "--run", RUN)
     assert code == 1
     steps = {line.step: line for line in world.runs()}
     assert [s.result for s in steps[RollStep.stop].sessions] == ["failed-exit-timeout"]
@@ -723,8 +723,8 @@ def test_a_stop_cut_short_keeps_what_it_stopped(world: World, capfd: pytest.Capt
     fix = world.root / "fix-herdr"
     leave = ("hc", "send", "t1", "/exit")
     # The chief is asked first (attempt 1), then the worker (attempt 2).
-    chief_ask = ("hc", "send", "--wait", "--timeout", "5", "t1", session.request(f"{RUN}-1"))
-    worker_ask = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-2"))
+    chief_ask = ("hc", "send", "--wait", "--timeout", "2", "t1", session.request(f"{RUN}-1"))
+    worker_ask = ("hc", "send", "--wait", "--timeout", "2", "t3", session.request(f"{RUN}-2"))
     interrupt = world.bin / "interrupt"
     interrupt.write_text(f"#!{sys.executable} -I\nimport os, signal\nos.kill({os.getpid()}, signal.SIGINT)\n")
     interrupt.chmod(0o755)

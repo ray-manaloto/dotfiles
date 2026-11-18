@@ -25,12 +25,13 @@ OPENCODE_SID = f"ses_{uuid.uuid4().hex}"
 # The run folder; each handshake's token is its name and the attempt number.
 RUN = "run-t"
 TOKEN = f"{RUN}-1"
-FAST = Timing(wait=5, settle=0.3, interval=0.01)
+# The stand-in hc answers at once: 2 s is long enough for a reply to land, and short for the waits tests run out.
+FAST = Timing(wait=2, settle=0.3, interval=0.01)
 # The plugins changed after every process a test starts, so each session is out of date and roll:stop takes it.
 MARK = dt.datetime.now() + dt.timedelta(hours=1)  # noqa: DTZ005 - compared with ps's local start time
 EXIT = ("hc", "send", "t3", "/exit")
-ASK = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(TOKEN))
-AGAIN = ("hc", "send", "--wait", "--timeout", "5", "t3", session.request(f"{RUN}-2"))
+ASK = ("hc", "send", "--wait", "--timeout", "2", "t3", session.request(TOKEN))
+AGAIN = ("hc", "send", "--wait", "--timeout", "2", "t3", session.request(f"{RUN}-2"))
 GET = ("hc", "get", "t3", "--json")
 READ = ("hc", "read", "t3")
 RESTART = ("hc", "send", "t3", "/restart")
