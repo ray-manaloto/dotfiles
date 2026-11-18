@@ -1,0 +1,5 @@
+interface:
+  display_name: "Session retro"
+  short_description: "Retrospective on a session or round of work: environment improvements, most severe first."
+policy:
+  allow_implicit_invocation: true
