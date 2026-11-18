@@ -33,6 +33,7 @@ ZSH = {
 # What agents may do on their own: the owner applies these by hand (owner ruling, 2026-11-17), so skills:apply
 # leaves them out and a failure here says so.
 PERMISSIONS = {
+    "~/.claude/settings.json/allow",
     "~/.claude/settings.json/automode",
     "~/.claude/settings.json/mcp-deny",
     "~/.codex/rules/guards.rules",
@@ -147,14 +148,14 @@ def opencode_jouet() -> None:
 
 
 def jouet_claude() -> None:
-    """What `jouet setup claude --global` writes (its six Claude hooks in settings.json and the jouet-init skill),
-    judged by jouet itself: its dry run prints `unchanged <file>` for each file it would leave as it is."""
-    done = run("jouet", "setup", "claude", "--global", "--dry-run")
+    """What `jouet setup claude --global --no-context-budget` writes (its Claude hooks in settings.json), judged by
+    jouet itself: its dry run prints `unchanged <file>` for each file it would leave as it is."""
+    done = run("jouet", "setup", "claude", "--global", "--no-context-budget", "--dry-run")
     heads = [line for line in done.stdout.splitlines() if line and line[0] not in "+-@ \\"]  # its diff lines
     changed = [line for line in heads if not line.startswith("unchanged ")]
     if done.returncode or changed or not heads:
         what = "; ".join(changed) or done.stderr.strip()
-        fail(f"jouet setup would change: {what}", "jouet setup claude --global")
+        fail(f"jouet setup would change: {what}", "jouet setup claude --global --no-context-budget")
 
 
 def main() -> None:

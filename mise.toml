@@ -137,6 +137,12 @@ run = "mkdir -p ~/.agents/skills"
 # denied: the user-scope `apify` server above is the one with the key. deniedMcpServers merges from every settings
 # source, so a user can deny servers for themselves (Claude Code 2.1.322 settings schema, allowManagedMcpServersOnly).
 "~/.claude/settings.json/mcp-deny" = { source = "unix/home/.claude/settings.mcp-deny.json", merge = true }
+# Keep the Artifact tools (owner, 2026-11-17). jouet 0.0.5's `jouet setup claude` denies Artifact, ArtifactComments
+# and ArtifactData unless permissions.allow or permissions.ask already names them (jouet v0.0.5 docs/setup.md "the
+# Artifact tools are denied", src/setup.rs:60). mise's merge replaces a whole array (mise v2026.11.9
+# docs/dotfiles/edits.md:121-122), so this entry owns the whole allow list: an "always allow" added later shows up
+# as drift in skills:doctor, to be copied here or dropped. A permission entry: the owner applies it.
+"~/.claude/settings.json/allow" = { source = "unix/home/.claude/settings.allow.json", merge = true }
 # No grayed-out prompt suggestions in the input box: a suggestion looks like a typed draft, so an agent sending to a
 # tab can't tell it from the owner's text (owner ruling 2026-11-11). Claude Code 2.1.322 reads promptSuggestionEnabled
 # from settings unless CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION is set (https://code.claude.com/docs/en/settings-reference).
