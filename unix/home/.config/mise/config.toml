@@ -675,8 +675,8 @@ run = [
 # Check: monit -c ~/.config/monit/monitrc status (over the 0600 unix socket; no password, `allow localhost`;
 # the socket path must stay under 104 bytes). chief-of-staff reads that and runs `lsof +L1` itself.
 # Spotlight skips every file under a folder named *.noindex, with no sudo (probed on macOS 27.2.1, 2026-11-16), so
-# bulky scratch goes here. ~/dev/github and ~/dev/tmp go in Search Privacy by hand once (Full Disk Access guards it):
-# mise run spotlight:check checks them (python/home/src/hometools/spotlight.py).
+# bulky scratch outside ~/dev goes in such a folder. ~/dev goes in Search Privacy by hand once (Full Disk Access guards
+# it): spotlight:check probes ~/dev/github and ~/dev/tmp (python/home/src/hometools/spotlight.py), daily from launchd.
 [bootstrap.directories."~/dev/tmp.noindex"]
 os = "macos"
 
@@ -778,6 +778,24 @@ nice = 10
 environment = { PATH = "{{ env.HOME }}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
 stdout_path = "~/.local/state/dotfiles/nightly/check.log"
 stderr_path = "~/.local/state/dotfiles/nightly/check.log"
+
+# spotlight:check once a day (owner, 2026-11-18), so the agent rule "Bulky scratch and Spotlight" (Spotlight skips
+# ~/dev) and this Mac never disagree for long: spotlight:daily alerts when a probe folder is indexed. launchd, not
+# monit, for the reason above. It runs at 09:30, when the Mac is usually awake, and takes 2-8 minutes (it waits for
+# Spotlight to index a control file). Apply: mise bootstrap macos launchd-agents apply.
+[bootstrap.directories."~/.local/state/dotfiles/spotlight"]
+os = "macos"
+mode = "0700"
+
+[bootstrap.macos.launchd.agents.spotlight-daily]
+program = "~/.local/bin/mise"
+args = ["run", "spotlight:daily"]
+start_calendar_interval = { hour = 9, minute = 30 }
+process_type = "Background"
+nice = 10
+environment = { PATH = "{{ env.HOME }}/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" }
+stdout_path = "~/.local/state/dotfiles/spotlight/daily.log"
+stderr_path = "~/.local/state/dotfiles/spotlight/daily.log"
 
 # DL-770: mise uses package specs exactly as written (docs/bootstrap.md:392), so [bootstrap.files]
 # renders them from [vars] before the packages step. mise reads its config before this file is written:
@@ -970,6 +988,12 @@ run = 'n=0; for l in "${MISE_STATE_DIR:-$HOME/.local/state/mise}"/tracked-config
 # without one alert); a failure raises monit:alert and exits 1. This Mac sleeps
 # when nothing holds it awake, and launchd then starts a missed 03:00 run on waking, when the owner sits down: a
 # run that starts after 05:59, or with the 5-minute load average above the core count, says so and skips.
+# The daily spotlight:check (launchd agent spotlight-daily). Exit 1 means Spotlight indexes ~/dev/github or ~/dev/tmp
+# and raises monit:alert; exit 3 (the control file was not indexed in time, so nothing was proved) only logs.
+[tasks."spotlight:daily"]
+description = "Run spotlight:check without opening System Settings; a folder Spotlight indexes raises a monit alert"
+run = 'date; SPOTLIGHT_NO_OPEN=1 mise run spotlight:check; rc=$?; [ "$rc" -ne 1 ] || MONIT_SERVICE=spotlight-check MONIT_EVENT="Check failed" MONIT_DESCRIPTION="Spotlight indexes ~/dev/github or ~/dev/tmp, against the agent rule Bulky scratch and Spotlight; see ~/.local/state/dotfiles/spotlight/daily.log" mise run monit:alert; exit "$rc"'
+
 [tasks."nightly:check"]
 description = "Run hk check --all, then the tests of the roots hk has no step for, in the dotfiles checkout; a failure raises a monit alert"
 run = 'date && h=$(date +%H) && l=$(sysctl -n vm.loadavg | cut -d" " -f3 | cut -d. -f1) && { [ "$h" -lt 6 ] && [ "$l" -lt "$(sysctl -n hw.ncpu)" ] || { echo "nightly:check skipped: hour $h, 5-minute load $l"; exit 0; }; } && cd "$(git -C "$(dirname "$(realpath ~/.config/mise/config.toml)")" rev-parse --show-toplevel)" && git log -1 --oneline && { hk check --all && mise run --jobs 1 //typescript:test ::: //visualplan:test ::: //cpp:test && touch ~/.local/state/dotfiles/nightly/passed && echo nightly:check passed; } || { MONIT_SERVICE=nightly-check MONIT_EVENT="Check failed" MONIT_DESCRIPTION="hk check --all or the tests of typescript, visualplan or cpp failed; see ~/.local/state/dotfiles/nightly/check.log" mise run monit:alert; exit 1; }'
