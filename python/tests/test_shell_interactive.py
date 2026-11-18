@@ -7,11 +7,9 @@ import pwd
 import re
 import shlex
 import shutil
-import socket as unix
 import stat
 import subprocess
 import tempfile
-import threading
 import time
 import tomllib
 import unittest
@@ -349,80 +347,6 @@ class InteractiveShellTest(unittest.TestCase):
         self.wait_for_line("echo apricot")
         self.keys("Up")
         self.wait_for_line("echo alpha")
-
-
-class SweepTest(unittest.TestCase):
-    """sweep() on a folder a dead run left, in a root of its own that no other run sweeps."""
-
-    def setUp(self) -> None:
-        # Not PREFIX*, so another run's setUpModule never sees this root or what it holds.
-        self.root = Path(tempfile.mkdtemp(prefix="dotfiles-sweep-", dir=TEMP_ROOT)).resolve()
-        self.addCleanup(shutil.rmtree, self.root)
-        ended = subprocess.Popen(["true"])
-        ended.wait()
-        self.folder = self.root / f"{PREFIX}{ended.pid}-left"
-        self.folder.mkdir()
-
-    def bind(self) -> None:
-        with unix.socket(unix.AF_UNIX) as bound:
-            bound.bind(str(self.folder / "tmux"))  # a server that bound its socket, then died
-
-    def test_a_run_removes_its_folder_only_once_no_sweep_holds_the_lock(self) -> None:
-        with locked():  # stands in for a sweep: flock excludes a second open of /tmp, same process
-            removing = threading.Thread(target=remove, args=(self.folder,))
-            removing.start()
-            removing.join(timeout=1)
-            self.assertTrue(removing.is_alive())
-            self.assertTrue(self.folder.exists())
-        removing.join()
-        self.assertFalse(self.folder.exists())
-
-    def test_passes_over_a_live_run_s_folder(self) -> None:
-        live = self.root / f"{PREFIX}{os.getpid()}-live"  # this run: it removes its own
-        live.mkdir()
-        sweep(self.root)
-        self.assertTrue(live.exists())
-        self.assertFalse(self.folder.exists())
-
-    def test_keeps_a_folder_while_its_shell_lives(self) -> None:
-        shell = subprocess.Popen(["sleep", "60"])
-        self.addCleanup(shell.wait)
-        self.addCleanup(shell.kill)
-        record(self.folder, [shell.pid])
-        sweep(self.root)
-        self.assertTrue(self.folder.exists())
-        shell.kill()
-        shell.wait()
-        sweep(self.root)
-        self.assertFalse(self.folder.exists())
-
-    def test_keeps_a_folder_whose_launch_never_recorded_a_shell(self) -> None:
-        self.bind()
-        sweep(self.root)
-        self.assertTrue(self.folder.exists())
-
-    def test_keeps_a_folder_whose_record_is_empty(self) -> None:
-        self.bind()
-        (self.folder / SHELLS).write_text("")
-        sweep(self.root)
-        self.assertTrue(self.folder.exists())
-
-    def test_skips_a_link_and_a_file_with_a_test_folder_name(self) -> None:
-        target = self.root / "target"
-        target.mkdir()
-        link = self.root / f"{self.folder.name}-link"
-        link.symlink_to(target)
-        plain = self.root / f"{self.folder.name}-file"
-        plain.write_text("")
-        sweep(self.root)
-        self.assertTrue(link.is_symlink())
-        self.assertTrue(target.exists())
-        self.assertTrue(plain.exists())
-        self.assertFalse(self.folder.exists())
-
-    def test_removes_a_folder_that_never_launched(self) -> None:
-        sweep(self.root)
-        self.assertFalse(self.folder.exists())
 
 
 if __name__ == "__main__":

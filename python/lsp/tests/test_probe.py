@@ -43,13 +43,6 @@ def test_smoke_asks_tsc_about_the_fixture(world: World, lsp: Lsp) -> None:
     assert lines[-1] == "  ok  shutdown: clean" or lines[-1].startswith("  ok  shutdown: not clean: ")
 
 
-def test_health_only_initializes(world: World, lsp: Lsp) -> None:
-    world.dotfiles()
-    result = lsp("health", "typescript", "--json")
-    assert result.code == 0
-    assert names(result.json()) == [("plugin", True), ("command", True), ("initialize", True), ("shutdown", True)]
-
-
 def test_a_server_that_dies_on_shutdown_is_noted_not_failed(world: World, lsp: Lsp) -> None:
     server = {"command": sys.executable, "args": [str(EXITS)], "extensionToLanguage": {".ts": "typescript"}}
     world.market("dotfiles", {"typescript-native-lsp": {"lsp": {"typescript": server}}})

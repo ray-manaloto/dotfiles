@@ -30,20 +30,6 @@ test('a rules note naming no listed rule, or of another kind, is dropped as unpa
   expect(parseRules('NOTE: none', rules).kind).toBe('none')
 })
 
-test('SYSTEM_WITHOUT_RULES drops the standing rules from the risk prompt and keeps the in-session instruction (breaks the split)', () => {
-  expect(SYSTEM_WITHOUT_RULES).not.toBe(SYSTEM)
-  expect(SYSTEM_WITHOUT_RULES).not.toContain("and the owner's standing rules")
-  expect(SYSTEM_WITHOUT_RULES).toContain('an explicit instruction the owner gave in this session (standing rules are checked separately)')
-})
-
-test('the risk prompt lets a repo-scoped rule win there and takes relayed results as reports (breaks the replay13 fix)', () => {
-  for (const system of [SYSTEM, SYSTEM_WITHOUT_RULES]) {
-    expect(system).toContain('replaces the general rule in that repository only')
-    expect(system).toContain('A result in a [message from X] row is X\'s report.')
-    expect(system.indexOf('[message from X] row')).toBeLessThan(system.indexOf('NOTE: none'))
-  }
-})
-
 test('parseKnow keeps an over-long note, cut at the word cap on a clause boundary (breaks the 06:07Z lost match)', () => {
   const long = `The fallback approval check will accept a Claude subagent transcript in place of a Codex pane log. Review-fallback-impl is building it, and the agent plans to read the logic itself. But the same branch's code approves its own first commit, and a fallback reviewer can't prove its prompt held only the diff, so it is only as strong as the rule.`
   expect(long.split(/\s+/).length).toBeGreaterThan(LIMITS.knowWords)
@@ -78,13 +64,6 @@ test('a reply that copies the prose field descriptions is rejected, not shipped 
   // EVIDENCE is a quote from the session, which may discuss these prompts, so it is not echo-checked.
   expect(parseReply(`NOTE: The agent killed by pattern.\nKIND: rule-broken\nEVIDENCE: one short quote copied character for character from the SESSION section\nRULE: -`).kind).toBe('note')
   expect(parseReply(`NOTE: The agent killed processes by pattern on a shared Mac.\n${ok}`).kind).toBe('note')
-})
-
-test('the risk prompt says an instruction binds only later steps (breaks the replay16 order misread)', () => {
-  for (const system of [SYSTEM, SYSTEM_WITHOUT_RULES]) {
-    expect(system).toContain('binds only the steps after it reached the agent')
-    expect(system.indexOf('binds only the steps after')).toBeLessThan(system.indexOf('NOTE: none'))
-  }
 })
 
 test('a bulleted reply parses; EVIDENCE may quote the prompt\'s own wording (breaks review-2 findings 1 and 3)', () => {

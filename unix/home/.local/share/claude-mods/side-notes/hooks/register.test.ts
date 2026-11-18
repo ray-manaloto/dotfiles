@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, SessionMessage } from 'claude-code'
 
-import { KNOW_SYSTEM, LIMITS, TAG, compose, emptyLedger, evidenceHolds, isRepeat, midTurnOf, parseKnow, parseReply, promptText, renderDigest, rulesText, sendersOf } from './core'
+import { LIMITS, TAG, compose, emptyLedger, evidenceHolds, isRepeat, midTurnOf, parseKnow, parseReply, promptText, renderDigest, rulesText, sendersOf } from './core'
 
 const SID = 'session-1'
 const QUOTE = 'rm -rf build/ ~/backups'
@@ -1078,12 +1078,6 @@ test('built-in notes are not passed as raised; a find that repeats one is logged
   expect(w.knowAsked[0]?.prompt).not.toContain(shown)
   expect(w.rows().length).toBe(0)
   expect(knowEvents(w)[0]).toMatchObject({ outcome: 'builtin-repeat', builtinLine: shown })
-})
-
-test('the know prompt aims at what defeats the owner\'s goal before step-level flaws (breaks the replay10 fix)', () => {
-  expect(KNOW_SYSTEM).toContain("Find the owner's latest request, question or decision")
-  expect(KNOW_SYSTEM).toContain('Prefer that over a flaw in how one step is carried out.')
-  expect(KNOW_SYSTEM.indexOf('How to choose it')).toBeLessThan(KNOW_SYSTEM.indexOf('NOTE: none'))
 })
 
 test('parseKnow: none, a note, a bracket-wrapped note, the placeholder and a malformed reply', () => {

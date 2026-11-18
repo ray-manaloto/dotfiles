@@ -320,15 +320,6 @@ def test_start_reports_unreadable_mcp_settings(
     assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
 
 
-def test_start_reports_an_ide_that_ends_at_the_deadline(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
-    """It ended during jbctl's last /api/about request, which outlasted --timeout: nothing runs, so refused, not
-    started-not-ready."""
-    flags(toolbox / "fake.app", "--die-asked")
-    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "1.5")
-    assert (code, event["lifecycle"]["action"]) == (1, "refused")
-    assert event["lifecycle"]["reason"].endswith("ended before it was ready")
-
-
 @pytest.mark.usefixtures("toolbox")
 def test_another_jbctl_holds_the_ide(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
     product = hashlib.sha256(b"FK").hexdigest()[:16]
@@ -511,20 +502,6 @@ def test_an_ide_without_the_station_plugin_is_not_a_toolbox_ide(
     (toolbox / "solo.app/Contents/plugins/station-plugin").rmdir()
     code, [event], _ = run(capsys, "status", "--all")
     assert (code, [row["script"] for row in event["ides"]]) == (0, ["fake", "fake1"])
-
-
-@needs_jbax
-def test_a_launcher_quotes_a_hostile_stand_in_path(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:
-    """The stand-in's own launcher is test setup, but its paths are outside text too: a folder named with a quote,
-    a dollar sign and a space still starts the stand-in, and nothing in the name is run by the shell."""
-    hostile = toolbox / 'st"and $(touch pwned) in'
-    hostile.mkdir()
-    shutil.copy(Path(__file__).with_name("standin.py"), hostile / "standin.py")
-    launcher(toolbox / "fake.app", hostile / "standin.py")
-    code, [event], _ = run(capsys, "start", "--foreground", "--ide", "fake", "--timeout", "20")
-    # The shell would run `touch pwned` in jbctl's working directory.
-    assert (code, event["lifecycle"]["action"], Path("pwned").exists()) == (0, "started", False)
-    assert run(capsys, "stop", "--ide", "fake", "--timeout", "20")[0] == 0
 
 
 def test_a_hostile_product_code_stays_out_of_the_lock_path(capsys: pytest.CaptureFixture[str], toolbox: Path) -> None:

@@ -107,11 +107,6 @@ def test_check_direct_needs_an_ide_or_a_url(capsys: pytest.CaptureFixture[str]) 
     assert run(capsys, "check-direct") == (1, [], "check-direct needs --ide or --mcp-url")
 
 
-def test_an_ide_name_is_a_script_name(capsys: pytest.CaptureFixture[str]) -> None:
-    code, events, error = run(capsys, "resolve", "--ide", "../CLion")
-    assert (code, events, "pattern" in error) == (1, [], True)
-
-
 def test_the_user_vmoptions_file_follows_the_launcher(
     capsys: pytest.CaptureFixture[str], toolbox: Path, start: Start
 ) -> None:

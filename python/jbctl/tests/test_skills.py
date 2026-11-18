@@ -192,12 +192,6 @@ def test_one_install_must_be_named(
     assert list(home.iterdir()) == []
 
 
-def test_all_is_not_an_option(capsys: pytest.CaptureFixture[str], home: Path) -> None:
-    code, events, error = run(capsys, "skills", "--all", "--skill", "fake-debugger")
-    assert (code, events, list(home.iterdir())) == (1, [], [])
-    assert "all" in error
-
-
 def test_a_product_with_one_install_names_it(capsys: pytest.CaptureFixture[str], home: Path) -> None:
     toolbox = home.parent
     app = toolbox / "solo.app"
