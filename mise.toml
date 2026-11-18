@@ -217,17 +217,32 @@ run = "mkdir -p ~/.agents/skills"
 "~/.claude/CLAUDE.md/agents" = { block = '''
 @~/.config/agents/AGENTS.md
 ''' }
-# The paths the shared file and the skills point at (#449, #453). Folder links: ~/.config/agents holds only
-# what dotfiles delivers, so its subfolders need not stay real folders.
-"~/.config/agents/workflow" = { source = "unix/home/.config/agents/workflow", mode = "symlink" }
-"~/.config/agents/skills" = { source = "unix/home/.config/agents/skills", mode = "symlink" }
+# The paths the shared file and the skills point at (#449, #453). The workflow documents and the ticket-retro and
+# session-retro skills moved to cpp-standard (its spec #147, ticket #156): their links resolve into its main
+# checkout, by a home-relative source. ~/.config/agents/skills is a real folder of one link per entry, since only
+# two of its skills moved; a switch from the old folder link removes that link before the apply, or the apply
+# writes the new links through it into this checkout.
+"~/.config/agents/workflow" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/workflow", mode = "symlink" }
+"~/.config/agents/skills/LICENSE" = { source = "unix/home/.config/agents/skills/LICENSE", mode = "symlink" }
+"~/.config/agents/skills/ticket-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+"~/.config/agents/skills/session-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/session-retro", mode = "symlink" }
+"~/.config/agents/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
+"~/.config/agents/skills/to-spec" = { source = "unix/home/.config/agents/skills/to-spec", mode = "symlink" }
+"~/.config/agents/skills/to-tickets" = { source = "unix/home/.config/agents/skills/to-tickets", mode = "symlink" }
+"~/.config/agents/skills/implement" = { source = "unix/home/.config/agents/skills/implement", mode = "symlink" }
+"~/.config/agents/skills/implement-spec" = { source = "unix/home/.config/agents/skills/implement-spec", mode = "symlink" }
+"~/.config/agents/skills/chief-of-staff" = { source = "unix/home/.config/agents/skills/chief-of-staff", mode = "symlink" }
+"~/.config/agents/skills/lsp-server" = { source = "unix/home/.config/agents/skills/lsp-server", mode = "symlink" }
+"~/.config/agents/skills/secrets" = { source = "unix/home/.config/agents/skills/secrets", mode = "symlink" }
+"~/.config/agents/skills/herdr-startup" = { source = "unix/home/.config/agents/skills/herdr-startup", mode = "symlink" }
+"~/.config/agents/skills/herdr-shutdown" = { source = "unix/home/.config/agents/skills/herdr-shutdown", mode = "symlink" }
 # ticket-retro (#453): the user-scope skill, one folder for both agents; the LICENSE sits beside it in the source.
-"~/.claude/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
-"~/.agents/skills/ticket-retro" = { source = "unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+"~/.claude/skills/ticket-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
+"~/.agents/skills/ticket-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/ticket-retro", mode = "symlink" }
 # session-retro (owner, 2026-11-18): mattpocock's retro, model-invocable, for a retro after any round of work; user
 # scope only, like ticket-retro.
-"~/.claude/skills/session-retro" = { source = "unix/home/.config/agents/skills/session-retro", mode = "symlink" }
-"~/.agents/skills/session-retro" = { source = "unix/home/.config/agents/skills/session-retro", mode = "symlink" }
+"~/.claude/skills/session-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/session-retro", mode = "symlink" }
+"~/.agents/skills/session-retro" = { source = "~/dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents/skills/session-retro", mode = "symlink" }
 # work (#455): sets a repository up on first use; user scope only, like ticket-retro.
 "~/.claude/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }
 "~/.agents/skills/work" = { source = "unix/home/.config/agents/skills/work", mode = "symlink" }

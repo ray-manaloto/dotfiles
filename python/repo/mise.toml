@@ -57,11 +57,10 @@ dir = "{{ config_root }}/../.."
 run = "uv tool install --reinstall ./python/repo"
 
 [tasks.tools-install]
-# main-guard-copy remains a working-tree install route (Q-G1); a changed RECORD makes this task reinstall.
-description = "Install workflowtools and repotools as uv tools from this checkout's committed trees; a second run changes nothing"
-depends = ["sync"]
-dir = "{{ config_root }}/../.."
-run = "uv run --project python/repo --locked repotools tools-install"
+# A pointer: both tools moved to cpp-standard (its spec #147, ticket #156), and its main checkout's task installs them
+# from its committed trees. This task installs nothing from here; main-guard-copy still installs this working tree.
+description = "Install workflowtools and repotools from cpp-standard's main checkout (its //repo:tools-install)"
+run = "mise -C ~/dev/github/ray-manaloto/cpp-standard run //repo:tools-install"
 
 [tasks.main-guard-install]
 description = "Install the guard's copy and register it as this repository's reference-transaction hook"
