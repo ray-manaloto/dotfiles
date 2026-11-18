@@ -6,6 +6,7 @@
 # own mise.toml, which mise reads only from inside the checkout, so this finds the checkout it is linked from, as
 # tasks/herdr/doctor does. Each failed line names the command that fixes it, and the task exits 1 when any failed.
 
+import fnmatch
 import json
 import os
 import subprocess
@@ -170,6 +171,25 @@ def opencode_jouet() -> None:
         fail(f"{path} has no single jouet block", POST_TOOLS)
 
 
+def codex_env() -> None:
+    """Every [shell_environment_policy.set] key in ~/.codex/config.toml passes the [wrappers.codex] include_only list
+    in the checkout's global mise config: include_only filters after set, so a key it misses never reaches Codex's
+    commands. Codex matches its patterns as case-insensitive globs (rust-v0.170.0 shell_environment_policy)."""
+    path = HOME / ".codex/config.toml"
+    if not path.is_file():
+        return
+    keys = tomllib.loads(path.read_text()).get("shell_environment_policy", {}).get("set", {})
+    config = CHECKOUT / "unix/home/.config/mise/config.toml"
+    args = tomllib.loads(config.read_text()).get("wrappers", {}).get("codex", {}).get("args", [])
+    prefix = "shell_environment_policy.include_only="
+    lists = [tomllib.loads(f"x = {arg.removeprefix(prefix)}")["x"] for arg in args if arg.startswith(prefix)]
+    patterns = [p.lower() for p in (lists[0] if lists else [])]
+    missed = sorted(k for k in keys if not any(fnmatch.fnmatchcase(k.lower(), p) for p in patterns))
+    if missed:
+        fail(f"{path} sets {', '.join(missed)}, which [wrappers.codex] include_only drops",
+             f"add them to the include_only list in {config}")  # fmt: skip
+
+
 def jouet_claude() -> None:
     """What `jouet setup claude --global --no-context-budget` writes (its Claude hooks in settings.json), judged by
     jouet itself: its dry run prints `unchanged <file>` for each file it would leave as it is."""
@@ -189,6 +209,7 @@ def main() -> None:
     agent_desktop(skills)
     herdr_gone(skills)
     opencode_jouet()
+    codex_env()
     for line in failed:
         print(line, file=sys.stderr)
     if failed:
