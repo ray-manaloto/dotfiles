@@ -304,15 +304,15 @@ def test_a_busy_chief_of_staff_that_goes_idle_within_the_wait_is_stopped(
 
 
 def test_a_busy_child_is_not_waited_on(world: World, capfd: pytest.CaptureFixture[str]) -> None:
-    """Only the chief of staff is waited on: a busy worker is listed to retry later at once, and fails nothing."""
+    """Only the chief of staff is waited on: a busy worker is listed to retry later at once, and fails nothing. A
+    wait would add a "waited Ns while busy" note, so the notes prove it, not the run's time (the nightly ran it in 33 s
+    at load 14)."""
     _, worker = scene(world)
     world.answer(
         {("hc", "get", "t3", "--json"): out(info("t3", worker, ["claude"], world.root / "proj", state="working"))}
     )
     args = ("all", "--apply", "--exclude", "chief-of-staff", "--wiki", str(world.wiki), *FAST, "--busy-wait", "60")
-    began = time.monotonic()
     code, got, err = hometools(capfd, *args)
-    assert time.monotonic() - began < 30
     assert code == 0, got + err
     steps = {line.step: line for line in world.runs()}
     [skipped] = steps[RollStep.stop].sessions
