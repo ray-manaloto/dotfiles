@@ -1,0 +1,52 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Check monit is running and watches Spotlight spikes (its spotlight-spike check)"
+"""spotlight:doctor: the spike watch is on when monit is running and has loaded its spotlight-spike check.
+
+No other task checks monit itself, so this checks both: ~/.config/monit/monitrc carries the check (what
+`mise bootstrap` renders from unix/home/.config/mise/config.toml), and the running monit reports it
+(`monit -c <monitrc> status spotlight-spike`, over its 0600 socket; it fails when monit is down or still runs an
+older monitrc). Each failure prints the command that fixes it; the task exits 1 when any failed. macOS only.
+A file task outside hometools (no unit tests, owner 2026-11-17).
+"""
+
+import subprocess
+import sys
+from pathlib import Path
+
+MONIT = "/opt/homebrew/bin/monit"  # brew's monit ([bootstrap.packages]), as the launchd agent runs it
+MONITRC = Path.home() / ".config/monit/monitrc"
+CHECK = "check program spotlight-spike"
+RELOAD = "launchctl kickstart -k gui/$(id -u)/dev.mise.monit"
+
+if sys.platform != "darwin":
+    sys.stdout.write("spotlight:doctor: macOS only; nothing to check\n")
+    raise SystemExit(0)
+failed = []
+try:
+    rendered = CHECK in MONITRC.read_text()
+except OSError as error:
+    rendered = False
+    failed.append(f"{MONITRC}: {error.strerror}; run: mise bootstrap files apply")
+else:
+    if not rendered:
+        failed.append(f"{MONITRC} has no spotlight-spike check; run: mise bootstrap files apply")
+if rendered:
+    try:
+        done = subprocess.run(
+            [MONIT, "-c", str(MONITRC), "status", "spotlight-spike"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        failed.append(f"{MONIT}: {error.strerror}; run: mise bootstrap packages apply")
+    else:
+        if done.returncode:
+            why = (done.stderr or done.stdout).strip().splitlines()[-1:] or [f"exit {done.returncode}"]
+            failed.append(f"monit does not report spotlight-spike ({why[0]}); run: {RELOAD}")
+for line in failed:
+    sys.stdout.write(f"spotlight:doctor: {line}\n")
+if failed:
+    raise SystemExit(1)
+sys.stdout.write("spotlight:doctor: monit is running and watches spotlight-spike\n")

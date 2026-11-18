@@ -1,0 +1,164 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Record who queried Spotlight in the last 3 minutes, to ~/.local/state/dotfiles/spotlight/spikes/"
+"""spotlight:capture: write one Spotlight spike capture as JSON and print its path.
+
+monit runs this when its spotlight-spike check fails (spotlight:probe exits 1), and again every 5 cycles while the
+spike lasts (the monitrc entry in unix/home/.config/mise/config.toml); run it by hand any time. A file task, so its
+run is not shell (AGENTS.md zero bash), and outside the hometools package, so it has no unit tests (owner,
+2026-11-17).
+
+The capture covers the last 3 minutes of the unified log and goes to
+~/.local/state/dotfiles/spotlight/spikes/<UTC time>.json. It holds: what fired it (monit's MONIT_SERVICE and
+MONIT_DESCRIPTION, null by hand); mds_stores' CPU; per-minute counts of mds_stores' "query nodes count" lines (one
+per query step); the processes that logged "Starting query" (subsystem com.apple.metadata), by name and pid, each
+with its command line and, when it runs in a herdr tab, that tab; the line counts of the indexers mdbulkimport,
+corespotlightd and mdworker_shared; the top 5 processes by CPU; and the load averages. `log show` runs under nice
+and taskpolicy -b. `mise run spotlight:spikes` prints one line per capture.
+
+The herdr tab comes from HC_TERMINAL_ID in the client's environment, or its nearest ancestor's (ps -E reads the
+same user's processes, but not a platform binary's such as mdfind), and one `hc ls --json` through hc-safe, which
+never starts a core (docs/agents/herdr-core.md); any failure there leaves the tab null.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import Counter, defaultdict
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+# monit starts a program with a bare PATH, so every system tool is named by its path.
+PS, LOG, NICE, TASKPOLICY, LSOF = "/bin/ps", "/usr/bin/log", "/usr/bin/nice", "/usr/sbin/taskpolicy", "/usr/sbin/lsof"
+HOME = Path.home()
+SPIKES = HOME / ".local/state/dotfiles/spotlight/spikes"
+HC_SAFE = HOME / ".local/bin/hc-safe"
+HC_SOCKET = HOME / ".local/state/herdr-core/default/default.sock"  # hc's default path (docs/agents/herdr-core.md)
+STORE = "mds_stores"
+INDEXERS = ("mdbulkimport", "corespotlightd", "mdworker_shared")
+WINDOW = timedelta(minutes=3)
+# `log show --style compact` lines: date, time, type, process[pid:tid], then the message.
+COMPACT = re.compile(r"^(\S+) (\d\d:\d\d):\S+ +\S+ +(.+?)\[(\d+):\S+\] (.*)$")
+TERMINAL = re.compile(r"(?:^| )HC_TERMINAL_ID=(\S+)")
+
+
+def run(*argv: str, env: dict[str, str] | None = None) -> str:
+    """argv's stdout, or "" when it can't start or fails: a capture records what it could read."""
+    try:
+        done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, env=env)
+    except OSError:
+        return ""
+    return done.stdout if done.returncode == 0 else ""
+
+
+def store_cpu() -> float | None:
+    """mds_stores' CPU percent, summed over every process of that name; None when none runs."""
+    found = None
+    for line in run(PS, "-A", "-o", "pcpu=,comm=").splitlines():
+        cpu, _, command = line.strip().partition(" ")
+        if command.strip().rsplit("/", 1)[-1] == STORE:
+            found = (found or 0.0) + float(cpu)
+    return found
+
+
+def log_lines(start: datetime, end: datetime, predicate: str) -> list[re.Match[str]]:
+    stamp = "%Y-%m-%d %H:%M:%S"
+    out = run(
+        NICE,
+        "-n",
+        "10",
+        TASKPOLICY,
+        "-b",
+        LOG,
+        "show",
+        "--style",
+        "compact",
+        "--start",
+        start.strftime(stamp),
+        "--end",
+        end.strftime(stamp),
+        "--predicate",
+        predicate,
+    )
+    return [m for line in out.splitlines() if (m := COMPACT.match(line))]
+
+
+def tabs() -> dict[str, str]:
+    """herdr terminal address -> its `where` (space / tab), from one hc ls through hc-safe; {} on any failure."""
+    holders = run(LSOF, "-t", "--", str(HC_SOCKET)).split()
+    if len(set(holders)) != 1:
+        return {}
+    # hc-safe finds hc on PATH, and hc lives in ~/.local/bin, which monit's bare PATH (and mise run's) leaves out.
+    path = os.pathsep.join([str(HC_SAFE.parent), os.environ.get("PATH", "/usr/bin:/bin")])
+    out = run(str(HC_SAFE), holders[0], str(HC_SOCKET), "--", "ls", "--json", env={**os.environ, "PATH": path})
+    try:
+        return {t["address"]: t.get("where", "") for t in json.loads(out)["terminals"]}
+    except ValueError, KeyError, TypeError:
+        return {}
+
+
+def terminal_of(pid: str) -> str | None:
+    """The HC_TERMINAL_ID of pid or of its nearest ancestor that shows one."""
+    for _ in range(8):
+        if pid in {"", "0", "1"}:
+            return None
+        if m := TERMINAL.search(run(PS, "-ww", "-E", "-p", pid, "-o", "command=")):
+            return m.group(1)
+        pid = run(PS, "-p", pid, "-o", "ppid=").strip()
+    return None
+
+
+def client(pid: str, where: dict[str, str]) -> dict[str, str | None]:
+    command = run(PS, "-ww", "-p", pid, "-o", "command=").strip() or None
+    terminal = terminal_of(pid)
+    return {"command": command, "terminal": terminal, "tab": where.get(terminal) if terminal else None}
+
+
+def top_cpu() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for line in run(PS, "-A", "-r", "-o", "pid=,pcpu=,comm=").splitlines()[:5]:
+        pid, cpu, command = line.split(None, 2)
+        rows.append({"pid": int(pid), "cpu": float(cpu), "process": command.rsplit("/", 1)[-1]})
+    return rows
+
+
+def capture() -> Path:
+    end = datetime.now().astimezone()
+    start = end - WINDOW
+    cpu = store_cpu()
+    per_minute: Counter[str] = Counter()
+    for m in log_lines(start, end, f'process == "{STORE}" AND eventMessage CONTAINS "query nodes count"'):
+        per_minute[m.group(2)] += 1
+    queries: dict[tuple[str, str], int] = defaultdict(int)
+    for m in log_lines(start, end, 'subsystem == "com.apple.metadata" AND eventMessage BEGINSWITH "Starting query"'):
+        queries[(m.group(3), m.group(4))] += 1
+    indexers: Counter[str] = Counter(dict.fromkeys(INDEXERS, 0))
+    names = ", ".join(f'"{name}"' for name in INDEXERS)
+    for m in log_lines(start, end, f"process IN {{{names}}}"):
+        indexers[m.group(3)] += 1
+    where = tabs() if queries else {}
+    clients = [
+        {"process": name, "pid": int(pid), "queries": count, **client(pid, where)}
+        for (name, pid), count in sorted(queries.items(), key=lambda item: -item[1])
+    ]
+    record = {
+        "time": datetime.now(UTC).isoformat(timespec="seconds"),
+        "window": {"start": start.isoformat(timespec="seconds"), "end": end.isoformat(timespec="seconds")},
+        "trigger": {"service": os.environ.get("MONIT_SERVICE"), "description": os.environ.get("MONIT_DESCRIPTION")},
+        "mds_stores_cpu": cpu,
+        "query_nodes_per_minute": dict(sorted(per_minute.items())),
+        "starting_query_clients": clients,
+        "indexer_lines": dict(indexers),
+        "top_cpu": top_cpu(),
+        "loadavg": list(os.getloadavg()),
+    }
+    SPIKES.mkdir(parents=True, exist_ok=True)
+    path = SPIKES / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
+    path.write_text(json.dumps(record, indent=2) + "\n")
+    return path
+
+
+if sys.platform != "darwin":
+    sys.exit("spotlight:capture: macOS only")
+sys.stdout.write(f"{capture()}\n")

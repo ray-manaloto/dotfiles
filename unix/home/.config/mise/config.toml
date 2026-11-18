@@ -724,6 +724,16 @@ check file nightly-passed with path {{ env.HOME }}/.local/state/dotfiles/nightly
     if mtime is older than 3 days then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles
 
+# Spotlight spikes (owner, 2026-11-17): spotlight:probe exits 1 while mds_stores logs over 4,000 query steps in 65 s
+# or a ps sample shows it over 100% CPU (its docstring says why), and spotlight:capture then records the
+# Starting-query clients, the indexers' line counts, top CPU and load in ~/.local/state/dotfiles/spotlight/spikes/;
+# once per 5 cycles while it lasts. Not `check process ... if cpu`: monit divides that by the thread count and
+# averages it over the cycle, so a 20-30 s burst never shows. mise run spotlight:spikes lists the captures and
+# mise run spotlight:doctor checks monit runs this check.
+check program spotlight-spike with path "{{ env.HOME }}/.local/bin/mise run spotlight:probe"
+    if status != 0 then exec "{{ env.HOME }}/.local/bin/mise run spotlight:capture"
+        repeat every 5 cycles
+
 check system $HOST
     if loadavg (5min) per core > 1.5 for 5 cycles then exec "{{ env.HOME }}/.local/bin/mise run monit:alert"
         repeat every 240 cycles

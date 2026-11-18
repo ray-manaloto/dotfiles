@@ -1,0 +1,42 @@
+#!/usr/bin/env -S python3 -I -B
+#MISE description="Print the latest Spotlight spike captures that spotlight:capture wrote, one line each"
+#USAGE arg "[count]" help="How many captures to print, newest last" default="10"
+"""spotlight:spikes: one line per capture in ~/.local/state/dotfiles/spotlight/spikes, newest last.
+
+A file task outside hometools (no unit tests, owner 2026-11-17), as spotlight:capture is. Each line: the capture's
+time, mds_stores' CPU, query-node lines per minute, the top Starting-query clients (process:pid, count and herdr tab),
+the indexer line counts, and the file. Read a file itself for the commands, top CPU and load averages.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+SPIKES = Path.home() / ".local/state/dotfiles/spotlight/spikes"
+
+
+def summary(path: Path) -> str:
+    try:
+        c = json.loads(path.read_text())
+        clients = ", ".join(
+            f"{q['process']}:{q['pid']}x{q['queries']}" + (f" ({q['tab']})" if q.get("tab") else "")
+            for q in c["starting_query_clients"][:5]
+        )
+        nodes = " ".join(str(n) for n in c["query_nodes_per_minute"].values())
+        indexers = " ".join(f"{name}={count}" for name, count in c["indexer_lines"].items())
+    except (OSError, ValueError, KeyError, TypeError) as failed:
+        return f"{path.name}: unreadable ({failed})"
+    return (
+        f"{c['time']} cpu={c['mds_stores_cpu']}% nodes/min=[{nodes}] clients=[{clients or 'none'}] "
+        f"{indexers} {path.name}"
+    )
+
+
+arg = sys.argv[1] if sys.argv[1:] else "10"
+if not arg.isdigit():
+    sys.exit(f"spotlight:spikes: count must be a whole number, not {arg!r}")
+captures = sorted(SPIKES.glob("*.json"))[-int(arg) :] if SPIKES.is_dir() else []
+if not captures:
+    sys.stdout.write(f"spotlight:spikes: no captures in {SPIKES}\n")
+for path in captures:
+    sys.stdout.write(summary(path) + "\n")
