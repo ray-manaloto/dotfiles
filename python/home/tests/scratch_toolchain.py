@@ -22,6 +22,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+from .real_tool import real_which
+
 CHECKOUT = Path(__file__).resolve().parents[3]
 MISE_HOME = Path("unix/home/.config/mise")
 # Every Mach-O program links it.
@@ -43,9 +45,9 @@ CLOSED = "http://127.0.0.1:9"
 
 
 def which(name: str) -> Path:
-    found = shutil.which(name)
+    found = real_which(name)
     if found is None:
-        msg = f"{name} is not on PATH"
+        msg = f"{name} is not on PATH (or only as a mise command wrapper)"
         raise FileNotFoundError(msg)
     return Path(found).resolve()
 
