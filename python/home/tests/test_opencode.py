@@ -6,7 +6,6 @@
 
 import json
 import os
-import shutil
 from pathlib import Path
 
 import pytest
@@ -14,8 +13,10 @@ import pytest
 from hometools import opencode
 from hometools.cli import main
 
+from .real_tool import real_which
+
 STAND_IN = Path(__file__).with_name("stand_in.py")
-REAL_JOUET = shutil.which("jouet")
+REAL_JOUET = real_which("jouet")
 
 
 def hometools(capfd: pytest.CaptureFixture[str]) -> tuple[int, str, str]:
@@ -43,7 +44,7 @@ def target(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def real_jouet(monkeypatch: pytest.MonkeyPatch) -> None:
     if REAL_JOUET is None:
-        pytest.skip("no jouet on PATH")
+        pytest.skip("no real jouet on PATH (none, or only a mise command wrapper)")
     monkeypatch.setenv("PATH", str(Path(REAL_JOUET).parent))
 
 
