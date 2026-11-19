@@ -24,11 +24,10 @@ local fast = new Mapping<String, Step> {
     // SKILL.md and okf concept frontmatter, and YAML that parses: the whole index, as a commit would hold it.
     ["frontmatter"] {
         glob = List("**/*.md", "**/*.yml", "**/*.yaml")
-        check = "mise run //workflow:frontmatter"
+        check = "mise run frontmatter"
     }
-    // Agent-config linters (docs/research/agent-config-linters.md). agnix gates: a path given on the command line is
-    // checked even when .agnix.toml excludes it, so the workflow docs are left out here too. Both steps run their tool
-    // through `mise x <backend>`, which takes the global pin, so a stale shim of the same name can't answer instead.
+    // Agent-config linters (docs/research/agent-config-linters.md). Both steps run their tool through
+    // `mise x <backend>`, which takes the global pin, so a stale shim of the same name can't answer instead.
     ["agnix"] {
         glob = List(
             "**/AGENTS.md",
@@ -39,7 +38,6 @@ local fast = new Mapping<String, Step> {
             "unix/home/.codex/**",
             "unix/home/.config/opencode/**"
         )
-        exclude = "unix/home/.config/agents/workflow/**"
         check = "mise x github:agent-sh/agnix -- agnix {{files}}"
     }
     // cclint covers Claude files only and reports without failing the hook (hk 2.12.0 Config.pkl:827-842).
@@ -59,12 +57,12 @@ local fast = new Mapping<String, Step> {
     // which would list the whole repository.
     ["zero-bash"] {
         glob = List("**")
-        check = "mise run //repo:zero-bash -- {{files}}"
+        check = "mise run zero-bash -- {{files}}"
     }
     // `fnox set` on a doppler provider writes the value into the TOML in plain text: a tracked fnox file's Doppler
     // entries must hold Doppler secret names (repotools fnox-refs). It reads the index, so it runs on every commit.
     ["fnox-refs"] {
-        check = "mise run //repo:fnox-refs"
+        check = "mise run fnox-refs"
     }
     // A git command run with a hook's GIT_DIR (a test's `git init`, say) can write core.worktree into the shared
     // .git/config, and every checkout of the repo then reads and writes another worktree's files. Nothing here sets it
@@ -83,18 +81,10 @@ local suites = new Mapping<String, Step> {
         glob = List("python/toolchains/p2996/**")
         check = "mise run //p2996:check"
     }
-    ["repo"] {
-        glob = List("python/repo/**")
-        check = "mise run //repo:check"
-    }
     // The lsptools package (mise run lsp): ruff, ty, codegen drift and 100% coverage, with the file task it runs from.
     ["lsp"] {
         glob = List("python/lsp/**", "unix/home/.config/mise/tasks/lsp")
         check = "mise run //lsp:check"
-    }
-    ["workflow"] {
-        glob = List("python/workflow/**")
-        check = "mise run //workflow:check"
     }
     // DL-758: the hometools package (#391, the global toolchain tasks), as p2996, and the file tasks and
     // config it checks, on a scratch copy of this Mac's toolchain; pre-commit adds the real-toolchain test.
@@ -122,7 +112,7 @@ local suites = new Mapping<String, Step> {
         check = "mise run //home:herdr-unit"
     }
     // python/tests reads the shared agent rules (a hash pin of the research section) and starts real zsh from the
-    // startup files, so a change to either runs them, as //repo:check does for python/repo. Off in CI, where the
+    // startup files, so a change to either runs them. Off in CI, where the
     // test task runs them anyway (#472).
     ["python-tests"] {
         glob = List("unix/home/.config/agents/**", "unix/home/.config/zsh/**", "unix/home/.zshenv")
@@ -170,8 +160,7 @@ local shared = List(
     "mise.lock",
     "hk.pkl",
     ".github/workflows/**",
-    "unix/home/.config/mise/config.toml",
-    "python/repo/**"
+    "unix/home/.config/mise/config.toml"
 )
 local checkSuites: Mapping<String, Step> = suites.toMap()
     .mapValues((name, s) -> if (name == "secret-doctor") s else (s) { glob = (s.glob as List<String>) + shared })
@@ -197,7 +186,7 @@ hooks {
         stash = "git"
         steps = (fast) {
             // AGENTS.md: main moves only to origin/main. This names the rule before the linters run; the
-            // reference-transaction hook (//repo:main-guard-install) also stops reset, branch -f and HK=0.
+            // reference-transaction hook (mise run main-guard-install) also stops reset, branch -f and HK=0.
             ["no-commit-to-main"] = Builtins.no_commit_to_branch
             // #391: the real-toolchain test (//home:integration) only, for a commit that reaches the toolchain tasks
             // or the global config; the rest of //home runs at pre-push (//home:unit). A commit that only deletes such
@@ -227,12 +216,8 @@ hooks {
             ["no-core-worktree"] = (fast["no-core-worktree"]) { exclusive = true }
         }
     }
-    // AGENTS.md main guard: a fast-forward of main to a new guard source installs it (//repo:main-guard-arm).
     ["post-merge"] {
         steps {
-            ["main-guard"] {
-                check = "mise run //repo:main-guard-arm"
-            }
             // mise's records of worktree copies of the global config make mise reshim and install warn
             // (mise:untrack-worktrees in the global config); a merge is when a worktree's work ends.
             ["mise-untrack-worktrees"] {

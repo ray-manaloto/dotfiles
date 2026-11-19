@@ -26,8 +26,8 @@ description = "Copy bundled skills out of a Toolbox install for Claude Code and 
 depends = ["sync"]
 run = "uv run --locked jbctl skills"
 
-# jbctl on PATH, run by name from any folder. Like //workflow:install, it installs this checkout as it is, apart from
-# //repo:tools-install, so a python/jbctl edit never blocks the repotools and workflowtools that pr-create and pr-merge use. The
+# jbctl on PATH, run by name from any folder. It installs this checkout as it is, apart from tools-install (repotools
+# and workflowtools from cpp-standard), so a python/jbctl edit never blocks the tools pr-create and pr-merge use. The
 # installed copy does not follow later edits or pulls: run this again after jbctl changes land.
 [tasks.install]
 description = "Install this checkout's jbctl as a uv tool, so jbctl runs by name"

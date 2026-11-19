@@ -2,13 +2,11 @@ min_version = "2026.10.20"
 monorepo_root = true
 
 [monorepo]
-config_roots = ["python", "python/toolchains/p2996", "python/repo", "python/workflow", "python/cbm", "python/home", "python/lsp", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
+config_roots = ["python", "python/toolchains/p2996", "python/cbm", "python/home", "python/lsp", "python/visualplan", "python/jbctl", "python/depmaps", "python/guards", "cpp", "swift"]
 lockfile = true
 
 [monorepo.path_aliases]
 p2996 = "python/toolchains/p2996"
-repo = "python/repo"
-workflow = "python/workflow"
 cbm = "python/cbm"
 home = "python/home"
 lsp = "python/lsp"
@@ -33,12 +31,12 @@ task.logs = true
 
 [tasks.test]
 description = "Run every language root's tests"
-depends = ["//python:test", "//repo:test", "//workflow:test", "//cbm:test", "//home:test", "//lsp:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
+depends = ["//python:test", "//cbm:test", "//home:test", "//lsp:test", "//visualplan:test", "//jbctl:test", "//guards:test", "//cpp:test", "//swift:test"]
 run = "echo all tests passed"
 
 [tasks."test:times"]
 description = "Each test task's runs, median and last time, and its last run's 25 slowest tests, one JSON line per task"
-run = "uv run --project python/repo --locked repotools test-times"
+run = "repotools test-times"
 
 # Private values that must never reach a tracked file or a pushed commit. Rendered on each machine from its own
 # environment, so the repo never holds them; privacy:scan reads them through its env.
@@ -57,26 +55,80 @@ flag "--outgoing" help="Scan every commit not yet on a remote, branches and tags
 arg "[file]" var=#true help="Files to scan; default every tracked file"
 '''
 # --option=value: a value that starts with - would otherwise be read by argparse as an option.
-run = 'uv run --project python/repo --locked repotools privacy-scan --patterns="$PRIVATE_PATTERNS" --files="${usage_file:-}" ${usage_outgoing:+--outgoing}'
+run = 'repotools privacy-scan --patterns="$PRIVATE_PATTERNS" --files="${usage_file:-}" ${usage_outgoing:+--outgoing}'
 
 [tasks."shell:apply"]
 description = "Back up the live zsh files, check a shell from the new ones, then link them into $HOME"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "uv run --project python/repo --locked repotools shell-apply"
+run = "repotools shell-apply"
 
 [tasks."shell:rollback"]
 description = "Restore the zsh files from the pre-apply backup"
 env = { SHELL_BACKUP_PATHS = "{{ vars.shell_backup_paths }}" }
-run = "uv run --project python/repo --locked repotools shell-rollback"
+run = "repotools shell-rollback"
 
-# Here, not in python/repo: that config's _.python.venv takes a lock under ~/.cache/mise on every run.
 # No usage spec, so mise appends the arguments to the line, each quoted; raw keeps both streams unprefixed, and
 # raw_args hands a --help to the command, not to mise (v2026.11.2 src/cli/run.rs:911-915).
 [tasks."scratch:env"]
 description = "Run one command from this checkout with every home path inside a scratch folder"
 raw = true
 raw_args = true
-run = "uv run --project python/repo --locked repotools scratch-env"
+run = "repotools scratch-env"
+
+# repotools and workflowtools live in cpp-standard (its spec #147: #156 switched the install, #157 removed the copy
+# here). These tasks run the copies its //repo:tools-install installed from its main, by name; this checkout holds
+# no source of either. Rerun tools-install after a merge there that changes them.
+[tasks.tools-install]
+description = "Install workflowtools and repotools from cpp-standard's main checkout (its //repo:tools-install)"
+run = "mise -C ~/dev/github/ray-manaloto/cpp-standard run //repo:tools-install"
+
+# repotools reads the body file and pipes its bytes to gh pr create, against origin's default branch.
+[tasks.pr-create]
+description = "Open a pull request against main from its title and body file"
+usage = '''
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the body"
+'''
+run = 'repotools pr-create --title "$usage_title" --body-file "$usage_body"'
+
+# A lead's self-merge (owner ruling, 2026-11-15): every gate checked, then the one merge form, from the PR's checkout.
+[tasks.pr-merge]
+description = "Merge a pull request whose head is this clean HEAD, once its text matches and hk check --pr passes; --check-only merges nothing"
+usage = '''
+arg "<number>" help="The pull request number"
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the pull request body"
+flag "--check-only" help="Run every gate and report each one; merge nothing"
+'''
+run = 'repotools pr-merge --number "$usage_number" --title "$usage_title" --body-file "$usage_body" ${usage_check_only:+--check-only}'
+
+[tasks.zero-bash]
+description = "Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files; --strict fails on any"
+usage = '''
+flag "--strict" help="Exit 1 when anything is left"
+arg "[file]" var=#true help="Files to check, as hk passes them; default every tracked file"
+'''
+# --files=value: a name that starts with - would otherwise be read as an option.
+run = 'repotools zero-bash --files="${usage_file:-}" ${usage_strict:+--strict}'
+
+# hk's fnox-refs step: `fnox set` on a doppler provider writes the value into the TOML in plain text.
+[tasks.fnox-refs]
+description = "Fail when a tracked fnox TOML's Doppler entry holds anything but a Doppler secret name"
+run = "repotools fnox-refs"
+
+[tasks.frontmatter]
+description = "Check SKILL.md and okf concept frontmatter, and that every YAML file parses, as the index has them"
+run = "workflowtools frontmatter"
+
+# The main guard (AGENTS.md): git runs it from the shared .git/config on every ref update, so the hook names the
+# installed repotools by its path in uv's tool bin folder. tools-install refreshes that copy; nothing here copies it.
+[tasks.main-guard-install]
+description = "Register the installed repotools as this repository's reference-transaction hook (the main guard)"
+run = '"$(uv tool dir --bin)/repotools" main-guard-install --bin "$(uv tool dir --bin)/repotools"'
+
+[tasks.main-guard-remove]
+description = "Remove the main guard's hook entry from this repository's config"
+run = "repotools main-guard-remove"
 
 [tasks.pre-commit]
 run = "hk run pre-commit"

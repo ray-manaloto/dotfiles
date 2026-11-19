@@ -27,24 +27,25 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   package that follows this; its `check` task runs all of it.
 - Zero bash: no tracked `*.sh`, no shell shebangs and no multi-line mise `run`, in this repo and the
   tracked global config. Write Python as a package under `python/` and call it from a one-line `run`.
-  Only the zsh startup files under `unix/home` stay shell. `mise run //repo:zero-bash` lists leftovers.
+  Only the zsh startup files under `unix/home` stay shell. `mise run zero-bash` lists leftovers.
 - Large Codex reviews fan out: a read-only lead splits the change into slices of about 1,000 lines,
   one subagent per slice works every (file, rule) row, and the lead verifies and merges.
 - No review is required for commits or pull requests (owner ruling, 2026-11-17). A lead may ask Codex
   to review a change by choice (`~/.config/agents/workflow/cross-review.md`); nothing waits on it.
-- Push the branch, then open the pull request with `mise run //repo:pr-create <title> <body file>`,
+- Push the branch, then open the pull request with `mise run pr-create <title> <body file>`,
   which pipes the body file's bytes to `gh pr create`. `.claude/settings.json` makes Claude ask the
   owner before `gh pr` and `gh issue` writes, but the web UI and other clients can still publish
   anything. `pr-create` and `gh pr merge` are not on that list (pr-create: owner, 2026-11-18; the lead
   still reads the PR text for private content before it runs): the lead merges its own pull request (owner
-  ruling, 2026-11-15) with `mise run //repo:pr-merge <number> <title> <body file>` from the PR's clean
+  ruling, 2026-11-15) with `mise run pr-merge <number> <title> <body file>` from the PR's clean
   checkout. It refuses unless HEAD is the PR head, the PR's title and body on GitHub are the given ones
   and `hk check --pr` passes: the checks for the pull request's changed files, and every suite when it
   changes a file in hk.pkl's `shared` list (`mise.lock`, `hk.pkl`, ...); the nightly still runs `--all`.
   Then it runs `gh pr merge N --merge --match-head-commit <HEAD> --author-email 1428022+sortakool@users.noreply.github.com` (the merging account's noreply
   address, never a personal email) and checks the merge commit's author. If it refuses, fix the cause.
-  It runs the repotools that `mise run //repo:tools-install` installed from cpp-standard's `main` (the
-  task points there; the tools moved), never the branch's own code; rerun it after a merge there that changes them.
+  It runs the repotools that `mise run tools-install` installed from cpp-standard's `main` (the task points
+  there; the tools moved and this repo holds no copy), never a branch's code; rerun it after a merge there that
+  changes them.
   Hosted checks from free apps are advisory, and no paid CI is added.
 - This repo is public. hk's checks still run, betterleaks and private-paths among them. Before any push
   or public write, the lead reads the whole PR diff, every commit in it with its message, and the PR
@@ -57,10 +58,10 @@ A mise monorepo for TypeScript (Claude Code mods), Python and C++.
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Local `main` moves only to `origin/main`: merge on GitHub, fetch, then `git merge --ff-only origin/main`.
   A `reference-transaction` hook in the shared `.git/config` refuses any other commit, reset, `branch -f`
-  or deletion of main, `HK=0` and `--no-verify` included. hk's post-merge step installs it, a uv tool copy
-  of repotools, on the fast-forward that brings it or a newer one to main; `mise run //repo:main-guard-install`
-  does the same by hand, and `//repo:main-guard-remove` switches it off until the next install. If the
-  copy can't start (its Python pruned), every move of main fails with a hint to re-run the install. It is
+  or deletion of main, `HK=0` and `--no-verify` included. It runs the repotools that `mise run tools-install`
+  installed; `mise run main-guard-install` registers it and `mise run main-guard-remove` switches it off until the
+  next registration. If that copy can't start (its Python pruned), every move of main fails with a hint (it names
+  cpp-standard's `//repo:` tasks; here they are the root tasks above) to re-run the install. It is
   a local check that anyone running as this user can remove, so it catches mistakes, not a forger.
 - Run anything against a scratch home through `mise run scratch:env <empty folder> <command>`, from
   this checkout. A scratch `HOME` alone keeps the inherited XDG paths, and from a checkout mise
@@ -97,8 +98,8 @@ Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents
 - Check: hk runs the file linters at commit and, at push, the `check` task (lint, types, codegen, tests) of each
   root the pushed files reach, e.g. `mise run //visualplan:check`. Run that root's `check` before committing a
   change under `python/<package>/` or `swift/`; `hk check --all && mise run test` runs everything.
-- Shipping: a branch and a pull request into `main`, opened with `mise run //repo:pr-create`
-  (it wraps `repotools pr-create`); the lead merges it with `mise run //repo:pr-merge`, and local `main` only fast-forwards
+- Shipping: a branch and a pull request into `main`, opened with `mise run pr-create`
+  (it wraps `repotools pr-create`); the lead merges it with `mise run pr-merge`, and local `main` only fast-forwards
   to `origin/main`.
 - Research: notes go in `docs/research/`.
 - Review: none required (owner ruling, 2026-11-17); a lead may ask Codex for one by choice

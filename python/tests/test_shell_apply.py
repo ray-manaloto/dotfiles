@@ -17,8 +17,10 @@ REPO = Path(__file__).resolve().parents[2]
 UNIX_HOME = REPO / "unix/home"
 MISE = Path(shutil.which("mise") or "mise").resolve()
 UV = Path(shutil.which("uv") or "uv").resolve()
-# The tasks run repotools through uv run; the scratch HOME has no uv cache or Python of its own, so the
-# copy's venv is built from this machine's cache, downloading what it lacks, with the interpreter
+# The tasks run the repotools that cpp-standard's //repo:tools-install installed (this repo holds no copy since
+# cpp-standard #157); the scratch PATH reaches it through a folder that holds only that one link.
+REPOTOOLS = Path(shutil.which("repotools") or "repotools").resolve()
+# The scratch HOME has no uv cache or Python of its own: uv uses this machine's cache and the interpreter
 # running these tests.
 UV_CACHE = subprocess.run([UV, "cache", "dir"], capture_output=True, check=True, text=True).stdout.strip()
 
@@ -37,10 +39,9 @@ WRITER = ("/bin/sh", "-c", "while :; do echo '# installer' >> .zshrc; done")
 TASK_HISTORY = re.compile(r"state/mise/task-history/[0-9a-f]{16}/[0-9a-f]{16}\.(json|lock)")
 # What a cold scratch:env run may write outside its folder (owner's ruling on #390): the config links
 # mise keeps (src/config/tracking.rs:22-27), its trust and monorepo markers (config_file/mod.rs:1298-1319),
-# its one-time marker migration (toolset/install_state.rs:1419), its task history, and the bytecode of a
-# first import.
+# its one-time marker migration (toolset/install_state.rs:1419) and its task history.
 COLD_WRITES = re.compile(
-    r"state/mise/(tracked-configs/.+|trusted-configs/.+|incomplete-installs/\.migrated)|repo/.*/__pycache__/.+"
+    r"state/mise/(tracked-configs/.+|trusted-configs/.+|incomplete-installs/\.migrated)"
     rf"|{TASK_HISTORY.pattern}"
 )
 # /bin/date +%Y%m%dT%H%M%S.%N%z
@@ -97,10 +98,13 @@ class ShellApplyTest(unittest.TestCase):
         self.pre_apply = self.backups / "pre-apply"
         # From the checkout mise climbs to the real ~/.config/mise as a project config.
         copy_checkout(self.repo)
+        tools = root / "tools"
+        tools.mkdir()
+        (tools / "repotools").symlink_to(REPOTOOLS)
         self.env = {
             "HOME": str(self.home),
             "USER": os.environ["USER"],  # the root mise.toml renders env.USER
-            "PATH": f"{MISE.parent}:{UV.parent}:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{MISE.parent}:{UV.parent}:{tools}:/usr/bin:/bin:/usr/sbin:/sbin",
             "UV_CACHE_DIR": UV_CACHE,
             "UV_PYTHON": str(Path(sys.executable).resolve()),
             "UV_PYTHON_DOWNLOADS": "never",
@@ -369,9 +373,7 @@ class ShellApplyTest(unittest.TestCase):
         self.assertEqual((done.returncode, done.stdout), (0, "--help\n"), done.stderr)
 
     def test_scratch_env_writes_only_into_its_folder(self) -> None:
-        # From a synced python/repo, with no mise state yet: a cold run may leave mise's own state and
-        # Python's bytecode in the checkout, a warm one only its next task-history record.
-        self.run_ok("//repo:sync")
+        # With no mise state yet: a cold run may leave mise's own state, a warm one only its next task-history record.
         root = self.home.parent
         for name in ("config", "data", "state", "cache"):
             shutil.rmtree(root / name, ignore_errors=True)

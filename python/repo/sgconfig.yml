@@ -1,4 +1,0 @@
-ruleDirs:
-  - lint/rules
-testConfigs:
-  - testDir: lint/tests

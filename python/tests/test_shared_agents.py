@@ -11,10 +11,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SHARED = REPO / "unix/home/.config/agents/AGENTS.md"
-WORKFLOW = REPO / "unix/home/.config/agents/workflow"
 SKILLS = REPO / "unix/home/.config/agents/skills"
-# Moved to cpp-standard (its #156): the links resolve into its main checkout, at this path below the home.
+# Moved to cpp-standard (its #156; #157 removed the copy here): the links resolve into its main checkout, at this
+# path below the home. That checkout is the only source of the moved files, so the tests read them from it.
 CPP_STANDARD = "dev/github/ray-manaloto/cpp-standard/unix/home/.config/agents"
+MOVED_SOURCE = Path.home() / CPP_STANDARD
+WORKFLOW = MOVED_SOURCE / "workflow"
 MOVED = ("ticket-retro", "session-retro")
 STAYED = ("work", "to-spec", "to-tickets", "implement", "implement-spec", "chief-of-staff", "lsp-server", "secrets")
 STAYED += ("herdr-startup", "herdr-shutdown")
@@ -69,11 +71,11 @@ class SharedAgentsInstallTest(unittest.TestCase):
         cls.root = Path(tempfile.mkdtemp()).resolve()
         cls.addClassCleanup(shutil.rmtree, cls.root)
         cls.home = cls.root / "home"
-        # The moved files, as cpp-standard's main checkout holds them: byte-equal copies of this tree's.
+        # The moved files, copied from cpp-standard's main checkout to the same path below the scratch home.
         cls.moved = cls.home / CPP_STANDARD
         shutil.copytree(WORKFLOW, cls.moved / "workflow")
         for skill in MOVED:
-            shutil.copytree(SKILLS / skill, cls.moved / "skills" / skill)
+            shutil.copytree(MOVED_SOURCE / "skills" / skill, cls.moved / "skills" / skill)
         done = cls.scratch("mise", "dot", "apply", *ENTRIES)
         if done.returncode != 0:
             raise AssertionError((done.returncode, done.stdout, done.stderr))
