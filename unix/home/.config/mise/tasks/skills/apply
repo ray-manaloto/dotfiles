@@ -5,7 +5,7 @@
 # A file task, so its run is not shell (AGENTS.md zero bash). The live files link into the checkout this file is
 # linked from (as tasks/skills/doctor finds it), so it applies only when the merge ran there with main checked out:
 # a linked worktree or another branch skips it. That is shell:apply's own worktree test (`.git` is a file in a
-# linked worktree, python/repo/src/repotools/shell.py apply) and main-guard's branch test (`git symbolic-ref HEAD`
+# linked worktree, repotools shell.py apply, in cpp-standard's python/repo) and main-guard's branch test (`git symbolic-ref HEAD`
 # is refs/heads/main, main_guard.py armed). mise starts a global task in the folder it was run from and keeps it
 # in MISE_ORIGINAL_CWD (mise v2026.11.9 src/task/task_executor.rs:3168-3176).
 #

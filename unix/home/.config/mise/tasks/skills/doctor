@@ -20,7 +20,7 @@ HOME = Path.home()
 
 # Templates that render only with bootstrap secrets (PC_HOST, CF_ACCOUNT_ID), which this task never reads.
 SECRET_TEMPLATES = {"~/.ssh/config.d/tailnet.conf", "~/.config/mise/conf.d/cloudflare.toml"}
-# The zsh files shell:apply links (python/repo/src/repotools/shell.py TARGETS): AGENTS.md says a bare
+# The zsh files shell:apply links (repotools shell.py TARGETS, in cpp-standard's python/repo): AGENTS.md says a bare
 # `mise dot apply` stops on them, so their fix is that task.
 ZSH = {
     "~/.zshenv",

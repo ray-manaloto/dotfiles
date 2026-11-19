@@ -27,7 +27,7 @@ then write.
      whether pull requests are used.
    - Where research notes go: a `docs/research/` or similar folder. If there is none, propose `docs/research/`.
    - Whether `repotools` is on `PATH`. If it is not, ask the owner to run
-     `mise run //repo:tools-install` from dotfiles, and stop.
+     `mise -C ~/dev/github/ray-manaloto/cpp-standard run //repo:tools-install`, and stop.
 3. **Draft.** Show the owner the section below with every `<...>` filled in from what you found. Ask about each
    item you could not settle, putting your recommended answer first. Let the owner edit the draft.
 4. **Write the section.** Write it in the root `AGENTS.md` and create the file if it is missing. If a `CLAUDE.md`

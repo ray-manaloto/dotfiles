@@ -1,8 +1,6 @@
 # agnix (agent-sh/agnix 0.61.0, pinned in the global mise config): the hk gate on the agent files.
 # Only the harnesses dotfiles configures.
 tools = ["claude-code", "codex", "opencode"]
-# The workflow docs live under an `agents/` folder, so agnix reads them as Claude subagent files (CC-AG-*).
-exclude = ["unix/home/.config/agents/workflow/**"]
 
 [rules]
 # `disable-model-invocation` is the Claude Code field our skills set on purpose.

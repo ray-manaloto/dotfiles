@@ -27,7 +27,7 @@ Stop, publishing nothing, and tell the owner why, when any of these fails:
   has none, ask the owner to run `/setup-matt-pocock-skills`. If it names another tracker, say this skill only
   publishes GitHub issues.
 - `workflowtools` and `repotools` are on `PATH` (`command -v`). If not, ask the owner to run
-  `mise run //repo:tools-install` from dotfiles.
+  `mise -C ~/dev/github/ray-manaloto/cpp-standard run //repo:tools-install`.
 - `git remote get-url origin` names a GitHub repository.
 
 ## Process
