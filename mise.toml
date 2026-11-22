@@ -102,6 +102,17 @@ flag "--check-only" help="Run every gate and report each one; merge nothing"
 '''
 run = 'repotools pr-merge --number "$usage_number" --title "$usage_title" --body-file "$usage_body" ${usage_check_only:+--check-only}'
 
+# Fast path while dotfiles winds down (owner, 2026-11-22): no local hk gate. dotfiles' ruleset needs a pull request and
+# a merge commit but no checks, so this pushes the branch, opens its pull request, merges it at once, then fast-forwards
+# the main checkout (the first worktree), stashing and restoring any edits there. Run it from a feature-branch worktree.
+[tasks.ship]
+description = "Push this branch, open its pull request and merge it at once (no local hk gate), then fast-forward the main checkout"
+usage = '''
+arg "<title>" help="The pull request title"
+arg "<body>" help="The file holding the pull request body"
+'''
+run = 'test "$(git branch --show-current)" != main && git push -q -u origin HEAD && repotools pr-create --title "$usage_title" --body-file "$usage_body" && gh pr merge "$(gh pr view --json number -q .number)" --merge --match-head-commit "$(git rev-parse HEAD)" --author-email 1428022+sortakool@users.noreply.github.com && main="$(git worktree list --porcelain | sed -n "1s/^worktree //p")" && test "$(git -C "$main" branch --show-current)" = main && git -C "$main" fetch -q origin && git -C "$main" merge -q --ff-only --autostash origin/main && git -C "$main" log -1 --format="main checkout now at %h %s"'
+
 [tasks.zero-bash]
 description = "Report shell scripts, shell shebangs and multi-line mise run in the given or tracked files; --strict fails on any"
 usage = '''
