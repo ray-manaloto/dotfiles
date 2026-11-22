@@ -2,6 +2,12 @@
 
 A mise monorepo for TypeScript (Claude Code mods), Python and C++.
 
+- **Role while dotfiles winds down (owner, 2026-11-22):** its one real duty is to keep the git history of the Mac's
+  tracked files that cpp-standard carries onto the containers on nzxth1desktop. New tools and skills go into
+  cpp-standard. Resolve drift by recording the Mac's live state here, not by reverting the Mac. Merge with
+  `mise run ship <title> <body file>` from a feature-branch worktree: it pushes, opens the pull request, merges it at
+  once (no local hk gate) and fast-forwards the main checkout. `mise run pr-merge` (below) stays for a gated merge.
+
 - Root `mise.toml` declares the monorepo roots and no tools: every tool is in the global config
   (`unix/home/.config/mise/config.toml`, DL-757), at its latest release; `mise.lock` covers
   macos-arm64, linux-x64 and linux-arm64.

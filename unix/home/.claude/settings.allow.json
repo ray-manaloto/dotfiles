@@ -13,7 +13,8 @@
       "Bash(python3 -)",
       "Artifact",
       "ArtifactComments",
-      "ArtifactData"
+      "ArtifactData",
+      "Bash(env -u GH_TOKEN git -c credential.https://github.com.helper= -c credential.https://github.com.helper='!mise run -q agent:token' push -u origin *)"
     ]
   }
 }
