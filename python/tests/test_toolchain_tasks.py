@@ -6,7 +6,6 @@
 # come from a copy of the candidate checkout, as ~/.config/mise links them from the main checkout, so this
 # suite runs unchanged against the shell tasks and the hometools port.
 
-import importlib.util
 import json
 import shutil
 import subprocess
@@ -17,18 +16,11 @@ import unittest
 from collections.abc import Callable
 from pathlib import Path
 
-from checkout import copy_checkout
+from checkout import copy_checkout, load_scratch_toolchain
 
 REPO = Path(__file__).resolve().parents[2]
 FIX = "run: mise run bootstrap:toolchain"
-# The builder is a test helper of python/home, not a package: load it by path.
-_spec = importlib.util.spec_from_file_location(
-    "scratch_toolchain", REPO / "python/home/tests/scratch_toolchain.py"
-)
-assert _spec and _spec.loader
-scratch_toolchain = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = scratch_toolchain
-_spec.loader.exec_module(scratch_toolchain)
+scratch_toolchain = load_scratch_toolchain()
 
 
 def refusal(err: str) -> list[str]:
