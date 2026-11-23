@@ -8,7 +8,6 @@
 # hometools port (#392).
 
 import fcntl
-import importlib.util
 import json
 import os
 import re
@@ -23,7 +22,7 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from checkout import copy_checkout
+from checkout import copy_checkout, load_scratch_toolchain
 
 REPO = Path(__file__).resolve().parents[2]
 MISE_HOME = Path("unix/home/.config/mise")
@@ -47,14 +46,7 @@ LEAF_CALLS = [
     *(f"{name} update" for name in NATIVE),
     *(f"{name} --version" for name in NATIVE),
 ]
-# The builder is a test helper of python/home, not a package: load it by path.
-_spec = importlib.util.spec_from_file_location(
-    "scratch_toolchain", REPO / "python/home/tests/scratch_toolchain.py"
-)
-assert _spec and _spec.loader
-scratch_toolchain = importlib.util.module_from_spec(_spec)
-sys.modules[_spec.name] = scratch_toolchain
-_spec.loader.exec_module(scratch_toolchain)
+scratch_toolchain = load_scratch_toolchain()
 
 
 def refusal(err: str) -> list[str]:
