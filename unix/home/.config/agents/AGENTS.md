@@ -46,7 +46,11 @@ index or native goal.
 For a question about a tool, library or agent harness, search OpenWiki with root `~/.openwiki` (the personal
 knowledge base, a member of every workspace) in workspace `infra-toolchains` first, then `all-knowledge`, before
 reading upstream source. A repository's own workspace alone misses most tool facts. For other topics, name the
-workspace that fits, such as `ai-agents-sdlc`.
+workspace that fits, such as `ai-agents-sdlc`. If a workspace search misses a target, check `~/.local/state/kb/pins.json`
+and `~/dev/kb.noindex/` (plus sibling tool checkouts like `~/dev/github/herdr/`) for a locally mapped `openwiki/`
+before falling back to upstream. When an upstream dependency is still missing offline and OpenWiki mapping or
+registration is paused, offer `kb:add --no-map` alongside full mapping via interactive question before modifying
+`knowledge-base-v2`.
 
 ## Adding a Doppler secret
 
